@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              win11-26h2-taskbar-position-auto-hide
-// @name            Windows 11 26H2 Taskbar Position Auto-Hide (KB5120998)
-// @description     Per-monitor edge auto-hide for Shell_TrayWnd and Shell_SecondaryTrayWnd on Left, Top, Right, and Bottom positions via DWMWA_CLOAK, SetWindowRgn, and SPI_SETWORKAREA hooks.
-// @version         1.0.0
+// @name            Windows 11 26H2 Taskbar Auto-Hide (All Edges)
+// @description     Auto-hides the Windows 11 taskbar on Left, Top, Right, and Bottom edges with a slide animation.
+// @version         1.0.1
 // @author          tbc06w
 // @github          https://github.com/TheoreticallyBryChen
 // @include         explorer.exe
@@ -13,32 +13,56 @@
 
 // ==WindhawkModReadme==
 /*
-# Windows 11 26H2 Taskbar Position Auto-Hide (KB5120998)
+# Windows 11 26H2 Taskbar Auto-Hide (All Edges)
 
-Per-monitor auto-hide for `Shell_TrayWnd` and `Shell_SecondaryTrayWnd` on
-**Left, Top, Right, and Bottom** taskbar positions on Windows 11 (26H2 / KB5120998+).
+Adds taskbar auto-hide with a slide-in/slide-out animation for **Left, Top,
+Right, and Bottom** taskbar positions on Windows 11 (26H2+).
 
-## Implementation
-- Subclasses `Shell_TrayWnd` and `Shell_SecondaryTrayWnd` on the taskbar UI thread (`SetWindowSubclassFromAnyThread`).
-- Hides via `DWMWA_CLOAK` + empty `SetWindowRgn(0, 0, 0, 0)` instead of `SW_HIDE`, keeping the XAML host alive while passing mouse input through.
-- Slides along the monitor edge using `SetWindowPos` (`HWND_TOPMOST`, `SWP_NOSENDCHANGING`) + monitor-clipped `SetWindowRgn` while swallowing `WM_WINDOWPOSCHANGING` / `WM_WINDOWPOSCHANGED`.
-- Hooks `SystemParametersInfoW` and `SystemParametersInfoForDpi` (`SPI_SETWORKAREA`) to hold `rcWork == rcMonitor` so open/maximized windows do not resize on reveal.
-- Ignores edge triggers while `VK_LBUTTON` or `VK_RBUTTON` is held; remains shown while Start, Search, Quick Settings, Jump Lists, thumbnails, or `#32768` menus are active.
-- Uses public Win32/DWM APIs only; no `taskbar.dll` or `Taskbar.View.dll` symbol hooks.
+![Taskbar Auto-Hide Demo](https://i.imgur.com/REPLACE_WITH_YOUR_GIF.gif)
+
+### Why this mod?
+Windows 11 26H2 reintroduced moving the taskbar to the Left, Top, and Right
+screen edges, but Windows' built-in *"Automatically hide the taskbar"* setting
+only works at the bottom edge (and existing auto-hide mods rely on that native
+behavior). This mod provides edge-hover auto-hide for all four edges without
+shrinking or rescaling your open windows when the taskbar appears.
+
+### Setup
+1. Turn **off** Windows' built-in setting: **Settings → Personalization →
+   Taskbar → Taskbar behaviors → Automatically hide the taskbar**.
+   *(If Windows' built-in auto-hide is left on, this mod stays inactive so it
+   never overwrites your Windows settings.)*
+2. Enable this mod and move your taskbar to any edge (**Left**, **Top**,
+   **Right**, or **Bottom**).
+3. Hover the screen edge where your taskbar is placed to reveal it.
+
+### Limitations
+- **Drag and drop:** Hovering the hidden edge while holding a mouse button does
+  not reveal the taskbar, so you cannot drag files onto hidden taskbar buttons.
+- **Touch & flashing apps:** Touch edge swipes and flashing taskbar buttons do
+  not reveal the hidden taskbar.
+- **Shared monitor edges:** On multi-monitor setups, if the taskbar sits on an
+  edge shared with another monitor, sweeping quickly across into the next
+  monitor may skip the edge trigger; pause briefly at the edge to reveal it.
+- **Exclusive fullscreen:** Does not pop up over exclusive Direct3D fullscreen
+  games.
+- **Other taskbar mods:** May conflict with mods that change the taskbar's
+  window shape (rounded/floating taskbar mods) or hide individual taskbars
+  (such as *Disable taskbar per monitor*).
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
 - animationDurationMs: 160
-  $name: Slide duration (ms)
-  $description: Ease-out slide duration in milliseconds (0 = instant).
+  $name: Slide animation duration (ms)
+  $description: Duration of the slide-in and slide-out animation (0 = instant).
 - hoverShowDelayMs: 40
   $name: Hover show delay (ms)
-  $description: Dwell time in milliseconds inside the 4 px screen-edge strip before reveal.
+  $description: Time the cursor must stay at the screen edge before the taskbar appears.
 - hideDelayMs: 220
   $name: Hide delay (ms)
-  $description: Delay in milliseconds before hiding after pointer leaves the taskbar and active flyouts.
+  $description: Time to wait after the cursor leaves the taskbar and any open menus before hiding it again.
 */
 // ==/WindhawkModSettings==
 
@@ -57,13 +81,6 @@ Per-monitor auto-hide for `Shell_TrayWnd` and `Shell_SecondaryTrayWnd` on
 #include <string>
 #include <unordered_map>
 #include <vector>
-
-#ifndef DWMWA_CLOAK
-#define DWMWA_CLOAK 13
-#endif
-#ifndef DWMWA_CLOAKED
-#define DWMWA_CLOAKED 14
-#endif
 
 namespace {
 
@@ -84,10 +101,12 @@ struct Settings {
 struct TaskbarState {
     HWND hwnd = nullptr;
     HMONITOR hMonitor = nullptr;
+    bool isPrimary = false;
     TaskbarEdge edge = TaskbarEdge::Bottom;
     RECT monitorRect{};
     RECT normalRect{};
-    RECT reservedWorkRect{};
+    RECT explorerWorkRect{};
+    bool hasExplorerWorkRect = false;
     bool validGeometry = false;
 
     bool isHoverShown = false;
@@ -111,13 +130,13 @@ struct AdjustWorkAreaCtx {
 };
 
 constexpr UINT_PTR kTickTimerId = 0x57484148;
-constexpr UINT kIdleTickMs = 25;
+constexpr UINT kIdleTickMs = 40;
 constexpr UINT kAnimTickMs = USER_TIMER_MINIMUM; // 10 ms
-constexpr ULONGLONG kSecondaryScanIntervalMs = 2000;
-constexpr int kEdgeTriggerPixels = 4;
-constexpr int kTaskbarKeepShownPaddingPx = 12;
+constexpr ULONGLONG kWorkAreaVerifyIntervalMs = 1000;
+constexpr int kBaseEdgeTriggerPx = 4;
+constexpr int kBaseKeepShownPaddingPx = 12;
 
-const UINT g_msgInitOrRefresh = RegisterWindowMessageW(L"Windhawk_TaskbarAutoHide_Refresh_" WH_MOD_ID);
+const UINT g_msgInitNewTaskbar = RegisterWindowMessageW(L"Windhawk_TaskbarAutoHide_Init_" WH_MOD_ID);
 const UINT g_msgSettingsChanged = RegisterWindowMessageW(L"Windhawk_TaskbarAutoHide_Settings_" WH_MOD_ID);
 const UINT g_msgUninitCleanup = RegisterWindowMessageW(L"Windhawk_TaskbarAutoHide_Cleanup_" WH_MOD_ID);
 
@@ -125,17 +144,14 @@ std::mutex g_settingsMutex;
 Settings g_settings;
 
 std::atomic<bool> g_shuttingDown{false};
-std::atomic<bool> g_reclaimWorkAreaActive{true};
-std::atomic<HANDLE> g_waiterThread{nullptr};
+std::atomic<bool> g_reclaimWorkAreaActive{false};
 
 // Accessed strictly on the taskbar UI thread
 std::unordered_map<HWND, TaskbarState> g_taskbars;
 std::unordered_map<DWORD, std::wstring> g_pidExeCache;
-bool g_savedNativeAutoHide = false;
-bool g_hadNativeAutoHide = false;
+HWND g_primaryTaskbarHwnd = nullptr;
 bool g_needsInitialWorkAreaSync = true;
 bool g_usingFastTimer = false;
-ULONGLONG g_lastSecondaryScanTick = 0;
 ULONGLONG g_lastWorkAreaCheckTick = 0;
 
 HWND g_cachedFgHwnd = nullptr;
@@ -145,8 +161,23 @@ HMONITOR g_cachedFgMonitor = nullptr;
 using SystemParametersInfoW_t = decltype(&SystemParametersInfoW);
 SystemParametersInfoW_t SystemParametersInfoW_Original = nullptr;
 
-using SystemParametersInfoForDpi_t = BOOL(WINAPI*)(UINT, UINT, PVOID, UINT, UINT);
-SystemParametersInfoForDpi_t SystemParametersInfoForDpi_Original = nullptr;
+using CreateWindowExW_t = decltype(&CreateWindowExW);
+CreateWindowExW_t CreateWindowExW_Original = nullptr;
+
+using CreateWindowInBand_t = HWND(WINAPI*)(DWORD,
+                                           LPCWSTR,
+                                           LPCWSTR,
+                                           DWORD,
+                                           int,
+                                           int,
+                                           int,
+                                           int,
+                                           HWND,
+                                           HMENU,
+                                           HINSTANCE,
+                                           LPVOID,
+                                           DWORD);
+CreateWindowInBand_t CreateWindowInBand_Original = nullptr;
 
 std::wstring ToLower(std::wstring s) {
     for (wchar_t& ch : s) {
@@ -170,6 +201,66 @@ Settings GetSettingsCopy() {
     return g_settings;
 }
 
+bool IsNativeAutoHideEnabled() {
+    APPBARDATA abd{};
+    abd.cbSize = sizeof(abd);
+    UINT_PTR state = SHAppBarMessage(ABM_GETSTATE, &abd);
+    return (state & ABS_AUTOHIDE) != 0;
+}
+
+TaskbarState* FindTaskbarForMonitor(HMONITOR hMon) {
+    for (auto& [hwnd, tb] : g_taskbars) {
+        if (tb.validGeometry && tb.hMonitor == hMon) {
+            return &tb;
+        }
+    }
+    return nullptr;
+}
+
+// Expands only the edge occupied by this monitor's taskbar so other registered
+// app bars (docked toolbars/launchers) retain their reserved space.
+RECT ComputeExpandedWorkArea(const TaskbarState& tb, const RECT& baseWork) {
+    RECT expanded = baseWork;
+    switch (tb.edge) {
+        case TaskbarEdge::Left:
+            expanded.left = tb.monitorRect.left;
+            break;
+        case TaskbarEdge::Right:
+            expanded.right = tb.monitorRect.right;
+            break;
+        case TaskbarEdge::Top:
+            expanded.top = tb.monitorRect.top;
+            break;
+        case TaskbarEdge::Bottom:
+            expanded.bottom = tb.monitorRect.bottom;
+            break;
+        default:
+            break;
+    }
+    return expanded;
+}
+
+RECT ComputeShrunkWorkAreaFromBase(const TaskbarState& tb, const RECT& currentWork) {
+    RECT work = currentWork;
+    switch (tb.edge) {
+        case TaskbarEdge::Left:
+            work.left = std::max(work.left, tb.normalRect.right);
+            break;
+        case TaskbarEdge::Right:
+            work.right = std::min(work.right, tb.normalRect.left);
+            break;
+        case TaskbarEdge::Top:
+            work.top = std::max(work.top, tb.normalRect.bottom);
+            break;
+        case TaskbarEdge::Bottom:
+            work.bottom = std::min(work.bottom, tb.normalRect.top);
+            break;
+        default:
+            break;
+    }
+    return work;
+}
+
 BOOL WINAPI SystemParametersInfoW_Hook(UINT uiAction, UINT uiParam, PVOID pvParam, UINT fWinIni) {
     if (uiAction == SPI_SETWORKAREA && g_reclaimWorkAreaActive.load(std::memory_order_acquire)) {
         if (!pvParam) {
@@ -180,43 +271,22 @@ BOOL WINAPI SystemParametersInfoW_Hook(UINT uiAction, UINT uiParam, PVOID pvPara
         MONITORINFO mi{};
         mi.cbSize = sizeof(mi);
         if (hMon && GetMonitorInfoW(hMon, &mi)) {
-            if (EqualRect(&mi.rcWork, &mi.rcMonitor)) {
-                return TRUE;
+            // Only rewrite monitors that actually host a managed taskbar
+            if (TaskbarState* tb = FindTaskbarForMonitor(hMon)) {
+                tb->explorerWorkRect = *req;
+                tb->hasExplorerWorkRect = true;
+
+                RECT expanded = ComputeExpandedWorkArea(*tb, *req);
+                if (EqualRect(&mi.rcWork, &expanded)) {
+                    return TRUE;
+                }
+                return SystemParametersInfoW_Original(
+                    uiAction, uiParam, &expanded,
+                    fWinIni & ~(SPIF_SENDCHANGE | SPIF_SENDWININICHANGE));
             }
-            RECT fullMon = mi.rcMonitor;
-            return SystemParametersInfoW_Original(
-                uiAction, uiParam, &fullMon, fWinIni & ~(SPIF_SENDCHANGE | SPIF_SENDWININICHANGE));
         }
-        return TRUE;
     }
     return SystemParametersInfoW_Original(uiAction, uiParam, pvParam, fWinIni);
-}
-
-BOOL WINAPI SystemParametersInfoForDpi_Hook(UINT uiAction,
-                                            UINT uiParam,
-                                            PVOID pvParam,
-                                            UINT fWinIni,
-                                            UINT dpi) {
-    if (uiAction == SPI_SETWORKAREA && g_reclaimWorkAreaActive.load(std::memory_order_acquire)) {
-        if (!pvParam) {
-            return TRUE;
-        }
-        const RECT* req = static_cast<const RECT*>(pvParam);
-        HMONITOR hMon = MonitorFromRect(req, MONITOR_DEFAULTTONEAREST);
-        MONITORINFO mi{};
-        mi.cbSize = sizeof(mi);
-        if (hMon && GetMonitorInfoW(hMon, &mi)) {
-            if (EqualRect(&mi.rcWork, &mi.rcMonitor)) {
-                return TRUE;
-            }
-            RECT fullMon = mi.rcMonitor;
-            return SystemParametersInfoForDpi_Original(
-                uiAction, uiParam, &fullMon,
-                fWinIni & ~(SPIF_SENDCHANGE | SPIF_SENDWININICHANGE), dpi);
-        }
-        return TRUE;
-    }
-    return SystemParametersInfoForDpi_Original(uiAction, uiParam, pvParam, fWinIni, dpi);
 }
 
 bool IsTaskbarClassBuf(const wchar_t* cls) {
@@ -290,25 +360,6 @@ bool IsFlyoutWindow(HWND hwnd) {
     return IsShellFlyoutProcess(GetProcessExeNameLowerCached(hwnd));
 }
 
-bool IsNativeAutoHideEnabled() {
-    APPBARDATA abd{};
-    abd.cbSize = sizeof(abd);
-    UINT_PTR state = SHAppBarMessage(ABM_GETSTATE, &abd);
-    return (state & ABS_AUTOHIDE) != 0;
-}
-
-void SetNativeAutoHide(bool enable) {
-    APPBARDATA abd{};
-    abd.cbSize = sizeof(abd);
-    UINT_PTR state = SHAppBarMessage(ABM_GETSTATE, &abd);
-    LPARAM desired = enable ? static_cast<LPARAM>(state | ABS_AUTOHIDE)
-                            : static_cast<LPARAM>(state & ~ABS_AUTOHIDE);
-    if (static_cast<UINT_PTR>(desired) != state) {
-        abd.lParam = desired;
-        SHAppBarMessage(ABM_SETSTATE, &abd);
-    }
-}
-
 TaskbarEdge DetectEdgeFromRect(const RECT& tb, const RECT& mon) {
     long tbW = tb.right - tb.left;
     long tbH = tb.bottom - tb.top;
@@ -327,27 +378,6 @@ TaskbarEdge DetectEdgeFromRect(const RECT& tb, const RECT& mon) {
         long distRight = std::abs(mon.right - tb.right);
         return (distLeft <= distRight) ? TaskbarEdge::Left : TaskbarEdge::Right;
     }
-}
-
-RECT ComputeReservedWorkArea(const RECT& mon, const RECT& tb, TaskbarEdge edge) {
-    RECT work = mon;
-    switch (edge) {
-        case TaskbarEdge::Left:
-            work.left = std::max(work.left, tb.right);
-            break;
-        case TaskbarEdge::Right:
-            work.right = std::min(work.right, tb.left);
-            break;
-        case TaskbarEdge::Top:
-            work.top = std::max(work.top, tb.bottom);
-            break;
-        case TaskbarEdge::Bottom:
-            work.bottom = std::min(work.bottom, tb.top);
-            break;
-        default:
-            break;
-    }
-    return work;
 }
 
 bool IsValidDockedTaskbarRect(const RECT& tb, const RECT& mon) {
@@ -395,7 +425,9 @@ BOOL CALLBACK EnumAdjustWorkAreaWindowsProc(HWND hwnd, LPARAM lParam) {
         return TRUE;
     }
 
-    bool isZoomed = IsZoomed(hwnd) != FALSE;
+    if (!IsZoomed(hwnd)) {
+        return TRUE;
+    }
 
     RECT winRect{};
     RECT frameRect{};
@@ -406,20 +438,11 @@ BOOL CALLBACK EnumAdjustWorkAreaWindowsProc(HWND hwnd, LPARAM lParam) {
         frameRect = winRect;
     }
 
-    LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
-    bool isBorderlessOldWork =
-        ((style & WS_CAPTION) != WS_CAPTION) &&
-        RectMatchesApprox(frameRect, c->oldWork, 4);
-
-    if (!isZoomed && !isBorderlessOldWork) {
-        return TRUE;
-    }
-
     DWORD_PTR res = 0;
     SendMessageTimeoutW(hwnd, WM_SETTINGCHANGE, SPI_SETWORKAREA, 0,
-                        SMTO_ABORTIFHUNG | SMTO_NOTIMEOUTIFNOTHUNG, 30, &res);
+                        SMTO_ABORTIFHUNG, 30, &res);
 
-    if (isZoomed && RectMatchesApprox(frameRect, c->newWork, 2)) {
+    if (RectMatchesApprox(frameRect, c->newWork, 2)) {
         return TRUE;
     }
 
@@ -447,7 +470,19 @@ void ApplyMonitorWorkArea(TaskbarState& tb, bool reclaim, bool notifyApps) {
         return;
     }
 
-    RECT desiredWork = reclaim ? mi.rcMonitor : tb.reservedWorkRect;
+    RECT desiredWork;
+    if (reclaim) {
+        if (!tb.hasExplorerWorkRect) {
+            tb.explorerWorkRect = mi.rcWork;
+            tb.hasExplorerWorkRect = true;
+        }
+        desiredWork = ComputeExpandedWorkArea(tb, tb.explorerWorkRect);
+    } else {
+        desiredWork = tb.hasExplorerWorkRect
+                          ? tb.explorerWorkRect
+                          : ComputeShrunkWorkAreaFromBase(tb, mi.rcWork);
+    }
+
     if (desiredWork.right <= desiredWork.left || desiredWork.bottom <= desiredWork.top) {
         return;
     }
@@ -463,36 +498,10 @@ void ApplyMonitorWorkArea(TaskbarState& tb, bool reclaim, bool notifyApps) {
     }
 }
 
-void SetTaskbarSlidePose(TaskbarState& tb, float progress) {
-    if (!IsWindow(tb.hwnd) || !tb.validGeometry) {
-        return;
-    }
-
-    progress = std::clamp(progress, 0.0f, 1.0f);
-    tb.animProgress = progress;
-
+void ComputeSlidPoseRect(const TaskbarState& tb, float progress, int* outX, int* outY, HRGN* outClipRgn) {
     long tbW = tb.normalRect.right - tb.normalRect.left;
     long tbH = tb.normalRect.bottom - tb.normalRect.top;
     long thickness = (tb.edge == TaskbarEdge::Left || tb.edge == TaskbarEdge::Right) ? tbW : tbH;
-
-    tb.isApplyingAnimPos = true;
-
-    if (progress <= 0.001f) {
-        if (!tb.isCloaked) {
-            BOOL cloak = TRUE;
-            DwmSetWindowAttribute(tb.hwnd, DWMWA_CLOAK, &cloak, sizeof(cloak));
-            tb.isCloaked = true;
-        }
-        SetWindowRgn(tb.hwnd, nullptr, FALSE);
-        SetWindowPos(tb.hwnd, nullptr, tb.normalRect.left, tb.normalRect.top, 0, 0,
-                     SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSENDCHANGING);
-        HRGN emptyRgn = CreateRectRgn(0, 0, 0, 0);
-        if (emptyRgn && !SetWindowRgn(tb.hwnd, emptyRgn, FALSE)) {
-            DeleteObject(emptyRgn);
-        }
-        tb.isApplyingAnimPos = false;
-        return;
-    }
 
     long offset = std::lround((1.0f - progress) * static_cast<float>(thickness));
     if (progress >= 0.999f) {
@@ -525,6 +534,42 @@ void SetTaskbarSlidePose(TaskbarState& tb, float progress) {
                 break;
         }
     }
+
+    *outX = x;
+    *outY = y;
+    *outClipRgn = clipRgn;
+}
+
+void SetTaskbarSlidePose(TaskbarState& tb, float progress) {
+    if (!IsWindow(tb.hwnd) || !tb.validGeometry) {
+        return;
+    }
+
+    progress = std::clamp(progress, 0.0f, 1.0f);
+    tb.animProgress = progress;
+    tb.isApplyingAnimPos = true;
+
+    if (progress <= 0.001f) {
+        if (!tb.isCloaked) {
+            BOOL cloak = TRUE;
+            DwmSetWindowAttribute(tb.hwnd, DWMWA_CLOAK, &cloak, sizeof(cloak));
+            tb.isCloaked = true;
+        }
+        SetWindowRgn(tb.hwnd, nullptr, FALSE);
+        SetWindowPos(tb.hwnd, nullptr, tb.normalRect.left, tb.normalRect.top, 0, 0,
+                     SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSENDCHANGING);
+        HRGN emptyRgn = CreateRectRgn(0, 0, 0, 0);
+        if (emptyRgn && !SetWindowRgn(tb.hwnd, emptyRgn, FALSE)) {
+            DeleteObject(emptyRgn);
+        }
+        tb.isApplyingAnimPos = false;
+        return;
+    }
+
+    int x = tb.normalRect.left;
+    int y = tb.normalRect.top;
+    HRGN clipRgn = nullptr;
+    ComputeSlidPoseRect(tb, progress, &x, &y, &clipRgn);
 
     if (!IsWindowVisible(tb.hwnd)) {
         ShowWindow(tb.hwnd, SW_SHOWNOACTIVATE);
@@ -561,7 +606,8 @@ void StartSlideAnimation(TaskbarState& tb, float target, int durationMs) {
     if (std::abs(tb.animTargetProgress - target) > 0.01f) {
         tb.animStartProgress = tb.animProgress;
         tb.animTargetProgress = target;
-        tb.animStartTick = GetTickCount64() - kAnimTickMs;
+        ULONGLONG now = GetTickCount64();
+        tb.animStartTick = (now > kAnimTickMs) ? (now - kAnimTickMs) : 0;
     }
 }
 
@@ -585,11 +631,11 @@ bool StepTaskbarAnimation(TaskbarState& tb, int durationMs) {
     return t < 1.0f;
 }
 
-void UpdateTaskbarGeometry(TaskbarState& tb) {
-    if (!IsWindow(tb.hwnd) || tb.isApplyingAnimPos) {
+void UpdateTaskbarGeometryFromRect(TaskbarState& tb, const RECT& rect) {
+    if (!IsWindow(tb.hwnd)) {
         return;
     }
-    HMONITOR hMon = MonitorFromWindow(tb.hwnd, MONITOR_DEFAULTTONEAREST);
+    HMONITOR hMon = MonitorFromRect(&rect, MONITOR_DEFAULTTONEAREST);
     MONITORINFO mi{};
     mi.cbSize = sizeof(mi);
     if (!hMon || !GetMonitorInfoW(hMon, &mi)) {
@@ -599,32 +645,49 @@ void UpdateTaskbarGeometry(TaskbarState& tb) {
     tb.hMonitor = hMon;
     tb.monitorRect = mi.rcMonitor;
 
-    RECT curRect{};
-    if (GetWindowRect(tb.hwnd, &curRect) && IsValidDockedTaskbarRect(curRect, mi.rcMonitor)) {
-        TaskbarEdge detectedEdge = DetectEdgeFromRect(curRect, mi.rcMonitor);
+    if (IsValidDockedTaskbarRect(rect, mi.rcMonitor)) {
+        TaskbarEdge detectedEdge = DetectEdgeFromRect(rect, mi.rcMonitor);
         if (detectedEdge != TaskbarEdge::Unknown) {
-            tb.normalRect = curRect;
+            tb.normalRect = rect;
             tb.edge = detectedEdge;
-            tb.reservedWorkRect = ComputeReservedWorkArea(mi.rcMonitor, curRect, detectedEdge);
             tb.validGeometry = true;
         }
     }
 }
 
+void UpdateTaskbarGeometry(TaskbarState& tb) {
+    if (!IsWindow(tb.hwnd) || tb.isApplyingAnimPos) {
+        return;
+    }
+    RECT curRect{};
+    if (GetWindowRect(tb.hwnd, &curRect)) {
+        UpdateTaskbarGeometryFromRect(tb, curRect);
+    }
+}
+
+int ScaleByWindowDpi(HWND hwnd, int px96) {
+    UINT dpi = GetDpiForWindow(hwnd);
+    if (dpi == 0) {
+        dpi = 96;
+    }
+    return std::max(1, MulDiv(px96, static_cast<int>(dpi), 96));
+}
+
 RECT ComputeTriggerRect(const TaskbarState& tb) {
     RECT r = tb.monitorRect;
+    long trig = ScaleByWindowDpi(tb.hwnd, kBaseEdgeTriggerPx);
     switch (tb.edge) {
         case TaskbarEdge::Left:
-            r.right = std::min(r.right, r.left + kEdgeTriggerPixels);
+            r.right = std::min(r.right, r.left + trig);
             break;
         case TaskbarEdge::Right:
-            r.left = std::max(r.left, r.right - kEdgeTriggerPixels);
+            r.left = std::max(r.left, r.right - trig);
             break;
         case TaskbarEdge::Top:
-            r.bottom = std::min(r.bottom, r.top + kEdgeTriggerPixels);
+            r.bottom = std::min(r.bottom, r.top + trig);
             break;
         case TaskbarEdge::Bottom:
-            r.top = std::max(r.top, r.bottom - kEdgeTriggerPixels);
+            r.top = std::max(r.top, r.bottom - trig);
             break;
         default:
             SetRectEmpty(&r);
@@ -650,13 +713,13 @@ bool IsTaskbarOrFlyoutActive(const TaskbarState& tb,
         return true;
     }
 
-    if (fg && fgIsFlyout &&
-        (fgMonitor == tb.hMonitor || tb.hwnd == FindWindowW(L"Shell_TrayWnd", nullptr))) {
+    if (fg && fgIsFlyout && (fgMonitor == tb.hMonitor || tb.isPrimary)) {
         return true;
     }
 
     if (tb.isHoverShown || tb.animProgress > 0.05f) {
-        if (IsCursorInRectWithPadding(cursorPt, tb.normalRect, kTaskbarKeepShownPaddingPx)) {
+        int pad = ScaleByWindowDpi(tb.hwnd, kBaseKeepShownPaddingPx);
+        if (IsCursorInRectWithPadding(cursorPt, tb.normalRect, pad)) {
             return true;
         }
         HWND underCursor = WindowFromPoint(cursorPt);
@@ -671,24 +734,42 @@ bool IsTaskbarOrFlyoutActive(const TaskbarState& tb,
     return false;
 }
 
-void EnsureWorkAreaAndNativeState() {
+bool IsExclusiveFullscreenActive() {
+    QUERY_USER_NOTIFICATION_STATE state = QUNS_ACCEPTS_NOTIFICATIONS;
+    return SUCCEEDED(SHQueryUserNotificationState(&state)) &&
+           state == QUNS_RUNNING_D3D_FULL_SCREEN;
+}
+
+void EnsureWorkAreaState(bool allowReclaim) {
     g_lastWorkAreaCheckTick = GetTickCount64();
-
-    if (IsNativeAutoHideEnabled()) {
-        SetNativeAutoHide(false);
-    }
-
-    g_reclaimWorkAreaActive.store(true, std::memory_order_release);
+    g_reclaimWorkAreaActive.store(allowReclaim, std::memory_order_release);
 
     for (auto& [hwnd, tb] : g_taskbars) {
         if (tb.validGeometry && IsWindow(hwnd)) {
-            ApplyMonitorWorkArea(tb, true, g_needsInitialWorkAreaSync);
+            ApplyMonitorWorkArea(tb, allowReclaim, g_needsInitialWorkAreaSync);
         }
     }
     g_needsInitialWorkAreaSync = false;
 }
 
 void EvaluateHoverAndAnimate(HWND primaryHwnd, const Settings& settings) {
+    // Stay completely passive when Windows' built-in auto-hide is enabled
+    if (IsNativeAutoHideEnabled()) {
+        if (g_reclaimWorkAreaActive.load(std::memory_order_relaxed)) {
+            g_reclaimWorkAreaActive.store(false, std::memory_order_release);
+            for (auto& [hwnd, tb] : g_taskbars) {
+                tb.isHoverShown = false;
+                SetTaskbarSlidePose(tb, 1.0f);
+            }
+        }
+        return;
+    }
+
+    if (!g_reclaimWorkAreaActive.load(std::memory_order_relaxed)) {
+        g_needsInitialWorkAreaSync = true;
+        EnsureWorkAreaState(true);
+    }
+
     POINT cursorPt{};
     bool hasCursor = GetCursorPos(&cursorPt) != FALSE;
     ULONGLONG now = GetTickCount64();
@@ -696,6 +777,8 @@ void EvaluateHoverAndAnimate(HWND primaryHwnd, const Settings& settings) {
     bool mouseDragging =
         ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0) ||
         ((GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0);
+
+    bool exclusiveFullscreen = IsExclusiveFullscreenActive();
 
     HWND fg = GetForegroundWindow();
     if (fg != g_cachedFgHwnd) {
@@ -717,12 +800,12 @@ void EvaluateHoverAndAnimate(HWND primaryHwnd, const Settings& settings) {
         RECT triggerRect = ComputeTriggerRect(tb);
         bool inTriggerZone = hasCursor && PtInRect(&triggerRect, cursorPt) != FALSE;
 
-        if (mouseDragging && !tb.isHoverShown) {
+        if ((mouseDragging && !tb.isHoverShown) || exclusiveFullscreen) {
             inTriggerZone = false;
         }
 
         if (!tb.isHoverShown) {
-            if (interactionActive && !mouseDragging) {
+            if (interactionActive && !mouseDragging && !exclusiveFullscreen) {
                 tb.hoverStartTick = 0;
                 tb.leaveStartTick = 0;
                 tb.isHoverShown = true;
@@ -773,8 +856,6 @@ void EvaluateHoverAndAnimate(HWND primaryHwnd, const Settings& settings) {
     }
 }
 
-void ScanAndRegisterTaskbars();
-
 LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
                                      UINT uMsg,
                                      WPARAM wParam,
@@ -782,17 +863,26 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
                                      DWORD_PTR dwRefData) {
     bool isPrimary = (dwRefData == 1);
 
-    if (uMsg == g_msgInitOrRefresh) {
+    if (uMsg == g_msgInitNewTaskbar) {
         TaskbarState& tb = g_taskbars[hWnd];
         tb.hwnd = hWnd;
-        UpdateTaskbarGeometry(tb);
+        tb.isPrimary = isPrimary;
         if (isPrimary) {
-            ScanAndRegisterTaskbars();
+            g_primaryTaskbarHwnd = hWnd;
+        }
+        UpdateTaskbarGeometry(tb);
+
+        if (isPrimary) {
             g_usingFastTimer = false;
             SetTimer(hWnd, kTickTimerId, kIdleTickMs, nullptr);
-            Settings settings = GetSettingsCopy();
-            EnsureWorkAreaAndNativeState();
-            EvaluateHoverAndAnimate(hWnd, settings);
+        }
+
+        Settings settings = GetSettingsCopy();
+        if (!IsNativeAutoHideEnabled()) {
+            EnsureWorkAreaState(true);
+            if (g_primaryTaskbarHwnd) {
+                EvaluateHoverAndAnimate(g_primaryTaskbarHwnd, settings);
+            }
         }
         return 0;
     }
@@ -817,9 +907,7 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
                 }
             }
             g_taskbars.clear();
-            if (g_hadNativeAutoHide && g_savedNativeAutoHide) {
-                SetNativeAutoHide(true);
-            }
+            g_primaryTaskbarHwnd = nullptr;
         }
         return 0;
     }
@@ -830,13 +918,9 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
                 Settings settings = GetSettingsCopy();
                 ULONGLONG now = GetTickCount64();
 
-                if (now - g_lastSecondaryScanTick >= kSecondaryScanIntervalMs) {
-                    g_lastSecondaryScanTick = now;
-                    ScanAndRegisterTaskbars();
-                }
-
-                if (now - g_lastWorkAreaCheckTick >= 1000) {
-                    EnsureWorkAreaAndNativeState();
+                if (!IsNativeAutoHideEnabled() &&
+                    now - g_lastWorkAreaCheckTick >= kWorkAreaVerifyIntervalMs) {
+                    EnsureWorkAreaState(true);
                 }
 
                 EvaluateHoverAndAnimate(hWnd, settings);
@@ -846,8 +930,32 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
 
         case WM_WINDOWPOSCHANGING: {
             auto it = g_taskbars.find(hWnd);
-            if (it != g_taskbars.end() && it->second.isApplyingAnimPos) {
-                return 0;
+            if (it != g_taskbars.end()) {
+                TaskbarState& tb = it->second;
+                if (tb.isApplyingAnimPos) {
+                    return 0;
+                }
+
+                // Keep normalRect in sync if Explorer moves/resizes the taskbar while hidden/animating
+                auto* wp = reinterpret_cast<WINDOWPOS*>(lParam);
+                if (wp && !(wp->flags & SWP_NOMOVE) && !(wp->flags & SWP_NOSIZE) &&
+                    wp->cx > 0 && wp->cy > 0) {
+                    RECT req{wp->x, wp->y, wp->x + wp->cx, wp->y + wp->cy};
+                    UpdateTaskbarGeometryFromRect(tb, req);
+                }
+
+                if (tb.animProgress < 0.999f && !tb.isCloaked && wp) {
+                    int x = tb.normalRect.left;
+                    int y = tb.normalRect.top;
+                    HRGN clipRgn = nullptr;
+                    ComputeSlidPoseRect(tb, tb.animProgress, &x, &y, &clipRgn);
+                    if (clipRgn) {
+                        DeleteObject(clipRgn);
+                    }
+                    wp->x = x;
+                    wp->y = y;
+                    wp->flags &= ~SWP_NOMOVE;
+                }
             }
             break;
         }
@@ -873,11 +981,14 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
                 g_needsInitialWorkAreaSync = true;
                 for (auto& [tbHwnd, tb] : g_taskbars) {
                     tb.isHoverShown = false;
+                    tb.hasExplorerWorkRect = false;
                     SetTaskbarSlidePose(tb, 1.0f);
                     UpdateTaskbarGeometry(tb);
                 }
+                if (!IsNativeAutoHideEnabled()) {
+                    EnsureWorkAreaState(true);
+                }
                 Settings settings = GetSettingsCopy();
-                EnsureWorkAreaAndNativeState();
                 EvaluateHoverAndAnimate(hWnd, settings);
             }
             break;
@@ -887,21 +998,107 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
                 _wcsicmp(reinterpret_cast<LPCWSTR>(lParam), L"TraySettings") == 0) {
                 g_needsInitialWorkAreaSync = true;
                 for (auto& [tbHwnd, tb] : g_taskbars) {
+                    tb.hasExplorerWorkRect = false;
                     SetTaskbarSlidePose(tb, 1.0f);
                     UpdateTaskbarGeometry(tb);
                 }
+                if (!IsNativeAutoHideEnabled()) {
+                    EnsureWorkAreaState(true);
+                }
                 Settings settings = GetSettingsCopy();
-                EnsureWorkAreaAndNativeState();
                 EvaluateHoverAndAnimate(hWnd, settings);
             }
             break;
 
         case WM_NCDESTROY:
             g_taskbars.erase(hWnd);
+            if (isPrimary) {
+                g_primaryTaskbarHwnd = nullptr;
+            }
             break;
     }
 
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
+void HandleNewWindowCreated(HWND hwnd) {
+    if (!hwnd || g_shuttingDown.load(std::memory_order_relaxed)) {
+        return;
+    }
+    wchar_t cls[64] = {};
+    if (GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) <= 0) {
+        return;
+    }
+    bool isPrimary = (_wcsicmp(cls, L"Shell_TrayWnd") == 0);
+    bool isSecondary = (_wcsicmp(cls, L"Shell_SecondaryTrayWnd") == 0);
+    if (!isPrimary && !isSecondary) {
+        return;
+    }
+
+    DWORD_PTR refData = isPrimary ? 1 : 2;
+    if (WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, TaskbarSubclassProc, refData)) {
+        PostMessageW(hwnd, g_msgInitNewTaskbar, 0, 0);
+    }
+}
+
+HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
+                                 LPCWSTR lpClassName,
+                                 LPCWSTR lpWindowName,
+                                 DWORD dwStyle,
+                                 int X,
+                                 int Y,
+                                 int nWidth,
+                                 int nHeight,
+                                 HWND hWndParent,
+                                 HMENU hMenu,
+                                 HINSTANCE hInstance,
+                                 LPVOID lpParam) {
+    HWND hwnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName, dwStyle,
+                                         X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
+    if (hwnd) {
+        HandleNewWindowCreated(hwnd);
+    }
+    return hwnd;
+}
+
+HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle,
+                                    LPCWSTR lpClassName,
+                                    LPCWSTR lpWindowName,
+                                    DWORD dwStyle,
+                                    int X,
+                                    int Y,
+                                    int nWidth,
+                                    int nHeight,
+                                    HWND hWndParent,
+                                    HMENU hMenu,
+                                    HINSTANCE hInstance,
+                                    LPVOID lpParam,
+                                    DWORD dwBand) {
+    HWND hwnd = CreateWindowInBand_Original(dwExStyle, lpClassName, lpWindowName, dwStyle,
+                                            X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam, dwBand);
+    if (hwnd) {
+        HandleNewWindowCreated(hwnd);
+    }
+    return hwnd;
+}
+
+BOOL CALLBACK EnumFindPrimaryTaskbarProc(HWND hWnd, LPARAM lParam) {
+    DWORD pid = 0;
+    WCHAR cls[64] = {};
+    if (GetWindowThreadProcessId(hWnd, &pid) &&
+        pid == GetCurrentProcessId() &&
+        GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) > 0 &&
+        _wcsicmp(cls, L"Shell_TrayWnd") == 0) {
+        *reinterpret_cast<HWND*>(lParam) = hWnd;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+HWND FindCurrentProcessPrimaryTaskbar() {
+    HWND found = nullptr;
+    EnumWindows(EnumFindPrimaryTaskbarProc, reinterpret_cast<LPARAM>(&found));
+    return found;
 }
 
 BOOL CALLBACK EnumThreadTaskbarsProc(HWND hWnd, LPARAM lParam) {
@@ -912,32 +1109,7 @@ BOOL CALLBACK EnumThreadTaskbarsProc(HWND hWnd, LPARAM lParam) {
     return TRUE;
 }
 
-HWND FindCurrentProcessPrimaryTaskbar() {
-    struct Ctx {
-        DWORD pid;
-        HWND found;
-    } ctx{GetCurrentProcessId(), nullptr};
-
-    EnumWindows(
-        [](HWND hWnd, LPARAM lParam) -> BOOL {
-            auto* c = reinterpret_cast<Ctx*>(lParam);
-            DWORD pid = 0;
-            WCHAR cls[64] = {};
-            if (GetWindowThreadProcessId(hWnd, &pid) &&
-                pid == c->pid &&
-                GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) > 0 &&
-                _wcsicmp(cls, L"Shell_TrayWnd") == 0) {
-                c->found = hWnd;
-                return FALSE;
-            }
-            return TRUE;
-        },
-        reinterpret_cast<LPARAM>(&ctx));
-
-    return ctx.found;
-}
-
-void ScanAndRegisterTaskbars() {
+void SubclassExistingTaskbars() {
     HWND primary = FindCurrentProcessPrimaryTaskbar();
     if (!primary) {
         return;
@@ -947,61 +1119,17 @@ void ScanAndRegisterTaskbars() {
     std::vector<HWND> threadTaskbars;
     EnumThreadWindows(tid, EnumThreadTaskbarsProc, reinterpret_cast<LPARAM>(&threadTaskbars));
 
-    for (auto it = g_taskbars.begin(); it != g_taskbars.end();) {
-        if (!IsWindow(it->first) ||
-            std::find(threadTaskbars.begin(), threadTaskbars.end(), it->first) == threadTaskbars.end()) {
-            it = g_taskbars.erase(it);
-        } else {
-            ++it;
-        }
-    }
-
-    for (HWND hwnd : threadTaskbars) {
-        if (g_taskbars.find(hwnd) == g_taskbars.end()) {
-            TaskbarState& tb = g_taskbars[hwnd];
-            tb.hwnd = hwnd;
-            UpdateTaskbarGeometry(tb);
-            DWORD_PTR refData = (hwnd == primary) ? 1 : 2;
-            WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, TaskbarSubclassProc, refData);
-        }
-    }
-}
-
-bool InitializeOnExistingTaskbar() {
-    HWND primary = FindCurrentProcessPrimaryTaskbar();
-    if (!primary) {
-        return false;
-    }
-
-    if (!g_hadNativeAutoHide) {
-        g_hadNativeAutoHide = true;
-        g_savedNativeAutoHide = IsNativeAutoHideEnabled();
-    }
-
-    DWORD tid = GetWindowThreadProcessId(primary, nullptr);
-    std::vector<HWND> threadTaskbars;
-    EnumThreadWindows(tid, EnumThreadTaskbarsProc, reinterpret_cast<LPARAM>(&threadTaskbars));
-
     for (HWND hwnd : threadTaskbars) {
         if (hwnd != primary) {
-            WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, TaskbarSubclassProc, 2);
-            PostMessageW(hwnd, g_msgInitOrRefresh, 0, 0);
+            if (WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, TaskbarSubclassProc, 2)) {
+                PostMessageW(hwnd, g_msgInitNewTaskbar, 0, 0);
+            }
         }
     }
 
-    WindhawkUtils::SetWindowSubclassFromAnyThread(primary, TaskbarSubclassProc, 1);
-    PostMessageW(primary, g_msgInitOrRefresh, 0, 0);
-    return true;
-}
-
-DWORD WINAPI TaskbarWaiterThreadProc(LPVOID) {
-    for (int i = 0; i < 150 && !g_shuttingDown.load(std::memory_order_relaxed); i++) {
-        if (InitializeOnExistingTaskbar()) {
-            break;
-        }
-        Sleep(100);
+    if (WindhawkUtils::SetWindowSubclassFromAnyThread(primary, TaskbarSubclassProc, 1)) {
+        PostMessageW(primary, g_msgInitNewTaskbar, 0, 0);
     }
-    return 0;
 }
 
 } // namespace
@@ -1019,23 +1147,22 @@ BOOL Wh_ModInit() {
     }
 
     LoadSettings();
-    g_shuttingDown = false;
-    g_reclaimWorkAreaActive.store(true, std::memory_order_release);
-    g_needsInitialWorkAreaSync = true;
-    g_usingFastTimer = false;
-    g_cachedFgHwnd = nullptr;
-    g_cachedFgIsFlyout = false;
-    g_cachedFgMonitor = nullptr;
 
-    Wh_SetFunctionHook((void*)SystemParametersInfoW,
-                       (void*)SystemParametersInfoW_Hook,
-                       (void**)&SystemParametersInfoW_Original);
+    WindhawkUtils::SetFunctionHook(SystemParametersInfoW,
+                                   SystemParametersInfoW_Hook,
+                                   &SystemParametersInfoW_Original);
+
+    WindhawkUtils::SetFunctionHook(CreateWindowExW,
+                                   CreateWindowExW_Hook,
+                                   &CreateWindowExW_Original);
 
     if (HMODULE user32 = GetModuleHandleW(L"user32.dll")) {
-        if (void* pSpiDpi = reinterpret_cast<void*>(GetProcAddress(user32, "SystemParametersInfoForDpi"))) {
-            Wh_SetFunctionHook(pSpiDpi,
-                               (void*)SystemParametersInfoForDpi_Hook,
-                               (void**)&SystemParametersInfoForDpi_Original);
+        auto pCreateWindowInBand = reinterpret_cast<CreateWindowInBand_t>(
+            GetProcAddress(user32, "CreateWindowInBand"));
+        if (pCreateWindowInBand) {
+            WindhawkUtils::SetFunctionHook(pCreateWindowInBand,
+                                           CreateWindowInBand_Hook,
+                                           &CreateWindowInBand_Original);
         }
     }
 
@@ -1044,10 +1171,7 @@ BOOL Wh_ModInit() {
 
 void Wh_ModAfterInit() {
     Wh_Log(L"AfterInit");
-    if (!InitializeOnExistingTaskbar()) {
-        HANDLE h = CreateThread(nullptr, 0, TaskbarWaiterThreadProc, nullptr, 0, nullptr);
-        g_waiterThread.store(h, std::memory_order_release);
-    }
+    SubclassExistingTaskbars();
 }
 
 void Wh_ModSettingsChanged() {
@@ -1064,19 +1188,15 @@ void Wh_ModUninit() {
     g_shuttingDown = true;
     g_reclaimWorkAreaActive.store(false, std::memory_order_release);
 
-    if (HANDLE h = g_waiterThread.exchange(nullptr, std::memory_order_acq_rel)) {
-        WaitForSingleObject(h, 2000);
-        CloseHandle(h);
-    }
-
     HWND primary = FindCurrentProcessPrimaryTaskbar();
     if (primary) {
-        DWORD_PTR res = 0;
-        SendMessageTimeoutW(primary, g_msgUninitCleanup, 0, 0, SMTO_ABORTIFHUNG, 500, &res);
-
         DWORD tid = GetWindowThreadProcessId(primary, nullptr);
         std::vector<HWND> threadTaskbars;
         EnumThreadWindows(tid, EnumThreadTaskbarsProc, reinterpret_cast<LPARAM>(&threadTaskbars));
+
+        // Synchronous wait ensures cleanup completes before removing subclasses and unloading DLL
+        SendMessageW(primary, g_msgUninitCleanup, 0, 0);
+
         for (HWND hwnd : threadTaskbars) {
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, TaskbarSubclassProc);
         }
