@@ -1,17 +1,16 @@
 // ==WindhawkMod==
-// @id              spotlight-for-windows
+// @id              liquid-search
 // @name            Liquid Search
-// @description     Liquid-glass Spotlight-style launcher with themes, animations, hover zoom, recents and all-drive file search
-// @version         3.3.1
+// @description     Liquid-glass search bar with spring animations, hover zoom, a glass context menu, recents, file browser, clipboard history and all-drive file search            
 // @author          itzderix
 // @include         windhawk.exe
 // @github          https://github.com/itzderix
-// @compilerOptions -lgdi32 -luser32 -lshell32 -luxtheme -lshlwapi -ladvapi32 -lole32 -lshcore
+// @compilerOptions -lgdi32 -luser32 -lshell32 -luxtheme -lshlwapi -ladvapi32 -lole32 -lshcore -lcrypt32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# Liquid Search 
+# Liquid Search
 
 ![Spotlight for Windows](https://raw.githubusercontent.com/itzderix/spotlight-screenshots/main/Screenshot%202026-11-24%20122542%20%282%29.png)
 
@@ -37,13 +36,6 @@ menu is drawn in the same glass.
 
 ![Right-click menu](https://raw.githubusercontent.com/itzderix/spotlight-screenshots/main/right-click.gif)
 
-## How it differs from Spotlight Launcher
-
-[Spotlight Launcher](https://windhawk.net/mods/spotlight-launcher) focuses on breadth: Store apps, a file browser, clipboard history,
-bookmarks and a window switcher. This mod focuses on the experience: the liquid-glass look, open/close and selection animations, hover zoom,
-a draggable bar, a persistent whole-drive file index (refreshed every 15 minutes) and a web-search fallback with a browser picker. Store-app,
-clipboard, bookmark and window-switcher features are not part of this mod.
-
 ## Usage
 
 * **Hotkey** (default Ctrl+Space) opens / closes it. Ctrl+Space is also used by some editors and IDEs
@@ -51,9 +43,26 @@ clipboard, bookmark and window-switcher features are not part of this mod.
   If the combination is already taken by another program, the bar will not open.
 * Type to search Start Menu apps, system tools, **files and folders on all drives** (fixed and removable), and more.
 * **Tab** autofills the selected suggestion (grey ghost text). **Right arrow** at the end of the text also accepts it.
+  When there is nothing to autofill, Tab switches to the file browser.
   **Shift+Tab / Up / Down** move the selection. **Enter** launches, **Esc** closes.
-* Calculator: `12*(3+4)/2` + Enter copies the result. `>command args` runs a command.
+* Calculator: `12*(3+4)/2`, `100+15%`, `sqrt(2)+pi` + Enter copies the result. `>command args` runs a command.
 * If nothing matches, the web search uses the browser you pick in settings.
+
+## File browser
+* Press Tab (with nothing to autofill) to switch between apps and Files.
+* Enter opens a file or enters a folder. Backspace on an empty bar goes up one level.
+* Type to filter the current folder. Ctrl+S changes the sort (name, type, modified, size).
+* Ctrl+Tab / Ctrl+Shift+Tab cycles through the drives. Ctrl+1...9 jumps to Home, Downloads, Documents,
+  Pictures, Music, Videos and then your drives.
+* Right-click a row for Open, Open file location, Cut, Copy, Paste, Copy path and Delete (Recycle Bin).
+* The list scrolls with the mouse wheel and the arrow keys.
+
+## Clipboard history
+* Off by default (setting "Clipboard history"). Type `clip:` to search what you copied.
+* Enter pastes into the window you came from, Ctrl+Enter only copies, Ctrl+D pins / unpins,
+  Ctrl+Shift+R removes the entry.
+* Text only. Entries are encrypted for your Windows account (DPAPI) before they are stored, copies that an
+  app marks as private (password managers) are skipped, and turning the feature off erases what was saved.
 
 ## Text box
 * Click and drag inside the text field to select text. Double-click selects everything.
@@ -226,6 +235,35 @@ clipboard, bookmark and window-switcher features are not part of this mod.
   $description: Only used when Browser is set to Custom. If the chosen browser is not installed, the default browser is used.
 - webSearchUrl: https://www.google.com/search?q=
   $name: Web search URL prefix
+- openMonitor: mouse
+  $name: Open on monitor
+  $options:
+  - mouse: Monitor with the mouse
+  - active: Monitor of the active window
+  - primary: Primary monitor
+- disableFullscreen: false
+  $name: Disable in fullscreen
+  $description: Ignore the hotkey while a fullscreen window (a game, a video player) is focused.
+- calcDisplay: both
+  $name: Calculator display
+  $options:
+  - card: Result card
+  - inline: Inline text
+  - both: Card and inline text
+- fileBrowser: true
+  $name: File browser
+  $description: Press Tab (when no app suggestion is pending) to switch between apps and Files. Enter opens a file or enters a folder, Backspace on an empty bar goes up, Ctrl+Tab cycles drives, Ctrl+1..9 jumps to Home / Downloads / Documents / Pictures / Music / Videos / drives, Ctrl+S changes the sort.
+- startDrive: ""
+  $name: Start drive
+  $description: Drive letter the file browser opens on the first time (for example D). Empty = Home.
+- rememberSort: false
+  $name: Remember file sort
+- clipHistory: false
+  $name: Clipboard history
+  $description: Keeps text you copy and adds a "clip:" prefix to search it. Enter pastes into the window you came from, Ctrl+Enter only copies, Ctrl+D pins, Ctrl+Shift+R removes. Entries are encrypted for your Windows account (DPAPI) before they are stored; copies marked private by password managers are skipped. Turning it off erases what was saved.
+- clipDays: 3
+  $name: Clipboard retention (days)
+  $description: Older unpinned entries are deleted (0 = keep until the 30-entry limit removes them).
 */
 // ==/WindhawkModSettings==
 
@@ -236,6 +274,7 @@ clipboard, bookmark and window-switcher features are not part of this mod.
 #include <shlwapi.h>
 #include <shellscalingapi.h>
 #include <sddl.h>
+#include <wincrypt.h>
 #include <windhawk_utils.h>
 
 #include <algorithm>
@@ -256,7 +295,7 @@ enum { C_APP, C_FILE, C_FOLDER, C_CALC, C_CMD, C_SITE, C_SEARCH, C_RECENT };
 
 struct Item {
     std::wstring name, sub, target;
-    int kind;  // 0 = open/launch, 1 = copy text, 3 = run command, 4 = open URL in chosen browser
+    int kind;  // 0 = open/launch, 1 = copy text, 3 = run command, 4 = open URL in chosen browser, 5 = paste clipboard entry, 6 = enter folder
     int cat;
 };
 
@@ -320,11 +359,11 @@ enum { ST_NONE, ST_FADE, ST_JELLY, ST_POP, ST_SLIDE, ST_ZOOM, ST_BOUNCE, ST_ELAS
 enum { PU_NONE, PU_JELLY, PU_POP, PU_SHAKE, PU_BOUNCE };
 enum {
     M_OPEN = 1, M_LOC, M_CUT, M_COPY, M_PASTE, M_COPYPATH,
-    M_TCUT, M_TCOPY, M_TPASTE, M_TSELALL
+    M_TCUT, M_TCOPY, M_TPASTE, M_TSELALL, M_DELETE
 };
 
 static const wchar_t* kClass = L"WindhawkSpotlightWnd";
-static const wchar_t* kPlaceholder = L"Windows Spotlight Search";
+static const wchar_t* kPlaceholder = L"Liquid Search";
 static const wchar_t* kMenuClass = L"WindhawkSpotlightMenu";
 
 static HANDLE g_thread = nullptr;
@@ -341,6 +380,9 @@ static struct {
     bool border = true, shadow = true, icons = true, endIcon = true, frost = true, drag = true,
          onTop = false, recents = true, apps = true, tools = true, files = true, folders = true,
          calc = true, cmds = true, sites = true, websearch = true;
+    std::wstring openMonitor, calcDisplay, startDrive;
+    int clipDays = 3;
+    bool noFull = false, fileBrowser = true, rememberSort = false, clipOn = false;
 } S;
 
 static std::vector<std::wstring> g_hidden;
@@ -705,6 +747,14 @@ static void LoadSettings() {
     S.cmds = Wh_GetIntSetting(L"showCommands") != 0;
     S.sites = Wh_GetIntSetting(L"showWebsites") != 0;
     S.websearch = Wh_GetIntSetting(L"showWebSearch") != 0;
+    S.openMonitor = GetStr(L"openMonitor");
+    S.calcDisplay = GetStr(L"calcDisplay");
+    S.startDrive = GetStr(L"startDrive");
+    S.noFull = Wh_GetIntSetting(L"disableFullscreen") != 0;
+    S.fileBrowser = Wh_GetIntSetting(L"fileBrowser") != 0;
+    S.rememberSort = Wh_GetIntSetting(L"rememberSort") != 0;
+    S.clipOn = Wh_GetIntSetting(L"clipHistory") != 0;
+    S.clipDays = Clampi(Wh_GetIntSetting(L"clipDays"), 0, 365);
     if (S.webUrl.empty()) S.webUrl = L"https://www.google.com/search?q=";
     g_hidden = SplitList(S.hiddenApps);
     ResolveBrowser();
@@ -758,12 +808,14 @@ struct Calc {
     const wchar_t* p;
     bool ok = true;
     void ws() { while (*p == L' ') p++; }
+    bool pct() { ws(); if (*p == L'%') { p++; return true; } return false; }
     double expr() {
         double v = term();
+        if (pct()) v /= 100.0;
         for (;;) {
             ws();
-            if (*p == L'+') { p++; v += term(); }
-            else if (*p == L'-') { p++; v -= term(); }
+            if (*p == L'+') { p++; double t = term(); if (pct()) t = v * t / 100.0; v += t; }
+            else if (*p == L'-') { p++; double t = term(); if (pct()) t = v * t / 100.0; v -= t; }
             else return v;
         }
     }
@@ -797,6 +849,31 @@ struct Calc {
             if (*p == L')') p++; else ok = false;
             return v;
         }
+        if (iswalpha(*p)) {
+            wchar_t name[8] = {0};
+            int k = 0;
+            while (iswalpha(*p)) { if (k < 7) name[k++] = (wchar_t)towlower(*p); p++; }
+            if (!wcscmp(name, L"pi")) return 3.14159265358979323846;
+            if (!wcscmp(name, L"e")) return 2.71828182845904523536;
+            ws();
+            if (*p != L'(') { ok = false; return 0; }
+            p++;
+            double a = expr();
+            ws();
+            if (*p == L')') p++; else ok = false;
+            if (!wcscmp(name, L"sqrt")) { if (a < 0) ok = false; return std::sqrt(a); }
+            if (!wcscmp(name, L"sin")) return std::sin(a);
+            if (!wcscmp(name, L"cos")) return std::cos(a);
+            if (!wcscmp(name, L"tan")) return std::tan(a);
+            if (!wcscmp(name, L"ln")) { if (a <= 0) ok = false; return std::log(a); }
+            if (!wcscmp(name, L"log")) { if (a <= 0) ok = false; return std::log10(a); }
+            if (!wcscmp(name, L"abs")) return std::fabs(a);
+            if (!wcscmp(name, L"round")) return std::round(a);
+            if (!wcscmp(name, L"floor")) return std::floor(a);
+            if (!wcscmp(name, L"ceil")) return std::ceil(a);
+            ok = false;
+            return 0;
+        }
         wchar_t* e;
         double v = wcstod(p, &e);
         if (e == p) { ok = false; return 0; }
@@ -805,15 +882,17 @@ struct Calc {
     }
 };
 
-static bool TryCalc(const std::wstring& q, double& out) {
+static bool TryCalc(const std::wstring& q0, double& out) {
+    std::wstring q = Lower(q0);
     bool hasOp = false, hasDigit = false;
     for (size_t i = 0; i < q.size(); i++) {
         wchar_t c = q[i];
         if (c >= L'0' && c <= L'9') hasDigit = true;
-        else if (c == L'+' || c == L'-' || c == L'*' || c == L'/' || c == L'^' || c == L'(') {
+        else if (c == L'+' || c == L'-' || c == L'*' || c == L'/' || c == L'^' || c == L'(' ||
+                 c == L'%') {
             if (i > 0 || c == L'(') hasOp = true;
         }
-        else if (c != L'.' && c != L' ' && c != L')') return false;
+        else if (!((c >= L'a' && c <= L'z') || c == L'.' || c == L' ' || c == L')')) return false;
     }
     if (!hasOp || !hasDigit) return false;
     Calc c;
@@ -899,6 +978,407 @@ static void AddRecent(const Item& it) {
     if (g_recents.size() > 20) g_recents.resize(20);
     SaveRecents();
 }
+
+// ======================= v3.4: clipboard history, file browser, helpers =======================
+
+static constexpr int C_CLIP = C_RECENT + 1;  // clipboard history entry
+static constexpr int K_PASTE = 5;            // Item::kind: paste a clipboard entry
+static constexpr int K_NAV = 6;              // Item::kind: enter a folder in the file browser
+
+static void NavTo(const std::wstring& path);        // defined further down
+static void PasteClip(const std::wstring& text);    // defined further down
+
+// Scrollable result list: g_full is everything, g_items is the visible slice.
+static std::vector<Item> g_full;
+static size_t g_top = 0;
+static bool g_scrollable = false;
+static std::wstring g_calcInline, g_calcCopy;
+static HWND g_prevWnd = nullptr;  // window that had focus before the bar opened
+
+static void ApplySlice() {
+    size_t cap = (size_t)S.maxResults;
+    if (g_top + cap > g_full.size()) g_top = g_full.size() > cap ? g_full.size() - cap : 0;
+    size_t end = std::min(g_full.size(), g_top + cap);
+    g_items.assign(g_full.begin() + g_top, g_full.begin() + end);
+}
+
+static HMONITOR PickMonitor() {
+    if (S.openMonitor == L"primary")
+        return MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
+    if (S.openMonitor == L"active" && g_prevWnd)
+        return MonitorFromWindow(g_prevWnd, MONITOR_DEFAULTTOPRIMARY);
+    POINT pt;
+    GetCursorPos(&pt);
+    return MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
+}
+
+static bool FullscreenActive() {
+    HWND fg = GetForegroundWindow();
+    if (!fg || fg == g_hwnd || fg == GetDesktopWindow() || fg == GetShellWindow()) return false;
+    wchar_t cls[64] = {0};
+    GetClassNameW(fg, cls, 64);
+    if (!wcscmp(cls, L"WorkerW") || !wcscmp(cls, L"Progman")) return false;
+    RECT r;
+    if (!GetWindowRect(fg, &r)) return false;
+    MONITORINFO mi{sizeof(mi)};
+    if (!GetMonitorInfoW(MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST), &mi)) return false;
+    return r.left <= mi.rcMonitor.left && r.top <= mi.rcMonitor.top &&
+           r.right >= mi.rcMonitor.right && r.bottom >= mi.rcMonitor.bottom;
+}
+
+// ---- clipboard history (text, encrypted with DPAPI before it is stored) ----
+
+struct Clip {
+    std::wstring text;
+    int minutes;  // minutes since 1970
+    bool pinned;
+};
+static std::vector<Clip> g_clips;  // newest first
+static bool g_clipListen = false;
+
+static int NowMin() {
+    FILETIME ft;
+    GetSystemTimeAsFileTime(&ft);
+    ULARGE_INTEGER u;
+    u.LowPart = ft.dwLowDateTime;
+    u.HighPart = ft.dwHighDateTime;
+    return (int)((u.QuadPart / 10000000ULL - 11644473600ULL) / 60ULL);
+}
+
+static std::wstring ClipKey(const wchar_t* f, int i) {
+    return g_sid + L"_clip" + f + std::to_wstring(i);
+}
+
+static bool ClipEncode(const std::wstring& text, std::wstring& hex) {
+    DATA_BLOB in{(DWORD)(text.size() * sizeof(wchar_t)), (BYTE*)text.data()}, out{};
+    if (!CryptProtectData(&in, L"ls", nullptr, nullptr, nullptr, CRYPTPROTECT_UI_FORBIDDEN, &out))
+        return false;
+    static const wchar_t* h = L"0123456789ABCDEF";
+    hex.clear();
+    hex.reserve((size_t)out.cbData * 2);
+    for (DWORD i = 0; i < out.cbData; i++) {
+        hex += h[out.pbData[i] >> 4];
+        hex += h[out.pbData[i] & 15];
+    }
+    LocalFree(out.pbData);
+    return true;
+}
+
+static bool ClipDecode(const std::wstring& hex, std::wstring& text) {
+    auto hv = [](wchar_t c) -> int {
+        if (c >= L'0' && c <= L'9') return c - L'0';
+        if (c >= L'A' && c <= L'F') return c - L'A' + 10;
+        return -1;
+    };
+    std::vector<BYTE> b;
+    for (size_t i = 0; i + 1 < hex.size(); i += 2) {
+        int a = hv(hex[i]), c = hv(hex[i + 1]);
+        if (a < 0 || c < 0) return false;
+        b.push_back((BYTE)(a * 16 + c));
+    }
+    if (b.empty()) return false;
+    DATA_BLOB in{(DWORD)b.size(), b.data()}, out{};
+    if (!CryptUnprotectData(&in, nullptr, nullptr, nullptr, nullptr, CRYPTPROTECT_UI_FORBIDDEN, &out))
+        return false;
+    text.assign((const wchar_t*)out.pbData, out.cbData / sizeof(wchar_t));
+    LocalFree(out.pbData);
+    return true;
+}
+
+static void SaveClips() {
+    std::wstring cnt = g_sid + L"_clipCount";
+    int old = Wh_GetIntValue(cnt.c_str(), 0);
+    int n = (int)g_clips.size();
+    Wh_SetIntValue(cnt.c_str(), n);
+    for (int i = 0; i < n; i++) {
+        std::wstring hex;
+        if (!ClipEncode(g_clips[i].text, hex)) hex.clear();
+        Wh_SetStringValue(ClipKey(L"Text", i).c_str(), hex.c_str());
+        Wh_SetIntValue(ClipKey(L"Time", i).c_str(), g_clips[i].minutes);
+        Wh_SetIntValue(ClipKey(L"Pin", i).c_str(), g_clips[i].pinned ? 1 : 0);
+    }
+    for (int i = n; i < old; i++) {
+        Wh_DeleteValue(ClipKey(L"Text", i).c_str());
+        Wh_DeleteValue(ClipKey(L"Time", i).c_str());
+        Wh_DeleteValue(ClipKey(L"Pin", i).c_str());
+    }
+}
+
+static void LoadClips() {
+    g_clips.clear();
+    int n = Clampi(Wh_GetIntValue((g_sid + L"_clipCount").c_str(), 0), 0, 60);
+    for (int i = 0; i < n; i++) {
+        std::vector<wchar_t> buf(32768, 0);
+        Wh_GetStringValue(ClipKey(L"Text", i).c_str(), buf.data(), buf.size() - 1);
+        Clip c;
+        if (!ClipDecode(buf.data(), c.text) || c.text.empty()) continue;
+        c.minutes = Wh_GetIntValue(ClipKey(L"Time", i).c_str(), 0);
+        c.pinned = Wh_GetIntValue(ClipKey(L"Pin", i).c_str(), 0) != 0;
+        g_clips.push_back(c);
+    }
+}
+
+static void PruneClips() {
+    int now = NowMin();
+    for (size_t i = g_clips.size(); i-- > 0;) {
+        if (!g_clips[i].pinned && S.clipDays > 0 && now - g_clips[i].minutes > S.clipDays * 1440)
+            g_clips.erase(g_clips.begin() + i);
+    }
+    while (g_clips.size() > 30) {
+        bool done = false;
+        for (size_t i = g_clips.size(); i-- > 0;) {
+            if (!g_clips[i].pinned) { g_clips.erase(g_clips.begin() + i); done = true; break; }
+        }
+        if (!done) break;
+    }
+}
+
+static void ClipAdd(const std::wstring& raw) {
+    std::wstring t = raw.substr(0, 2000);
+    if (Trim(t).empty()) return;
+    bool pin = false;
+    for (size_t i = 0; i < g_clips.size(); i++) {
+        if (g_clips[i].text == t) {
+            pin = g_clips[i].pinned;
+            g_clips.erase(g_clips.begin() + i);
+            break;
+        }
+    }
+    g_clips.insert(g_clips.begin(), Clip{t, NowMin(), pin});
+    PruneClips();
+    SaveClips();
+}
+
+static bool ReadClipText(std::wstring& out) {
+    for (int k = 0; k < 5; k++) {
+        if (OpenClipboard(g_hwnd)) {
+            HANDLE h = GetClipboardData(CF_UNICODETEXT);
+            if (h) {
+                const wchar_t* p = (const wchar_t*)GlobalLock(h);
+                if (p) {
+                    size_t sz = GlobalSize(h) / sizeof(wchar_t), n = 0;
+                    while (n < sz && p[n] && n < 2000) n++;
+                    out.assign(p, n);
+                    GlobalUnlock(h);
+                }
+            }
+            CloseClipboard();
+            return !out.empty();
+        }
+        Sleep(15);
+    }
+    return false;
+}
+
+static void OnClipUpdate() {
+    if (!S.clipOn || g_sid.empty()) return;
+    if (GetClipboardOwner() == g_hwnd) return;  // our own copies
+    static UINT excl = RegisterClipboardFormatW(L"ExcludeClipboardContentFromMonitorProcessing");
+    if (IsClipboardFormatAvailable(excl)) return;  // password managers
+    if (!IsClipboardFormatAvailable(CF_UNICODETEXT)) return;
+    std::wstring t;
+    if (ReadClipText(t)) ClipAdd(t);
+}
+
+static void ApplyClipSetting() {
+    if (!g_hwnd || g_sid.empty()) return;
+    if (S.clipOn) {
+        if (!g_clipListen && AddClipboardFormatListener(g_hwnd)) g_clipListen = true;
+        LoadClips();
+        PruneClips();
+    } else {
+        if (g_clipListen) { RemoveClipboardFormatListener(g_hwnd); g_clipListen = false; }
+        if (Wh_GetIntValue((g_sid + L"_clipCount").c_str(), 0) > 0) {
+            g_clips.clear();
+            SaveClips();  // erases everything that was saved
+        }
+    }
+}
+
+static std::wstring AgeStr(int minutes) {
+    int d = NowMin() - minutes;
+    if (d < 1) return L"just now";
+    if (d < 60) return std::to_wstring(d) + L" min ago";
+    if (d < 1440) return std::to_wstring(d / 60) + L" h ago";
+    return std::to_wstring(d / 1440) + L" d ago";
+}
+
+static void UpdateClipResults(const std::wstring& filter) {
+    PruneClips();
+    std::wstring lf = Lower(filter);
+    for (int pass = 0; pass < 2; pass++) {  // pinned first
+        for (auto& c : g_clips) {
+            if ((pass == 0) != c.pinned) continue;
+            if (!lf.empty() && Lower(c.text).find(lf) == std::wstring::npos) continue;
+            std::wstring line;
+            for (wchar_t ch : c.text) {
+                if (line.size() >= 120) break;
+                line += (ch == L'\r' || ch == L'\n' || ch == L'\t') ? L' ' : ch;
+            }
+            std::wstring sub = L"Clipboard \u00B7 " + AgeStr(c.minutes) +
+                               (c.pinned ? L" \u00B7 pinned" : L"");
+            g_full.push_back({line, sub, c.text, K_PASTE, C_CLIP});
+        }
+    }
+}
+
+// ---- file browser ----
+
+struct DirEnt {
+    std::wstring name, lname;
+    bool dir;
+    ULONGLONG size;
+    FILETIME mt;
+};
+struct Chip {
+    std::wstring name, path;
+    bool drive;
+};
+static std::vector<DirEnt> g_dir;
+static std::wstring g_path;  // "" = list of drives
+static bool g_files = false, g_pathInit = false;
+static int g_sort = 0;  // 0 name, 1 type, 2 modified, 3 size
+
+static std::wstring JoinPath(const std::wstring& base, const std::wstring& name) {
+    if (base.empty()) return name + L"\\";
+    if (base.back() == L'\\') return base + name;
+    return base + L"\\" + name;
+}
+
+static std::wstring ParentOf(std::wstring p) {
+    while (p.size() > 3 && p.back() == L'\\') p.pop_back();
+    if (p.size() <= 3) return L"";  // drive root -> list of drives
+    size_t k = p.find_last_of(L'\\');
+    if (k == std::wstring::npos) return L"";
+    p.resize(k);
+    if (p.size() == 2) p += L'\\';
+    return p;
+}
+
+static void LoadDir(const std::wstring& path) {
+    g_dir.clear();
+    if (path.empty()) {
+        DWORD m = GetLogicalDrives();
+        for (int i = 2; i < 26; i++) {
+            if (!(m & (1u << i))) continue;
+            wchar_t r[4] = {(wchar_t)(L'A' + i), L':', L'\\', 0};
+            UINT t = GetDriveTypeW(r);
+            if (t != DRIVE_FIXED && t != DRIVE_REMOVABLE) continue;
+            DirEnt e{};
+            e.name = std::wstring(r, 2);
+            e.lname = Lower(e.name);
+            e.dir = true;
+            g_dir.push_back(e);
+        }
+        return;
+    }
+    WIN32_FIND_DATAW fd;
+    std::wstring pat = JoinPath(path, L"*");
+    HANDLE h = FindFirstFileExW(pat.c_str(), FindExInfoBasic, &fd, FindExSearchNameMatch, nullptr,
+                                FIND_FIRST_EX_LARGE_FETCH);
+    if (h == INVALID_HANDLE_VALUE) return;
+    do {
+        if (fd.cFileName[0] == L'.' &&
+            (!fd.cFileName[1] || (fd.cFileName[1] == L'.' && !fd.cFileName[2])))
+            continue;
+        if (fd.dwFileAttributes & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM)) continue;
+        DirEnt e{};
+        e.name = fd.cFileName;
+        e.lname = Lower(e.name);
+        e.dir = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+        e.size = ((ULONGLONG)fd.nFileSizeHigh << 32) | fd.nFileSizeLow;
+        e.mt = fd.ftLastWriteTime;
+        g_dir.push_back(e);
+        if (g_dir.size() > 20000) break;
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+}
+
+static std::vector<Chip> Chips() {
+    std::vector<Chip> c;
+    std::wstring h = Env(L"%USERPROFILE%");
+    if (!h.empty()) {
+        c.push_back({L"Home", h, false});
+        const wchar_t* sub[] = {L"Downloads", L"Documents", L"Pictures", L"Music", L"Videos"};
+        for (const wchar_t* s : sub) {
+            std::wstring p = h + L"\\" + s;
+            if (PathIsDirectoryW(p.c_str())) c.push_back({s, p, false});
+        }
+    }
+    DWORD m = GetLogicalDrives();
+    for (int i = 2; i < 26; i++) {
+        if (!(m & (1u << i))) continue;
+        wchar_t r[4] = {(wchar_t)(L'A' + i), L':', L'\\', 0};
+        UINT t = GetDriveTypeW(r);
+        if (t == DRIVE_FIXED || t == DRIVE_REMOVABLE) c.push_back({std::wstring(r, 2), r, true});
+    }
+    return c;
+}
+
+static std::wstring FmtSize(ULONGLONG s) {
+    wchar_t b[32];
+    if (s < 1024ULL) return std::to_wstring(s) + L" B";
+    if (s < 1024ULL * 1024) _snwprintf(b, 31, L"%.1f KB", s / 1024.0);
+    else if (s < 1024ULL * 1024 * 1024) _snwprintf(b, 31, L"%.1f MB", s / (1024.0 * 1024));
+    else _snwprintf(b, 31, L"%.1f GB", s / (1024.0 * 1024 * 1024));
+    b[31] = 0;
+    return b;
+}
+
+static std::wstring FmtTime(const FILETIME& ft) {
+    FILETIME lf;
+    SYSTEMTIME st;
+    if (!FileTimeToLocalFileTime(&ft, &lf) || !FileTimeToSystemTime(&lf, &st)) return L"";
+    wchar_t d[64] = {0}, t[64] = {0};
+    GetDateFormatW(LOCALE_USER_DEFAULT, DATE_SHORTDATE, &st, nullptr, d, 64);
+    GetTimeFormatW(LOCALE_USER_DEFAULT, TIME_NOSECONDS, &st, nullptr, t, 64);
+    return std::wstring(d) + L" " + t;
+}
+
+static const wchar_t* SortName() {
+    static const wchar_t* n[] = {L"name", L"type", L"modified", L"size"};
+    return n[g_sort & 3];
+}
+
+static std::wstring Placeholder() {
+    if (!g_files) return kPlaceholder;
+    return L"Files \u00B7 " + (g_path.empty() ? std::wstring(L"This PC") : g_path) +
+           L" \u00B7 sorted by " + SortName();
+}
+
+static void BuildFileItems() {
+    std::wstring q = Lower(Trim(g_query));
+    std::vector<size_t> idx;
+    for (size_t i = 0; i < g_dir.size(); i++)
+        if (q.empty() || g_dir[i].lname.find(q) != std::wstring::npos) idx.push_back(i);
+    auto ext = [](const DirEnt& e) {
+        size_t k = e.lname.rfind(L'.');
+        return k == std::wstring::npos ? std::wstring() : e.lname.substr(k);
+    };
+    std::stable_sort(idx.begin(), idx.end(), [&](size_t a, size_t b) {
+        const DirEnt& x = g_dir[a];
+        const DirEnt& y = g_dir[b];
+        if (x.dir != y.dir) return x.dir;  // folders first
+        switch (g_sort) {
+            case 1: { int c = ext(x).compare(ext(y)); if (c) return c < 0; break; }
+            case 2: { int c = CompareFileTime(&x.mt, &y.mt); if (c) return c > 0; break; }
+            case 3: if (x.size != y.size) return x.size > y.size; break;
+        }
+        return x.lname < y.lname;
+    });
+    for (size_t i : idx) {
+        const DirEnt& e = g_dir[i];
+        std::wstring full = JoinPath(g_path, e.name);
+        std::wstring disp = g_path.empty() ? e.name + L"\\" : e.name;
+        std::wstring sub;
+        if (g_path.empty()) sub = L"Drive";
+        else if (e.dir) sub = L"Folder \u00B7 " + FmtTime(e.mt) + L" \u00B7 " + g_path;
+        else sub = FmtSize(e.size) + L" \u00B7 " + FmtTime(e.mt) + L" \u00B7 " + g_path;
+        g_full.push_back({disp, sub, full, e.dir ? K_NAV : 0, e.dir ? C_FOLDER : C_FILE});
+    }
+}
+
+// ======================= end of v3.4 data-side block =======================
 
 // ---------------------------------------------------------------- index ---
 
@@ -1167,6 +1647,16 @@ static void UpdateResults() {
     g_items.clear();
     g_sel = 0;
     g_ghost.clear();
+    g_full.clear();
+    g_scrollable = false;
+    g_top = 0;
+    g_calcInline.clear();
+    if (g_files) {
+        BuildFileItems();
+        g_scrollable = true;
+        ApplySlice();
+        return;
+    }
     std::wstring q = Trim(g_query);
     if (q.empty()) {
         if (S.recents) {
@@ -1176,6 +1666,12 @@ static void UpdateResults() {
         }
         return;
     }
+    if (S.clipOn && _wcsnicmp(q.c_str(), L"clip:", 5) == 0) {
+        UpdateClipResults(Trim(q.substr(5)));
+        g_scrollable = true;
+        ApplySlice();
+        return;
+    }
     size_t cap = (size_t)S.maxResults;
 
     double v;
@@ -1183,7 +1679,10 @@ static void UpdateResults() {
         wchar_t b[64];
         _snwprintf(b, 63, L"%.10g", v);
         b[63] = 0;
-        g_items.push_back({std::wstring(L"= ") + b, L"Press Enter to copy result", b, 1, C_CALC});
+        g_calcCopy = b;
+        if (S.calcDisplay != L"inline")
+            g_items.push_back({std::wstring(L"= ") + b, L"Press Enter to copy result", b, 1, C_CALC});
+        if (S.calcDisplay != L"card") g_calcInline = std::wstring(L"= ") + b;
     }
     if (S.cmds && q[0] == L'>') {
         std::wstring cmd = Trim(q.substr(1));
@@ -1781,6 +2280,7 @@ static const wchar_t* GlyphFor(const Item& it) {
         case C_SITE: return L"\uE71B";
         case C_SEARCH: return L"\uE774";
         case C_FOLDER: return L"\uE8B7";
+        case C_CLIP: return L"\uE77F";
     }
     return nullptr;
 }
@@ -1826,7 +2326,7 @@ static void RenderPanel() {
     UINT tf = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS;
     int tw = 0;
     if (g_query.empty()) {
-        Txt(mdc, g_fQuery, std::wstring(kPlaceholder), rq, dim, tf);
+        Txt(mdc, g_fQuery, Placeholder(), rq, dim, tf);
     } else {
         if (HasSel()) {
             int x0 = tx + TextW(SelLo()), x1 = std::min(tx + TextW(SelHi()), maxR);
@@ -1839,6 +2339,10 @@ static void RenderPanel() {
             RECT rg = {tx + tw, 0, maxR, Sc(SEARCH_H)};
             Txt(mdc, g_fQuery, g_ghost, rg, ghostC, tf);
         }
+    }
+    if (!g_calcInline.empty() && !g_query.empty() && tx + tw < maxR) {
+        RECT rc = {tx + tw + Sc(10), 0, maxR, Sc(SEARCH_H)};
+        Txt(mdc, g_fQuery, g_calcInline, rc, ghostC, tf);
     }
     if (g_caretOn && !HasSel()) {
         int cx = std::min(tx + TextW(g_caret) + Sc(1), maxR);
@@ -2345,11 +2849,14 @@ static void ShowWnd() {
     g_query.clear();
     g_caret = g_anchor = 0;
     g_hov = 1.0;
+    g_files = false;
+    g_prevWnd = GetForegroundWindow();
+    g_sort = (S.rememberSort && !g_sid.empty())
+                 ? (Wh_GetIntValue((g_sid + L"_fileSort").c_str(), 0) & 3)
+                 : 0;
 
     // DPI of the monitor the bar opens on (not the system DPI)
-    POINT pt;
-    GetCursorPos(&pt);
-    HMONITOR hmHome = MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
+    HMONITOR hmHome = PickMonitor();
     MONITORINFO mi{sizeof(mi)};
     GetMonitorInfoW(hmHome, &mi);
     g_dpi = MonDpi(hmHome);
@@ -2524,6 +3031,8 @@ static void PasteFilesInto(const std::wstring& destDir) {
 static void Activate(int i) {
     if (i < 0 || i >= (int)g_items.size()) return;
     Item it = g_items[i];
+    if (it.kind == K_NAV) { NavTo(it.target); return; }
+    if (it.kind == K_PASTE) { PasteClip(it.target); return; }
     HideWnd();
     AddRecent(it);
     if (it.kind == 1) {
@@ -2600,6 +3109,150 @@ static void QueryChanged() {
     g_caretOn = true;
     Layout();
 }
+
+// ======================= v3.4: UI-side actions =======================
+
+static void NavTo(const std::wstring& path) {
+    g_path = path;
+    LoadDir(path);
+    g_query.clear();
+    g_caret = g_anchor = 0;
+    UpdateResults();
+    g_caretOn = true;
+    Layout();
+}
+
+static void ToggleFiles() {
+    if (!S.fileBrowser) return;
+    g_files = !g_files;
+    if (g_files) {
+        if (!g_pathInit) {
+            g_pathInit = true;
+            g_path = Env(L"%USERPROFILE%");
+            std::wstring sd = Trim(S.startDrive);
+            if (!sd.empty() && iswalpha(sd[0])) {
+                std::wstring root;
+                root += (wchar_t)towupper(sd[0]);
+                root += L":\\";
+                if (PathIsDirectoryW(root.c_str())) g_path = root;
+            }
+        }
+        LoadDir(g_path);
+    }
+    g_query.clear();
+    g_caret = g_anchor = 0;
+    UpdateResults();
+    g_caretOn = true;
+    Layout();
+    StartPulse();
+}
+
+static void GoUp() {
+    if (!g_files || g_path.empty()) return;
+    NavTo(ParentOf(g_path));
+}
+
+static void CycleSort() {
+    g_sort = (g_sort + 1) & 3;
+    if (S.rememberSort && !g_sid.empty())
+        Wh_SetIntValue((g_sid + L"_fileSort").c_str(), g_sort);
+    UpdateResults();
+    Layout();
+}
+
+static void JumpChip(int i) {
+    std::vector<Chip> c = Chips();
+    if (i >= 0 && i < (int)c.size()) NavTo(c[i].path);
+}
+
+static void CycleDrive(int dir) {
+    if (!g_files) return;
+    std::vector<std::wstring> d;
+    for (auto& c : Chips()) if (c.drive) d.push_back(c.path);
+    if (d.empty()) return;
+    int n = (int)d.size(), cur = -1;
+    if (g_path.size() >= 2 && g_path[1] == L':') {
+        for (int i = 0; i < n; i++)
+            if (towupper(d[i][0]) == towupper(g_path[0])) cur = i;
+    }
+    int nx = cur < 0 ? (dir > 0 ? 0 : n - 1) : (cur + dir + n) % n;
+    NavTo(d[nx]);
+}
+
+static void SliceKeep(int sel) {
+    ApplySlice();
+    g_sel = g_items.empty() ? 0 : Clampi(sel, 0, (int)g_items.size() - 1);
+    ComputeGhost();
+    Redraw();
+}
+
+static void MoveSel(int dir) {
+    int n = (int)g_items.size();
+    if (!n) return;
+    if (!g_scrollable) { SetSel((g_sel + dir + n) % n, true); return; }
+    size_t total = g_full.size(), cap = (size_t)S.maxResults;
+    if (dir > 0) {
+        if (g_sel < n - 1) SetSel(g_sel + 1, true);
+        else if (g_top + (size_t)n < total) { g_top++; SliceKeep(n - 1); }
+        else { g_top = 0; SliceKeep(0); }
+    } else {
+        if (g_sel > 0) SetSel(g_sel - 1, true);
+        else if (g_top > 0) { g_top--; SliceKeep(0); }
+        else { g_top = total > cap ? total - cap : 0; SliceKeep((int)cap); }
+    }
+}
+
+static void PasteClip(const std::wstring& text) {
+    HWND prev = g_prevWnd;
+    DoHide();  // no animation: focus must go back right away
+    CopyText(text);
+    if (prev && IsWindow(prev)) SetForegroundWindow(prev);
+    Sleep(120);
+    INPUT in[4] = {};
+    in[0].type = INPUT_KEYBOARD;
+    in[0].ki.wVk = VK_CONTROL;
+    in[1].type = INPUT_KEYBOARD;
+    in[1].ki.wVk = 'V';
+    in[2] = in[1];
+    in[2].ki.dwFlags = KEYEVENTF_KEYUP;
+    in[3] = in[0];
+    in[3].ki.dwFlags = KEYEVENTF_KEYUP;
+    SendInput(4, in, sizeof(INPUT));
+}
+
+static void ClipToggleSel(bool remove) {
+    if (g_items.empty() || g_items[g_sel].cat != C_CLIP) return;
+    std::wstring t = g_items[g_sel].target;
+    for (size_t i = 0; i < g_clips.size(); i++) {
+        if (g_clips[i].text != t) continue;
+        if (remove) g_clips.erase(g_clips.begin() + i);
+        else g_clips[i].pinned = !g_clips[i].pinned;
+        break;
+    }
+    SaveClips();
+    int keep = g_sel;
+    UpdateResults();
+    g_sel = g_items.empty() ? 0 : std::min(keep, (int)g_items.size() - 1);
+    Layout();
+}
+
+static void DeleteToBin(const std::wstring& path) {
+    std::wstring from = path;
+    from.push_back(0);  // double-null terminated
+    SHFILEOPSTRUCTW op{};
+    op.hwnd = g_hwnd;
+    op.wFunc = FO_DELETE;
+    op.pFrom = from.c_str();
+    op.fFlags = FOF_ALLOWUNDO;
+    SHFileOperationW(&op);
+    if (g_files) {
+        LoadDir(g_path);
+        UpdateResults();
+        Layout();
+    }
+}
+
+// ======================= end of v3.4 UI-side block =======================
 
 static void ResetPosition() {
     g_userMoved = false;
@@ -2831,6 +3484,9 @@ static void RunMenuAction(int id) {
         case M_COPYPATH:
             if (!g_ctxPath.empty()) CopyText(g_ctxPath);
             break;
+        case M_DELETE:
+            if (!g_ctxPath.empty()) DeleteToBin(g_ctxPath);
+            break;
         case M_TCUT:
         case M_TCOPY:
         case M_TPASTE:
@@ -2919,6 +3575,10 @@ static void ShowContextMenu(LPARAM lp) {
                             canPaste, false});
         m.push_back(MenuEnt{0, L"", false, true});
         m.push_back(MenuEnt{M_COPYPATH, L"Copy path", hasPath, false});
+        if (g_files && hasPath && g_ctxPath.size() > 3) {
+            m.push_back(MenuEnt{0, L"", false, true});
+            m.push_back(MenuEnt{M_DELETE, L"Delete (Recycle Bin)", true, false});
+        }
     } else {
         bool sel = HasSel();
         m.push_back(MenuEnt{M_TCUT, L"Cut", sel, false});
@@ -2993,13 +3653,27 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             EndPaint(hwnd, &ps);
             return 0;
         }
+        case WM_CLIPBOARDUPDATE:
+            OnClipUpdate();
+            return 0;
+        case WM_MOUSEWHEEL:
+            if (g_scrollable && g_anim != ANIM_CLOSE && !g_menuOpen) {
+                size_t cap = (size_t)S.maxResults;
+                if (GET_WHEEL_DELTA_WPARAM(wp) > 0) { if (g_top > 0) g_top--; }
+                else if (g_top + cap < g_full.size()) g_top++;
+                SliceKeep(g_sel);
+                NoteInput();
+            }
+            return 0;
         case WM_HOTKEY:
-            if (IsWindowVisible(hwnd) && g_anim != ANIM_CLOSE) HideWnd(); else ShowWnd();
+            if (IsWindowVisible(hwnd) && g_anim != ANIM_CLOSE) HideWnd();
+            else if (!(S.noFull && FullscreenActive())) ShowWnd();
             return 0;
         case WM_APP_SETTINGS:
             LoadSettings();
             RegisterHot();
             UpdateTheme();
+            ApplyClipSetting();
             if (IsWindowVisible(hwnd) && g_anim != ANIM_CLOSE) {
                 ComputeBase(g_homeWork);
                 if (!g_userMoved) {
@@ -3069,14 +3743,25 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             bool ctrl = GetKeyState(VK_CONTROL) < 0;
             bool shift = GetKeyState(VK_SHIFT) < 0;
             int n = (int)g_items.size();
+            if (ctrl && g_files && wp >= '1' && wp <= '9') { JumpChip((int)(wp - '1')); return 0; }
             switch (wp) {
                 case VK_ESCAPE: HideWnd(); break;
-                case VK_RETURN: Activate(g_sel); break;
+                case VK_RETURN:
+                    if (ctrl && n && g_items[g_sel].cat == C_CLIP) {
+                        CopyText(g_items[g_sel].target);
+                        HideWnd();
+                    } else if (!g_calcInline.empty() && S.calcDisplay == L"inline") {
+                        CopyText(g_calcCopy);
+                        HideWnd();
+                    } else {
+                        Activate(g_sel);
+                    }
+                    break;
                 case VK_DOWN:
-                    if (n) SetSel((g_sel + 1) % n, true);
+                    MoveSel(1);
                     break;
                 case VK_UP:
-                    if (n) SetSel((g_sel + n - 1) % n, true);
+                    MoveSel(-1);
                     break;
                 case VK_LEFT: {
                     size_t pos = (!shift && HasSel()) ? SelLo() : (g_caret > 0 ? g_caret - 1 : 0);
@@ -3124,16 +3809,17 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     }
                     break;
                 case VK_TAB:
-                    if (!n) break;
-                    if (shift) {
-                        SetSel((g_sel + n - 1) % n, true);
-                    } else if (g_items[g_sel].cat == C_APP &&
-                               _wcsicmp(g_items[g_sel].name.c_str(), g_query.c_str()) != 0) {
+                    if (ctrl) { CycleDrive(shift ? -1 : 1); break; }
+                    if (shift) { MoveSel(-1); break; }
+                    if (!g_files && n && g_items[g_sel].cat == C_APP &&
+                        _wcsicmp(g_items[g_sel].name.c_str(), g_query.c_str()) != 0) {
                         SetQuery(g_items[g_sel].name);  // autofill
                         QueryChanged();
                         StartPulse();
+                    } else if (S.fileBrowser) {
+                        ToggleFiles();
                     } else {
-                        SetSel((g_sel + 1) % n, true);
+                        MoveSel(1);
                     }
                     break;
                 case VK_BACK:
@@ -3153,6 +3839,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                             g_anchor = g_caret;
                         }
                     } else {
+                        if (g_files && g_query.empty()) GoUp();
                         break;
                     }
                     QueryChanged();
@@ -3168,6 +3855,15 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     break;
                 case 'V':
                     if (ctrl) TextMenuAction(M_TPASTE);
+                    break;
+                case 'S':
+                    if (ctrl && g_files) CycleSort();
+                    break;
+                case 'D':
+                    if (ctrl) ClipToggleSel(false);
+                    break;
+                case 'R':
+                    if (ctrl && shift) ClipToggleSel(true);
                     break;
             }
             return 0;
@@ -3278,6 +3974,7 @@ static DWORD WINAPI UiThread(LPVOID) {
                                     nullptr);
         LoadSettings();
         LoadRecents();
+        ApplyClipSetting();
         UpdateTheme();
         g_dpi = MonDpi(MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY));
         ApplyScale();
