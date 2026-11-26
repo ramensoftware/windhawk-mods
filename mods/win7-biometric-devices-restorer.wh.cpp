@@ -37,8 +37,7 @@ This is needed **only** for the elevated "Change biometric settings" page: COM e
 
 ## About
 
-The mod downloads the original Windows 7 binaries from Microsoft's public symbol server (`msdl.microsoft.com`, over HTTPS, using the system proxy settings) on first use, verifies them with pinned SHA-256 hashes, applies the necessary compatibility patches, and registers the applet virtually so that no permanent system files or registry keys are modified.
-
+The mod downloads the original Windows 7 binaries from Microsoft's public symbol server (`msdl.microsoft.com`, over HTTPS, using the system proxy settings) on first use, verifies them with pinned SHA-256 hashes, applies the necessary compatibility patches, and registers the applet virtually so that no permanent system files or registry keys are modified. This mod has been tested on Windows 11 24H2.
 It supports 6 languages: English, Italian, French, Spanish, Portuguese, and German.
 The language can follow the Windows UI language or be set to a specific locale.
 
@@ -3558,6 +3557,9 @@ static bool LoadDllHostPayload(const std::wstring& binDir, const std::wstring& d
 #ifndef BIO_GENERATOR_ONLY
 
 static BOOL ModInitImpl() {
+#if !defined(_M_AMD64) && !defined(__x86_64__)
+    return FALSE;  // The Windows 7 binaries are x64-only.
+#endif
     LoadSettings();
 
     wchar_t exe[MAX_PATH] = {};
