@@ -8897,8 +8897,13 @@ static bool WidgetsBelowDesktop() {
     return false;
 }
 
+static void WallpaperChanged();
+
 static void CALLBACK OnForeground(HWINEVENTHOOK, DWORD, HWND h, LONG obj, LONG, DWORD, DWORD) {
     if (obj == OBJID_WINDOW && h && IsDeskClass(h)) PostThreadMessageW(g_uiThreadId, WM_APP_DESK, 0, 0);
+    // An animated-wallpaper app tells nobody when it changes the wallpaper, but choosing one means using its window
+    // and leaving it: then the glass is taken again (the live glass follows the screen by itself)
+    if (obj == OBJID_WINDOW && !g_ui.liveGlass && WallpaperAppWindow()) WallpaperChanged();
 }
 
 // ---------------------------------------------------------------------------
@@ -11102,13 +11107,14 @@ static bool ShowsDesktop(Widget* wd) {
 // A new wallpaper (or theme, or slideshow picture) is faded in by Windows over about a second: the glass is taken
 // again a few times after it, so it ends up with the new picture whatever the mode (without the live glass it's never
 // retaken by itself)
-static ULONGLONG g_reglassAt[3] = {};
+static ULONGLONG g_reglassAt[4] = {};
 
 static void WallpaperChanged() {
     ULONGLONG now = GetTickCount64();
-    g_reglassAt[0] = now + 300;
-    g_reglassAt[1] = now + 1500;
-    g_reglassAt[2] = now + 3500;
+    g_reglassAt[0] = now + 150;
+    g_reglassAt[1] = now + 700;
+    g_reglassAt[2] = now + 1500;
+    g_reglassAt[3] = now + 3500;
 }
 
 // Slideshows and Spotlight don't always tell the windows: the wallpaper's file is watched too (every few seconds)
