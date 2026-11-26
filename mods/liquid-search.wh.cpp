@@ -2,6 +2,7 @@
 // @id              liquid-search
 // @name            Liquid Search
 // @description     Liquid-glass search bar with spring animations, hover zoom, a glass context menu, recents, file browser, clipboard history and all-drive file search            
+// @version         3.4.0
 // @author          itzderix
 // @include         windhawk.exe
 // @github          https://github.com/itzderix
