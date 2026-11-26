@@ -2,12 +2,13 @@
 // @id              taskbar-edge-color-match
 // @name            Taskbar Edge Color Match
 // @description     Standalone mod that matches the Windows 11 taskbar color to the edge strip, majority screen color, or mixed mode, with true transparency on desktop, rounded corners, and top-to-bottom fade animation.
-// @version         2.5.72
+// @version         2.5.73
 // @author          Nitin Patel
 // @github          https://github.com/nitinp94
+// @license         GPL-3.0
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lgdi32 -luser32 -ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore -lversion -ladvapi32
+// @compilerOptions -lgdi32 -luser32 -ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -15,6 +16,14 @@
 # Taskbar Edge Color Match
 
 Matches the Windows 11 taskbar background color in real time—**standalone**, with no `Windows 11 Taskbar Styler` dependency.
+
+![Taskbar Edge Color Match Preview](https://github.com/nitinp94/taskbar-edge-color-match/blob/main/Screenshot%202026-11-26%20161229.png)
+
+![Taskbar Edge Color Match Preview](https://github.com/nitinp94/taskbar-edge-color-match/blob/main/Screenshot%202026-11-26%20161257.png)
+
+![Taskbar Edge Color Match Preview](https://github.com/nitinp94/taskbar-edge-color-match/blob/main/Screenshot%202026-11-26%20161402.png)
+
+![Taskbar Edge Color Match Preview](https://github.com/nitinp94/taskbar-edge-color-match/blob/main/Screenshot%202026-11-26%20161512.png)
 
 ## Features
 - **Works Out of the Box**: Starts matching the taskbar color right after installation.
@@ -29,8 +38,12 @@ Matches the Windows 11 taskbar background color in real time—**standalone**, w
 - **Rounded Corners with Transparent Outer Area**: Rounds the panel corners and hides the underlying rectangular taskbar fill when rounded so the outer corner area stays transparent.
 - **Tray-Aware Transparency Contrast**: When transparent on the desktop, adapts system tray and battery icon contrast to whether the screen behind the tray is light or dark.
 - **Start / Flyout Stability**: Holds and re-asserts the current color during Start menu / flyout transitions so the bar doesn't flash black or white.
-- **Targeted Explorer Restart**: Restarts `explorer.exe` safely only on Windows theme changes (when enabled), when **Transparent when on desktop** changes, and when unapplying the mod; all other settings apply live.
+- **Live Settings & Clean Unload**: Applies settings live and restores taskbar state cleanly on disable or unload without restarting `explorer.exe`.
 - **Optional Cosmetics & Contrast**: Brightness clamping, panel opacity, panel corner radius, top-to-bottom fade animation, adaptive light/dark taskbar icons (including battery contrast), and fullscreen pause.
+
+## Why a Separate Mod & Credits
+- **Why separate from Top Taskbar Bleed, Dynamic Taskbar Transparency, and Adaptive Tray Contrast**: Rather than sampling maximized window title bars or only handling desktop transparency or tray contrast, this mod samples live screen edge strips, monitor-wide majority colors, or a hysteresis-gated mixed mode, works out of the box on bottom and multi-position taskbars, and combines top-to-bottom sweep animation, corner radius, brightness clamping, and YouTube/Gemini edge overrides in one standalone mod.
+- **Credits**: XAML island attachment, visual-tree helpers, and theme hysteresis are adapted from **Top Taskbar Bleed** (`m417z`, licensed under GPL-3.0).
 */
 // ==/WindhawkModReadme==
 
@@ -49,7 +62,7 @@ Matches the Windows 11 taskbar background color in real time—**standalone**, w
   $name: Transparent when on desktop
   $description: Makes the taskbar transparent in any theme when on the desktop (including when windows are minimized or tray icons are hovered/clicked). When off, the panel stays visible at Panel opacity.
 - panelOpacityPercent: 100
-  $name: Panel opacity (100-100%)
+  $name: Panel opacity (10-100%)
   $description: Controls the opacity of the color-matched taskbar background panel when active.
 - panelCornerRadius: 0
   $name: Panel corner radius (0-24 px)
@@ -69,9 +82,6 @@ Matches the Windows 11 taskbar background color in real time—**standalone**, w
 - pauseOnFullscreen: true
   $name: Pause on fullscreen windows
   $description: Skips screen sampling when a fullscreen app covers the monitor.
-- restartExplorerOnThemeChange: true
-  $name: Restart Explorer on Windows theme change
-  $description: Automatically restarts explorer.exe when Windows switches between Light and Dark theme.
 */
 // ==/WindhawkModSettings==
 
@@ -100,6 +110,9 @@ Matches the Windows 11 taskbar background color in real time—**standalone**, w
 #include <unordered_map>
 #include <vector>
 
+EXTERN_C IMAGE_DOS_HEADER __ImageBase;
+#define HINST_THISCOMPONENT reinterpret_cast<HINSTANCE>(&__ImageBase)
+
 namespace wf = winrt::Windows::Foundation;
 namespace wu = winrt::Windows::UI;
 namespace wux = winrt::Windows::UI::Xaml;
@@ -108,14 +121,13 @@ namespace wuxm = winrt::Windows::UI::Xaml::Media;
 namespace wuxs = winrt::Windows::UI::Xaml::Shapes;
 
 // Balanced polling avoids UI thread contention during app switches while keeping animations crisp
-static constexpr DWORD IDLE_POLL_INTERVAL_MS = 75;
-static constexpr DWORD MIXED_POLL_INTERVAL_MS = 34;
-static constexpr DWORD EDGE_POLL_INTERVAL_MS = 12;
+static constexpr DWORD IDLE_POLL_INTERVAL_MS = 120;
+static constexpr DWORD MIXED_POLL_INTERVAL_MS = 60;
+static constexpr DWORD EDGE_POLL_INTERVAL_MS = 45;
 static constexpr DWORD ANIM_POLL_INTERVAL_MS = 18;
 static constexpr ULONGLONG FLYOUT_CLOSE_GRACE_MS = 120;
 static constexpr ULONGLONG kCommitCooldownMs = 130;
 static constexpr ULONGLONG kEdgeDebounceMs = 55;
-static constexpr ULONGLONG kVideoHoldGraceMs = 2000;
 static constexpr ULONGLONG kWindowScanCacheMs = 180;
 static constexpr ULONGLONG kSideCheckCacheMs = 300;
 static constexpr ULONGLONG kMixedMajorityCacheMs = 260;
@@ -130,6 +142,7 @@ static std::atomic<bool> g_symbolsHooked{false};
 static std::atomic<bool> g_taskbarViewHooked{false};
 static std::atomic<bool> g_systemTrayHooked{false};
 static std::atomic<bool> g_hasCachedXamlRoot{false};
+static std::atomic<bool> g_taskbarMissingPanel{true};
 static HANDLE g_workerThread = nullptr;
 static HANDLE g_wakeEvent = nullptr;
 
@@ -144,8 +157,6 @@ static std::atomic<int> g_minChannel{16};
 static std::atomic<int> g_maxChannel{242};
 static std::atomic<bool> g_adaptiveIconTheme{true};
 static std::atomic<bool> g_pauseOnFullscreen{true};
-static std::atomic<bool> g_restartExplorerOnThemeChange{true};
-static std::atomic<bool> g_restartingExplorer{false};
 static std::atomic<bool> g_forceRefresh{false};
 static std::atomic<bool> g_animRunningGlobal{false};
 static std::atomic<ULONGLONG> g_lastFgChangeTick{0};
@@ -165,44 +176,6 @@ static void SignalWorkerWakeup() {
     if (g_wakeEvent) {
         SetEvent(g_wakeEvent);
     }
-}
-
-static void SafeRestartExplorer(PCWSTR reason) {
-    if (g_restartingExplorer.exchange(true)) return;
-
-    Wh_Log(L"Taskbar Edge Color Match: safely restarting explorer.exe (%s)", reason);
-    g_unloading.store(true);
-    g_stop.store(true);
-    SignalWorkerWakeup();
-
-    if (HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd()) {
-        RunFromWindowThread(hTaskbarWnd, CleanupIslandsOnTaskbarThread, nullptr);
-        RunFromWindowThread(hTaskbarWnd, CleanupTaskbarAsyncDispatcherOnUiThread, nullptr);
-    }
-
-    WCHAR sysDir[MAX_PATH]{};
-    if (GetSystemDirectoryW(sysDir, ARRAYSIZE(sysDir)) > 0) {
-        WCHAR cmdLine[MAX_PATH * 2]{};
-        swprintf_s(
-            cmdLine,
-            L"\"%s\\cmd.exe\" /c ping -n 2 127.0.0.1 >nul & start \"\" \"%s\\explorer.exe\"",
-            sysDir, sysDir);
-
-        STARTUPINFOW si{};
-        si.cb = sizeof(si);
-        si.dwFlags = STARTF_USESHOWWINDOW;
-        si.wShowWindow = SW_HIDE;
-
-        PROCESS_INFORMATION pi{};
-        if (CreateProcessW(
-                nullptr, cmdLine, nullptr, nullptr, FALSE,
-                CREATE_NO_WINDOW | DETACHED_PROCESS, nullptr, nullptr, &si, &pi)) {
-            CloseHandle(pi.hThread);
-            CloseHandle(pi.hProcess);
-        }
-    }
-
-    ExitProcess(0);
 }
 
 static void LoadSettings() {
@@ -232,8 +205,6 @@ static void LoadSettings() {
 
     g_adaptiveIconTheme.store(Wh_GetIntSetting(L"adaptiveIconTheme") != 0);
     g_pauseOnFullscreen.store(Wh_GetIntSetting(L"pauseOnFullscreen") != 0);
-    g_restartExplorerOnThemeChange.store(
-        Wh_GetIntSetting(L"restartExplorerOnThemeChange") != 0);
     g_forceRefresh.store(true);
     SignalWorkerWakeup();
 }
@@ -327,13 +298,15 @@ void WINAPI EnsureTaskbarAsyncDispatcherOnUiThread(void*) {
     WNDCLASSEXW wc{};
     wc.cbSize = sizeof(wc);
     wc.lpfnWndProc = AsyncTaskbarWndProc;
-    wc.hInstance = GetModuleHandleW(nullptr);
+    wc.hInstance = HINST_THISCOMPONENT;
     wc.lpszClassName = L"WindhawkAsyncUiDispatcher_" WH_MOD_ID;
-    RegisterClassExW(&wc);
+    if (!RegisterClassExW(&wc)) {
+        if (GetLastError() != ERROR_CLASS_ALREADY_EXISTS) return;
+    }
 
     HWND disp = CreateWindowExW(
         0, wc.lpszClassName, L"", 0, 0, 0, 0, 0,
-        HWND_MESSAGE, nullptr, wc.hInstance, nullptr);
+        HWND_MESSAGE, nullptr, HINST_THISCOMPONENT, nullptr);
     if (disp) {
         g_uiThreadDispatcherWnd.store(disp);
     }
@@ -344,6 +317,7 @@ void WINAPI CleanupTaskbarAsyncDispatcherOnUiThread(void*) {
     if (disp && IsWindow(disp)) {
         DestroyWindow(disp);
     }
+    UnregisterClassW(L"WindhawkAsyncUiDispatcher_" WH_MOD_ID, HINST_THISCOMPONENT);
 }
 
 bool PostToWindowThreadAsync(HWND hWnd, RunFromWindowThreadProc_t proc, void* procParam) {
@@ -381,7 +355,7 @@ bool PostToWindowThreadAsync(HWND hWnd, RunFromWindowThreadProc_t proc, void* pr
 }
 
 bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, void* procParam) {
-    if (!hWnd || !IsWindow(hWnd) || g_unloading.load()) return false;
+    if (!hWnd || !IsWindow(hWnd) || !proc) return false;
 
     static const UINT runMsg =
         RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
@@ -642,7 +616,7 @@ static HMODULE GetSystemTrayModuleHandle() {
 
 static bool HookTaskbarViewMeasureOverride(HMODULE mod) {
     if (!mod) return false;
-    // Taskbar.View.dll
+    // Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
         {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Windows::UI::Xaml::IFrameworkElementOverrides>::MeasureOverride(struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size *))"},
          reinterpret_cast<void**>(&TaskbarFrame_MeasureOverride_Original),
@@ -689,37 +663,27 @@ static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, D
 bool HookTaskbarDllSymbols() {
     HMODULE module = LoadLibraryExW(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!module) {
-        Wh_Log(L"Taskbar Edge Color Match: failed to load taskbar.dll (err=%lu)", GetLastError());
+        Wh_Log(L"failed to load taskbar.dll (err=%lu)", GetLastError());
         return false;
     }
 
-    struct SymbolEntry {
-        PCWSTR symbol;
-        void** target;
-        PCWSTR label;
-        bool required;
+    // taskbar.dll
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
+        {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
+         &CTaskBand_ITaskListWndSite_vftable},
+        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
+         &CTaskBand_GetTaskbarHost_Original},
+        {{LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
+         &CSecondaryTaskBand_ITaskListWndSite_vftable, nullptr, true},
+        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"},
+         &CSecondaryTaskBand_GetTaskbarHost_Original, nullptr, true},
+        {{LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
+         &TaskbarHost_FrameHeight_Original, nullptr, true},
+        {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
+         &std__Ref_count_base__Decref_Original},
     };
 
-    SymbolEntry entries[] = {
-        {LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})", &CTaskBand_ITaskListWndSite_vftable, L"CTaskBand vftable", true},
-        {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )", reinterpret_cast<void**>(&CTaskBand_GetTaskbarHost_Original), L"CTaskBand::GetTaskbarHost", true},
-        {LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})", &CSecondaryTaskBand_ITaskListWndSite_vftable, L"CSecondaryTaskBand vftable", false},
-        {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )", reinterpret_cast<void**>(&CSecondaryTaskBand_GetTaskbarHost_Original), L"CSecondaryTaskBand::GetTaskbarHost", false},
-        {LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )", &TaskbarHost_FrameHeight_Original, L"TaskbarHost::FrameHeight", false},
-        {LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))", reinterpret_cast<void**>(&std__Ref_count_base__Decref_Original), L"std::_Ref_count_base::_Decref", false},
-    };
-
-    bool anyHooked = false;
-    for (const auto& e : entries) {
-        WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[1] = {
-            {{e.symbol}, e.target},
-        };
-        if (WindhawkUtils::HookSymbols(module, taskbarDllHooks, 1)) {
-            anyHooked = true;
-        }
-    }
-
-    return anyHooked;
+    return WindhawkUtils::HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
 }
 
 // ============================================================================
@@ -732,6 +696,14 @@ static wu::Color ColorRefToWuColor(COLORREF c) {
     return wu::Color{255, GetRValue(c), GetGValue(c), GetBValue(c)};
 }
 
+struct BatteryBrushBackup {
+    winrt::weak_ref<wux::DependencyObject> node;
+    wuxm::Brush origStroke{nullptr};
+    wuxm::Brush origFill{nullptr};
+    wuxm::Brush origBorder{nullptr};
+    wuxm::Brush origForeground{nullptr};
+};
+
 struct Island {
     HWND hwnd = nullptr;
     void* frameId = nullptr;
@@ -739,6 +711,7 @@ struct Island {
     winrt::weak_ref<wux::FrameworkElement> fill;
     winrt::weak_ref<wux::FrameworkElement> themeRoot;
     std::vector<winrt::weak_ref<wux::DependencyObject>> cachedBatteryNodes;
+    std::vector<BatteryBrushBackup> savedBatteryBrushes;
 
     wuxc::Border panel{nullptr};
     wuxm::SolidColorBrush brush{nullptr};
@@ -801,10 +774,55 @@ bool IsBatteryElement(wux::DependencyObject const& obj) {
     return false;
 }
 
-void StyleBatterySubtree(wux::DependencyObject const& node, wuxm::SolidColorBrush const& contrastBrush, int depth) {
+static BatteryBrushBackup& GetOrCreateBatteryBackup(Island& isl, wux::DependencyObject const& node) {
+    for (auto& b : isl.savedBatteryBrushes) {
+        if (b.node.get() == node) return b;
+    }
+    BatteryBrushBackup entry{};
+    entry.node = node;
+    try {
+        if (auto shape = node.try_as<wuxs::Shape>()) {
+            entry.origStroke = shape.Stroke();
+            entry.origFill = shape.Fill();
+        } else if (auto border = node.try_as<wuxc::Border>()) {
+            entry.origBorder = border.BorderBrush();
+        } else if (auto tb = node.try_as<wuxc::TextBlock>()) {
+            entry.origForeground = tb.Foreground();
+        }
+    } catch (...) {
+    }
+    isl.savedBatteryBrushes.push_back(entry);
+    return isl.savedBatteryBrushes.back();
+}
+
+void RestoreBatteryContrast(Island& isl) {
+    for (auto it = isl.savedBatteryBrushes.begin(); it != isl.savedBatteryBrushes.end();) {
+        auto node = it->node.get();
+        if (!node) {
+            it = isl.savedBatteryBrushes.erase(it);
+            continue;
+        }
+        try {
+            if (auto shape = node.try_as<wuxs::Shape>()) {
+                if (it->origStroke) shape.Stroke(it->origStroke);
+                if (it->origFill) shape.Fill(it->origFill);
+            } else if (auto border = node.try_as<wuxc::Border>()) {
+                if (it->origBorder) border.BorderBrush(it->origBorder);
+            } else if (auto tb = node.try_as<wuxc::TextBlock>()) {
+                if (it->origForeground) tb.Foreground(it->origForeground);
+            }
+        } catch (...) {
+        }
+        ++it;
+    }
+    isl.savedBatteryBrushes.clear();
+}
+
+void StyleBatterySubtree(Island& isl, wux::DependencyObject const& node, wuxm::SolidColorBrush const& contrastBrush, int depth) {
     if (!node || !contrastBrush || depth < 0) return;
 
     try {
+        auto& backup = GetOrCreateBatteryBackup(isl, node);
         if (auto shape = node.try_as<wuxs::Shape>()) {
             if (shape.Stroke()) {
                 shape.Stroke(contrastBrush);
@@ -815,6 +833,7 @@ void StyleBatterySubtree(wux::DependencyObject const& node, wuxm::SolidColorBrus
                     shape.Fill(contrastBrush);
                 }
             }
+            (void)backup;
         } else if (auto border = node.try_as<wuxc::Border>()) {
             if (border.BorderBrush()) {
                 border.BorderBrush(contrastBrush);
@@ -827,12 +846,15 @@ void StyleBatterySubtree(wux::DependencyObject const& node, wuxm::SolidColorBrus
 
     int count = wuxm::VisualTreeHelper::GetChildrenCount(node);
     for (int i = 0; i < count; i++) {
-        StyleBatterySubtree(wuxm::VisualTreeHelper::GetChild(node, i), contrastBrush, depth - 1);
+        StyleBatterySubtree(isl, wuxm::VisualTreeHelper::GetChild(node, i), contrastBrush, depth - 1);
     }
 }
 
 void ApplyBatteryContrast(Island& isl, int wantTheme, bool enable) {
-    if (!enable || wantTheme == ThemeNone) return;
+    if (!enable || wantTheme == ThemeNone) {
+        RestoreBatteryContrast(isl);
+        return;
+    }
 
     auto root = isl.themeRoot.get();
     if (!root && isl.panel) {
@@ -855,7 +877,7 @@ void ApplyBatteryContrast(Island& isl, int wantTheme, bool enable) {
     for (auto it = isl.cachedBatteryNodes.begin(); it != isl.cachedBatteryNodes.end();) {
         if (auto node = it->get()) {
             hasLiveCache = true;
-            StyleBatterySubtree(node, contrastBrush, 5);
+            StyleBatterySubtree(isl, node, contrastBrush, 5);
             ++it;
         } else {
             it = isl.cachedBatteryNodes.erase(it);
@@ -868,7 +890,7 @@ void ApplyBatteryContrast(Island& isl, int wantTheme, bool enable) {
         if (!cur || depth < 0) return;
         if (IsBatteryElement(cur)) {
             isl.cachedBatteryNodes.emplace_back(cur);
-            StyleBatterySubtree(cur, contrastBrush, 5);
+            StyleBatterySubtree(isl, cur, contrastBrush, 5);
             return;
         }
         int count = wuxm::VisualTreeHelper::GetChildrenCount(cur);
@@ -1111,6 +1133,7 @@ void ApplyTopToBottomBrush(Island& isl, COLORREF solidColor, bool animateTopToBo
 }
 
 void TeardownIsland(Island& isl) try {
+    RestoreBatteryContrast(isl);
     if (auto root = isl.themeRoot.get()) {
         if (isl.forcedTheme != ThemeNone) {
             isl.forcedTheme = ThemeNone;
@@ -1247,21 +1270,33 @@ bool IsTaskbarWindowClass(HWND hWnd) {
 void WINAPI AttachAllTaskbars(void*) try {
     if (g_unloading.load()) return;
     PruneDeadIslands();
+    bool anyMissing = false;
     EnumThreadWindows(
         GetCurrentThreadId(),
-        [](HWND hWnd, LPARAM) -> BOOL {
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
             if (!IsTaskbarWindowClass(hWnd)) return TRUE;
+            auto* pAnyMissing = reinterpret_cast<bool*>(lParam);
             try {
                 auto xamlRoot = XamlRootOfTaskbarWindow(hWnd);
-                if (!xamlRoot) return TRUE;
+                if (!xamlRoot) {
+                    *pAnyMissing = true;
+                    return TRUE;
+                }
                 auto rep = FindDescendantByName(xamlRoot.Content(), L"TaskbarFrameRepeater", 12);
-                if (!rep) return TRUE;
-                AttachIsland(rep, hWnd);
+                if (!rep) {
+                    *pAnyMissing = true;
+                    return TRUE;
+                }
+                if (!AttachIsland(rep, hWnd)) {
+                    *pAnyMissing = true;
+                }
             } catch (...) {
+                *pAnyMissing = true;
             }
             return TRUE;
         },
-        0);
+        reinterpret_cast<LPARAM>(&anyMissing));
+    g_taskbarMissingPanel.store(anyMissing);
 } catch (...) {
 }
 
@@ -1270,8 +1305,10 @@ void WINAPI ApplyPanelColorOnTaskbarThread(void* param) try {
         ~PendingGuard() { g_pendingAsyncUiUpdates.fetch_sub(1); }
     } pendingGuard;
 
-    if (g_unloading.load() || !param) return;
+    if (!param) return;
     auto& upd = *static_cast<PanelColorUpdate*>(param);
+    if (g_unloading.load()) return;
+
     auto isl = FindIslandByHwnd(upd.hwnd);
     if (!isl || !IsPanelParented(*isl)) {
         AttachAllTaskbars(nullptr);
@@ -1317,6 +1354,7 @@ void WINAPI ApplyPanelColorOnTaskbarThread(void* param) try {
 }
 
 static void DispatchPanelUpdateNonBlocking(HWND tb, const PanelColorUpdate& upd) {
+    if (g_unloading.load()) return;
     int maxQueue = (g_colorSamplingMode.load() == 1) ? 4 : 6;
     if (g_pendingAsyncUiUpdates.load() >= maxQueue) return;
     auto* heapUpd = new PanelColorUpdate(upd);
@@ -1340,6 +1378,7 @@ void WINAPI CleanupIslandsOnTaskbarThread(void*) {
         TeardownIsland(*isl);
     }
     all.clear();
+    g_taskbarMissingPanel.store(true);
 }
 
 // ============================================================================
@@ -1510,34 +1549,6 @@ static bool IsGeminiForegroundWindow(HWND fg) {
     WCHAR title[256]{};
     if (GetWindowTextW(fg, title, ARRAYSIZE(title)) <= 0) return false;
     return FindCaseInsensitive(title, L"gemini") != std::wstring_view::npos;
-}
-
-static int QueryWindowsLightThemeState() {
-    HKEY hKey = nullptr;
-    LONG status = RegOpenKeyExW(
-        HKEY_CURRENT_USER,
-        L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-        0,
-        KEY_READ,
-        &hKey);
-    if (status != ERROR_SUCCESS || !hKey) return -1;
-
-    DWORD value = 0;
-    DWORD dataSize = sizeof(value);
-    DWORD type = 0;
-    status = RegQueryValueExW(
-        hKey, L"SystemUsesLightTheme", nullptr, &type,
-        reinterpret_cast<LPBYTE>(&value), &dataSize);
-    if (status != ERROR_SUCCESS || type != REG_DWORD) {
-        dataSize = sizeof(value);
-        status = RegQueryValueExW(
-            hKey, L"AppsUseLightTheme", nullptr, &type,
-            reinterpret_cast<LPBYTE>(&value), &dataSize);
-    }
-    RegCloseKey(hKey);
-
-    if (status != ERROR_SUCCESS || type != REG_DWORD) return -1;
-    return (value != 0) ? 1 : 0;
 }
 
 static bool IsWindowCloakedLocal(HWND hwnd) {
@@ -1801,8 +1812,6 @@ static COLORREF MajorityFromDibPixels(const uint32_t* pixels, int count, int wid
         std::clamp(static_cast<int>(best->sumG / static_cast<uint64_t>(best->count)), 0, 255),
         std::clamp(static_cast<int>(best->sumB / static_cast<uint64_t>(best->count)), 0, 255));
 
-    // If left and right side margins are white/near-white and the calculated majority isn't already white,
-    // use white instead of letting a centered non-white card/banner hijack the majority color.
     if (width > 0 && height > 0 && AreLeftAndRightSidesWhite(pixels, width, height)) {
         bool majIsWhite = (GetRValue(maj) >= 228 && GetGValue(maj) >= 228 && GetBValue(maj) >= 228);
         if (!majIsWhite) {
@@ -1829,7 +1838,6 @@ static COLORREF SampleMajorityOnMonitor(FastDibSampler& dib, HWND taskbar, HWND 
     constexpr int targetW = 48;
     constexpr int targetH = 27;
 
-    // Avoid PrintWindow DWM stalls during active app switching; use it when a background maximized app is under a floating window
     if (allowPrintWindow && maxHwnd && IsWindow(maxHwnd) && !IsIconic(maxHwnd)) {
         RECT winRect{};
         if (GetWindowRect(maxHwnd, &winRect)) {
@@ -2084,19 +2092,21 @@ static DWORD WINAPI WorkerThreadProc(void*) {
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
     FastDibSampler dib;
+    std::vector<HWND> cachedTaskbars;
+    ULONGLONG lastTaskbarEnumTick = 0;
     std::unordered_map<HWND, COLORREF> lastColors;
     std::unordered_map<HWND, COLORREF> lastTrayColors;
     std::unordered_map<HWND, bool> lastDesktopStates;
+    std::unordered_map<HWND, bool> lastDispatchedTransparent;
+    std::unordered_map<HWND, ULONGLONG> animEndTickByHwnd;
     std::unordered_map<HWND, MonitorWindowScan> scanCache;
     std::unordered_map<HWND, CachedMajorityState> majorityCache;
     std::unordered_map<HWND, CachedSideWhiteState> sideWhiteCache;
     std::unordered_map<HWND, bool> mixedEdgeActive;
     std::unordered_map<HWND, ColorStabilizerState> stabilizers;
     int attachCheckCounter = 0;
-    int themeCheckCounter = 0;
     bool wasFlyoutActive = false;
     ULONGLONG holdUntilTick = 0;
-    int lastSystemTheme = QueryWindowsLightThemeState();
 
     while (!g_stop.load() && !g_unloading.load()) {
         bool forcedThisTick = g_forceRefresh.exchange(false);
@@ -2112,6 +2122,8 @@ static DWORD WINAPI WorkerThreadProc(void*) {
             lastColors.clear();
             lastTrayColors.clear();
             lastDesktopStates.clear();
+            lastDispatchedTransparent.clear();
+            animEndTickByHwnd.clear();
             scanCache.clear();
             majorityCache.clear();
             sideWhiteCache.clear();
@@ -2119,7 +2131,36 @@ static DWORD WINAPI WorkerThreadProc(void*) {
             stabilizers.clear();
             wasFlyoutActive = false;
             holdUntilTick = 0;
-            themeCheckCounter = 0;
+            lastTaskbarEnumTick = 0;
+        }
+
+        if (cachedTaskbars.empty() || forcedThisTick || (now - lastTaskbarEnumTick >= 1500)) {
+            cachedTaskbars.clear();
+            EnumWindows(
+                [](HWND hWnd, LPARAM lp) -> BOOL {
+                    DWORD pid = 0;
+                    if (GetWindowThreadProcessId(hWnd, &pid) &&
+                        pid == GetCurrentProcessId() &&
+                        IsTaskbarWindowClass(hWnd)) {
+                        reinterpret_cast<std::vector<HWND>*>(lp)->push_back(hWnd);
+                    }
+                    return TRUE;
+                },
+                reinterpret_cast<LPARAM>(&cachedTaskbars));
+            lastTaskbarEnumTick = now;
+        }
+
+        cachedTaskbars.erase(
+            std::remove_if(cachedTaskbars.begin(), cachedTaskbars.end(),
+                           [](HWND h) { return !h || !IsWindow(h); }),
+            cachedTaskbars.end());
+
+        if (cachedTaskbars.empty()) {
+            DWORD res = WaitForSingleObject(g_wakeEvent, 1000);
+            if (res == WAIT_OBJECT_0) {
+                lastTaskbarEnumTick = 0;
+            }
+            continue;
         }
 
         bool hideFillForCorners = (g_panelCornerRadius.load() > 0);
@@ -2135,22 +2176,6 @@ static DWORD WINAPI WorkerThreadProc(void*) {
         bool adaptiveTheme = g_adaptiveIconTheme.load();
         bool pauseFullscreen = g_pauseOnFullscreen.load();
 
-        if ((++themeCheckCounter % 45) == 1) {
-            int currentSystemTheme = QueryWindowsLightThemeState();
-            if (currentSystemTheme != -1) {
-                if (lastSystemTheme == -1) {
-                    lastSystemTheme = currentSystemTheme;
-                } else if (currentSystemTheme != lastSystemTheme &&
-                           g_restartExplorerOnThemeChange.load()) {
-                    dib.Cleanup();
-                    SafeRestartExplorer(L"Windows Light/Dark theme change");
-                    return 0;
-                } else {
-                    lastSystemTheme = currentSystemTheme;
-                }
-            }
-        }
-
         bool flyoutActive = IsStartOrFlyoutActive(fg);
         if (flyoutActive) {
             wasFlyoutActive = true;
@@ -2162,41 +2187,28 @@ static DWORD WINAPI WorkerThreadProc(void*) {
 
         bool inHoldWindow = flyoutActive || (now < holdUntilTick);
 
-        std::vector<HWND> taskbars;
-        EnumWindows(
-            [](HWND hWnd, LPARAM lp) -> BOOL {
-                DWORD pid = 0;
-                if (GetWindowThreadProcessId(hWnd, &pid) &&
-                    pid == GetCurrentProcessId() &&
-                    IsTaskbarWindowClass(hWnd)) {
-                    reinterpret_cast<std::vector<HWND>*>(lp)->push_back(hWnd);
-                }
-                return TRUE;
-            },
-            reinterpret_cast<LPARAM>(&taskbars));
-
-        bool needsAttach = false;
-        for (HWND tb : taskbars) {
-            auto isl = FindIslandByHwnd(tb);
-            if (!isl || !IsPanelParented(*isl)) {
-                needsAttach = true;
-                break;
-            }
-        }
-
+        bool needsAttach = g_taskbarMissingPanel.load();
         bool fgZoomed = (fg && IsWindow(fg) && IsZoomed(fg));
         bool anyEdgeLogic = isEdgeStrip || forceEdgeForApp;
         bool settlingAppSwitch = !forcedThisTick && !anyEdgeLogic && !fgZoomed &&
                                  (now - g_lastFgChangeTick.load() < kAppSwitchSettleMs);
 
         bool inEarlyStartup = (now - g_modInitTick.load() < kEarlyStartupWindowMs);
-        int attachMod = needsAttach ? (inEarlyStartup ? 3 : 10) : (inEarlyStartup ? 12 : 240);
-        if (!settlingAppSwitch && !taskbars.empty() &&
-            ((++attachCheckCounter % attachMod) == 1)) {
-            RunFromWindowThread(taskbars.front(), AttachAllTaskbars, nullptr);
+        int attachMod = needsAttach ? (inEarlyStartup ? 4 : 15) : (inEarlyStartup ? 20 : 300);
+        if (!settlingAppSwitch && ((++attachCheckCounter % attachMod) == 1)) {
+            RunFromWindowThread(cachedTaskbars.front(), AttachAllTaskbars, nullptr);
         }
 
-        for (HWND tb : taskbars) {
+        bool anyAnimRunningNow = false;
+        for (const auto& kv : animEndTickByHwnd) {
+            if (now < kv.second) {
+                anyAnimRunningNow = true;
+                break;
+            }
+        }
+        g_animRunningGlobal.store(anyAnimRunningNow);
+
+        for (HWND tb : cachedTaskbars) {
             if (!IsWindow(tb) || g_unloading.load()) continue;
 
             HMONITOR mon = MonitorFromWindow(tb, MONITOR_DEFAULTTONEAREST);
@@ -2290,11 +2302,18 @@ static DWORD WINAPI WorkerThreadProc(void*) {
                 trayBg = prevTray;
             }
 
-            auto isl = FindIslandByHwnd(tb);
-            bool islTransparencyOutOfSync = (isl && isl->lastAppliedTransparent != onDesktop);
+            bool prevDispTrans = false;
+            bool hasDispTrans = false;
+            if (auto it = lastDispatchedTransparent.find(tb); it != lastDispatchedTransparent.end()) {
+                prevDispTrans = it->second;
+                hasDispTrans = true;
+            }
+            bool transparencyOutOfSync = !hasDispTrans || (prevDispTrans != onDesktop);
+            bool animStillRunning = topToBottomAnim && (now < animEndTickByHwnd[tb]);
 
             if (inHoldWindow && prev != CLR_INVALID) {
-                if (forcedThisTick || desktopStateChanged || trayChanged || islTransparencyOutOfSync) {
+                if (forcedThisTick || desktopStateChanged || trayChanged || transparencyOutOfSync) {
+                    lastDispatchedTransparent[tb] = onDesktop;
                     PanelColorUpdate upd{
                         tb,
                         prev,
@@ -2313,16 +2332,17 @@ static DWORD WINAPI WorkerThreadProc(void*) {
 
             if (!hasMaximized || (!useEdgeLogic && !hasActiveWindow)) {
                 COLORREF holdColor = (prev != CLR_INVALID) ? prev : RGB(32, 32, 32);
-                if (forcedThisTick || desktopStateChanged || trayChanged || islTransparencyOutOfSync || prev == CLR_INVALID) {
+                if (forcedThisTick || desktopStateChanged || trayChanged || transparencyOutOfSync || prev == CLR_INVALID) {
                     if (prev == CLR_INVALID) {
                         lastColors[tb] = holdColor;
                     }
+                    lastDispatchedTransparent[tb] = onDesktop;
                     PanelColorUpdate upd{
                         tb,
                         holdColor,
                         trayBg != CLR_INVALID ? trayBg : holdColor,
                         adaptiveTheme,
-                        trayChanged || desktopStateChanged || islTransparencyOutOfSync || forcedThisTick,
+                        trayChanged || desktopStateChanged || transparencyOutOfSync || forcedThisTick,
                         onDesktop,
                         hideFillForCorners,
                         false,
@@ -2333,8 +2353,8 @@ static DWORD WINAPI WorkerThreadProc(void*) {
                 continue;
             }
 
-            if (settlingAppSwitch && prev != CLR_INVALID && !forcedThisTick && !islTransparencyOutOfSync) {
-                if (topToBottomAnim && isl && isl->animActive) {
+            if (settlingAppSwitch && prev != CLR_INVALID && !forcedThisTick && !transparencyOutOfSync) {
+                if (animStillRunning) {
                     PanelColorUpdate upd{
                         tb,
                         prev,
@@ -2398,21 +2418,27 @@ static DWORD WINAPI WorkerThreadProc(void*) {
             }
 
             COLORREF toApply = (prev != CLR_INVALID) ? prev : targetColor;
-            bool colorOutOfSync = (isl && isl->currentColor != CLR_INVALID &&
-                                   toApply != CLR_INVALID && isl->currentColor != toApply);
-            bool startAnim = colorChanged && topToBottomAnim;
-            bool animStillRunning = topToBottomAnim && isl && isl->animActive;
-            bool needUiUpdate = forcedThisTick || colorChanged || colorOutOfSync ||
-                                islTransparencyOutOfSync || trayChanged ||
-                                desktopStateChanged || animStillRunning || !isl;
+            bool startAnim = colorChanged && topToBottomAnim && !onDesktop;
+            if (startAnim) {
+                double normSpeed = std::clamp(static_cast<double>(animSpeedPct) / 100.0, 0.1, 1.0);
+                double durationMs = 160.0 - normSpeed * 100.0;
+                animEndTickByHwnd[tb] = now + static_cast<ULONGLONG>(durationMs) + 20;
+                g_animRunningGlobal.store(true);
+            } else if (onDesktop || !topToBottomAnim) {
+                animEndTickByHwnd[tb] = 0;
+            }
+
+            bool needUiUpdate = forcedThisTick || colorChanged || transparencyOutOfSync ||
+                                trayChanged || desktopStateChanged || animStillRunning || needsAttach;
 
             if (needUiUpdate && toApply != CLR_INVALID) {
+                lastDispatchedTransparent[tb] = onDesktop;
                 PanelColorUpdate upd{
                     tb,
                     toApply,
                     trayBg != CLR_INVALID ? trayBg : toApply,
                     adaptiveTheme,
-                    colorChanged || colorOutOfSync || islTransparencyOutOfSync ||
+                    colorChanged || transparencyOutOfSync ||
                         trayChanged || desktopStateChanged || forcedThisTick,
                     onDesktop,
                     hideFillForCorners,
@@ -2448,11 +2474,7 @@ static DWORD WINAPI WorkerThreadProc(void*) {
 // ============================================================================
 
 void Wh_ModSettingsChanged() {
-    bool prevTransparentOnDesktop = g_transparentOnDesktop.load();
     LoadSettings();
-    if (g_transparentOnDesktop.load() != prevTransparentOnDesktop) {
-        SafeRestartExplorer(L"transparentOnDesktop setting changed");
-    }
 }
 
 BOOL Wh_ModInit() {
@@ -2493,11 +2515,11 @@ BOOL Wh_ModInit() {
             CloseHandle(g_wakeEvent);
             g_wakeEvent = nullptr;
         }
-        Wh_Log(L"Taskbar Edge Color Match: failed to create worker thread");
+        Wh_Log(L"failed to create worker thread");
         return FALSE;
     }
 
-    Wh_Log(L"Taskbar Edge Color Match v2.5.72 initialized");
+    Wh_Log(L"initialized v" WH_MOD_VERSION);
     return TRUE;
 }
 
@@ -2567,8 +2589,5 @@ void Wh_ModUninit() {
         g_cachedXamlRoots.clear();
     }
 
-    Wh_Log(L"Taskbar Edge Color Match uninitialized");
-    if (!g_restartingExplorer.load()) {
-        SafeRestartExplorer(L"mod unapplied");
-    }
+    Wh_Log(L"uninitialized");
 }
