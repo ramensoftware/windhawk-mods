@@ -4,7 +4,7 @@
 // @name:zh-CN      流光启动台
 // @description     A fullscreen Start replacement with expanded groups, free group layout, manual and web entries, themes, bilingual UI and instant search
 // @description:zh-CN 全屏应用启动器：展开分组、自由分组布局、手动与网址入口、主题、中英双语与即时搜索
-// @version         1.5.8
+// @version         1.5.9
 // @author          Fangyu Guo (ryjs)
 // @github          https://github.com/ryjs140
 // @homepage        https://github.com/ryjs140/ryjs-launchpad
@@ -224,20 +224,30 @@ Clicking outside the icons or switching to another window closes it.
 ## Data and network
 - No telemetry and no analytics. Lumiflow does not send anything anywhere except
   the requests described next.
-- Website icon requests run when the launcher finds a web entry without a
-  cached icon or you ask to refresh it. The page is read to find its declared icon, with
-  `/favicon.ico` as the fallback. Declared icons can be hosted on a different
-  server than the page you entered (a CDN or a third party). Requests have time
-  limits and a size cap, are sent without cookies, and the result is cached in
-  the mod's storage. Nothing is uploaded. Set a custom icon for the entry and
-  no request is made for it.
+- Website icon requests run after an app-list load whenever the launcher finds a
+  web entry without a cached icon, including the first automatic load after
+  Explorer starts and even if you never open the launcher. This includes direct
+  web entries and eligible `.url` / browser-shortcut entries discovered on the
+  Desktop and Public Desktop. Saving or manually refreshing an entry also
+  requests its icon. **Background website icon download** in Settings > Help
+  turns the automatic app-list requests off; saving and manual refresh still
+  download, and cached icons still work. The default is on.
+  The page is read to find its declared icon, with `/favicon.ico` as the
+  fallback. Declared icons can be hosted on a different server than the page
+  you entered (a CDN, a third party, or a private/intranet host). Requests have
+  time limits and a size cap, are sent without cookies or automatic credentials,
+  and the result is cached in the mod's storage. Nothing is uploaded. Set a
+  custom icon for the entry and no request is made for it.
 - Layouts, groups, entries, icons and settings stay in Windhawk's per-mod
   storage folder on this PC. Scratch files (the exported Start layout and the
   backup worker) live in a `tmp` folder next to it and are removed when the
   work is done. The optional full backup writes a `.ryjs.zip`
-  file only where you choose, and import restores data, never code. Running a
-  Store app as administrator uses a temporary shortcut in that same `tmp`
-  folder; it is deleted after the launch.
+  file only where you choose. Import never executes archive code or binaries;
+  it does restore app entries with their targets and arguments, and the
+  confirmation lists every imported launch target. The Start-button and Win-key
+  actions and the configured program command remain as they are on this PC.
+  Running a Store app as administrator uses a temporary shortcut in that same
+  `tmp` folder; it is deleted after the launch.
 
 ## Credits
 - [Fullscreen Start (Launchpad style)](https://windhawk.net/mods/fullscreen-start)
@@ -871,6 +881,12 @@ SOFTWARE.
     pointer moves away from the icon centre. At 80, a small movement lights the facing edge.
   $name:zh-CN: 光效触发距离
   $description:zh-CN: 设置指针在应用图标外多远仍可触发光效，以及离开图标中心时边缘的响应速度。调到 80 后，稍微移动指针即可点亮对应方向的边缘。
+- webIconBackgroundFetch: true
+  $name: Background website icon download
+  $description: Fetch missing icons for websites and desktop URL shortcuts after the app list loads. Turn off to
+    allow downloads only when you save or manually refresh an entry; cached icons still work.
+  $name:zh-CN: 后台下载网站图标
+  $description:zh-CN: 应用列表加载后，为网站及桌面 URL 快捷方式获取缺失图标。关闭后仅在保存条目或手动刷新时联网下载；已缓存图标仍可使用。
 */
 // ==/WindhawkModSettings==
 
@@ -983,6 +999,7 @@ inline constexpr Resource resources[] = {
     {L"Background dimming", L"背景压暗"},
     {L"Background material", L"背景材质"},
     {L"Background opacity (%)", L"背景不透明度（%）"},
+    {L"Background website icon download", L"后台下载网站图标"},
     {L"Backup and restore", L"备份与恢复"},
     {L"Backup verified:", L"备份已通过校验："},
     {L"Based on Fullscreen Start by Rafael Mendes", L"基于 Rafael Mendes 的 Fullscreen Start"},
@@ -1093,6 +1110,7 @@ inline constexpr Resource resources[] = {
     {L"Export layout file", L"导出当前布局文件"},
     {L"Export material", L"导出材质"},
     {L"Export…", L"导出…"},
+    {L"Fetch missing icons for websites and desktop URL shortcuts after the app list loads. Turn off to allow downloads only when you save or manually refresh an entry; cached icons still work.", L"应用列表加载后，为网站及桌面 URL 快捷方式获取缺失图标。关闭后仅在保存条目或手动刷新时联网下载；已缓存图标仍可使用。"},
     {L"File or web address", L"文件路径或网址"},
     {L"Fill small icons", L"放大小图标"},
     {L"Fills the controls below with a tuned starting point. Custom keeps them as they are.", L"只填充下面的模糊、透明度与质感，不改着色颜色；选“自定义”则保持当前值。"},
@@ -1199,6 +1217,7 @@ inline constexpr Resource resources[] = {
     {L"Name shadow strength", L"名称阴影强度"},
     {L"Name the Save preset button uses. Leave empty for a numbered name.", L"“保存预设”按钮使用的名称；留空则自动编号。"},
     {L"Native Windows title bar", L"使用系统标题栏"},
+    {L"Network", L"网络"},
     {L"New group", L"新建分组"},
     {L"Newer layout format: changes are read-only. Restore a backup or import a supported layout.", L"布局版本较新，当前只读。请恢复备份或导入兼容布局。"},
     {L"No apps", L"暂无应用"},
@@ -3016,84 +3035,8 @@ namespace {
 
 using launchpad_i18n::Tr;
 
-// Lifecycle bookkeeping for work that runs on another thread's message loop.
-// A queued lambda is code in this image: if the mod is unloaded while the
-// taskbar's dispatcher still holds it, that thread runs unmapped code and
-// Explorer crashes. The counter makes the wait possible, the gate stops new
-// work once unload begins, and the drain runs after every hook is gone.
-//
-// Ownership rule: one count per unit of work that runs code in this image.
-// A call to ClearStartButtonLatch is one unit (it runs now), and the lambda it
-// queues is a second unit (it runs later). Each unit increments once and
-// releases exactly once, so the counter can neither underflow nor reach zero
-// while module code is still running or still queued.
-//
-// Separate from the XAML header so the test harness can exercise the drain
-// without the WinRT hooks.
-
-// Units of work that have not finished yet.
-std::atomic<int> g_startLatchPending{0};
-// Closed in Wh_ModBeforeUninit, while the hooks are still installed.
-std::atomic<bool> g_startLatchStopping{false};
-// Auto-reset, set when the count reaches zero. Created in Wh_ModInit.
-HANDLE g_startLatchIdle = nullptr;
-
-void FinishStartLatchReset() {
-    int before = g_startLatchPending.fetch_sub(1);
-    if (before <= 0) {
-        // The protocol above never does this: every increment has exactly one
-        // release. Keep a future break from turning into a drain that can
-        // never finish, and leave a trace of it.
-        g_startLatchPending.store(0);
-        Wh_Log(L"Start-latch count released without a pending unit (%d); reset to zero", before);
-        if (g_startLatchIdle) SetEvent(g_startLatchIdle);  // Let a waiting drain re-check.
-        return;
-    }
-    if (before == 1 && g_startLatchIdle) SetEvent(g_startLatchIdle);
-}
-
-// One unit of work: counted on construction, released on destruction, whether
-// the function returns normally or unwinds.
-struct StartLatchTicket {
-    StartLatchTicket() { g_startLatchPending.fetch_add(1); }
-    ~StartLatchTicket() { FinishStartLatchReset(); }
-    StartLatchTicket(const StartLatchTicket&) = delete;
-    StartLatchTicket& operator=(const StartLatchTicket&) = delete;
-};
-
-// Called once from Wh_ModUninit. By then Windhawk has removed the hooks and
-// the launcher thread is joined, so no new unit can be created: the count can
-// only fall. A dispatcher that accepted a reset but never runs it means the
-// taskbar thread is gone or blocked for longer than the timeout; the caller
-// then keeps this image mapped rather than letting a late callback run
-// unmapped code.
-bool WaitForStartLatchResets(DWORD timeoutMs) {
-    if (g_startLatchPending.load() == 0) return true;
-    HANDLE event = g_startLatchIdle;
-    if (!event) return false;
-    ULONGLONG deadline = GetTickCount64() + timeoutMs;
-    for (;;) {
-        ULONGLONG now = GetTickCount64();
-        if (now >= deadline) break;
-        if (WaitForSingleObject(event, (DWORD)(deadline - now)) == WAIT_OBJECT_0 &&
-            g_startLatchPending.load() == 0)
-            return true;
-    }
-    return g_startLatchPending.load() == 0;
-}
-
-void PinModuleForStartLatch() {
-    HMODULE module = nullptr;
-    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
-                           (PCWSTR)&PinModuleForStartLatch, &module)) {
-        Wh_Log(L"A start-button reset is still queued at unload; the module stays mapped so the callback cannot run unmapped code");
-    } else {
-        // Nothing else can keep the callback's code mapped. Say so loudly: the
-        // unload is about to free an image that a taskbar thread may still run.
-        Wh_Log(L"Could not pin the module for a queued start-button reset: %u", GetLastError());
-    }
-}
-
+// Start-button reset messages are handled synchronously by a taskbar-window
+// subclass. No module lambda is queued on another thread's dispatcher.
 
 constexpr WCHAR kWindowClass[] = L"WindhawkRYJSLaunchpad";
 constexpr WCHAR kBackdropClass[] = L"WindhawkRYJSLaunchpadBackdrop";
@@ -3270,6 +3213,7 @@ struct Settings {
     AppSource source = AppSource::AllApps;
     std::wstring monitor = L"mouse";
     std::wstring program;
+    bool webIconBackgroundFetch = true;
     bool powerBar = true;
     bool powerShown[std::size(kPower)] = {true, true, true, true, true, true};  // By action ID.
     PowerOrder powerOrder = DefaultPowerOrder();
@@ -3427,6 +3371,7 @@ void LoadSettings() {
                                      : AppSource::AllApps;
     s.monitor = GetStringSetting(L"monitor");
     s.program = GetStringSetting(L"program");
+    s.webIconBackgroundFetch = IntSetting(L"webIconBackgroundFetch", 1) != 0;
     s.powerBar = IntSetting(L"powerBar", 1) != 0;
     s.powerOrder = ParsePowerOrder(GetStringSetting(L"powerOrder"));
     for (int i : DefaultPowerOrder()) {
@@ -4940,13 +4885,16 @@ std::wstring WebIconPath(const std::wstring& key) {
     return StoragePath(name);
 }
 bool LoadWebsiteIcon(int size, App& app) {
-    app.pixels.clear();
-    app.iconSize = 0;
+    auto path = WebIconPath(AppKey(app) + L"|" + app.websiteUrl);
+    if (GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) return false;
+    // A missing/corrupt cache must not erase the shell icon already loaded.
+    App decoded;
+    if (!LoadIconFile(path, size, decoded, false)) return false;
+    app.pixels = std::move(decoded.pixels);
+    app.iconSize = decoded.iconSize;
     app.bitmap.Reset();
     app.generation = 0;
-    auto path = WebIconPath(AppKey(app) + L"|" + app.websiteUrl);
-    return GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES &&
-           LoadIconFile(path, size, app, false);
+    return true;
 }
 
 void ReloadEntryIcon(int size, App& app) {
@@ -5157,7 +5105,7 @@ bool LoadGroupPositions(const std::wstring& backup={}) {
             int* fields[]{&p.gridX,&p.gridY,&p.gridW,&p.gridH};
             for(int j=0;j<4&&valid;j++) {
                 float value=0;
-                valid=PositionNumber(r[10+j],value)&&value==std::floor(value);
+                valid=PositionNumber(r[10+j],value)&&value==std::floor(value)&&value<=4096;
                 if(valid)*fields[j]=(int)value;
             }
             if(v4&&valid) {
@@ -5667,6 +5615,9 @@ void ResetTarget() {
     // These cache device-dependent bitmaps. They must go before the device is
     // dropped, or a lost device stays alive through the cache and the next
     // generation can sample a texture that belongs to the old one.
+    for (const auto& app : g_apps) {
+        if (app) app->bitmap.Reset();
+    }
     ReleaseMaterial();
     ReleasePanelBlur();
     ClearGroupTitleRenders();
@@ -6174,23 +6125,28 @@ static UINT32 LegacyPresetTint(const std::wstring& id) {
 }
 
 static void MigrateLegacyPresetTint() {
+    static bool attempted = false;
+    if (attempted || Wh_GetIntValue(L"legacyPresetTintMigrated", 0)) return;
+    attempted = true;
+    if (g_dataReadOnly) return; // Never turn migration into a read-only write.
     const UINT32 legacy = LegacyPresetTint(GetStringSetting(L"materialPreset"));
-    if (!legacy) return;
-    const UINT32 stored = launchpad_material::RgbFromColor(
-        ParseColor(GetStringSetting(L"tintColor"), launchpad_material::ColorFromRgb(0)));
-    if (stored != legacy) return;
-    std::wstring host = WindhawkUtils::StringSetting::make(L"tintColor").get();
-    launchpad_settings_store::Save(StoragePath(L"ui-settings.ini"),
-                                   {{L"tintColor", L"#000000", host}});
-    // Light/dark/system themes paint their own base tint after the fields load;
-    // only a custom theme follows this value at runtime.
-    if (g_settings.theme != L"light" && g_settings.theme != L"dark" &&
-        g_settings.theme != L"system")
-        g_settings.tint = launchpad_material::ColorFromRgb(0);
+    const UINT32 stored = legacy ? launchpad_material::RgbFromColor(
+        ParseColor(GetStringSetting(L"tintColor"), launchpad_material::ColorFromRgb(0))) : 0;
+    if (legacy && stored == legacy) {
+        std::wstring host = WindhawkUtils::StringSetting::make(L"tintColor").get();
+        launchpad_settings_store::Save(StoragePath(L"ui-settings.ini"),
+                                       {{L"tintColor", L"#000000", host}});
+        // Light/dark/system themes paint their own base tint after fields load.
+        if (g_settings.theme != L"light" && g_settings.theme != L"dark" &&
+            g_settings.theme != L"system")
+            g_settings.tint = launchpad_material::ColorFromRgb(0);
+    }
+    // One process- and installation-wide attempt only. A later user choice that
+    // happens to equal a legacy preset colour is a real choice, not residue.
+    Wh_SetIntValue(L"legacyPresetTintMigrated", 1);
 }
 
 void SyncMaterialFromSettings() {
-    MigrateLegacyPresetTint();
     g_material.backend = g_settings.backend;
     g_material.params = g_settings.material;
     g_material.params.tint = g_settings.tint;
@@ -12384,6 +12340,7 @@ static std::vector<SetField> Set_MakeFields() {
 {K::Number, L"powerShadowOpacity", L"Power icon shadow opacity", L"Shadow strength behind the power dock glyphs. It is separate from the text shadow.", L"72", {}, 0, 100, 3, L"Power icon shadow"},
 {K::Number, L"powerShadowBlur", L"Power icon shadow blur", L"Blur radius for the power dock glyphs, at 100% display scaling.", L"2", {}, 0, 6, 3, L"Power icon shadow"},
 {K::Number, L"glowDistance", L"Glow trigger distance", L"Sets how far the nearest app icon reacts outside its bounds and how quickly its rim lights as the pointer moves away from the icon centre. At 80, a small movement lights the facing edge.", L"24", {}, 0, 80, 2, L"Appearance"},
+{K::Check, L"webIconBackgroundFetch", L"Background website icon download", L"Fetch missing icons for websites and desktop URL shortcuts after the app list loads. Turn off to allow downloads only when you save or manually refresh an entry; cached icons still work.", L"1", {}, 0, 100, 3, L"Network"},
 // Custom settings end
 {K::Choice, L"interfaceLanguage", L"Interface language", L"Follow Windows display language. Save to apply; app names stay unchanged.", L"auto", {{L"auto", L"Automatic (Windows)"}, {L"zh-CN", L"Simplified Chinese"}, {L"en", L"English"}}, 0, 100, 2, L"Language"},
 {K::Choice, L"uiFont", L"Interface font", L"Choose a locally installed font. Applies to text only; symbol icons use their own font.", L"auto", {{L"auto", L"Automatic (language default)"}}, 0, 100, 2, L"Typography"},
@@ -12555,6 +12512,7 @@ struct SetWindow {
     int deskW = 0, deskH = 0;
     RECT deskVirtual{};
     SetCom<ID2D1Bitmap> deskBitmap;
+    SetCom<ID2D1Bitmap> mark;
     SetCom<ID2D1RoundedRectangleGeometry> roundGeo;
     SetCom<ID2D1Layer> roundLayer;
     ID2D1RenderTarget* roundTarget = nullptr;
@@ -13756,13 +13714,12 @@ static void Set_DrawMark(SetPaint& p, IDWriteTextFormat* glyph, const D2D1_RECT_
     (void)glyph;
     if (alpha <= 0.001f || s <= 0) return;
     if (!appIcon) {
-        static ID2D1RenderTarget* cachedTarget = nullptr;
-        static ComPtr<ID2D1Bitmap> cachedBitmap;
-        if (cachedTarget != p.rt) {
-            cachedTarget = p.rt;
-            cachedBitmap = CreateAppIconBitmap(p.rt);
+        // Per-window ownership, released together with that render target.
+        if (!p.w.mark) {
+            auto icon = CreateAppIconBitmap(p.rt);
+            if (icon) *p.w.mark.put() = icon.Detach();
         }
-        appIcon = cachedBitmap.Get();
+        appIcon = p.w.mark.get();
     }
     if (appIcon) {
         p.rt->DrawBitmap(appIcon, r, alpha, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
@@ -14731,8 +14688,16 @@ static bool Set_PickMaterialFile(SetWindow& w, bool save, std::wstring& path) {
         std::wstring suggest = w.userPresets.front().name + L".ryjsm";
         wcscpy_s(file, suggest.c_str());
     }
-    std::wstring filter = std::wstring(Tr(L"Lumiflow material (*.ryjsm)")) + L'\0' +
-                          L"*.ryjsm\0JSON (*.json)\0*.json\0";
+    // Each embedded NUL is appended explicitly: std::wstring(c_str()) would
+    // stop at the first one. c_str() supplies the final extra NUL.
+    std::wstring filter = Tr(L"Lumiflow material (*.ryjsm)");
+    auto filterPart = [&filter](const wchar_t* text) {
+        filter.append(text);
+        filter.push_back(L'\0');
+    };
+    filterPart(L"*.ryjsm");
+    filterPart(L"JSON (*.json)");
+    filterPart(L"*.json");
     OPENFILENAMEW ofn{};
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = w.owner ? w.owner : w.hwnd;
@@ -15105,6 +15070,7 @@ static void Set_ReleaseRt(SetWindow& w) {
     w.rt.reset();
     w.dcRt.reset();
     w.deskBitmap.reset();
+    w.mark.reset();
     w.roundLayer.reset();
     w.roundGeo.reset();
     w.roundTarget = nullptr;
@@ -18015,11 +17981,8 @@ void StartWebIconFetch(const App& app,bool refresh=false,bool reportFailure=fals
 }
 void OnWebIconReady(WebIconResult* payload) {
     std::unique_ptr<WebIconResult> result(payload);
-    // The worker can post before its handle becomes signaled.
-    for(auto worker:g_webWorkers)if(GetThreadId(worker)==result->threadId) {
-        WaitForSingleObject(worker,INFINITE);
-        break;
-    }
+    // Result ownership transferred with the message; never resolve a worker by
+    // a reusable thread ID or block the UI waiting for a thread to exit.
     PumpWebIcons();
     if(g_customIcons.count(result->key))return;
     for(const auto& app:g_apps)if(AppKey(*app)==result->key&&app->websiteUrl==result->url) {
@@ -18262,6 +18225,18 @@ function Object-Map($value) {
 function Decode-Entry([string]$value) {
     if ($value -cmatch '%(?!(25|09|0A|0D))') { throw 'Invalid entry encoding.' }
     return $value.Replace('%09',"`t").Replace('%0A',"`n").Replace('%0D',"`r").Replace('%25','%')
+}
+function Read-EntryRecords([byte[]]$bytes) {
+    $records=@()
+    if ($null -eq $bytes) { return $records }
+    $text=$utf8.GetString($bytes).TrimStart([char]0xFEFF)
+    foreach ($line in ($text -split '\r?\n')) {
+        $f=$line.Split("`t")
+        if ($f.Count -eq 7 -and $f[0] -eq 'entry') {
+            $records+=@{name=(Decode-Entry $f[4]);target=(Decode-Entry $f[3]);arguments=(Decode-Entry $f[5])}
+        }
+    }
+    return $records
 }
 function Read-Ini([byte[]]$bytes) {
     $text = if ($bytes.Length -ge 2 -and $bytes[0] -eq 255 -and $bytes[1] -eq 254) {
@@ -18607,6 +18582,9 @@ function Import-Complete($checked) {
         [IO.File]::WriteAllText($iconFile,($lines -join "`r`n")+"`r`n",$utf8)
     }
     $effective=Object-Map $checked.manifest.effective_settings
+    # These settings turn a key/button into command execution. An imported
+    # archive must not silently arm them; retain this PC's current host values.
+    foreach ($key in @('program','winKeyAction','shiftWinKeyAction','startButtonAction')) { $effective.Remove($key) }
     $ui=Join-Path $stage 'ui-settings.ini'
     if (Test-Path -LiteralPath $ui) { [IO.File]::Copy($ui,(Join-Path $stage 'import-original-ui-settings.ini'),$true) }
     $text="[meta]`r`nversion=1`r`n"
@@ -18638,7 +18616,18 @@ try {
         else {
             $source=[string]$checked.manifest.source_mod
             $version=[string]$checked.manifest.version
-            $result=@{summary=($source+' '+$version+"`r`n"+$checked.files.Count+' files');hash=$checked.hash;previous=''}
+            $summary=$source+' '+$version+"`r`n"+$checked.files.Count+' files'
+            $summary+="`r`nStart-button / Win-key actions and the program command stay as configured on this PC."
+            $entryLines=@()
+            foreach ($entry in @(Read-EntryRecords $checked.files['data/entries-v1.txt'])) {
+                $command=[string]$entry.target
+                if ($entry.arguments) { $command+=' '+[string]$entry.arguments }
+                $entryLines+=([string]$entry.name+' -> '+$command)
+            }
+            if ($entryLines.Count) {
+                $summary+="`r`nImported entry launch targets (nothing is executed during import):`r`n"+($entryLines -join "`r`n")
+            }
+            $result=@{summary=$summary;hash=$checked.hash;previous=''}
         }
     } else { throw 'Unknown backup operation.' }
     $resultText="[result]`r`nstatus=ok`r`nsummary="+(Encode-Value $result.summary)+"`r`nhash="+$result.hash+"`r`nprevious="+(Encode-Value $result.previous)+"`r`n"
@@ -18647,7 +18636,7 @@ try {
 }
 [IO.File]::WriteAllText((Join-Path $work 'result.ini'),$resultText,[Text.Encoding]::Unicode)
 )RYJS_BACKUP";
-constexpr wchar_t kFullBackupDefaults[] = LR"RYJS_DEFAULTS({"interfaceLanguage": "auto", "uiFont": "auto", "winKeyAction": "grid", "shiftWinKeyAction": "start", "startButtonAction": "grid", "program": "", "monitor": "mouse", "appSource": "allApps", "gridLayout": "groups", "gridColumns": "0", "globalColumns": "0", "coverScreen": "0", "gridIconSize": "56", "showLabels": "1", "normalizeIcons": "1", "blurMode": "custom", "blurAmount": "60", "backgroundOpacity": "30", "tintColor": "#000000", "glowStrength": "60", "chromeOpacity": "90", "powerBar": "1", "dockAlignment": "center", "powerButtons.lock": "1", "powerButtons.signOut": "1", "powerButtons.sleep": "1", "powerButtons.hibernate": "1", "powerButtons.restart": "1", "powerButtons.shutDown": "1", "powerNoConfirm": "0", "powerWarning": "1", "powerWarningActions.lock": "0", "powerWarningActions.signOut": "1", "powerWarningActions.sleep": "0", "powerWarningActions.hibernate": "0", "powerWarningActions.restart": "1", "powerWarningActions.shutDown": "1", "powerWarningFollow": "mouse", "powerWarningColor": "#A91223", "powerWarningStrength": "78", "powerWarningSpread": "100", "powerWarningEdge": "65", "powerWarningBleed": "15", "wiggle": "1", "holdTime": "420", "animations": "1", "settingsGlass": "1", "nativeSettingsTitleBar": "0", "settingsTrayIcon": "1", "gpuPresenter": "1", "performanceLogging": "0", "frameRateLimit": "0", "openDuration": "280", "closeDuration": "180", "animationEasing": "settle", "reducedMotion": "0", "labelFontSize": "13", "horizontalSpacing": "56", "verticalSpacing": "16", "groupWidth": "0", "groupSpacing": "32", "groupFlow": "columns", "groupNavigation": "scroll", "folderDuration": "180", "themeMode": "custom", "backgroundDim": "0", "launchpadAnimation": "iconFlyIn", "powerOrder": "lock,signOut,sleep,hibernate,restart,shutDown", "textShadowOpacity": "72", "textShadowBlur": "2", "textOutlineOpacity": "75", "textOutlineWidth": "1", "materialPreset": "Default", "materialPresetName": "", "materialUserPresets": "", "materialBlur": "36", "materialSaturation": "100", "materialBrightness": "100", "materialContrast": "100", "materialLuminosity": "0", "materialNoise": "0", "materialNoiseScale": "100", "powerShadowOpacity": "72", "powerShadowBlur": "2", "glowDistance": "24"})RYJS_DEFAULTS";
+constexpr wchar_t kFullBackupDefaults[] = LR"RYJS_DEFAULTS({"interfaceLanguage": "auto", "uiFont": "auto", "winKeyAction": "grid", "shiftWinKeyAction": "start", "startButtonAction": "grid", "program": "", "monitor": "mouse", "appSource": "allApps", "gridLayout": "groups", "gridColumns": "0", "globalColumns": "0", "coverScreen": "0", "gridIconSize": "56", "showLabels": "1", "normalizeIcons": "1", "blurMode": "custom", "blurAmount": "60", "backgroundOpacity": "30", "tintColor": "#000000", "glowStrength": "60", "chromeOpacity": "90", "powerBar": "1", "dockAlignment": "center", "powerButtons.lock": "1", "powerButtons.signOut": "1", "powerButtons.sleep": "1", "powerButtons.hibernate": "1", "powerButtons.restart": "1", "powerButtons.shutDown": "1", "powerNoConfirm": "0", "powerWarning": "1", "powerWarningActions.lock": "0", "powerWarningActions.signOut": "1", "powerWarningActions.sleep": "0", "powerWarningActions.hibernate": "0", "powerWarningActions.restart": "1", "powerWarningActions.shutDown": "1", "powerWarningFollow": "mouse", "powerWarningColor": "#A91223", "powerWarningStrength": "78", "powerWarningSpread": "100", "powerWarningEdge": "65", "powerWarningBleed": "15", "wiggle": "1", "holdTime": "420", "animations": "1", "settingsGlass": "1", "nativeSettingsTitleBar": "0", "settingsTrayIcon": "1", "gpuPresenter": "1", "performanceLogging": "0", "frameRateLimit": "0", "openDuration": "280", "closeDuration": "180", "animationEasing": "settle", "reducedMotion": "0", "labelFontSize": "13", "horizontalSpacing": "56", "verticalSpacing": "16", "groupWidth": "0", "groupSpacing": "32", "groupFlow": "columns", "groupNavigation": "scroll", "folderDuration": "180", "themeMode": "custom", "backgroundDim": "0", "launchpadAnimation": "iconFlyIn", "powerOrder": "lock,signOut,sleep,hibernate,restart,shutDown", "textShadowOpacity": "72", "textShadowBlur": "2", "textOutlineOpacity": "75", "textOutlineWidth": "1", "materialPreset": "Default", "materialPresetName": "", "materialUserPresets": "", "materialBlur": "36", "materialSaturation": "100", "materialBrightness": "100", "materialContrast": "100", "materialLuminosity": "0", "materialNoise": "0", "materialNoiseScale": "100", "powerShadowOpacity": "72", "powerShadowBlur": "2", "glowDistance": "24", "webIconBackgroundFetch": "1"})RYJS_DEFAULTS";
 std::wstring_view DeclaredSettingDefault(std::wstring_view key) {
     static constexpr std::pair<std::wstring_view, std::wstring_view> defaults[] = {
         {L"animationEasing", L"settle"},
@@ -18733,6 +18722,7 @@ std::wstring_view DeclaredSettingDefault(std::wstring_view key) {
         {L"tintColor", L"#000000"},
         {L"uiFont", L"auto"},
         {L"verticalSpacing", L"16"},
+        {L"webIconBackgroundFetch", L"1"},
         {L"wiggle", L"1"},
         {L"winKeyAction", L"grid"},
     };
@@ -19939,10 +19929,12 @@ void ForgetStartButton() {
     StartButtonLock lock;
     std::swap(previous, g_startButtonReference);
 }
-// A queued reset is a lambda in this image, so it may not outlive the module.
-// The counter, the gate and the drain live in launchpad_lifecycle.h; the gate
-// is closed in Wh_ModBeforeUninit and Wh_ModUninit waits for the count.
-// The body runs on the thread that owns the element.
+// Reset work is posted as a plain registered message to Shell_TrayWnd, whose
+// thread owns the XAML taskbar. A Windhawk subclass runs that message
+// synchronously; removing it during unload is a synchronous join point.
+std::atomic<HWND> g_startLatchWindow{nullptr};
+std::atomic<bool> g_startLatchStopping{false};
+UINT g_startLatchMessage = 0;
 static void ClearStartButtonLatchNow(const winrt::Windows::UI::Xaml::Controls::Primitives::ToggleButton& element,const wchar_t* why) {
     try {
         auto checked=element.IsChecked();
@@ -19970,34 +19962,65 @@ static void ClearStartButtonLatchNow(const winrt::Windows::UI::Xaml::Controls::P
         StartStateTrace(why,latch?0:-1,element.IsPressed(),element.IsPointerOver(),focus);
     } catch(...) {}
 }
+LRESULT CALLBACK StartLatchSubclassProc(HWND hwnd, UINT message, WPARAM wParam,
+                                        LPARAM lParam, DWORD_PTR) {
+    if (message == WM_NCDESTROY && g_startLatchWindow.load() == hwnd)
+        g_startLatchWindow = nullptr;
+    if (message == g_startLatchMessage && g_startLatchMessage != 0 && !g_startLatchStopping.load()) {
+        auto reference = StartButtonReferenceForReset();
+        try {
+            // Defend against a taskbar implementation whose XAML thread is
+            // not Shell_TrayWnd's thread: never touch XAML from the wrong one.
+            if (reference.dispatcher && reference.dispatcher.HasThreadAccess()) {
+                if (auto element = reference.element.get())
+                    ClearStartButtonLatchNow(element, L"latch-taskbar-message");
+            } else {
+                Wh_Log(L"Start-latch reset skipped: the XAML dispatcher is on another thread");
+            }
+        } catch (...) {}
+        return 0;
+    }
+    return DefSubclassProc(hwnd, message, wParam, lParam);
+}
+bool EnsureStartLatchSubclass() {
+    if (g_startLatchStopping.load()) return false;
+    if (HWND current = g_startLatchWindow.load(); current && IsWindow(current)) return true;
+    HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+    if (!taskbar) return false;
+    if (!g_startLatchMessage)
+        g_startLatchMessage = RegisterWindowMessageW(L"Lumiflow.ClearStartButtonLatch.ryjs-launchpad");
+    if (!g_startLatchMessage) return false;
+    if (WindhawkUtils::SetWindowSubclassFromAnyThread(taskbar, StartLatchSubclassProc, 0)) {
+        g_startLatchWindow = taskbar;
+        return true;
+    }
+    Wh_Log(L"Could not subclass Shell_TrayWnd for Start-latch reset: %u", GetLastError());
+    return false;
+}
+void RemoveStartLatchSubclass() {
+    g_startLatchStopping = true;
+    HWND taskbar = g_startLatchWindow.exchange(nullptr);
+    if (taskbar && IsWindow(taskbar))
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(taskbar, StartLatchSubclassProc);
+    ForgetStartButton();
+}
 void ClearStartButtonLatch(const wchar_t* why) {
-    // The call itself is one unit of work: it runs module code right now, on a
-    // hook thread that can still be inside this function when the unload
-    // starts. Counting it is what stops the drain from seeing zero while this
-    // thread has not even reached the queue yet.
-    StartLatchTicket invocation;
     if (g_startLatchStopping.load() || g_nativeStartPassthrough.load()) return;
-    auto reference = StartButtonReferenceForReset();
-    if (!reference.dispatcher) return;
-    g_startLatchPending.fetch_add(1);
-    if (g_startLatchStopping.load()) {
-        FinishStartLatchReset();
+    if (!EnsureStartLatchSubclass()) {
+        // If the caller already owns the XAML object, a synchronous reset is
+        // safe and preserves the existing Start-button behavior. Never queue
+        // module code as a fallback when the subclass cannot be installed.
+        auto reference = StartButtonReferenceForReset();
+        try {
+            if (reference.dispatcher && reference.dispatcher.HasThreadAccess()) {
+                if (auto element = reference.element.get()) ClearStartButtonLatchNow(element, why);
+            }
+        } catch (...) {}
         return;
     }
-    try {
-        reference.dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Normal,
-            [weak = std::move(reference.element), why]() {
-                struct Release { ~Release() { FinishStartLatchReset(); } } release;
-                // A reset queued before Ctrl+Esc may run after native Start
-                // takes ownership. Leave its checked and focus states alone.
-                if (g_nativeStartPassthrough.load()) return;
-                try {
-                    if (auto element = weak.get()) ClearStartButtonLatchNow(element, why);
-                } catch (...) {}
-            });
-    } catch (...) {
-        FinishStartLatchReset();
-    }
+    HWND taskbar = g_startLatchWindow.load();
+    if (taskbar && !PostMessageW(taskbar, g_startLatchMessage, 0, 0))
+        Wh_Log(L"Could not post Start-latch reset: %u", GetLastError());
 }
 winrt::Windows::UI::Xaml::Controls::Primitives::ToggleButton StartToggleElement(void* object) {
     try {
@@ -20204,7 +20227,8 @@ void OnAppsLoaded(AppList* list, int key) {
     LoadTiles();
     ApplyCustomIcons(key & 0xFFFF);
     for (const auto& app : g_apps)
-        if (app->pixels.empty() && !g_customIcons.count(AppKey(*app))) StartWebIconFetch(*app);
+        if (g_settings.webIconBackgroundFetch && !g_webStop && app->pixels.empty() &&
+            !g_customIcons.count(AppKey(*app))) StartWebIconFetch(*app);
     if (key != AppsKey()) {
         // The settings changed while this list was read: the reload then
         // found the worker busy. It has posted and is about to end.
@@ -21260,7 +21284,8 @@ BOOL Wh_ModInit() {
     // A differently named DLL must not stack a second Start interceptor on a
     // known running predecessor. Never disable or unload that mod for the user.
     if (FindWindowW(L"WindhawkSeamlessLaunchpad", nullptr) ||
-        FindWindowW(L"WindhawkFullscreenStartPlus", nullptr)) {
+        FindWindowW(L"WindhawkFullscreenStartPlus", nullptr) ||
+        FindWindowW(L"WindhawkFullscreenStart", nullptr)) {
         Wh_Log(L"Another launcher is running. Disable it before enabling Lumiflow; original data was not changed.");
         return FALSE;
     }
@@ -21286,22 +21311,23 @@ BOOL Wh_ModInit() {
         Wh_Log(L"Lumiflow storage is damaged or unsupported; opening read-only.");
     }
     LoadSettings();
+    if (!EnsureStartLatchSubclass()) {
+        Wh_Log(L"The taskbar reset subclass is required; Start was not replaced");
+        CloseHandle(g_integrationLease); g_integrationLease = nullptr;
+        return FALSE;
+    }
     if (!HookShowStartView()) {
+        RemoveStartLatchSubclass();
         CloseHandle(g_integrationLease); g_integrationLease = nullptr;
         return FALSE;
     }
     HookXamlStartVisibility();
-    // Created before the launcher thread and before Windhawk applies the XAML
-    // hooks (it does that after Wh_ModInit returns), and closed after the last
-    // queued reset is done (Wh_ModUninit).
-    g_startLatchIdle = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    if (!g_startLatchIdle) Wh_Log(L"No start-latch event; unload cannot wait for a queued reset");
     g_readyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_thread = CreateThread(nullptr, 0, StartThread, nullptr, 0, nullptr);
     if (!g_thread) {
         CloseHandle(g_readyEvent);
         g_readyEvent = nullptr;
-        if (g_startLatchIdle) { CloseHandle(g_startLatchIdle); g_startLatchIdle = nullptr; }
+        RemoveStartLatchSubclass();
         CloseHandle(g_integrationLease); g_integrationLease = nullptr;
         return FALSE;
     }
@@ -21313,23 +21339,21 @@ BOOL Wh_ModInit() {
 void Wh_ModBeforeUninit() {
     Wh_Log(L">");
 
-    // Windhawk still has the mod's hooks installed here. Closing the gate now
-    // means no new XAML latch reset can be queued; the ones already queued are
-    // counted and drained in Wh_ModUninit. Hooks are removed right after this
-    // returns, so no new caller can appear once the drain starts.
-    g_startLatchStopping = true;
+    // Hooks still exist here. Closing the gate and synchronously removing the
+    // subclass prevents any new reset from entering module code. Removal joins
+    // any reset that is already executing on the taskbar thread.
+    RemoveStartLatchSubclass();
 }
 
 void Wh_ModUninit() {
     Wh_Log(L">");
 
-    // Defensive: normally Wh_ModBeforeUninit has already closed the gate.
-    g_startLatchStopping = true;
+    // Defensive: Wh_ModBeforeUninit normally removed this already. This call is
+    // synchronous and leaves neither a queued module callback nor a module pin.
+    RemoveStartLatchSubclass();
     if (!g_thread) {
         CloseSettingsWindow();
         if (g_integrationLease) { CloseHandle(g_integrationLease); g_integrationLease = nullptr; }
-        ForgetStartButton();
-        if (g_startLatchIdle) { CloseHandle(g_startLatchIdle); g_startLatchIdle = nullptr; }
         return;
     }
     if (g_keyThread) {
@@ -21349,24 +21373,8 @@ void Wh_ModUninit() {
     g_thread = nullptr;
     CloseHandle(g_readyEvent);
     g_readyEvent = nullptr;
-    // Invariant for the drain: the hooks are gone (Windhawk removes them after
-    // Wh_ModBeforeUninit returns) and the launcher thread is joined, so no new
-    // unit of latch work can start. Everything already counted -- a hook still
-    // inside ClearStartButtonLatch and every queued lambda -- is released by
-    // its owner, so the count can only fall.
-    // A dispatcher that never runs its callback leaves it above zero: the
-    // taskbar thread is then gone or blocked for longer than the timeout, and
-    // the image must stay mapped (see PinModuleForStartLatch).
-    bool latchDrained = WaitForStartLatchResets(5000);
-    ForgetStartButton();
-    if (g_startLatchIdle) {
-        // Only close when nothing can still signal it. In the pinned case a
-        // callback is still holding the old counter, and closing the handle
-        // under it would let a recycled handle number be signalled instead.
-        if (latchDrained) CloseHandle(g_startLatchIdle);
-        g_startLatchIdle = nullptr;
-    }
-    if (!latchDrained) PinModuleForStartLatch();
+    // All module callbacks are joined: hooks were removed by Windhawk, the
+    // taskbar subclass was synchronously removed, and the launcher is joined.
     // Sleep and hibernate return only after the PC wakes; every other action
     // returns at once, so this join cannot hang a normal unload.
     if (g_powerThread) {
