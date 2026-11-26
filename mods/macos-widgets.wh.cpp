@@ -10702,6 +10702,7 @@ struct GlassTarget {
     RECT clip;     // what of the screen may show (GlassClip)
     bool visible;  // the desktop shows around it (not covered by a window)
     bool moving;   // being dragged or springing into its cell: taken as often as it can
+    bool big;      // the Ajustes window: a big picture to blur, so not more than 5 times a second
 };
 struct GlassShot {
     HWND hwnd;
@@ -10901,10 +10902,12 @@ static void GlassThread() {
             RECT x;
             for (const RECT& c : changed)
                 if (IntersectRect(&x, &c, &t.rc)) st->pending = true;
-            if (st->pending && now - st->last >= (t.moving ? 16u : 50u)) {  // 60 a second moving, else 20 at most
+            if (st->pending && now - st->last >= (t.moving ? 16u : t.big ? 200u : 50u)) {  // 60 a second moving, else 20 at most
                 if (GlassShot* shot = TakeShot(d, t)) {
+                    bool wasEmpty;
                     {
                         std::lock_guard<std::mutex> lock(g_glassMutex);
+                        wasEmpty = g_glassBox.empty();
                         bool replaced = false;
                         for (auto& b : g_glassBox)
                             if (b->hwnd == shot->hwnd) {
@@ -10913,7 +10916,10 @@ static void GlassThread() {
                             }
                         if (!replaced) g_glassBox.emplace_back(shot);
                     }
-                    PostThreadMessageW(g_uiThreadId, WM_APP_GLASS, 0, 0);
+                    // One message for the whole box: the UI thread takes all of it at once. A message per picture
+                    // (with an animated wallpaper, hundreds a second) filled its queue, and posted messages come
+                    // before clicks and timers, so everything froze (the clock, the Ajustes window)
+                    if (wasEmpty) PostThreadMessageW(g_uiThreadId, WM_APP_GLASS, 0, 0);
                 }
                 st->pending = false;
                 st->last = now;
@@ -10943,7 +10949,7 @@ static void PublishGlassTargets() {
         for (auto& sp : g_springs)
             if (sp.wd == wd) moving = true;
         RECT rc = CaptureRect(wd);
-        t.push_back({wd->hwnd, rc, GlassClip(rc), visible || moving, moving});
+        t.push_back({wd->hwnd, rc, GlassClip(rc), visible || moving, moving, wd == g_cfg.wd});
     };
     for (Widget* wd : g_widgets) add(wd, ShowsDesktop(wd));
     add(g_cfg.wd, true);
@@ -11128,7 +11134,9 @@ static DWORD WINAPI UiThread(LPVOID) {
                     continue;
                 }
                 if (msg.message == WM_APP_GLASS) {
-                    TakeGlassBox();
+                    // Clicks and keys waiting come first: the pictures stay in the box, and the glass timer
+                    // (4 times a second) takes them
+                    if (!HIWORD(GetQueueStatus(QS_INPUT))) TakeGlassBox();
                     continue;
                 }
                 if (msg.message == WM_APP_DESK) {
