@@ -70,6 +70,7 @@ by Microsoft (MIT License), mirrored horizontally.
 
 #include <windhawk_utils.h>
 
+#include <atomic>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -149,11 +150,13 @@ void LoadSettings() {
 ////////////////////////////////////////////////////////////////////////////////
 // State
 //
-// XAML objects are only created, used and released on the UI thread. The
-// globals that hold them have their destructors suppressed, since a destructor
-// would run on the wrong thread or after XAML has shut down.
+// XAML objects are only created, used and released on the UI thread. Globals
+// with strong references have their destructors suppressed, since a destructor
+// would run on the wrong thread or after XAML has shut down. They are released
+// explicitly on unload instead.
 
-// The UI thread's dispatcher, usable from any thread.
+// The UI thread's dispatcher, usable from any thread. Released in
+// Wh_ModBeforeUninit.
 [[clang::no_destroy]] mud::DispatcherQueue g_dispatcher{nullptr};
 std::mutex g_dispatcherMutex;
 
@@ -162,10 +165,15 @@ struct WatchedRoot {
     winrt::weak_ref<mux::FrameworkElement> root;
     winrt::event_token layoutUpdatedToken;
     ULONGLONG lastSearch = 0;
+    int failedSearchesAfterLoad = 0;
 };
-[[clang::no_destroy]] std::vector<WatchedRoot> g_watchedRoots;
+std::vector<WatchedRoot> g_watchedRoots;
 
-[[clang::no_destroy]] winrt::weak_ref<muxc::Image> g_logoImage;
+// Searches after a window's content has loaded before giving up on it. The
+// logo is static XAML in the main window, so other windows never get one.
+constexpr int kMaxFailedSearchesAfterLoad = 8;
+
+winrt::weak_ref<muxc::Image> g_logoImage;
 winrt::event_token g_themeChangedToken{};
 
 // The logo's original properties, restored when the mod is disabled.
@@ -364,6 +372,13 @@ void ApplyToLogo(muxc::Image const& image) {
 void AttachToLogo(muxc::Image const& image) {
     Wh_Log(L"Found the Command Palette logo");
 
+    // A new logo replaces an old one: undo the changes to the old one, so that
+    // it doesn't keep a handler that cleanup can no longer reach.
+    if (auto previous = g_logoImage.get(); previous && previous != image) {
+        previous.ActualThemeChanged(g_themeChangedToken);
+        RestoreOriginal(previous);
+    }
+
     g_logoImage = winrt::make_weak(image);
 
     // The built-in arrow is drawn in a color that depends on the theme.
@@ -448,32 +463,40 @@ bool IsLogoAttached() {
     return image && image.XamlRoot();
 }
 
-void OnRootLayoutUpdated(WatchedRoot& watched) {
+// Returns false when the window should no longer be watched.
+bool OnRootLayoutUpdated(WatchedRoot& watched) {
     if (g_unloading || IsLogoAttached()) {
-        return;
+        return true;
     }
 
     // Layout updates can be frequent, don't search on each of them.
     ULONGLONG now = GetTickCount64();
     if (now - watched.lastSearch < 250) {
-        return;
+        return true;
     }
     watched.lastSearch = now;
 
     auto root = watched.root.get();
     if (!root) {
-        return;
+        return false;
     }
 
     // TopBarGrid is the named grid in ShellPage.xaml that holds the logo.
     auto topBar = FindChildByName(root, L"TopBarGrid");
     if (!topBar) {
-        return;
+        if (root.IsLoaded() &&
+            ++watched.failedSearchesAfterLoad >= kMaxFailedSearchesAfterLoad) {
+            Wh_Log(L"No logo in this window, no longer watching it");
+            return false;
+        }
+        return true;
     }
 
     if (auto image = FindLogoImage(topBar)) {
         AttachToLogo(image);
     }
+
+    return true;
 }
 
 void WatchRoot(mux::FrameworkElement const& root) {
@@ -499,11 +522,18 @@ void WatchRoot(mux::FrameworkElement const& root) {
         root.LayoutUpdated([weakRoot](wf::IInspectable const&,
                                       wf::IInspectable const&) {
             try {
-                for (auto& w : g_watchedRoots) {
-                    if (w.root == weakRoot) {
-                        OnRootLayoutUpdated(w);
-                        break;
+                for (auto it = g_watchedRoots.begin();
+                     it != g_watchedRoots.end(); ++it) {
+                    if (it->root != weakRoot) {
+                        continue;
                     }
+                    if (!OnRootLayoutUpdated(*it)) {
+                        if (auto r = it->root.get()) {
+                            r.LayoutUpdated(it->layoutUpdatedToken);
+                        }
+                        g_watchedRoots.erase(it);
+                    }
+                    break;
                 }
             } catch (...) {
                 Wh_Log(L"Error %08X", winrt::to_hresult());
@@ -523,6 +553,7 @@ void CleanupOnUiThread() {
         }
     }
     g_watchedRoots.clear();
+    g_watchedRoots.shrink_to_fit();
 
     if (auto image = g_logoImage.get()) {
         image.ActualThemeChanged(g_themeChangedToken);
@@ -530,8 +561,7 @@ void CleanupOnUiThread() {
     }
     g_logoImage = nullptr;
 
-    // If the logo is already gone, the original source is kept alive rather
-    // than released here, see the comment above the globals.
+    // Released here, on the UI thread, whether or not the logo still exists.
     if (g_original.saved) {
         g_originalSource = nullptr;
         g_original.saved = false;
@@ -624,19 +654,14 @@ bool HookMicrosoftUiXamlSymbols(HMODULE module) {
     return true;
 }
 
-bool g_xamlHooked = false;
+std::atomic<bool> g_xamlHooked;
 
 bool HookMicrosoftUiXamlIfLoaded() {
-    if (g_xamlHooked) {
-        return false;
-    }
-
     HMODULE module = GetModuleHandle(L"Microsoft.UI.Xaml.dll");
-    if (!module) {
+    if (!module || g_xamlHooked.exchange(true)) {
         return false;
     }
 
-    g_xamlHooked = true;
     return HookMicrosoftUiXamlSymbols(module);
 }
 
@@ -647,13 +672,10 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
                                    DWORD dwFlags) {
     HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
 
-    if (module && !g_xamlHooked && lpLibFileName) {
-        PCWSTR fileName = wcsrchr(lpLibFileName, L'\\');
-        fileName = fileName ? fileName + 1 : lpLibFileName;
-        if (_wcsicmp(fileName, L"Microsoft.UI.Xaml.dll") == 0 &&
-            HookMicrosoftUiXamlIfLoaded()) {
-            Wh_ApplyHookOperations();
-        }
+    if (module && !g_xamlHooked &&
+        module == GetModuleHandle(L"Microsoft.UI.Xaml.dll") &&
+        HookMicrosoftUiXamlIfLoaded()) {
+        Wh_ApplyHookOperations();
     }
 
     return module;
@@ -698,4 +720,8 @@ void Wh_ModBeforeUninit() {
     Wh_Log(L">");
 
     RunOnUiThread([]() { CleanupOnUiThread(); });
+
+    // DispatcherQueue is agile, so it can be released from this thread.
+    std::lock_guard lock(g_dispatcherMutex);
+    g_dispatcher = nullptr;
 }
