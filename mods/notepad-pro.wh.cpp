@@ -7,7 +7,7 @@
 // @github          https://github.com/armaninyow
 // @include         notepad.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lgdi32 -luser32 -ladvapi32 -ldwmapi
+// @compilerOptions -lcomctl32 -lgdi32 -luser32 -ladvapi32 -ldwmapi -luxtheme -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -98,6 +98,8 @@ This mod is under active development, with additional quality-of-life improvemen
 #include <commctrl.h>
 #include <richedit.h>
 #include <dwmapi.h>
+#include <shellapi.h>  // [keep] ShellExecuteW linked directly
+#include <uxtheme.h>  // [keep] SetWindowTheme linked directly
 
 #include <d2d1.h>
 #include <d2d1_1.h>
@@ -133,6 +135,7 @@ constexpr WCHAR kPropEditor[] = L"WhNotepadPro.Editor";
 constexpr WCHAR kPropTop[] = L"WhNotepadPro.Top";
 constexpr UINT_PTR kEditSubclassId = 0x4E505245;
 constexpr UINT_PTR kTopSubclassId = 0x4E505254;
+constexpr UINT_PTR kPvRichSubclassId = 0x4E505256;  // [keep] preview rich edit subclass
 constexpr UINT kSysCmdId = 0xA1F0;
 constexpr UINT_PTR kTickTimer = 1;
 // [keep] adaptive tick rate instead of a fixed 16 ms timer (see SetTickRate)
@@ -487,7 +490,7 @@ static bool SystemAppsUseDark() {
 }
 
 // Dark-mode order: window's dark attribute, editor text color, then the system apps theme.
-static bool IsDarkTheme(EditorCtx* c) {
+static bool IsDarkTheme(EditorCtx* c, bool textKnown, COLORREF text) {  // [keep] shared by GuideDark
     HWND top = GetAncestor(c->edit, GA_ROOT);
     BOOL dwmDark = FALSE;
     if (top && SUCCEEDED(DwmGetWindowAttribute(top, DWMWA_USE_IMMERSIVE_DARK_MODE, &dwmDark,
@@ -495,12 +498,14 @@ static bool IsDarkTheme(EditorCtx* c) {
         dwmDark) {
         return true;
     }
-    if (c->textColorKnown) {
-        int lum = (30 * GetRValue(c->textColor) + 59 * GetGValue(c->textColor) +
-                   11 * GetBValue(c->textColor)) / 100;
+    if (textKnown) {
+        int lum = (30 * GetRValue(text) + 59 * GetGValue(text) + 11 * GetBValue(text)) / 100;
         return lum >= 128;
     }
     return SystemAppsUseDark();
+}
+static bool IsDarkTheme(EditorCtx* c) {
+    return IsDarkTheme(c, c->textColorKnown, c->textColor);
 }
 
 // Editor queries
@@ -803,29 +808,20 @@ enum SynClass : uint8_t {
 constexpr size_t kSyntaxMaxChars = 3000000;
 
 enum LangFlags {
-    fLineSlash = 1,
-    fLineHash = 2,
-    fBlockC = 4,
-    fTriple = 8,
-    fBacktick = 16,
-    fPreproc = 32,
-    fAnnot = 64,
-    fJsonKeys = 128,
-    fDigitSep = 256,
-    fJava = 512,
-    fCpp = 1024,
-    fCSharp = 2048,
-    fJson = 4096,
-    fJs = 8192,
-    fTs = 16384,
-    fPython = 32768
+    // [keep] generic-pass flags removed; each language has a dedicated tokenizer flag
+    fJava = 1,
+    fCpp = 2,
+    fCSharp = 4,
+    fJson = 8,
+    fJs = 16,
+    fTs = 32,
+    fPython = 64
 };
 
 struct LangCfg {
     const WCHAR* exts;
     int flags;
-    std::unordered_set<std::wstring_view> kw, ty, cn;
-};
+};  // [keep] kw/ty/cn word sets removed (tokenizers own their tables)
 
 static void BuildSet(std::unordered_set<std::wstring_view>& s, const WCHAR* list) {
     const WCHAR* p = list;
@@ -840,38 +836,26 @@ static void BuildSet(std::unordered_set<std::wstring_view>& s, const WCHAR* list
 
 static std::vector<LangCfg> BuildLangs() {
     std::vector<LangCfg> v;
-    auto add = [&](const WCHAR* exts, int flags, const WCHAR* kw, const WCHAR* ty,
-                   const WCHAR* cn) {
-        LangCfg l;
-        l.exts = exts;
-        l.flags = flags;
-        BuildSet(l.kw, kw);
-        BuildSet(l.ty, ty);
-        BuildSet(l.cn, cn);
-        v.push_back(std::move(l));
-    };
-
     // 0: C / C++ (its word tables live in TokenizeCpp, which scans it)
-    add(L"c h cpp cc cxx c++ hpp hh hxx h++ ino cu cuh",
-        fLineSlash | fBlockC | fPreproc | fDigitSep | fCpp, L"", L"", L"");
+    v.push_back({L"c h cpp cc cxx c++ hpp hh hxx h++ ino cu cuh", fCpp});
 
     // 1: Java (its word tables live in TokenizeJava, which scans it)
-    add(L"java", fJava, L"", L"", L"");
+    v.push_back({L"java", fJava});
 
     // 2: C# (its word tables live in TokenizeCsharp, which scans it)
-    add(L"cs csx", fLineSlash | fBlockC | fPreproc | fDigitSep | fCSharp, L"", L"", L"");
+    v.push_back({L"cs csx", fCSharp});
 
     // 3: JavaScript
-    add(L"js jsx mjs cjs", fLineSlash | fBlockC | fBacktick | fAnnot | fJs, L"", L"", L"");
+    v.push_back({L"js jsx mjs cjs", fJs});
 
     // 4: TypeScript
-    add(L"ts tsx mts cts", fLineSlash | fBlockC | fBacktick | fAnnot | fTs, L"", L"", L"");
+    v.push_back({L"ts tsx mts cts", fTs});
 
     // 5: Python
-    add(L"py pyw pyi", fLineHash | fTriple | fAnnot | fPython, L"", L"", L"");
+    v.push_back({L"py pyw pyi", fPython});
 
     // 6: JSON
-    add(L"json jsonc", fLineSlash | fBlockC | fJson, L"", L"", L"");
+    v.push_back({L"json jsonc", fJson});
     return v;
 }
 
@@ -3220,7 +3204,7 @@ static PyWords BuildPyWords() {
                             L"divmod enumerate eval filter format getattr globals hasattr hash help "
                             L"hex id input isinstance issubclass iter len locals map max min next oct "
                             L"open ord pow property range repr reversed round setattr sorted "
-                            L"staticmethod sum super type vars zip aiter anext breakpoint compiile "
+                            L"staticmethod sum super type vars zip aiter anext breakpoint compile "
                             L"exec print apply cmp coerce execfile intern raw_input reduce reload "
                             L"unichr xrange __import__");
     return w;
@@ -3586,161 +3570,7 @@ static void Tokenize(const LangCfg& L, const std::wstring& t, std::vector<uint8_
         TokenizeJava(t, cls);
         return;
     }
-    const size_t n = t.size();
-    cls.assign(n, kcDefault);
-    auto fill = [&](size_t a, size_t b, uint8_t k) {
-        if (b > n) b = n;
-        for (size_t q = a; q < b; q++) cls[q] = k;
-    };
-    size_t i = 0;
-    bool lineStart = true;
-    while (i < n) {
-        WCHAR c = t[i];
-        if (c == L'\r' || c == L'\n') {
-            i++;
-            lineStart = true;
-            continue;
-        }
-        if (c == L' ' || c == L'\t') {
-            i++;
-            continue;
-        }
-        bool atStart = lineStart;
-        lineStart = false;
-
-        // Comments
-        if ((L.flags & fLineSlash) && c == L'/' && i + 1 < n && t[i + 1] == L'/') {
-            size_t e = i;
-            while (e < n && t[e] != L'\r' && t[e] != L'\n') e++;
-            fill(i, e, kcComment);
-            i = e;
-            continue;
-        }
-        if ((L.flags & fBlockC) && c == L'/' && i + 1 < n && t[i + 1] == L'*') {
-            size_t e = t.find(L"*/", i + 2);
-            e = (e == std::wstring::npos) ? n : e + 2;
-            fill(i, e, kcComment);
-            i = e;
-            continue;
-        }
-        if ((L.flags & fLineHash) && c == L'#') {
-            size_t e = i;
-            while (e < n && t[e] != L'\r' && t[e] != L'\n') e++;
-            fill(i, e, kcComment);
-            i = e;
-            continue;
-        }
-
-        // Preprocessor directive
-        if ((L.flags & fPreproc) && c == L'#' && atStart) {
-            size_t e = i + 1;
-            while (e < n && (t[e] == L' ' || t[e] == L'\t')) e++;
-            size_t ws = e;
-            while (e < n && IsIdPart(t[e])) e++;
-            fill(i, e, kcPreproc);
-            if (t.compare(ws, e - ws, L"include") == 0 || t.compare(ws, e - ws, L"import") == 0) {
-                size_t p = e;
-                while (p < n && (t[p] == L' ' || t[p] == L'\t')) p++;
-                if (p < n && t[p] == L'<') {
-                    size_t q = p;
-                    while (q < n && t[q] != L'>' && t[q] != L'\r' && t[q] != L'\n') q++;
-                    if (q < n && t[q] == L'>') {
-                        fill(p, q + 1, kcString);
-                        e = q + 1;
-                    }
-                }
-            }
-            i = e;
-            continue;
-        }
-
-        // Strings
-        if (c == L'"' || (c == L'\'' && !(L.flags & fJsonKeys)) ||
-            (c == L'`' && (L.flags & fBacktick))) {
-            if ((L.flags & fTriple) && i + 2 < n && t[i + 1] == c && t[i + 2] == c) {
-                WCHAR trip[4] = {c, c, c, 0};
-                size_t e = t.find(trip, i + 3);
-                e = (e == std::wstring::npos) ? n : e + 3;
-                fill(i, e, kcString);
-                i = e;
-                continue;
-            }
-            bool multi = (c == L'`');
-            size_t e = i + 1;
-            while (e < n) {
-                WCHAR d = t[e];
-                if (d == L'\\' && e + 1 < n) {
-                    e += 2;
-                    continue;
-                }
-                if (d == c) {
-                    e++;
-                    break;
-                }
-                if (!multi && (d == L'\r' || d == L'\n')) break;
-                e++;
-            }
-            fill(i, e, kcString);
-            if (L.flags & fJsonKeys) {
-                size_t k = e;
-                while (k < n && (t[k] == L' ' || t[k] == L'\t')) k++;
-                if (k < n && t[k] == L':') fill(i, e, kcType);
-            }
-            i = e;
-            continue;
-        }
-
-        // Numbers
-        if (IsDigitCh(c) || (c == L'.' && i + 1 < n && IsDigitCh(t[i + 1]))) {
-            size_t e = i + 1;
-            bool hex = (c == L'0' && e < n && (t[e] == L'x' || t[e] == L'X'));
-            while (e < n) {
-                WCHAR d = t[e];
-                if ((d < 128 && iswalnum(d)) || d == L'_' || d == L'.') {
-                    e++;
-                    continue;
-                }
-                if (d == L'\'' && (L.flags & fDigitSep) && e + 1 < n && iswalnum(t[e + 1])) {
-                    e++;
-                    continue;
-                }
-                if ((d == L'+' || d == L'-') && !hex &&
-                    (t[e - 1] == L'e' || t[e - 1] == L'E' || t[e - 1] == L'p' ||
-                     t[e - 1] == L'P')) {
-                    e++;
-                    continue;
-                }
-                break;
-            }
-            fill(i, e, kcNumber);
-            i = e;
-            continue;
-        }
-
-        // Identifiers / keywords
-        if (IsIdStart(c)) {
-            size_t e = i + 1;
-            while (e < n && IsIdPart(t[e])) e++;
-            std::wstring_view w(t.data() + i, e - i);
-            uint8_t k = kcDefault;
-            if (L.kw.count(w)) k = kcKeyword;
-            else if (L.ty.count(w)) k = kcType;
-            else if (L.cn.count(w)) k = kcConst;
-            if (k != kcDefault) fill(i, e, k);
-            i = e;
-            continue;
-        }
-
-        // Annotations / decorators
-        if (c == L'@' && (L.flags & fAnnot) && i + 1 < n && IsIdStart(t[i + 1])) {
-            size_t e = i + 1;
-            while (e < n && (IsIdPart(t[e]) || t[e] == L'.')) e++;
-            fill(i, e, kcPreproc);
-            i = e;
-            continue;
-        }
-        i++;
-    }
+    cls.assign(t.size(), kcDefault);  // [keep] every language has its own tokenizer; generic pass removed
 }
 
 // The editor counts a line break as ONE character (CRLF = one paragraph mark); syntax code uses that numbering.
@@ -4304,22 +4134,11 @@ constexpr int kGuideMaxLevels = 64;
 constexpr int kGuideReadChars = 256;
 
 static bool GuideDark(EditorCtx* c) {
-    HWND top = GetAncestor(c->edit, GA_ROOT);
-    BOOL dwmDark = FALSE;
-    if (top && SUCCEEDED(DwmGetWindowAttribute(top, DWMWA_USE_IMMERSIVE_DARK_MODE, &dwmDark,
-                                               sizeof(dwmDark))) &&
-        dwmDark) {
-        return true;
-    }
     CHARFORMAT2W cf{};
     cf.cbSize = sizeof(cf);
     SendMessageW(c->edit, EM_GETCHARFORMAT, SCF_DEFAULT, (LPARAM)&cf);
-    if ((cf.dwMask & CFM_COLOR) && !(cf.dwEffects & CFE_AUTOCOLOR)) {
-        int lum = (30 * GetRValue(cf.crTextColor) + 59 * GetGValue(cf.crTextColor) +
-                   11 * GetBValue(cf.crTextColor)) / 100;
-        return lum >= 128;
-    }
-    return SystemAppsUseDark();
+    bool known = (cf.dwMask & CFM_COLOR) && !(cf.dwEffects & CFE_AUTOCOLOR);
+    return IsDarkTheme(c, known, cf.crTextColor);  // [keep] fresh text color, shared theme check
 }
 
 static void GuideBuild(EditorCtx* c) {
@@ -6040,14 +5859,14 @@ static uint32_t MdEmoji(const std::wstring& name) {
 }
 
 // Reference definitions of the document being converted (label -> url); set by MarkdownToRtf.
-static const std::unordered_map<std::wstring, std::wstring>* g_mdRefs = nullptr;
+static thread_local const std::unordered_map<std::wstring, std::wstring>* g_mdRefs = nullptr;  // [keep] thread_local: one per window thread
 
 // Footnote definitions (label -> text) and the labels in order of first reference; set by MarkdownToRtf.
-static const std::unordered_map<std::wstring, std::wstring>* g_mdFoot = nullptr;
-static std::vector<std::wstring>* g_mdFootOrder = nullptr;
+static thread_local const std::unordered_map<std::wstring, std::wstring>* g_mdFoot = nullptr;  // [keep] thread_local
+static thread_local std::vector<std::wstring>* g_mdFootOrder = nullptr;  // [keep] thread_local
 
 // Indices of <details> blocks whose open/closed state the user flipped by clicking; set by the preview.
-static const std::unordered_set<int>* g_mdOpen = nullptr;
+static thread_local const std::unordered_set<int>* g_mdOpen = nullptr;  // [keep] thread_local
 
 static void MdInline(std::string& o, const std::wstring& s) {
     std::wstring plain;
@@ -6901,6 +6720,8 @@ static std::string MarkdownToRtf(const std::wstring& doc, const PvPal& pal, int 
     };
 
     std::function<void(const std::vector<std::wstring>&, const std::vector<char>&)> run;
+    int mdDepth = 0;  // [keep] nesting depth of run(); capped so crafted input can't overflow the stack
+    constexpr int kMdMaxDepth = 16;
     // A block quote: each run of lines at one depth becomes a row with one 2-pixel bar cell per level and a text cell.
     auto quoteBlock = [&](std::vector<std::wstring> ql, std::vector<char> qs, std::vector<int> qd) {
         int al = -1;
@@ -6952,7 +6773,9 @@ static std::string MarkdownToRtf(const std::wstring& doc, const PvPal& pal, int 
                 static const char* kLbl[] = {"Note", "Tip", "Important", "Warning", "Caution"};
                 o += pd() + bsl + "\\sa" + ns(em / 4) + " {\\b\\cf" + ns(7 + al) + " " + kLbl[al] + "}\\par\n";
             }
+            mdDepth++;  // [keep] depth cap
             run(sl, ss);
+            mdDepth--;
             std::string body;
             body.swap(o);
             o.swap(saved);
@@ -7115,7 +6938,11 @@ static std::string MarkdownToRtf(const std::wstring& doc, const PvPal& pal, int 
                 const bool open = attrOpen != (g_mdOpen && g_mdOpen->count(idx) > 0);
                 o += pd() + bsl + "\\sa" + ns(open ? em / 4 : em * 8 / 10) + " {\\v\\u57347?}{\\f3" + fsz(125) + "\\cf3 " + (open ? "\\u9660?" : "\\u9654?") +
                      "\\u65038?} " + inl(sum) + "{\\v\\u57348?" + ns(idx) + "\\u57349?}\\par\n";
-                if (open) run(B, BS);
+                if (open && mdDepth < kMdMaxDepth) {  // [keep] depth cap
+                    mdDepth++;
+                    run(B, BS);
+                    mdDepth--;
+                }
                 n = e;
                 continue;
             }
@@ -7217,7 +7044,7 @@ static std::string MarkdownToRtf(const std::wstring& doc, const PvPal& pal, int 
                 emitTable(rows, al, false);
                 continue;
             }
-            if (t[0] == L'>') {
+            if (t[0] == L'>' && mdDepth < kMdMaxDepth) {  // [keep] depth cap: deeper quotes stay plain text
                 flush();
                 stack.clear();
                 std::vector<std::wstring> ql;
@@ -7869,18 +7696,12 @@ static DWORD CALLBACK PvStreamCb(DWORD_PTR ck, LPBYTE buf, LONG cb, LONG* pcb) {
 }
 
 static void PvSetTheme(HWND h, bool dark) {
-    using Fn = HRESULT(WINAPI*)(HWND, LPCWSTR, LPCWSTR);
-    static Fn fn = (Fn)GetProcAddress(LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32),
-                                      "SetWindowTheme");
-    if (fn) fn(h, dark ? L"DarkMode_Explorer" : L"Explorer", nullptr);
+    SetWindowTheme(h, dark ? L"DarkMode_Explorer" : L"Explorer", nullptr);  // [keep] direct import
 }
 
 static void PvOpen(const std::wstring& url) {
     if (url.compare(0, 7, L"http://") && url.compare(0, 8, L"https://") && url.compare(0, 7, L"mailto:")) return;
-    using Fn = HINSTANCE(WINAPI*)(HWND, LPCWSTR, LPCWSTR, LPCWSTR, LPCWSTR, INT);
-    static Fn fn = (Fn)GetProcAddress(LoadLibraryExW(L"shell32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32),
-                                      "ShellExecuteW");
-    if (fn) fn(nullptr, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    ShellExecuteW(nullptr, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);  // [keep] direct import
 }
 
 // True if h is a real rich-text control: streams in a bold RTF run and reads the bold flag back.
@@ -7901,6 +7722,20 @@ static bool PvRichProbe(HWND h) {
     return ok;
 }
 
+// [keep] >0 while the preview's rich edit handles a message, so indent guides skip its EndDraw
+static thread_local int tl_inPreviewRich = 0;
+
+static LRESULT CALLBACK PvRichSubclassProc(HWND h, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR id, DWORD_PTR) {
+    if (msg == WM_NCDESTROY) {
+        RemoveWindowSubclass(h, PvRichSubclassProc, id);
+        return DefSubclassProc(h, msg, wParam, lParam);
+    }
+    tl_inPreviewRich++;
+    LRESULT r = DefSubclassProc(h, msg, wParam, lParam);
+    tl_inPreviewRich--;
+    return r;
+}
+
 static void PvCreateChildren(EditorCtx* c) {
     PvData& d = c->pv;
     if (d.rich || !c->preview) return;
@@ -7919,6 +7754,7 @@ static void PvCreateChildren(EditorCtx* c) {
     if (!d.rich) d.rich = CreateWindowExW(0, L"RICHEDIT50W", L"",
                              WS_CHILD | WS_VSCROLL | ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL | ES_NOHIDESEL,
                              0, 0, 0, 0, c->preview, nullptr, g_hInst, nullptr);
+    if (d.rich) SetWindowSubclass(d.rich, PvRichSubclassProc, kPvRichSubclassId, 0);  // [keep] guides skip the preview
     d.list = CreateWindowExW(0, L"SysListView32", L"", WS_CHILD | LVS_REPORT | LVS_OWNERDATA | LVS_SHOWSELALWAYS,
                              0, 0, 0, 0, c->preview, nullptr, g_hInst, nullptr);
     d.tree = CreateWindowExW(0, L"SysTreeView32", L"",
@@ -8164,6 +8000,7 @@ static void PreviewBuild(EditorCtx* c, int kind) {
         int fs = std::max(12, (int)(c->pvFontPx * 144.0 / (dpi > 0 ? dpi : 96) + 0.5));
         g_mdOpen = &d.flip;
         PvLoadRtf(d, MarkdownToRtf(t, pal, tw, fs), pal.bg, c->pvKeep);
+        g_mdOpen = nullptr;  // [keep] don't leave a pointer into this tab's state
         PvShow(d, d.rich);
     } else if (kind == pvRtf) {
         std::string r;
@@ -9113,7 +8950,7 @@ static EditorCtx* GuideEditor() {
 static thread_local bool tl_inGuide = false;
 
 static void DrawIndentGuides(void* self) {
-    if (tl_inGuide) return;
+    if (tl_inGuide || tl_inPreviewRich > 0) return;  // [keep] never draw guides over the preview pane
     EditorCtx* c = GuideEditor();
     if (!c) return;
     tl_inGuide = true;
