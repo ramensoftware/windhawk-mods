@@ -2,7 +2,18 @@
 
 目标是在 Windows 11 快捷设置的原生应用音量混合器中，为每行增加一个输出设备选择入口。应用直接使用 Windows 逐应用路由播放主输出，其他选中端点接收该应用的 WASAPI 镜像。
 
-当前交付处于 Phase 0。仓库提供可运行的音频探针，以及用于检查原生混合器行模型的 Windhawk 诊断源码。产品模块从 Phase 1 开始，首个具备单设备路由能力的版本计划为 v0.1.0。
+当前提供任务栏单设备路由预览 `0.0.1`，在原生应用音量行末尾增加输出设备菜单，使用 Windows 行模型中的 `PossibleOutputs` 和 `SelectedOutput`。多设备镜像仍在独立探针阶段。
+
+## Windhawk 预览
+
+在 Windhawk 本地模块编辑器中编译 [发布格式源码](dist/native-audio-router.wh.cpp)。先打开一次任务栏快捷设置以加载 `ControlCenter.dll`，启用后重新进入声音输出页。若该页在启用前已经打开，将焦点移到任意应用音量行。
+
+```powershell
+./scripts/build.ps1
+./scripts/build.ps1 -WindhawkRoot $windhawkDirectory
+```
+
+第二条命令使用已有 Windhawk 安装的 Clang 另行生成本地 DLL。预览仅在布局结构与符号匹配时添加菜单。恢复目前依赖还可访问的行模型，应用退出或者 Shell 重启后的恢复仍待实现。
 
 | 文档 | 内容 |
 | --- | --- |
@@ -24,4 +35,4 @@
 
 ## English
 
-Native Audio Router is a planned Windhawk extension for the Windows 11 Quick Settings volume mixer. The current repository contains a standalone Core Audio feasibility probe and a Windhawk mixer-model diagnostic. The probe exercises per-app policy readback and process-loopback fan-out to explicitly selected output endpoints. See [test procedures](docs/TESTING.md) for build and run commands.
+Native Audio Router is an experimental Windhawk extension for the Windows 11 Quick Settings volume mixer. The current preview adds a native per-app output menu. The separate Core Audio probe exercises policy readback and process-loopback fan-out to explicitly selected output endpoints. See [test procedures](docs/TESTING.md) for build and run commands.
