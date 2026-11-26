@@ -85,7 +85,9 @@ The glass is made by the mod from a picture of what is behind the widget, as in 
 follows what changes behind it, up to 20 times a second and only where something changed (Windows' Desktop Duplication),
 and follows the widget while you drag it: videos and animated wallpapers show in the glass. Off, the glass uses a still
 picture of the wallpaper and the icons, taken again when the wallpaper changes (animated-wallpaper apps such as Wallpaper
-Engine included), and is lighter; the widgets then also show in screenshots.
+Engine included), and is lighter; the widgets then also show in screenshots. With an animated-wallpaper app running,
+the glass is read from the screen when you leave the app's window and every 15 seconds: at those instants the widgets
+are left out of screen captures and recordings for a fraction of a second.
 
 ## Network access
 Nothing is sent anywhere unless a widget that needs it is on. No API keys, no accounts, no telemetry; TLS certificate checks
@@ -99,7 +101,7 @@ are never turned off.
 | The news sites you add | Nothing beyond the request | Every 15 minutes. When an address is a page and not a feed, finding its feed takes up to 10 more requests: the feeds the page announces, links on the page that look like feeds (these can be on other hosts) and the usual places on the site (/feed, /rss, /rss.xml, /feed.xml, /index.xml, /atom.xml, /rss/&lt;site&gt;/). That happens the first time, again an hour after no feed was found, and again if the feed found goes 30 days without a story. A site that doesn't answer is left alone for 1, 2, 4… up to 60 minutes, and no other addresses are tried on it | News widget off (off by default; no sites until you add them) |
 | The hosts the feeds name for their cover images | Nothing beyond the request | Up to 30 images after each news update | News widget off |
 | Your calendar links | The link itself, which for a private iCal address includes its secret token | Every 15 minutes | Calendar widget off (off by default) |
-| Your Home Assistant | Your access token (`Authorization: Bearer`) | Every 5 seconds (every minute while it doesn't answer), and on each tap | Home widget off (off by default) or no token |
+| Your Home Assistant | Your access token (`Authorization: Bearer`) | The entities on the widget every 5 seconds, one small request each, and the whole list every 5 minutes or when the favorites picker opens (every minute while it doesn't answer); a request on each tap | Home widget off (off by default) or no token |
 
 The default Home Assistant address is `http://homeassistant.local:8123`: on plain http the token travels unencrypted over your
 network. Use an `https://` address if your Home Assistant has one.
@@ -700,6 +702,7 @@ If you enjoy MacOS Widgets, you can support its development with a Pix donation:
 #include <unordered_map>
 #include <initializer_list>
 #include <memory>
+#include <map>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -1920,6 +1923,9 @@ static std::thread g_dataThread;
 
 static HANDLE g_uiThread = nullptr;
 static DWORD g_uiThreadId = 0;
+// Messages and timers of the UI thread go to this message-only window: thread messages and thread timers are
+// dropped while a modal loop runs (a file dialog, a message box, dragging a window by its title), a window's aren't
+static std::atomic<HWND> g_msgWnd{nullptr};
 static HANDLE g_uiReady = nullptr;
 
 #define WM_APP_RELOAD (WM_APP + 1)
@@ -2200,7 +2206,7 @@ static void SearchPlaces(std::wstring query) {
         delete found;
         found = nullptr;
     }
-    if (!g_uiThreadId || !PostThreadMessageW(g_uiThreadId, WM_APP_PLACES, 0, (LPARAM)found)) delete found;
+    if (!g_msgWnd || !PostMessageW(g_msgWnd, WM_APP_PLACES, 0, (LPARAM)found)) delete found;
 }
 
 static std::wstring WeatherText(int code) {
@@ -3680,6 +3686,7 @@ struct HaEntity {
 };
 static std::vector<HaEntity> g_ha;
 static std::vector<HaEntity> g_haAll;  // everything useful in the Home Assistant, for the favorites picker
+static std::atomic<bool> g_haWantAll{false};  // the picker was opened: the whole list is read again now
 static std::wstring g_haError;
 static std::deque<std::pair<std::wstring, std::wstring>> g_haCommands;  // (domain/service, entity) for the network thread
 
@@ -3760,6 +3767,45 @@ static void FetchHome() {
     if (base.empty() || s.haToken.empty()) {
         error = L"Ligue o Home Assistant em Ajustes > Casa";
     } else {
+        // The whole list (/api/states, several MB on big setups) only every 5 minutes, when the choice changed or the
+        // picker is open; in between, only the entities on the widget, one small request each
+        static ULONGLONG lastFull = 0;
+        static std::wstring lastWanted;
+        static std::vector<std::wstring> shownIds;
+        ULONGLONG now = GetTickCount64();
+        bool full = !lastFull || now - lastFull > 5 * 60 * 1000 || g_haWantAll.exchange(false) || shownIds.empty() ||
+                    s.haEntities != lastWanted;
+        if (!full) {
+            std::vector<HaEntity> fresh;
+            for (const auto& id : shownIds) {
+                DWORD status = 0;
+                std::string json = HttpRequest(L"GET", base + L"/api/states/" + id, HaHeaders(), "", &status);
+                if (status == 401) {
+                    error = L"O Home Assistant recusou o token (confira em Ajustes > Casa)";
+                    break;
+                }
+                if (status == 404) continue;  // removed from the Home Assistant
+                if (status != 200 || json.empty()) {
+                    error = Fmt(TF(L"Não deu para falar com o Home Assistant em %ls"), base.c_str());
+                    break;
+                }
+                HaEntity e;
+                e.id = JsonString(json, 0, json.size(), "entity_id");
+                e.state = JsonString(json, 0, json.size(), "state");
+                e.name = JsonString(json, 0, json.size(), "friendly_name");
+                e.unit = JsonString(json, 0, json.size(), "unit_of_measurement");
+                e.deviceClass = JsonString(json, 0, json.size(), "device_class");
+                if (e.id.empty()) e.id = id;
+                if (e.name.empty()) e.name = e.id;
+                fresh.push_back(e);
+            }
+            std::lock_guard<std::mutex> lock(g_dataMutex);
+            if (error.empty()) g_ha = fresh;
+            g_haError = error;
+            return;
+        }
+        lastFull = now;
+        lastWanted = s.haEntities;
         DWORD status = 0;
         std::string json = HttpRequest(L"GET", base + L"/api/states", HaHeaders(), "", &status);
         if (status == 401) error = L"O Home Assistant recusou o token (confira em Ajustes > Casa)";
@@ -3800,6 +3846,8 @@ static void FetchHome() {
             }
             if (chosen.size() > 24) chosen.resize(24);
             out = chosen;
+            shownIds.clear();
+            for (const auto& e : out) shownIds.push_back(e.id);
         }
     }
     std::lock_guard<std::mutex> lock(g_dataMutex);
@@ -3919,7 +3967,7 @@ static void NetThread() {
             // A failed update (the internet not back yet after the PC wakes up, for one) is tried again in a minute
             lastNews = ok ? now : now - 14 * 60 * 1000;
         }
-        if (g_uiThreadId) PostThreadMessageW(g_uiThreadId, WM_APP_REDRAW, 0, 0);
+        if (g_msgWnd) PostMessageW(g_msgWnd, WM_APP_REDRAW, 0, 0);
 
         std::unique_lock<std::mutex> lock(g_dataMutex);
         g_cv.wait_for(lock, std::chrono::seconds(1),
@@ -3976,7 +4024,7 @@ static void DataThread() {
             ReadNotesAndReminders();
             lastNotes = now;
         }
-        if (g_uiThreadId) PostThreadMessageW(g_uiThreadId, WM_APP_REDRAW, 0, 0);
+        if (g_msgWnd) PostMessageW(g_msgWnd, WM_APP_REDRAW, 0, 0);
 
         std::unique_lock<std::mutex> lock(g_dataMutex);
         g_cv.wait_for(lock, std::chrono::seconds(1), [] { return !g_running || !g_commands.empty(); });
@@ -5249,11 +5297,41 @@ static void DrawThemedShape(const D2D1_RECT_F& r, float radius) {
 // Widget content (drawn in DIPs, origin at the glass' top-left corner)
 // ---------------------------------------------------------------------------
 
+// Text formats and stroke styles are made once and kept (they never change after being set up): making them on each
+// draw cost a lot while the backlight or the chrome border animates (every widget redrawn 20 times a second).
+// Used on the UI thread only
+static std::map<std::wstring, ComPtr<IDWriteTextFormat>>& FormatCache() {
+    [[clang::no_destroy]] static std::map<std::wstring, ComPtr<IDWriteTextFormat>> cache;
+    if (cache.size() > 400) cache.clear();  // never expected; a bound all the same
+    return cache;
+}
+static std::wstring FormatKey(PCWSTR kind, PCWSTR family, float size, int weight, int align, bool wrap) {
+    wchar_t k[160];
+    swprintf(k, 160, L"%ls|%ls|%.2f|%d|%d|%d", kind, family, size, weight, align, wrap ? 1 : 0);
+    return k;
+}
+static ID2D1StrokeStyle* RoundStroke(bool roundJoin = false) {
+    [[clang::no_destroy]] static ComPtr<ID2D1StrokeStyle> caps, joins;
+    ComPtr<ID2D1StrokeStyle>& s = roundJoin ? joins : caps;
+    if (!s)
+        g_d2d->CreateStrokeStyle(roundJoin ? D2D1::StrokeStyleProperties(D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND,
+                                                                         D2D1_CAP_STYLE_ROUND, D2D1_LINE_JOIN_ROUND)
+                                           : D2D1::StrokeStyleProperties(D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND),
+                                 nullptr, 0, &s);
+    return s.Get();
+}
+
 static void Text(const std::wstring& src, float x, float y, float w, float h, float size, DWRITE_FONT_WEIGHT weight,
                  D2D1_COLOR_F color, DWRITE_TEXT_ALIGNMENT align = DWRITE_TEXT_ALIGNMENT_LEADING) {
     const std::wstring& s = T(src);
     if (s.empty()) return;
-    ComPtr<IDWriteTextFormat> fmt;
+    ComPtr<IDWriteTextFormat>& fmt = FormatCache()[FormatKey(L"text", L"", size, weight, align, false)];
+    if (fmt) {
+        if (auto br = Solid(color))
+            g_t->DrawText(s.c_str(), (UINT32)s.size(), fmt.Get(), D2D1::RectF(x, y, x + w, y + h), br.Get(),
+                          D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        return;
+    }
     if (FAILED(g_dw->CreateTextFormat(L"Segoe UI Variable Display", nullptr, weight, DWRITE_FONT_STYLE_NORMAL,
                                       DWRITE_FONT_STRETCH_NORMAL, size, L"", &fmt)))
         return;
@@ -5278,11 +5356,7 @@ static void FillEllipse(float cx, float cy, float rx, float ry, D2D1_COLOR_F c) 
 }
 static void Line(float x1, float y1, float x2, float y2, float width, D2D1_COLOR_F c) {
     if (auto b = Solid(c)) {
-        ComPtr<ID2D1StrokeStyle> round;
-        D2D1_STROKE_STYLE_PROPERTIES p = D2D1::StrokeStyleProperties(D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND,
-                                                                     D2D1_CAP_STYLE_ROUND, D2D1_LINE_JOIN_ROUND);
-        g_d2d->CreateStrokeStyle(p, nullptr, 0, &round);
-        g_t->DrawLine(D2D1::Point2F(x1, y1), D2D1::Point2F(x2, y2), b.Get(), width, round.Get());
+        g_t->DrawLine(D2D1::Point2F(x1, y1), D2D1::Point2F(x2, y2), b.Get(), width, RoundStroke(true));
     }
 }
 
@@ -5809,9 +5883,7 @@ static void DrawRing(float cx, float cy, float r, float width, double pct, D2D1_
     }
     sink->EndFigure(D2D1_FIGURE_END_OPEN);
     sink->Close();
-    ComPtr<ID2D1StrokeStyle> round;
-    g_d2d->CreateStrokeStyle(D2D1::StrokeStyleProperties(D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND), nullptr, 0, &round);
-    if (auto b = Solid(c)) g_t->DrawGeometry(path.Get(), b.Get(), width, round.Get());
+    if (auto b = Solid(c)) g_t->DrawGeometry(path.Get(), b.Get(), width, RoundStroke());
 }
 
 static D2D1_COLOR_F BatteryColor(const BatteryInfo& b) {
@@ -6160,7 +6232,12 @@ static void TextWrap(const std::wstring& src, float x, float y, float w, float h
                      D2D1_COLOR_F color) {
     const std::wstring& s = T(src);
     if (s.empty()) return;
-    ComPtr<IDWriteTextFormat> fmt;
+    ComPtr<IDWriteTextFormat>& fmt = FormatCache()[FormatKey(L"wrap", L"", size, weight, 0, true)];
+    if (fmt) {
+        if (auto br = Solid(color))
+            g_t->DrawText(s.c_str(), (UINT32)s.size(), fmt.Get(), D2D1::RectF(x, y, x + w, y + h), br.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        return;
+    }
     if (FAILED(g_dw->CreateTextFormat(L"Segoe UI Variable Text", nullptr, weight, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
                                       size, L"", &fmt)))
         return;
@@ -6913,9 +6990,7 @@ static void HaIcon(const HaEntity& e, float cx, float cy, float s, D2D1_COLOR_F 
                                               D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE, D2D1_ARC_SIZE_LARGE));
                 sink->EndFigure(D2D1_FIGURE_END_OPEN);
                 sink->Close();
-                ComPtr<ID2D1StrokeStyle> round;
-                g_d2d->CreateStrokeStyle(D2D1::StrokeStyleProperties(D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND), nullptr, 0, &round);
-                g_t->DrawGeometry(arc.Get(), b.Get(), w, round.Get());
+                g_t->DrawGeometry(arc.Get(), b.Get(), w, RoundStroke());
             }
         }
     }
@@ -7002,11 +7077,7 @@ static void OutlineShape(std::initializer_list<D2D1_POINT_2F> pts, float width, 
     for (++it; it != pts.end(); ++it) sink->AddLine(*it);
     sink->EndFigure(D2D1_FIGURE_END_CLOSED);
     sink->Close();
-    ComPtr<ID2D1StrokeStyle> round;
-    g_d2d->CreateStrokeStyle(D2D1::StrokeStyleProperties(D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND,
-                                                         D2D1_LINE_JOIN_ROUND),
-                             nullptr, 0, &round);
-    if (auto b = Solid(c)) g_t->DrawGeometry(path.Get(), b.Get(), width, round.Get());
+    if (auto b = Solid(c)) g_t->DrawGeometry(path.Get(), b.Get(), width, RoundStroke(true));
 }
 
 static void DrawMusicButtons(const Widget* wd, const MediaData& m) {
@@ -7278,11 +7349,7 @@ static void SensorGraph(const SensorValue& s, int id, float x, float y, float w,
     as->Close();
     D2D1_GRADIENT_STOP st[2] = {{0.0f, D2D1::ColorF(c.r, c.g, c.b, 0.35f)}, {1.0f, D2D1::ColorF(c.r, c.g, c.b, 0.0f)}};
     if (auto b = MakeGradient(st, 2, D2D1::Point2F(0, y), D2D1::Point2F(0, y + h))) g_t->FillGeometry(area.Get(), b.Get());
-    ComPtr<ID2D1StrokeStyle> round;
-    g_d2d->CreateStrokeStyle(D2D1::StrokeStyleProperties(D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND,
-                                                         D2D1_LINE_JOIN_ROUND),
-                             nullptr, 0, &round);
-    if (auto b = Solid(c)) g_t->DrawGeometry(line.Get(), b.Get(), 1.8f, round.Get());
+    if (auto b = Solid(c)) g_t->DrawGeometry(line.Get(), b.Get(), 1.8f, RoundStroke(true));
 }
 
 static void DrawSensors(Widget* wd) {
@@ -7428,8 +7495,9 @@ static bool ScreenWithoutUs(HDC into, const RECT& area) {
 }
 
 static HDC DesktopPicture() {
-    // An animated wallpaper is read from the screen, which takes a moment: not more often than every 6 s
-    if (g_deskDC && GetTickCount64() - g_deskTick < (g_deskFromScreen ? 6000u : 3000u)) return g_deskDC;
+    // An animated wallpaper is read from the screen, which hides the widgets from captures for an instant: not more
+    // often than every 15 s (and right after leaving the app's window, see OnForeground)
+    if (g_deskDC && GetTickCount64() - g_deskTick < (g_deskFromScreen ? 15000u : 3000u)) return g_deskDC;
     FreeDesktopPicture();
     g_deskFromScreen = false;
     HWND app = WallpaperAppWindow();
@@ -7673,7 +7741,8 @@ static PCWSTR GlyphFamily() {
 
 static ComPtr<IDWriteTextFormat> Format(PCWSTR family, float size, DWRITE_FONT_WEIGHT weight, DWRITE_TEXT_ALIGNMENT align,
                                         bool wrap) {
-    ComPtr<IDWriteTextFormat> f;
+    ComPtr<IDWriteTextFormat>& f = FormatCache()[FormatKey(L"fmt", family, size, weight, align, wrap)];
+    if (f) return f;
     if (FAILED(g_dw->CreateTextFormat(family, nullptr, weight, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, size,
                                       L"", &f)))
         return nullptr;
@@ -8862,6 +8931,7 @@ static Widget* g_ghost = nullptr;  // the glass outline of the cell the widget w
 static Widget* g_gridWin = nullptr;  // every cell, faint (optional)
 static double g_gx = 0, g_gy = 0, g_lastFrame = 0;
 static POINT g_ghostTo{};
+enum : UINT_PTR { kTimerFrame = 1, kTimerSecond, kTimerGlass, kTimerAnim };
 static UINT_PTR g_frameTimer = 0;
 
 static void PlaceAtDesktop() {
@@ -8897,11 +8967,37 @@ static bool WidgetsBelowDesktop() {
 
 static void WallpaperChanged();
 
+// The folder of the program a window belongs to
+static std::wstring WindowAppFolder(HWND h) {
+    DWORD pid = 0;
+    if (!h || !GetWindowThreadProcessId(h, &pid) || !pid) return L"";
+    HANDLE p = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!p) return L"";
+    wchar_t path[MAX_PATH * 2] = L"";
+    DWORD n = MAX_PATH * 2;
+    BOOL ok = QueryFullProcessImageNameW(p, 0, path, &n);
+    CloseHandle(p);
+    if (!ok) return L"";
+    std::wstring dir = path;
+    size_t slash = dir.find_last_of(L'\\');
+    return Lower(slash == std::wstring::npos ? dir : dir.substr(0, slash + 1));
+}
+
 static void CALLBACK OnForeground(HWINEVENTHOOK, DWORD, HWND h, LONG obj, LONG, DWORD, DWORD) {
-    if (obj == OBJID_WINDOW && h && IsDeskClass(h)) PostThreadMessageW(g_uiThreadId, WM_APP_DESK, 0, 0);
+    if (obj != OBJID_WINDOW || !h) return;
+    if (IsDeskClass(h)) PostMessageW(g_msgWnd, WM_APP_DESK, 0, 0);
     // An animated-wallpaper app tells nobody when it changes the wallpaper, but choosing one means using its window
-    // and leaving it: then the glass is taken again (the live glass follows the screen by itself)
-    if (obj == OBJID_WINDOW && !g_ui.liveGlass && WallpaperAppWindow()) WallpaperChanged();
+    // and leaving it: when the window left belongs to that app (its own program, or another one from its folder, as
+    // Wallpaper Engine's settings), the glass is taken again. Only without the live glass, which follows the screen
+    static HWND last = nullptr;
+    HWND left = last;
+    last = h;
+    if (g_ui.liveGlass || !left || left == h) return;
+    HWND app = WallpaperAppWindow();
+    if (!app) return;
+    std::wstring appDir = WindowAppFolder(app), leftDir = WindowAppFolder(left);
+    if (appDir.empty() || leftDir.empty()) return;
+    if (leftDir.rfind(appDir, 0) == 0 || appDir.rfind(leftDir, 0) == 0) WallpaperChanged();
 }
 
 // ---------------------------------------------------------------------------
@@ -8972,7 +9068,7 @@ static void SaveCell(Widget* wd) {
 // ---------------------------------------------------------------------------
 
 static void StartFrames() {
-    if (!g_frameTimer) g_frameTimer = SetTimer(nullptr, 0, 15, nullptr);
+    if (!g_frameTimer) g_frameTimer = SetTimer(g_msgWnd, kTimerFrame, 15, nullptr);
     g_lastFrame = GetTickCount64();
 }
 
@@ -9088,7 +9184,7 @@ static void Frame() {
         if (!g_drag.dragging && g_springs.empty()) DestroyHelper(g_ghost);
     }
     if (g_springs.empty() && !g_ghost && !g_drag.dragging && g_frameTimer) {
-        KillTimer(nullptr, g_frameTimer);
+        KillTimer(g_msgWnd, kTimerFrame);
         g_frameTimer = 0;
     }
 }
@@ -9099,7 +9195,7 @@ static void AbortDrag() {
     g_springs.clear();
     DestroyHelper(g_ghost);
     DestroyHelper(g_gridWin);
-    if (g_frameTimer) KillTimer(nullptr, g_frameTimer);
+    if (g_frameTimer) KillTimer(g_msgWnd, kTimerFrame);
     g_frameTimer = 0;
 }
 
@@ -10246,9 +10342,9 @@ static bool Animated() { return g_ui.chromeBorder || BacklightOn(); }
 
 static void UpdateAnimTimer() {
     bool want = Animated();  // the moving light of the backlight and chrome
-    if (want && !g_animTimer) g_animTimer = SetTimer(nullptr, 0, 50, nullptr);
+    if (want && !g_animTimer) g_animTimer = SetTimer(g_msgWnd, kTimerAnim, 50, nullptr);
     if (!want && g_animTimer) {
-        KillTimer(nullptr, g_animTimer);
+        KillTimer(g_msgWnd, kTimerAnim);
         g_animTimer = 0;
     }
 }
@@ -10699,6 +10795,7 @@ static void OpenPicker(int kind) {
     PickerUi& g = g_pick;
     g.kind = kind;
     if (kind == 0) {
+        g_haWantAll = true;  // the list is read again on the next round (in 5 s at most)
         std::vector<HaEntity> all, shown;
         {
             std::lock_guard<std::mutex> lock(g_dataMutex);
@@ -11025,7 +11122,7 @@ static void GlassThread() {
                     // One message for the whole box: the UI thread takes all of it at once. A message per picture
                     // (with an animated wallpaper, hundreds a second) filled its queue, and posted messages come
                     // before clicks and timers, so everything froze (the clock, the Ajustes window)
-                    if (wasEmpty) PostThreadMessageW(g_uiThreadId, WM_APP_GLASS, 0, 0);
+                    if (wasEmpty && g_msgWnd) PostMessageW(g_msgWnd, WM_APP_GLASS, 0, 0);
                 }
                 st->pending = false;
                 st->last = now;
@@ -11259,13 +11356,75 @@ static void RebuildWidgets() {
 
 static void StartWorkers();
 
+// The UI thread's own messages and timers (see g_msgWnd)
+static LRESULT CALLBACK AppMsgProc(HWND hwnd, UINT message, WPARAM wp, LPARAM lp) {
+    switch (message) {
+        case WM_TIMER:
+            if (wp == kTimerFrame) {
+                Frame();
+            } else if (wp == kTimerGlass) {
+                if (g_ui.liveGlass) PublishGlassTargets();
+                TakeGlassBox();  // pictures held back while clicks were waiting
+                ReglassIfDue();
+            } else if (wp == kTimerSecond) {
+                UpdateSystemStats();
+                if (g_ui.showScreenTime) TrackUsage();
+                RECT work;
+                SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0);
+                if (!EqualRect(&work, &g_lastWork) && !g_drag.wd && g_springs.empty()) {
+                    RebuildWidgets();  // the taskbar or a bar changed the work area: the grid moved
+                    return 0;
+                }
+                if (!g_drag.wd && WidgetsBelowDesktop()) PlaceAtDesktop();
+                // A menu that never got the focus closes by itself
+                if (g_menu.wd && GetForegroundWindow() != g_menu.wd->hwnd && GetTickCount64() - g_menu.opened > 1500) CloseMenu();
+                if (g_ui.liveGlass) LiveGlassTick();
+                WallpaperTick();
+                RenderTick();
+            } else if (wp == kTimerAnim) {
+                RenderAll();
+            }
+            return 0;
+        case WM_APP_GLASS:
+            // Clicks and keys waiting come first: the pictures stay in the box, and the glass timer (4 times a
+            // second) takes them
+            if (!HIWORD(GetQueueStatus(QS_INPUT))) TakeGlassBox();
+            return 0;
+        case WM_APP_DESK:
+            if (!g_drag.wd && WidgetsBelowDesktop()) PlaceAtDesktop();
+            return 0;
+        case WM_APP_PLACES: {
+            auto* found = (std::vector<Place>*)lp;
+            if (!found) g_placeStatus = L"Não foi possível procurar agora (sem internet?)";
+            else if (found->empty()) g_placeStatus = L"Nenhuma cidade encontrada com esse nome";
+            else g_placeStatus.clear();
+            g_places = found ? *found : std::vector<Place>();
+            delete found;
+            if (g_cfg.wd) Render(g_cfg.wd);
+            return 0;
+        }
+        case WM_APP_REDRAW:
+            // New data: the second timer redraws everything anyway; only what should react at once here (a music
+            // button just pressed, a notification that arrived)
+            for (Widget* wd : g_widgets)
+                if (wd->kind == W_MUSIC || wd->kind == W_NOTIF) Render(wd);
+            return 0;
+        case WM_APP_RELOAD:
+            CloseMenu();
+            ClosePicker();
+            CloseSettings();
+            RebuildWidgets();  // the new ones come up before the old ones go: no empty desktop for a moment
+            return 0;
+    }
+    return DefWindowProcW(hwnd, message, wp, lp);
+}
+
 static std::atomic<bool> g_uiDone{false};  // the UI thread has saved what it had to (it's closing)
 
 static DWORD WINAPI UiThread(LPVOID) {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     MSG msg;
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);  // creates the message queue
-    SetEvent(g_uiReady);
 
     D2D1_FACTORY_OPTIONS fo = {};
     D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory1), &fo, (void**)g_d2d.GetAddressOf());
@@ -11277,84 +11436,22 @@ static DWORD WINAPI UiThread(LPVOID) {
     wc.hCursor = LoadCursorW(nullptr, MAKEINTRESOURCEW(32512));
     wc.lpszClassName = kClassName;
     RegisterClassExW(&wc);
+    WNDCLASSEXW mc = {sizeof(mc)};
+    mc.lpfnWndProc = AppMsgProc;
+    mc.hInstance = GetModuleHandleW(nullptr);
+    mc.lpszClassName = L"MacOSWidgets_Messages";
+    RegisterClassExW(&mc);
+    g_msgWnd = CreateWindowExW(0, mc.lpszClassName, nullptr, 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, mc.hInstance, nullptr);
+    SetEvent(g_uiReady);  // settings changes and the threads' news can be sent from now on
 
-    if (g_d2d && g_dw) {
+    if (g_d2d && g_dw && g_msgWnd) {
         UpdateSystemStats();
         CreateWidgets();
-        g_secondTimer = SetTimer(nullptr, 0, 1000, nullptr);
-        g_glassTimer = SetTimer(nullptr, 0, 250, nullptr);
+        g_secondTimer = SetTimer(g_msgWnd, kTimerSecond, 1000, nullptr);
+        g_glassTimer = SetTimer(g_msgWnd, kTimerGlass, 250, nullptr);
         g_fgHook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr, OnForeground, 0, 0,
                                    WINEVENT_OUTOFCONTEXT);
         while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-            if (!msg.hwnd) {
-                if (msg.message == WM_TIMER) {
-                    if (msg.wParam == g_frameTimer) {
-                        Frame();
-                        continue;
-                    }
-                    if (msg.wParam == g_glassTimer) {
-                        if (g_ui.liveGlass) PublishGlassTargets();
-                        TakeGlassBox();  // pictures whose message was lost (e.g. in the file picker's loop)
-                        ReglassIfDue();
-                        continue;
-                    }
-                    if (msg.wParam == g_secondTimer) {
-                        UpdateSystemStats();
-                        if (g_ui.showScreenTime) TrackUsage();
-                        RECT work;
-                        SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0);
-                        if (!EqualRect(&work, &g_lastWork) && !g_drag.wd && g_springs.empty()) {
-                            RebuildWidgets();  // the taskbar or a bar changed the work area: the grid moved
-                            continue;
-                        }
-                        if (!g_drag.wd && WidgetsBelowDesktop()) PlaceAtDesktop();
-                        // A menu that never got the focus closes by itself
-                        if (g_menu.wd && GetForegroundWindow() != g_menu.wd->hwnd && GetTickCount64() - g_menu.opened > 1500)
-                            CloseMenu();
-                        if (g_ui.liveGlass) LiveGlassTick();
-                        WallpaperTick();
-                        RenderTick();
-                        continue;
-                    }
-                    RenderAll();
-                    continue;
-                }
-                if (msg.message == WM_APP_GLASS) {
-                    // Clicks and keys waiting come first: the pictures stay in the box, and the glass timer
-                    // (4 times a second) takes them
-                    if (!HIWORD(GetQueueStatus(QS_INPUT))) TakeGlassBox();
-                    continue;
-                }
-                if (msg.message == WM_APP_DESK) {
-                    if (!g_drag.wd && WidgetsBelowDesktop()) PlaceAtDesktop();
-                    continue;
-                }
-                if (msg.message == WM_APP_PLACES) {
-                    auto* found = (std::vector<Place>*)msg.lParam;
-                    if (!found) g_placeStatus = L"Não foi possível procurar agora (sem internet?)";
-                    else if (found->empty()) g_placeStatus = L"Nenhuma cidade encontrada com esse nome";
-                    else g_placeStatus.clear();
-                    g_places = found ? *found : std::vector<Place>();
-                    delete found;
-                    if (g_cfg.wd) Render(g_cfg.wd);
-                    continue;
-                }
-                if (msg.message == WM_APP_REDRAW) {
-                    // New data: the second timer redraws everything anyway; only what should react at once here
-                    // (a music button just pressed, a notification that arrived)
-                    for (Widget* wd : g_widgets)
-                        if (wd->kind == W_MUSIC || wd->kind == W_NOTIF) Render(wd);
-                    continue;
-                }
-                if (msg.message == WM_APP_RELOAD) {
-                    CloseMenu();
-                    ClosePicker();
-                    CloseSettings();
-                    DestroyWidgets();
-                    CreateWidgets();
-                    continue;
-                }
-            }
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
@@ -11368,11 +11465,12 @@ static DWORD WINAPI UiThread(LPVOID) {
     g_uiDone = true;  // the rest is tidying up, which ending the process does anyway
     if (g_fgHook) UnhookWinEvent(g_fgHook);
     g_fgHook = nullptr;
-    if (g_animTimer) KillTimer(nullptr, g_animTimer);
-    if (g_secondTimer) KillTimer(nullptr, g_secondTimer);
-    if (g_glassTimer) KillTimer(nullptr, g_glassTimer);
+    if (g_animTimer) KillTimer(g_msgWnd, kTimerAnim);
+    if (g_secondTimer) KillTimer(g_msgWnd, kTimerSecond);
+    if (g_glassTimer) KillTimer(g_msgWnd, kTimerGlass);
     g_glassTimer = 0;
     g_animTimer = g_secondTimer = 0;
+    if (HWND mw = g_msgWnd.exchange(nullptr)) DestroyWindow(mw);
     CloseMenu();
     ClosePicker();
     CloseSettings();
@@ -11436,7 +11534,7 @@ void WhTool_ModSettingsChanged() {
         g_weatherRefresh = true;
     }
     g_cv.notify_all();
-    if (g_uiThreadId) PostThreadMessageW(g_uiThreadId, WM_APP_RELOAD, 0, 0);
+    if (g_msgWnd) PostMessageW(g_msgWnd, WM_APP_RELOAD, 0, 0);
 }
 
 void WhTool_ModUninit() {
