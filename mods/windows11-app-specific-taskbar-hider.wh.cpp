@@ -48,7 +48,7 @@ taskbar if the shell recreates it.
    two don't fight each other.
 4. The Start menu still opens with the Win key. Opening it switches focus away
    from your app, so the taskbar is shown while it's open (in "Require focus"
-   mode).
+   mode). Alt+Tab and Task View don't bring the taskbar back.
 
 To find an app's EXE name, open Task Manager, go to the **Details** tab, and
 look at the **Name** column.
@@ -86,6 +86,7 @@ look at the **Name** column.
 namespace {
 
 constexpr DWORD kTickIntervalMs = 500;
+constexpr ULONGLONG kWorkAreaRecheckIntervalMs = 5000;
 constexpr UINT kMsgSettingsChanged = WM_APP + 1;
 
 struct Settings {
@@ -105,7 +106,7 @@ CRITICAL_SECTION g_settingsLock;
 std::atomic<bool> g_forceHidden{false};
 
 HANDLE g_workerThread = nullptr;
-DWORD g_workerThreadId = 0;
+std::atomic<DWORD> g_workerThreadId{0};
 HANDLE g_stopEvent = nullptr;
 
 // Work areas saved before expanding them, restored when the taskbar is shown
@@ -116,6 +117,14 @@ struct SavedWorkArea {
     RECT workRect;
 };
 std::vector<SavedWorkArea> g_savedWorkAreas;
+ULONGLONG g_lastWorkAreaCheck = 0;
+
+// Some calls below (e.g. the work area change broadcast) dispatch incoming
+// sent messages, which can run the foreground event callback while an update
+// is in progress. These flags make such nested calls run afterwards instead.
+// Only used by the worker thread.
+bool g_updateInProgress = false;
+bool g_updatePending = false;
 
 // ---------------------------------------------------------------------
 // Taskbar windows
@@ -167,32 +176,61 @@ std::vector<HWND> GetTaskbarWindows() {
 // Work area
 // ---------------------------------------------------------------------
 
-BOOL CALLBACK ExpandWorkAreaMonitorProc(HMONITOR hMonitor,
-                                        HDC,
-                                        LPRECT,
-                                        LPARAM) {
+BOOL CALLBACK CollectMonitorInfoProc(HMONITOR hMonitor,
+                                     HDC,
+                                     LPRECT,
+                                     LPARAM lParam) {
+    auto* monitors = reinterpret_cast<std::vector<MONITORINFO>*>(lParam);
+
     MONITORINFO mi{};
     mi.cbSize = sizeof(mi);
-    if (!GetMonitorInfoW(hMonitor, &mi)) {
-        return TRUE;
-    }
-
-    if (!EqualRect(&mi.rcWork, &mi.rcMonitor)) {
-        g_savedWorkAreas.push_back({mi.rcMonitor, mi.rcWork});
-        SystemParametersInfoW(SPI_SETWORKAREA, 0, &mi.rcMonitor,
-                              SPIF_SENDCHANGE);
+    if (GetMonitorInfoW(hMonitor, &mi)) {
+        monitors->push_back(mi);
     }
 
     return TRUE;
 }
 
+// Expands the work area of every monitor to the full monitor size. Can be
+// called repeatedly: monitors that are already expanded are skipped, and the
+// original work area is only saved the first time, so that it can be
+// restored later.
 void ExpandWorkAreas() {
-    g_savedWorkAreas.clear();
-    EnumDisplayMonitors(nullptr, nullptr, ExpandWorkAreaMonitorProc, 0);
+    g_lastWorkAreaCheck = GetTickCount64();
+
+    std::vector<MONITORINFO> monitors;
+    EnumDisplayMonitors(nullptr, nullptr, CollectMonitorInfoProc,
+                        reinterpret_cast<LPARAM>(&monitors));
+
+    for (auto& mi : monitors) {
+        if (EqualRect(&mi.rcWork, &mi.rcMonitor)) {
+            continue;
+        }
+
+        bool alreadySaved = false;
+        for (const auto& saved : g_savedWorkAreas) {
+            if (EqualRect(&saved.monitorRect, &mi.rcMonitor)) {
+                alreadySaved = true;
+                break;
+            }
+        }
+
+        if (!alreadySaved) {
+            g_savedWorkAreas.push_back({mi.rcMonitor, mi.rcWork});
+        }
+
+        SystemParametersInfoW(SPI_SETWORKAREA, 0, &mi.rcMonitor,
+                              SPIF_SENDCHANGE);
+    }
 }
 
 void RestoreWorkAreas() {
-    for (const auto& saved : g_savedWorkAreas) {
+    // Move the list out first, so that it's in a consistent state even if
+    // this function is interrupted by a nested update.
+    std::vector<SavedWorkArea> savedWorkAreas = std::move(g_savedWorkAreas);
+    g_savedWorkAreas.clear();
+
+    for (const auto& saved : savedWorkAreas) {
         // Skip if the monitor layout changed in the meantime; the shell will
         // have recalculated the work area for the new layout anyway.
         HMONITOR hMonitor =
@@ -207,8 +245,6 @@ void RestoreWorkAreas() {
         RECT workRect = saved.workRect;
         SystemParametersInfoW(SPI_SETWORKAREA, 0, &workRect, SPIF_SENDCHANGE);
     }
-
-    g_savedWorkAreas.clear();
 }
 
 // ---------------------------------------------------------------------
@@ -222,6 +258,19 @@ bool ExeNameMatches(PCWSTR exeName, const std::vector<std::wstring>& targets) {
         }
     }
     return false;
+}
+
+bool IsTransientShellWindow(HWND hWnd) {
+    WCHAR className[64];
+    if (!GetClassNameW(hWnd, className, ARRAYSIZE(className))) {
+        return false;
+    }
+
+    return _wcsicmp(className, L"XamlExplorerHostIslandWindow") == 0 ||
+           _wcsicmp(className, L"ForegroundStaging") == 0 ||
+           _wcsicmp(className, L"MultitaskingViewFrame") == 0 ||
+           _wcsicmp(className, L"TaskSwitcherWnd") == 0 ||
+           IsTaskbarWindow(hWnd);
 }
 
 enum class FocusState { Unknown, TargetFocused, OtherFocused };
@@ -240,6 +289,14 @@ FocusState GetTargetFocusState(const std::vector<std::wstring>& targets) {
         return FocusState::Unknown;
     }
 
+    if (pid == GetCurrentProcessId() && IsTransientShellWindow(hWnd)) {
+        // Alt+Tab, Task View and similar shell UI briefly take the focus
+        // while switching windows. Keep the current state, otherwise the
+        // taskbar would pop up (and the work area would change) on every
+        // Alt+Tab between target apps.
+        return FocusState::Unknown;
+    }
+
     HANDLE hProcess =
         OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
     if (!hProcess) {
@@ -247,7 +304,7 @@ FocusState GetTargetFocusState(const std::vector<std::wstring>& targets) {
         return FocusState::OtherFocused;
     }
 
-    WCHAR path[MAX_PATH];
+    WCHAR path[1024];
     DWORD size = ARRAYSIZE(path);
     bool matches = false;
     if (QueryFullProcessImageNameW(hProcess, 0, path, &size)) {
@@ -287,10 +344,13 @@ bool IsAnyTargetProcessRunning(const std::vector<std::wstring>& targets) {
 // ---------------------------------------------------------------------
 
 void ApplyTaskbarVisibility(bool hide) {
-    // The hooks only block *show* attempts while g_forceHidden is set, so
-    // the calls below go through.
+    // The taskbar windows belong to another thread. ShowWindowAsync doesn't
+    // wait for that thread, so it can't deadlock if the taskbar thread is
+    // busy or waiting for us. The hooks only block *show* attempts while
+    // g_forceHidden is set, so hiding always goes through, and showing is
+    // only done after g_forceHidden was cleared.
     for (HWND hTaskbar : GetTaskbarWindows()) {
-        ShowWindow(hTaskbar, hide ? SW_HIDE : SW_SHOWNA);
+        ShowWindowAsync(hTaskbar, hide ? SW_HIDE : SW_SHOWNA);
     }
 
     if (hide) {
@@ -300,8 +360,7 @@ void ApplyTaskbarVisibility(bool hide) {
     }
 }
 
-// Must only be called from the worker thread.
-void UpdateTaskbarState() {
+void UpdateTaskbarStateOnce() {
     bool masterEnabled;
     bool requireFocus;
     std::vector<std::wstring> targets;
@@ -347,10 +406,33 @@ void UpdateTaskbarState() {
         for (HWND hTaskbar : GetTaskbarWindows()) {
             if (IsWindowVisible(hTaskbar)) {
                 Wh_Log(L"Re-hiding taskbar %p", hTaskbar);
-                ShowWindow(hTaskbar, SW_HIDE);
+                ShowWindowAsync(hTaskbar, SW_HIDE);
             }
         }
+
+        // Re-expand the work area if it was reset, e.g. after a display
+        // change or when a monitor was connected. Done only every few
+        // seconds, since changing the work area notifies all windows.
+        if (GetTickCount64() - g_lastWorkAreaCheck >=
+            kWorkAreaRecheckIntervalMs) {
+            ExpandWorkAreas();
+        }
     }
+}
+
+// Must only be called from the worker thread.
+void UpdateTaskbarState() {
+    if (g_updateInProgress) {
+        g_updatePending = true;
+        return;
+    }
+
+    g_updateInProgress = true;
+    do {
+        g_updatePending = false;
+        UpdateTaskbarStateOnce();
+    } while (g_updatePending);
+    g_updateInProgress = false;
 }
 
 // ---------------------------------------------------------------------
@@ -532,11 +614,20 @@ void Wh_ModAfterInit() {
 
     // Hooks are active at this point, start tracking the target apps.
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_stopEvent) {
+        Wh_Log(L"CreateEvent failed: %u", GetLastError());
+        return;
+    }
+
+    DWORD threadId = 0;
     g_workerThread = CreateThread(nullptr, 0, WorkerThreadProc, nullptr, 0,
-                                  &g_workerThreadId);
+                                  &threadId);
     if (!g_workerThread) {
         Wh_Log(L"CreateThread failed: %u", GetLastError());
+        return;
     }
+
+    g_workerThreadId = threadId;
 }
 
 void Wh_ModUninit() {
@@ -547,6 +638,7 @@ void Wh_ModUninit() {
         WaitForSingleObject(g_workerThread, INFINITE);
         CloseHandle(g_workerThread);
         g_workerThread = nullptr;
+        g_workerThreadId = 0;
     }
 
     if (g_stopEvent) {
