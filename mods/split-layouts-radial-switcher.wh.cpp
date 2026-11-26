@@ -75,6 +75,20 @@ up as soon as one of its windows is moved, resized or minimized.
   **Esc** cancels.
 
 The bar, the previews and the Alt+Tab view appear instantly, without animations.
+Dragging feedback and the thumbstick are updated once per screen refresh, at the
+refresh rate of the monitor in use (for example 60, 120 or 144 Hz).
+
+## Compared with Windows and other mods
+- Windows 11 snap layouts offer a top/bottom split only on portrait monitors.
+  This mod offers it on every monitor, together with the other layouts, and
+  also from the screen edges and corners. Its chooser can close windows, too.
+- Windows 11 shows snap groups in its own Alt+Tab only for windows snapped by
+  Windows. The radial view here recognizes any windows that fill one of the
+  layouts above, however they were arranged, and restores the whole arrangement.
+- Compared with the Radial Window Switcher mod, the radial view is a full-screen
+  split view with a large preview, keeps every window in a fixed place on the
+  wheel with Alt+Tab numbers, is steered with the mouse like a thumbstick and
+  treats split groups as one item.
 
 ## Limitations
 Windows doesn't let programs move or close windows of programs running as
@@ -121,6 +135,10 @@ may not pass the keyboard to this mod, and the default Alt+Tab appears instead.
 #include <shellscalingapi.h>
 #include <gdiplus.h>
 
+#ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
+#define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
+#endif
+
 namespace common {
 
 struct Zone {
@@ -165,6 +183,79 @@ void StopThread(HANDLE thread, DWORD threadId) {
     CloseHandle(thread);
 }
 
+int RefreshRate(HMONITOR mon) {
+    MONITORINFOEXW mi{};
+    mi.cbSize = sizeof(mi);
+    DEVMODEW dm{};
+    dm.dmSize = sizeof(dm);
+    if (GetMonitorInfoW(mon, &mi) &&
+        EnumDisplaySettingsW(mi.szDevice, ENUM_CURRENT_SETTINGS, &dm) &&
+        dm.dmDisplayFrequency > 1)
+        return dm.dmDisplayFrequency;
+    return 60;
+}
+
+struct FrameClock {
+    HANDLE timer = nullptr;
+    LONGLONG interval = 10000000 / 60;
+    bool active = false;
+
+    void Create() {
+        timer = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
+                                       TIMER_ALL_ACCESS);
+        if (!timer)
+            timer = CreateWaitableTimerExW(nullptr, nullptr, 0, TIMER_ALL_ACCESS);
+    }
+
+    void Destroy() {
+        Stop();
+        if (timer)
+            CloseHandle(timer);
+        timer = nullptr;
+    }
+
+    void Arm() {
+        LARGE_INTEGER due;
+        due.QuadPart = -interval;
+        if (timer)
+            SetWaitableTimer(timer, &due, 0, nullptr, nullptr, FALSE);
+    }
+
+    void Start(HMONITOR mon) {
+        interval = 10000000 / RefreshRate(mon);
+        active = true;
+        Arm();
+    }
+
+    void Stop() {
+        active = false;
+        if (timer)
+            CancelWaitableTimer(timer);
+    }
+};
+
+template <typename Callback>
+void RunMessageLoop(FrameClock& clock, Callback onFrame) {
+    for (;;) {
+        DWORD r = MsgWaitForMultipleObjectsEx(clock.timer ? 1 : 0, &clock.timer, INFINITE,
+                                              QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+        if (clock.timer && r == WAIT_OBJECT_0) {
+            if (clock.active) {
+                clock.Arm();
+                onFrame();
+            }
+            continue;
+        }
+        MSG msg;
+        while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_QUIT)
+                return;
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+    }
+}
+
 }  // namespace common
 
 constexpr int MAXMEMBERS = 4;
@@ -174,6 +265,8 @@ namespace split {
 using namespace common;
 
 constexpr int MAXWIN = 12;
+constexpr DWORD WINDOW_CORNER_PREFERENCE = 33;
+constexpr int CORNER_ROUND = 2;
 
 struct {
     std::atomic<bool> enabled;
@@ -190,6 +283,7 @@ HFONT g_font;
 RECT g_work;
 POINT g_start;
 UINT_PTR g_track, g_timer;
+FrameClock g_frames;
 int g_ticks, g_dpi = 96, g_hl = -1, g_hz = -1, g_layout, g_zone, g_done, g_nused;
 int g_count, g_hover = -1;
 DWORD g_shownAt;
@@ -222,6 +316,8 @@ void Fill(HDC dc, RECT r, COLORREF c) {
 }
 
 bool Place(HWND hwnd, RECT z) {
+    if (IsHungAppWindow(hwnd))
+        return false;
     if (IsZoomed(hwnd) || IsIconic(hwnd))
         ShowWindow(hwnd, SW_RESTORE);
     RECT wr, fr;
@@ -255,7 +351,7 @@ BOOL CALLBACK EnumProc(HWND hwnd, LPARAM) {
     DWORD cloaked = 0;
     DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
     GetClassName(hwnd, cls, 32);
-    if (!IsWindowVisible(hwnd) || cloaked || GetWindow(hwnd, GW_OWNER) ||
+    if (!IsWindowVisible(hwnd) || cloaked || IsHungAppWindow(hwnd) || GetWindow(hwnd, GW_OWNER) ||
         (GetWindowLongPtr(hwnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) ||
         !GetWindowTextLength(hwnd) || !lstrcmpW(cls, L"Progman"))
         return TRUE;
@@ -482,6 +578,24 @@ void CALLBACK ApplyProc(HWND, UINT, UINT_PTR, DWORD) {
         NextChooser();
 }
 
+RECT g_barRect, g_previewRect;
+bool g_barShown, g_previewShown;
+
+void ShowAt(HWND hwnd, HWND after, RECT r, RECT& last, bool& shown) {
+    if (shown && EqualRect(&r, &last))
+        return;
+    SetWindowPos(hwnd, after, r.left, r.top, r.right - r.left, r.bottom - r.top,
+                 SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    last = r;
+    shown = true;
+}
+
+void HideAt(HWND hwnd, bool& shown) {
+    if (shown)
+        ShowWindow(hwnd, SW_HIDE);
+    shown = false;
+}
+
 void CALLBACK TrackProc(HWND, UINT, UINT_PTR, DWORD) {
     POINT pt;
     GetCursorPos(&pt);
@@ -536,9 +650,9 @@ void CALLBACK TrackProc(HWND, UINT, UINT_PTR, DWORD) {
         }
 
     if (show)
-        SetWindowPos(g_bar, HWND_TOPMOST, bx, by, bw, bh, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        ShowAt(g_bar, HWND_TOPMOST, {bx, by, bx + bw, by + bh}, g_barRect, g_barShown);
     else
-        ShowWindow(g_bar, SW_HIDE);
+        HideAt(g_bar, g_barShown);
 
     if (hl != g_hl || hz != g_hz) {
         g_hl = hl;
@@ -546,13 +660,11 @@ void CALLBACK TrackProc(HWND, UINT, UINT_PTR, DWORD) {
         InvalidateRect(g_bar, nullptr, FALSE);
     }
 
-    if (hl >= 0) {
-        RECT z = ZoneIn(g_work, g_layouts[hl].z[hz]);
-        SetWindowPos(g_preview, g_hwnd, z.left, z.top, z.right - z.left, z.bottom - z.top,
-                     SWP_NOACTIVATE | SWP_SHOWWINDOW);
-    } else {
-        ShowWindow(g_preview, SW_HIDE);
-    }
+    if (hl >= 0)
+        ShowAt(g_preview, g_hwnd, ZoneIn(g_work, g_layouts[hl].z[hz]), g_previewRect,
+               g_previewShown);
+    else
+        HideAt(g_preview, g_previewShown);
 }
 
 void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
@@ -586,16 +698,17 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
         g_start = pt;
         g_hl = g_hz = -1;
         InvalidateRect(g_bar, nullptr, FALSE);
-        g_track = SetTimer(nullptr, g_track, 15, TrackProc);
+        g_track = 1;
+        g_frames.Start(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST));
         return;
     }
 
     if (!g_track || hwnd != g_hwnd)
         return;
-    KillTimer(nullptr, g_track);
+    g_frames.Stop();
     g_track = 0;
-    ShowWindow(g_bar, SW_HIDE);
-    ShowWindow(g_preview, SW_HIDE);
+    HideAt(g_bar, g_barShown);
+    HideAt(g_preview, g_previewShown);
 
     MONITORINFO mi{sizeof(mi)};
     GetMonitorInfo(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST), &mi);
@@ -613,16 +726,15 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
 }
 
 DWORD WINAPI ThreadProc(LPVOID) {
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     HINSTANCE inst;
     GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                       (LPCWSTR)ThreadProc, &inst);
     HBRUSH brush = CreateSolidBrush(RGB(0, 120, 215));
     WNDCLASS pc{0, DefWindowProc, 0, 0, inst,
-                nullptr, nullptr, brush, nullptr, L"TopDragSplitPreview"};
+                nullptr, nullptr, brush, nullptr, L"SplitLayoutsPreview"};
     WNDCLASS uc{0, WndProc, 0, 0, inst,
-                nullptr, LoadCursor(nullptr, IDC_ARROW), nullptr, nullptr, L"TopDragSplitUi"};
+                nullptr, LoadCursor(nullptr, IDC_ARROW), nullptr, nullptr, L"SplitLayoutsUi"};
     RegisterClass(&pc);
     RegisterClass(&uc);
 
@@ -637,9 +749,9 @@ DWORD WINAPI ThreadProc(LPVOID) {
     g_chooser = CreateWindowEx(WS_EX_TOPMOST | WS_EX_TOOLWINDOW, uc.lpszClassName, nullptr,
                                WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, inst, nullptr);
     SetLayeredWindowAttributes(g_bar, 0, 245, LWA_ALPHA);
-    int round = 2;
-    DwmSetWindowAttribute(g_bar, 33, &round, sizeof(round));
-    DwmSetWindowAttribute(g_preview, 33, &round, sizeof(round));
+    int round = CORNER_ROUND;
+    DwmSetWindowAttribute(g_bar, WINDOW_CORNER_PREFERENCE, &round, sizeof(round));
+    DwmSetWindowAttribute(g_preview, WINDOW_CORNER_PREFERENCE, &round, sizeof(round));
     BOOL noAnim = TRUE;
     HWND windows[] = {g_bar, g_preview, g_chooser};
     for (HWND w : windows)
@@ -651,16 +763,14 @@ DWORD WINAPI ThreadProc(LPVOID) {
     HWINEVENTHOOK fgHook =
         SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
                         nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
-    MSG msg;
-    while (GetMessage(&msg, nullptr, 0, 0) > 0) {
-        TranslateMessage(&msg);
-        DispatchMessage(&msg);
-    }
+    g_frames.Create();
+    RunMessageLoop(g_frames, [] { TrackProc(nullptr, 0, 0, 0); });
 
-    if (g_track)
-        KillTimer(nullptr, g_track);
+    g_frames.Destroy();
     if (g_timer)
         KillTimer(nullptr, g_timer);
+    g_track = g_timer = 0;
+    g_barShown = g_previewShown = false;
     UnhookWinEvent(moveHook);
     UnhookWinEvent(fgHook);
     HideChooser();
@@ -672,16 +782,32 @@ DWORD WINAPI ThreadProc(LPVOID) {
     DeleteObject(brush);
     if (g_font)
         DeleteObject(g_font);
+    g_font = nullptr;
     return 0;
+}
+
+void RestoreDocking(BOOL value) {
+    BOOL current = TRUE;
+    SystemParametersInfo(SPI_GETDOCKMOVING, 0, &current, 0);
+    if (!current)
+        SystemParametersInfo(SPI_SETDOCKMOVING, 0, (PVOID)(INT_PTR)value, 0);
+    Wh_SetIntValue(L"dockingOff", 0);
+}
+
+void RecoverDocking() {
+    if (Wh_GetIntValue(L"dockingOff", 0))
+        RestoreDocking(Wh_GetIntValue(L"savedDocking", TRUE));
 }
 
 void SetDocking(bool off) {
     if (off && !g_dockChanged) {
         SystemParametersInfo(SPI_GETDOCKMOVING, 0, &g_oldDock, 0);
+        Wh_SetIntValue(L"savedDocking", g_oldDock ? 1 : 0);
+        Wh_SetIntValue(L"dockingOff", 1);
         SystemParametersInfo(SPI_SETDOCKMOVING, 0, (PVOID)FALSE, 0);
         g_dockChanged = true;
     } else if (!off && g_dockChanged) {
-        SystemParametersInfo(SPI_SETDOCKMOVING, 0, (PVOID)(INT_PTR)g_oldDock, 0);
+        RestoreDocking(g_oldDock);
         g_dockChanged = false;
     }
 }
@@ -738,6 +864,7 @@ HWND g_wnd;
 std::atomic<bool> g_session, g_open;
 int g_count, g_sel, g_dpi = 96;
 constexpr int MAXRAW = 48;
+constexpr int TITLE_LEN = MAXMEMBERS * 205;
 HWND g_raw[MAXRAW];
 HICON g_rawIcons[MAXRAW];
 int g_rawCount;
@@ -746,6 +873,8 @@ HTHUMBNAIL g_thumbs[MAXMEMBERS];
 HWND g_order[MAXWIN];
 int g_orderCount, g_slot[MAXWIN], g_slotOf[MAXWIN];
 DWORD g_lastJoy;
+FrameClock g_frames;
+LARGE_INTEGER g_lastFrame;
 bool g_dirty;
 RECT g_mon, g_preview;
 POINT g_center, g_savedPos;
@@ -825,7 +954,7 @@ void ItemTitle(int i, WCHAR* buf, int len) {
         WCHAR t[200] = L"";
         GetWindowText(g_items[i].w[m], t, 200);
         int used = (int)wcslen(buf);
-        swprintf_s(buf + used, len - used, m ? L"  |  %s" : L"%s", t);
+        _snwprintf_s(buf + used, len - used, _TRUNCATE, m ? L"  |  %s" : L"%s", t);
     }
 }
 
@@ -1040,7 +1169,8 @@ void Open() {
     UpdateWindow(g_wnd);
     SetCursorPos(g_center.x, g_center.y);
     SetCursor(nullptr);
-    SetTimer(g_wnd, 2, 15, nullptr);
+    g_lastFrame.QuadPart = 0;
+    g_frames.Start(mon);
     PostThreadMessage(g_hookThreadId, WM_APP_MOUSEHOOK, 1, 0);
 }
 
@@ -1048,7 +1178,7 @@ void Close() {
     if (!g_open)
         return;
     g_open = false;
-    KillTimer(g_wnd, 2);
+    g_frames.Stop();
     PostThreadMessage(g_hookThreadId, WM_APP_MOUSEHOOK, 0, 0);
     for (HTHUMBNAIL& t : g_thumbs) {
         if (t)
@@ -1099,9 +1229,9 @@ void Paint(HDC dc, int w, int h) {
         center.SetTrimming(StringTrimmingEllipsisCharacter);
         center.SetFormatFlags(StringFormatFlagsNoWrap);
 
-        WCHAR title[600], text[620];
-        ItemTitle(g_sel, title, 600);
-        swprintf_s(text, L"%d  \u00B7  %s", g_sel + 1, title);
+        WCHAR title[TITLE_LEN], text[TITLE_LEN + 20];
+        ItemTitle(g_sel, title, TITLE_LEN);
+        _snwprintf_s(text, _TRUNCATE, L"%d  \u00B7  %s", g_sel + 1, title);
         Font titleFont(L"Segoe UI Semibold", Sc(20), FontStyleRegular, UnitPixel);
         RectF titleRect(Sc(80), Sc(40), w - Sc(160), Sc(40)), measured;
         g.MeasureString(text, -1, &titleFont, titleRect, &center, &measured);
@@ -1159,8 +1289,8 @@ void Paint(HDC dc, int w, int h) {
                          RectF(g_wx + rm * c - Sc(20), g_wy + rm * sn + isz / 2, Sc(40), Sc(16)),
                          &center, i == g_sel ? &white : &dim);
 
-            WCHAR label[600];
-            ItemTitle(i, label, 600);
+            WCHAR label[TITLE_LEN];
+            ItemTitle(i, label, TITLE_LEN);
             float lx = g_wx + lr * c + c * lw / 2, ly = g_wy + lr * sn + sn * lh / 2;
             g.DrawString(label, -1, i == g_sel ? &labelBold : &labelFont,
                          RectF(lx - lw / 2, ly - lh / 2, lw, lh), &wrap,
@@ -1234,7 +1364,7 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM wp, LPARAM lp) {
         if (!g_session) {
             g_session = true;
             PostMessage(g_wnd, WM_APP_START, shift, 0);
-        } else if (down) {
+        } else {
             PostMessage(g_wnd, WM_APP_STEP, shift ? -1 : 1, 0);
         }
         return 1;
@@ -1313,6 +1443,27 @@ DWORD WINAPI HookThreadProc(LPVOID) {
     return 0;
 }
 
+void OnFrame() {
+    LARGE_INTEGER now, freq;
+    QueryPerformanceCounter(&now);
+    QueryPerformanceFrequency(&freq);
+    float dt = g_lastFrame.QuadPart ? (now.QuadPart - g_lastFrame.QuadPart) * 1000.f / freq.QuadPart
+                                    : 0;
+    g_lastFrame = now;
+    if (GetTickCount() - g_lastJoy > 90 && (g_jx || g_jy)) {
+        float k = powf(0.72f, dt / 15.f);
+        g_jx *= k;
+        g_jy *= k;
+        if (g_jx * g_jx + g_jy * g_jy < 1)
+            g_jx = g_jy = 0;
+        g_dirty = true;
+    }
+    if (g_dirty) {
+        g_dirty = false;
+        RedrawWindow(g_wnd, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW);
+    }
+}
+
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
         case WM_APP_START:
@@ -1339,21 +1490,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 KillTimer(hwnd, 3);
                 for (int k = 0; k < g_pendingCount; k++)
                     SetWindowPos(g_pendingOthers[k], g_pendingPrimary, 0, 0, 0, 0,
-                                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-                return 0;
-            }
-            if (wp == 2) {
-                if (GetTickCount() - g_lastJoy > 90 && (g_jx || g_jy)) {
-                    g_jx *= 0.72f;
-                    g_jy *= 0.72f;
-                    if (g_jx * g_jx + g_jy * g_jy < 1)
-                        g_jx = g_jy = 0;
-                    g_dirty = true;
-                }
-                if (g_dirty) {
-                    g_dirty = false;
-                    InvalidateRect(hwnd, nullptr, FALSE);
-                }
+                                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
                 return 0;
             }
             KillTimer(hwnd, 1);
@@ -1444,7 +1581,7 @@ DWORD WINAPI ThreadProc(LPVOID) {
                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                       (LPCWSTR)ThreadProc, &g_inst);
 
-    WNDCLASS wc{0, WndProc, 0, 0, g_inst, nullptr, nullptr, nullptr, nullptr, L"RadialAltTab"};
+    WNDCLASS wc{0, WndProc, 0, 0, g_inst, nullptr, nullptr, nullptr, nullptr, L"RadialSwitcher"};
     RegisterClass(&wc);
     g_wnd = CreateWindowEx(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, wc.lpszClassName,
                            nullptr, WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, g_inst, nullptr);
@@ -1452,17 +1589,20 @@ DWORD WINAPI ThreadProc(LPVOID) {
     DwmSetWindowAttribute(g_wnd, DWMWA_TRANSITIONS_FORCEDISABLED, &noAnim, sizeof(noAnim));
     StartThread(HookThreadProc, g_hookThread, g_hookThreadId);
 
-    MSG msg;
-    while (GetMessage(&msg, nullptr, 0, 0) > 0)
-        DispatchMessage(&msg);
+    g_frames.Create();
+    RunMessageLoop(g_frames, OnFrame);
 
     Close();
+    g_frames.Destroy();
     StopThread(g_hookThread, g_hookThreadId);
     DestroyWindow(g_wnd);
     if (g_mem)
         DeleteDC(g_mem);
     if (g_bmp)
         DeleteObject(g_bmp);
+    g_mem = nullptr;
+    g_bmp = nullptr;
+    g_bmpSize = {};
     UnregisterClass(wc.lpszClassName, g_inst);
     Gdiplus::GdiplusShutdown(gdiplusToken);
     return 0;
@@ -1478,6 +1618,7 @@ void LoadSettings() {
 }
 
 bool Start() {
+    g_session = false;
     return StartThread(ThreadProc, g_thread, g_threadId);
 }
 
@@ -1487,20 +1628,37 @@ void Stop() {
 
 }  // namespace radial
 
+bool g_splitRunning, g_radialRunning;
+
 void LoadSettings() {
     split::LoadSettings();
     radial::LoadSettings();
+    if (split::settings.enabled && !g_splitRunning) {
+        g_splitRunning = split::Start();
+    } else if (!split::settings.enabled && g_splitRunning) {
+        split::Stop();
+        g_splitRunning = false;
+    }
+    if (radial::settings.enabled && !g_radialRunning) {
+        g_radialRunning = radial::Start();
+    } else if (!radial::settings.enabled && g_radialRunning) {
+        radial::Stop();
+        g_radialRunning = false;
+    }
 }
 
 BOOL WhTool_ModInit() {
+    split::RecoverDocking();
     LoadSettings();
-    bool ok = split::Start();
-    return radial::Start() && ok;
+    return TRUE;
 }
 
 void WhTool_ModUninit() {
-    split::Stop();
-    radial::Stop();
+    if (g_splitRunning)
+        split::Stop();
+    if (g_radialRunning)
+        radial::Stop();
+    split::SetDocking(false);
 }
 
 void WhTool_ModSettingsChanged() {
