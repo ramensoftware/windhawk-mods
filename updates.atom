@@ -2,12 +2,300 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-26T05:03:44.000Z</updated>
+    <updated>2026-11-26T06:00:25.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Extra Dim 1.0.0]]></title>
+        <id>https://windhawk.net/mods/extra-dim#2dfb44c5d376a01d2952572278d396d1b24bea75</id>
+        <link href="https://windhawk.net/mods/extra-dim"/>
+        <updated>2026-11-26T06:00:25.000Z</updated>
+        <content type="html"><![CDATA[<h1>Extra Dim</h1>
+<p>Dims the screen further than the brightness slider goes, and adds a warm tint
+for the evening. A flyout, a tray icon and global hotkeys.</p>
+<p><img src="https://raw.githubusercontent.com/DeepakBalaraman/extra-dim/master/assets/screenshot.png" alt="Extra Dim Mod Sample Screenshot"></p>
+<p>Open it with <strong>Ctrl+Alt+Shift+D</strong>, or by clicking the tray icon. The same controls
+are in the icon's right-click menu.</p>
+<h2>Dimming</h2>
+<ul>
+<li><strong>Extra dim</strong> goes darker than the bottom of the brightness slider. The slider
+stops at the ceiling you set, so the screen can't be dimmed to black by
+accident. Switching the toggle off keeps the level for next time.</li>
+<li><strong>Overlay</strong> (default) puts a click-through black layer over each display. Works
+with any GPU and driver, doesn't touch HDR, and costs nothing while it's off.
+It can't reach exclusive-fullscreen games, because those skip the desktop.</li>
+<li><strong>Gamma</strong> lowers the display's own gamma ramp instead, which does reach
+exclusive fullscreen. It depends on the driver: some games and most resolution
+changes reset it, and if the driver refuses, the mod falls back to the overlay
+by itself and says so under the Displays card.</li>
+</ul>
+<h2>Warm tint</h2>
+<p>A second layer, with its own color and strength, on top of dimming or on its
+own. It needs no driver support. The panel keeps showing the strength while the
+tint is off, so the number you see is the level the switch brings back.</p>
+<p><strong>Ctrl+Alt+T</strong> switches it from anywhere.</p>
+<h2>Good to know</h2>
+<ul>
+<li>Every hotkey can be changed or cleared. The panel, dim and tint chords start
+bound; dim more and dim less start empty, because a global chord is a chord
+taken from every other program, and the panel, the tray menu and the wheel
+already change the level.</li>
+<li>By default the dim layer covers the panel too, so the panel shows what the
+screen looks like. Turn on <strong>Keep the panel above the dim layer</strong> to read it at
+full brightness; the controls work either way, because the layer lets clicks
+through.</li>
+<li>Under the overlay the pointer stays bright, because Windows draws it above
+every window. <strong>Dim the mouse pointer too</strong>, under Settings &gt; Dim, swaps the
+system cursors for darkened copies while dimming is on and puts them back
+afterwards. Gamma dims the pointer already. A run that ends without its
+shutdown leaves the swap behind, and the next start undoes it before anything
+else.</li>
+<li>The layer sits with ordinary topmost windows, so what Windows raises above them
+is not covered: the Alt+Tab switcher, shell flyouts that go topmost. Gamma does
+reach those, because it dims the scanout rather than the desktop.</li>
+<li>Gamma is the lighter of the two at the same percentage. Drivers limit how far
+the ramp may go, so the two methods look their most alike at low levels and
+drift apart as the level rises.</li>
+<li>Windows never dims the secure desktop, so the UAC prompt and the sign-in screen
+stay bright. That's the platform, not the mod.</li>
+<li>Levels, toggles, the method and the display choice are remembered unless you
+switch that off. The method and display chosen in the panel are kept beside the
+setting they replaced, so changing that setting in Windhawk wins them back.</li>
+<li>Everything is stored in the mod's own Windhawk storage, one set per user
+account. The mod doesn't read or write Windows' Night light setting, and sends
+nothing anywhere.</li>
+</ul>
+<h2>Settings</h2>
+<ul>
+<li><strong>Startup</strong> - start dimmed, the level to start at, remember changes.</li>
+<li><strong>Appearance</strong> - theme, accent color, panel opacity, panel scale.</li>
+<li><strong>Placement</strong> - corner, monitor, fine offsets, close on focus loss, tray icon.</li>
+<li><strong>Dim</strong> - step, maximum, method, all displays, exclude from captures, keep the
+panel bright, smooth changes, dim the pointer.</li>
+<li><strong>Tint</strong> - color and starting strength.</li>
+<li><strong>Shortcuts</strong> - one chord per action, written as on a keyboard: <code>ctrl+alt+d</code>.
+A chord needs Ctrl, Alt, Shift or Win; a lone key is ignored unless it is an
+F-key, so a stray letter can't be taken from every other program.</li>
+</ul>
+]]></content>
+        <author>
+            <name>DpakB</name>
+            <uri>https://github.com/DeepakBalaraman</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Quick Link Menu 1.1.2]]></title>
+        <id>https://windhawk.net/mods/quick-link-menu#efe1aca07232aa38c9ea732618c4d3108cf4b4f7</id>
+        <link href="https://windhawk.net/mods/quick-link-menu"/>
+        <updated>2026-11-26T06:00:19.000Z</updated>
+        <content type="html"><![CDATA[<h1>Quick Link Menu</h1>
+<p><strong>English</strong> · <a href="https://github.com/CTravkin/DSN_Windhawk_Mods/blob/main/Quick_Link_Menu/README.ru.md">Русский</a></p>
+<p>Quick Link Menu customizes the native Windows 11 menu opened by <strong>Win+X</strong> or by
+right-clicking the Start button.</p>
+<h2>Features</h2>
+<p><img src="https://raw.githubusercontent.com/CTravkin/DSN_Windhawk_Mods/3b4e177fc36ebff3d3904821c6b85d9e9032583d/Quick_Link_Menu/Assets/Previews/Comparison.png" alt="Windows 11 Win+X and three Quick Link Menu configurations showing the System, Shut down, and Event Viewer submenus"></p>
+<h3>Customization and command availability</h3>
+<ul>
+<li><strong>Menu contents.</strong> Hide individual rows, submenu commands, or entire sections.
+Turning off a section preserves its settings. Turning off a row hides its submenu.</li>
+<li><strong>Automatic filtering.</strong> The mod hides unavailable commands based on the Windows
+edition, installed components, hardware, and system policies. If a main action is
+unavailable, its available shortcuts remain. An empty menu falls back to standard Win+X.</li>
+<li><strong>User permissions.</strong> An optional filter hides administrator commands that require
+credentials or whose elevation is blocked. Commands that only need UAC consent stay visible.</li>
+<li><strong>Submenu controls.</strong> Open submenus on hover, after a delay, on arrow hover, or by
+clicking the arrow. A hand cursor can mark areas that run a command.</li>
+<li><strong>Terminal.</strong> The main Terminal action can run as administrator.</li>
+</ul>
+<h3>Menu sections</h3>
+<ul>
+<li><strong>Settings.</strong> Open Windows Settings categories and pages such as Display,
+Sound, VPN, Default apps, and Windows Update.</li>
+<li><strong>Control Panel.</strong> Open classic tools such as Device Manager, Network
+Connections, Power Options, and Programs and Features.</li>
+<li><strong>Administration.</strong> Open Computer Management, Services, Event Viewer,
+Registry Editor, Terminal, and related tools such as Task Scheduler and
+Command Prompt.</li>
+<li><strong>Basic commands.</strong> Open Run, Task Manager, Search, and File Explorer, show
+the desktop, or access power and sign-in options. File Explorer opens its
+configured start page, with a submenu for locations such as This PC,
+Downloads, and the Recycle Bin.</li>
+</ul>
+<h3>Quick access to power actions</h3>
+<p>The main power row shuts down Windows in one click by default. It can run another
+action, such as Restart or Lock. Choose <strong>None</strong> to open the power submenu without
+running a command. When Windows offers <strong>Update and shut down</strong> or <strong>Update and
+restart</strong> in Win+X, the corresponding Shut down or Restart switch also controls
+that entry.</p>
+<h3>Labels and icons</h3>
+<p>The menu uses Windows labels in the system display language and Segoe Fluent Icons.
+Settings shortcuts use the matching Windows icons where available.</p>
+<p>Windhawk settings are available in English, Russian, Spanish, German, Brazilian
+Portuguese, and Simplified Chinese.</p>
+<h2>Platforms</h2>
+<p>Requires Windows 11 x64 or ARM64. GitHub Actions verified native ARM64
+compilation and automated command availability tests. Win+X interaction was
+tested on x64.</p>
+<h3>Compatibility</h3>
+<p>Quick Link Menu works with the standard Windows 11 Win+X menu. Mods that replace
+it are incompatible. One example is <a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/windows-10-winx-restorer.wh.cpp">Windows 10 Win+X restorer on Win11 24H2</a>.</p>
+<h2>Usage</h2>
+<p>Click a row's label or press <strong>Enter</strong> to run its main action. Click the arrow
+or press <strong>→</strong> to open the submenu. Click the label if a row only has a submenu.</p>
+<p>To change the menu, open <strong>Quick Link Menu → Settings</strong> in Windhawk. Section
+switches are below their descriptions. Row and submenu switches follow the menu
+order. Find submenu behavior and the administrator filter under <strong>General settings</strong>,
+and Terminal and power actions under <strong>Command settings</strong>.</p>
+<h2>Links</h2>
+<ul>
+<li><a href="https://github.com/CTravkin/DSN_Windhawk_Mods/tree/main/Quick_Link_Menu">Quick Link Menu on GitHub</a></li>
+<li><a href="https://github.com/CTravkin/DSN_Windhawk_Mods/blob/main/README.md">DSN Windhawk Mods</a></li>
+</ul>
+]]></content>
+        <author>
+            <name>CTravkin</name>
+            <uri>https://github.com/CTravkin</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Enable Preview Pane for Downloaded Files 1.0.0]]></title>
+        <id>https://windhawk.net/mods/enable-preview-pane-for-downloads#9aa89adc4abf51d510fcd800e510ccc5854fb73c</id>
+        <link href="https://windhawk.net/mods/enable-preview-pane-for-downloads"/>
+        <updated>2026-11-26T06:00:14.000Z</updated>
+        <content type="html"><![CDATA[<h1>Enable Preview Pane for Downloaded Files</h1>
+<p>Files saved from a browser, an email client or a chat app usually get a
+<code>Zone.Identifier</code> NTFS alternate data stream, known as the Mark of the Web
+(MOTW), which places them in the Internet security zone. File Explorer refuses
+to show such files in the preview pane: &quot;The file you are attempting to preview
+could harm your computer.&quot;</p>
+<p>This mod lets the preview pane show files in the Internet zone for the file
+extensions you choose. By default only <code>pdf</code> is affected.</p>
+<p>Before, a PDF with the Mark of the Web shows the warning:</p>
+<p><img src="https://raw.githubusercontent.com/javierpetrucci/windhawk-enable-preview-pane-for-downloads/main/images/before.png" alt="Preview pane showing the warning"></p>
+<p>After, the same PDF is previewed:</p>
+<p><img src="https://raw.githubusercontent.com/javierpetrucci/windhawk-enable-preview-pane-for-downloads/main/images/after.png" alt="Preview pane showing the PDF"></p>
+<p>The Mark of the Web is <strong>not</strong> removed or modified. Files keep their
+<code>Zone.Identifier</code> stream, so SmartScreen, Office Protected View, Microsoft
+Defender and every other program that checks the mark behave as before.</p>
+<h2>How it works</h2>
+<p>Before the preview pane loads a preview handler, File Explorer asks the URL
+security manager (<code>IInternetSecurityManager::ProcessUrlAction</code>) whether the
+<code>URLACTION_SHELL_PREVIEW</code> action is allowed for the file. In the Internet zone
+the answer is &quot;disallow&quot;, and the warning is shown instead of the preview.</p>
+<p>The mod hooks that method inside <code>explorer.exe</code>. When the original answer is
+not &quot;allow&quot;, the answer is changed to &quot;allow&quot; only if all of these are true:</p>
+<ul>
+<li>The action is <code>URLACTION_SHELL_PREVIEW</code>. No other security action is changed.</li>
+<li>The file is on a local fixed, removable or RAM drive (<code>C:\...</code>). Network
+shares (<code>\\server\...</code>) and mapped network drives are never exempted.</li>
+<li>The path has no alternate data stream, the file itself is not a symbolic
+link or another type of reparse point, and no folder in the path is a
+directory symbolic link. Cloud placeholder files, such as OneDrive files,
+and directory junctions are allowed.</li>
+<li>The extension is in the list from the settings.</li>
+<li>The security manager maps the file to the Internet zone (zone 3). Files in
+the Restricted Sites zone, or in any other zone, are left alone.</li>
+</ul>
+<h2>Settings</h2>
+<ul>
+<li><strong>Extensions</strong>: comma-separated list without the dot, for example
+<code>pdf, txt, png</code>. A leading dot is accepted too. Matching is not case
+sensitive.</li>
+<li><strong>Only when the path contains</strong> (optional): only exempt files whose path
+contains this text, not case sensitive. For example <code>\Downloads\</code>.</li>
+</ul>
+<h2>Types that are never exempted</h2>
+<p>The following extensions are ignored even if they are listed in the settings:</p>
+<ul>
+<li>Executables, libraries and installers: <code>exe</code>, <code>com</code>, <code>scr</code>, <code>pif</code>, <code>cpl</code>,
+<code>dll</code>, <code>ocx</code>, <code>sys</code>, <code>drv</code>, <code>efi</code>, <code>msi</code>, <code>msp</code>, <code>mst</code>, <code>msu</code>, <code>appx</code>,
+<code>appxbundle</code>, <code>msix</code>, <code>msixbundle</code>, <code>appinstaller</code>, <code>application</code>,
+<code>appref-ms</code>, <code>xbap</code>, <code>gadget</code>, <code>jar</code>, <code>msc</code>.</li>
+<li>Scripts and command files: <code>bat</code>, <code>cmd</code>, <code>ps1</code>, <code>psm1</code>, <code>psd1</code>, <code>ps1xml</code>,
+<code>pssc</code>, <code>psc1</code>, <code>vb</code>, <code>vbs</code>, <code>vbe</code>, <code>js</code>, <code>jse</code>, <code>ws</code>, <code>wsf</code>, <code>wsc</code>, <code>wsh</code>,
+<code>hta</code>, <code>sct</code>, <code>inf</code>, <code>ins</code>, <code>isp</code>, <code>reg</code>, <code>scf</code>, <code>shb</code>, <code>shs</code>, <code>mof</code>, <code>hlp</code>,
+<code>chm</code>, <code>diagcab</code>, <code>diagcfg</code>, <code>diagpkg</code>, <code>rdp</code>, <code>py</code>, <code>pyw</code>.</li>
+<li>Shortcuts and shell links: <code>lnk</code>, <code>url</code>, <code>website</code>, <code>library-ms</code>,
+<code>search-ms</code>, <code>searchconnector-ms</code>, <code>settingcontent-ms</code>.</li>
+<li>Office files with macros, including legacy formats that can carry VBA:
+<code>docm</code>, <code>dotm</code>, <code>xlsm</code>, <code>xltm</code>, <code>xlsb</code>, <code>xlam</code>, <code>pptm</code>, <code>potm</code>, <code>ppsm</code>,
+<code>ppam</code>, <code>sldm</code>, <code>doc</code>, <code>dot</code>, <code>xls</code>, <code>xlt</code>, <code>xla</code>, <code>ppt</code>, <code>pot</code>, <code>pps</code>,
+<code>ppa</code>, <code>mdb</code>, <code>mde</code>, <code>accdb</code>, <code>accde</code>, <code>ade</code>, <code>adp</code>, <code>xll</code>, <code>wll</code>, <code>one</code>.</li>
+<li>Archives: <code>zip</code>, <code>7z</code>, <code>rar</code>, <code>cab</code>, <code>tar</code>, <code>gz</code>, <code>tgz</code>, <code>bz2</code>, <code>tbz2</code>, <code>xz</code>,
+<code>txz</code>, <code>zst</code>, <code>lzh</code>, <code>lha</code>, <code>arj</code>, <code>z</code>, <code>wim</code>.</li>
+<li>Disk images: <code>iso</code>, <code>img</code>, <code>vhd</code>, <code>vhdx</code>, <code>vmdk</code>.</li>
+</ul>
+<p>This list is a safety net, not a complete security policy. Only add file types
+that you are comfortable previewing from untrusted sources.</p>
+<h2>Notes and limitations</h2>
+<ul>
+<li>Windows blocks these previews because they can leak credentials. A file
+that refers to a remote resource (<code>\\server\...</code>) can make the preview
+handler connect to that server and send it the user's NTLM hash. PDFs can
+do this, and <code>pdf</code> is the default. See Microsoft's
+<a href="https://support.microsoft.com/help/5070960">note on the change</a>. With the
+mod, previewing a listed file can leak the hash this way, just like opening
+it would.</li>
+<li>The preview handler registered for the type (for example the PDF previewer
+of Microsoft Edge, Adobe Acrobat or SumatraPDF) also parses the file, so a
+vulnerable preview handler can be exploited by a malicious file.</li>
+<li>A preview handler can opt in to previewing untrusted files with the
+<code>AutomaticallyPreviewUntrustedFiles</code> value on its CLSID key. Windows then
+shows the preview without this mod. The PDF previewer of Microsoft Edge does
+this. The PDF preview handlers of Adobe Acrobat Reader and SumatraPDF don't,
+so they need the mod.</li>
+<li>Tested by the author on Windows 11 build 26300 with the PDF preview handlers
+of SumatraPDF, Adobe Acrobat Reader and Microsoft Edge.</li>
+<li>Only the File Explorer preview pane in <code>explorer.exe</code> is covered. The preview
+pane in the Open and Save dialogs of other programs runs inside those
+programs. To cover one, add it under <code>Details</code> -&gt; <code>Advanced</code> -&gt;
+<code>Custom process inclusion list</code>. This was tested with the Open dialog of a
+program added to that list.</li>
+<li>Files reached through a directory symbolic link are never exempted, because
+the link can point to a network share. Directory junctions can only point to
+local folders, so they are allowed. Hard links are the same file. File
+Explorer doesn't preview file symbolic links at all, with or without the
+mod.</li>
+<li>The mod overrides the &quot;disallow&quot; answer for the listed types even when it
+comes from a Group Policy setting for the Internet zone.</li>
+<li>This targets the standard URL security manager of Windows (<code>urlmon.dll</code>). If
+a Windows update makes the preview pane use a different check, the mod has no
+effect and the warning is shown as usual.</li>
+<li>Disable the mod to restore the default behavior. Nothing on disk or in the
+registry is modified.</li>
+</ul>
+]]></content>
+        <author>
+            <name>javierpetrucci</name>
+            <uri>https://github.com/javierpetrucci</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Explorer Tab Memory Saver 0.3.0]]></title>
+        <id>https://windhawk.net/mods/explorer-tab-memory#772f4cfe06ba1530dbb828841994b7994ee59fd3</id>
+        <link href="https://windhawk.net/mods/explorer-tab-memory"/>
+        <updated>2026-11-26T06:00:08.000Z</updated>
+        <content type="html"><![CDATA[<h1>Explorer Tab Memory Saver</h1>
+<p>Close the last File Explorer window with its tabs still open. The next time
+you open Explorer to Home or This PC, the mod reopens the saved folders as tabs
+and selects the one you were using. If you open a specific folder instead,
+that folder stays selected alongside the restored tabs.</p>
+<p>Windows supplies the tab order, which can differ from an order you set by
+dragging tabs. Each Windows user has a separate saved session.</p>
+<p>This mod restores the last window with Explorer's own tab commands. The
+similarly named <a href="https://windhawk.net/mods/explorer-tabs-session-saver">Explorer Tabs Session Saver</a>
+uses shell launches and recommends a companion utility for grouping tabs.
+Enable only one session-restoration mod at a time.</p>
+<p>Requires Windows 11 File Explorer with native tabs. Tested on x64 build 26300.9974.</p>
+]]></content>
+        <author>
+            <name>Maxxwell Quinn</name>
+            <uri>https://github.com/MXXQN</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Task Manager Pause Button 1.1.1]]></title>
         <id>https://windhawk.net/mods/task-manager-pause-button#7e4ed06f199782d1e3c512e259ba5866b8590fb6</id>
@@ -433,144 +721,6 @@ PowerShell notification.</p>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 8.1 Start Screen Recreation 1.3.0]]></title>
-        <id>https://windhawk.net/mods/win81-start-screen-recreation#e8116310d764553d91ec584d0d34f2acbc9b0c28</id>
-        <link href="https://windhawk.net/mods/win81-start-screen-recreation"/>
-        <updated>2026-11-25T17:01:28.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added best-effort live tiles</li>
-<li>Added support for up to eight custom tiles, each with a target, color, icon, and separate images for the four tile sizes</li>
-<li>Added best-effort touchscreen support (not tested by the author due to hardware limitations)</li>
-<li>Reintroduced the optional setting to sample desktop tile colors from application icons (Color sampling is best-effort)</li>
-<li>Added best-effort integration with Windows 8.1 Taskbar Recreation: when detected on the current monitor, it is prioritized on bottom-edge hover. The native taskbar remains the fallback when the companion is not detected</li>
-<li>Preserved the existing layout format. Custom images are read from local paths and are not copied by the mod</li>
-<li>Standardized and translated the new settings’ descriptions</li>
-<li>Applied minor graphic improvements</li>
-</ul>
-]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable taskbar per monitor 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-disable-per-monitor#a95d2c814194ae8a0ab80ec124f5289038179118</id>
-        <link href="https://windhawk.net/mods/taskbar-disable-per-monitor"/>
-        <updated>2026-11-25T08:02:48.000Z</updated>
-        <content type="html"><![CDATA[<h1>Disable taskbar per monitor</h1>
-<p>Pick one or more monitors. Their taskbar is disabled: it's invisible, can't be
-clicked, and never comes back, whether from the mouse at the screen edge, the
-Win key, Win+T / Win+number, flashing app buttons or notifications. Windows on
-those monitors can use the space the taskbar took. Taskbars on every other
-monitor are left alone. Works with the taskbar at the bottom, top, left or
-right, with auto-hide on or off.</p>
-<h2>Why not auto-hide</h2>
-<p>Auto-hide brings the taskbar back on hover, on the Win key and when an app
-wants attention, and it applies to every monitor. <strong>Taskbar auto-hide fine
-tuning</strong> can keep it from ever showing, but on all monitors at once, and
-<strong>Taskbar auto-hide per monitor</strong> chooses auto-hide on or off per monitor but
-doesn't stop the taskbar from showing. This mod turns the taskbar off on the
-chosen monitors only and doesn't need or change the auto-hide setting.</p>
-<h2>Choosing monitors</h2>
-<p>The <strong>Monitors to disable the taskbar on</strong> setting is a comma-separated list.
-Each entry can be:</p>
-<ul>
-<li><code>primary</code>: the primary monitor, wherever it is.</li>
-<li>A number (<code>1</code>, <code>2</code>, <code>3</code>...): the monitor's position in Windows' monitor
-enumeration. It may differ from the numbers shown in Display Settings, and it
-can change after plugging monitors in or out.</li>
-<li>Any other text: matched (case-insensitive) against part of the monitor's
-device name, model name or interface name, e.g. <code>GSM5BD2</code> or <code>DISPLAY2</code>.
-This stays correct when the numbering changes.</li>
-</ul>
-<p>Examples: <code>primary</code> · <code>1,3</code> · <code>primary, GSM5BD2</code>. An empty list disables
-nothing.</p>
-<p>To see the number, device name, model and interface name of each monitor:
-Advanced tab, set <strong>Debug logging</strong> to <strong>Mod logs</strong>, open <strong>Show log output</strong>,
-then save the settings again. Every monitor is logged in a <code>Monitor</code> line.</p>
-<h2>How it works</h2>
-<p>The taskbar window of a chosen monitor and its popups (tooltips, previews) are
-cloaked with DWM, which makes them invisible and click-through without moving
-them, and the work area of that monitor is computed as if its taskbar were
-auto-hidden. Nothing is written to the system settings, so disabling or
-removing the mod leaves no trace.</p>
-<h2>Notes</h2>
-<ul>
-<li>Windows 11. Tested on build 26300 with bottom and left taskbars, auto-hide
-on and off. &quot;Show my taskbar on all displays&quot; must be on if any of the chosen
-monitors is not the primary one.</li>
-<li>Keyboard focus can still move to a disabled taskbar (e.g. Win+T); press Esc
-to leave it.</li>
-</ul>
-]]></content>
-        <author>
-            <name>eprilx</name>
-            <uri>https://github.com/eprilx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Volume Key Step 1.0]]></title>
-        <id>https://windhawk.net/mods/volume-key-step#ad86ce3a5b546f545af49f4430c7b002be48c4bb</id>
-        <link href="https://windhawk.net/mods/volume-key-step"/>
-        <updated>2026-11-25T08:02:43.000Z</updated>
-        <content type="html"><![CDATA[<h1>Volume Key Step</h1>
-<p>Windows raises or lowers the volume by 2% per volume key press. This mod lets you
-pick any step from 1% to 100%. The Windows volume flyout still shows as usual.</p>
-<p>The step also applies to anything else that steps the volume through Explorer, such as
-scrolling with the Windows 11 indicator in the Taskbar Volume Control mod.</p>
-<p>At least one audio device (speaker or mic) must be connected when Explorer starts. If
-none was, reload the mod after connecting one.</p>
-]]></content>
-        <author>
-            <name>Artistro08</name>
-            <uri>https://github.com/artistro08</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Notepad Pro 1.0.0]]></title>
-        <id>https://windhawk.net/mods/notepad-pro#f25ef647911aa78ccd08b23778d2e96b51dd3de1</id>
-        <link href="https://windhawk.net/mods/notepad-pro"/>
-        <updated>2026-11-25T08:02:37.000Z</updated>
-        <content type="html"><![CDATA[<h1>Notepad Pro</h1>
-<p><img src="https://raw.githubusercontent.com/armaninyow/Remove-Context-Menu-Items/refs/heads/main/Don't%20Touch/NP.png" alt="Notepad Pro"></p>
-<p>Upgrade the standard Windows Notepad with modern code-editor features while keeping it fast and lightweight.</p>
-<h2>Line-Number Gutter</h2>
-<p>Adds a clean line-number margin to the left side of the editor.</p>
-<ul>
-<li><code>Smart wrapping</code>: Only displays numbers on the first row of wrapped lines.</li>
-<li><code>Dynamic sizing</code>: Automatically adjusts its width as your document grows.</li>
-<li><code>Theme-aware</code>: Seamlessly adapts to light and dark modes in real time.</li>
-<li><code>Editor sync</code>: Matches your current font, size, zoom level, and display scaling, with highlighting for the active line.</li>
-<li><code>Markers</code>: Colors the left edge of the gutter next to every line you changed, added, or removed.</li>
-</ul>
-<h2>Minimap</h2>
-<p>Adds a high-level visual overview of your entire file right alongside the scrollbar.</p>
-<ul>
-<li><code>Visual preview</code>: Represents your text as clean, color-coded blocks for easy scanning.</li>
-<li><code>Smooth navigation</code>: Click anywhere to jump directly to that section, drag the viewport slider, or scroll smoothly with your mouse wheel.</li>
-<li><code>Responsive layout</code>: Automatically scales with the window size and hides itself when the window becomes too narrow.</li>
-<li><code>Universal support</code>: Works across all open documents and file types.</li>
-</ul>
-<h2>Syntax Highlighting</h2>
-<p>Automatically brings color and readability to popular programming and data files based on the open file type.</p>
-<ul>
-<li><code>Rich color coding</code>: Highlights keywords, types, strings, numbers, and directives while keeping plain text and unsaved tabs clean.</li>
-<li><code>Non-destructive</code>: Purely visual, never alters your underlying files.</li>
-<li><code>Theme-aware</code>: Uses tailored color palettes that automatically switch between light and dark themes.</li>
-</ul>
-<blockquote>
-<p>Note: Very large files may cause slight delays, slower rendering, or higher memory usage when calculating line numbers, drawing the minimap, or running syntax highlighting.</p>
-</blockquote>
-<h3>More Features Soon</h3>
-<p>This mod is under active development, with additional quality-of-life improvements and editor tools planned for future updates.</p>
-]]></content>
-        <author>
-            <name>Armaninyow</name>
-            <uri>https://github.com/armaninyow</uri>
         </author>
     </entry>
 </feed>

@@ -6432,6 +6432,36 @@
         "version": "1.0"
       }
     },
+    "enable-preview-pane-for-downloads": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795672814000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795672814000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86",
+          "x86-64"
+        ],
+        "author": "javierpetrucci",
+        "compilerOptions": "-lole32 -lshlwapi -lurlmon",
+        "description": "Lets the File Explorer preview pane show selected file types (PDF by default) that are marked as downloaded from the Internet, without removing the mark",
+        "github": "https://github.com/javierpetrucci",
+        "homepage": "https://github.com/javierpetrucci/windhawk-enable-preview-pane-for-downloads",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Enable Preview Pane for Downloaded Files",
+        "version": "1.0.0"
+      }
+    },
     "energy-saver-power-plan-link": {
       "details": {
         "defaultSorting": 280,
@@ -7844,6 +7874,31 @@
         "version": "1.2"
       }
     },
+    "explorer-tab-memory": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795672808000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795672808000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Maxxwell Quinn",
+        "compilerOptions": "-fms-extensions -lole32 -loleaut32 -lshell32 -luuid -ladvapi32 -lcrypt32",
+        "description": "Restores your tabs and active folder when you reopen File Explorer.",
+        "github": "https://github.com/MXXQN",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Explorer Tab Memory Saver",
+        "version": "0.3.0"
+      }
+    },
     "explorer-tab-router": {
       "details": {
         "defaultSorting": 1420,
@@ -8406,6 +8461,34 @@
         "name": "Turn off change file extension warning",
         "twitter": "https://twitter.com/m417z",
         "version": "1.0.1"
+      }
+    },
+    "extra-dim": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795672825000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795672825000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "DpakB",
+        "compilerOptions": "-luser32 -lgdi32 -lshell32 -ladvapi32 -lole32",
+        "description": "Extra dim below the minimum brightness, plus a warm evening tint, in a fluent flyout with a tray icon and global hotkeys.",
+        "donateUrl": "https://buymeacoffee.com/dpakb",
+        "github": "https://github.com/DeepakBalaraman",
+        "homepage": "https://dpakb.com",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Extra Dim",
+        "twitter": "https://twitter.com/dpakb_",
+        "version": "1.0.0"
       }
     },
     "f1-blocker": {
@@ -15108,6 +15191,38 @@
         "license": "MIT",
         "name": "Quick Launch & Media Panel",
         "version": "2.2.0"
+      }
+    },
+    "quick-link-menu": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795672819000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795672819000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "CTravkin",
+        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lcomctl32 -lruntimeobject -lole32 -loleaut32 -lshell32 -lshlwapi -ladvapi32 -liphlpapi -luuid -ldwrite",
+        "description": "自定义 Win+X 菜单并添加更多命令（右键单击“开始”按钮）",
+        "github": "https://github.com/CTravkin",
+        "homepage": "https://ctravkin.ru",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Quick Link Menu",
+        "version": "1.1.2"
+      },
+      "metadataEnglish": {
+        "description": "Customize the Win+X menu and add more commands (right-click the Start button)"
       }
     },
     "quick-look": {
