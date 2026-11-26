@@ -4,6 +4,7 @@
 // @description     Standalone mod that matches the Windows 11 taskbar color to the edge strip, majority screen color, or mixed mode, with true transparency on desktop, rounded corners, and top-to-bottom fade animation.
 // @version         2.5.68
 // @author          Nitin Patel
+// @github          https://github.com/nitinp94
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lgdi32 -luser32 -ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore -lversion -ladvapi32
