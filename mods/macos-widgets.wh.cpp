@@ -7374,25 +7374,91 @@ static void FreeDesktopPicture() {
 // desktop's own picture doesn't contain (it keeps showing Windows' wallpaper). That window lives in a "WorkerW":
 // before Windows 11 24H2 a top-level one right after the one holding the icons; since 24H2 a child of Progman
 static HWND WallpaperAppWindow() {
-    HWND host = nullptr;
-    if (HWND progman = GetShellWindow()) host = FindWindowExW(progman, nullptr, L"WorkerW", nullptr);
-    if (!host) {
-        for (HWND w = nullptr; (w = FindWindowExW(nullptr, w, L"WorkerW", nullptr)) != nullptr;)
-            if (FindWindowExW(w, nullptr, L"SHELLDLL_DefView", nullptr)) {
-                host = FindWindowExW(nullptr, w, L"WorkerW", nullptr);
-                break;
+    // The app's window: inside Progman's WorkerW (24H2 and later), or a top-level WorkerW without the icons (earlier)
+    auto inside = [](HWND box, bool topLevelWorker) -> HWND {
+        for (HWND c = GetWindow(box, GW_CHILD); c; c = GetWindow(c, GW_HWNDNEXT)) {
+            if (!IsWindowVisible(c)) continue;
+            wchar_t cls[64] = L"";
+            GetClassNameW(c, cls, 64);
+            if (!wcscmp(cls, L"SHELLDLL_DefView")) continue;
+            if (!wcscmp(cls, L"WorkerW")) {
+                HWND a = GetWindow(c, GW_CHILD);
+                while (a && !IsWindowVisible(a)) a = GetWindow(a, GW_HWNDNEXT);
+                if (a) return a;
+                continue;
             }
+            if (topLevelWorker || box == GetShellWindow()) return c;
+        }
+        return nullptr;
+    };
+    if (HWND progman = GetShellWindow())
+        if (HWND a = inside(progman, false)) return a;
+    for (HWND w = nullptr; (w = FindWindowExW(nullptr, w, L"WorkerW", nullptr)) != nullptr;)
+        if (IsWindowVisible(w) && !FindWindowExW(w, nullptr, L"SHELLDLL_DefView", nullptr))
+            if (HWND a = inside(w, true)) return a;
+    return nullptr;
+}
+
+static bool g_deskFromScreen = false;  // the picture is the screen (an animated wallpaper): only where it shows the desktop
+
+static BOOL CALLBACK CollectOurWindows(HWND h, LPARAM lp) {
+    if (IsWindowVisible(h)) ((std::vector<HWND>*)lp)->push_back(h);
+    return TRUE;
+}
+
+// An animated wallpaper can't be drawn into a picture (it's DirectX): the screen is read instead, with our own windows
+// hidden from the capture for that moment only (they stay on the screen), as the live glass does all the time
+static bool ScreenWithoutUs(HDC into, const RECT& area) {
+    std::vector<HWND> ours;
+    EnumThreadWindows(GetCurrentThreadId(), CollectOurWindows, (LPARAM)&ours);
+    for (HWND h : ours) SetWindowDisplayAffinity(h, WDA_EXCLUDEFROMCAPTURE);
+    static auto flush = [] {
+        HMODULE dwm = LoadLibraryExW(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        return dwm ? (HRESULT(WINAPI*)())(void*)GetProcAddress(dwm, "DwmFlush") : nullptr;
+    }();
+    // The change shows from the next frame the compositor makes
+    for (int i = 0; i < 2; i++) {
+        if (flush) flush();
+        else Sleep(17);
     }
-    if (!host || !IsWindowVisible(host)) return nullptr;
-    HWND app = GetWindow(host, GW_CHILD);
-    return app && IsWindowVisible(app) ? app : nullptr;
+    HDC screen = GetDC(nullptr);
+    BOOL ok = BitBlt(into, 0, 0, area.right - area.left, area.bottom - area.top, screen, area.left, area.top, SRCCOPY);
+    ReleaseDC(nullptr, screen);
+    for (HWND h : ours) SetWindowDisplayAffinity(h, WDA_NONE);
+    return ok;
 }
 
 static HDC DesktopPicture() {
-    if (g_deskDC && GetTickCount64() - g_deskTick < 3000) return g_deskDC;
+    // An animated wallpaper is read from the screen, which takes a moment: not more often than every 6 s
+    if (g_deskDC && GetTickCount64() - g_deskTick < (g_deskFromScreen ? 6000u : 3000u)) return g_deskDC;
     FreeDesktopPicture();
+    g_deskFromScreen = false;
     HWND app = WallpaperAppWindow();
-    HWND shell = app ? app : GetShellWindow();
+    if (app) {
+        RECT vs = {GetSystemMetrics(SM_XVIRTUALSCREEN), GetSystemMetrics(SM_YVIRTUALSCREEN),
+                   GetSystemMetrics(SM_XVIRTUALSCREEN) + GetSystemMetrics(SM_CXVIRTUALSCREEN),
+                   GetSystemMetrics(SM_YVIRTUALSCREEN) + GetSystemMetrics(SM_CYVIRTUALSCREEN)};
+        HDC screen = GetDC(nullptr);
+        g_deskDC = CreateCompatibleDC(screen);
+        g_deskBmp = CreateCompatibleBitmap(screen, vs.right - vs.left, vs.bottom - vs.top);
+        ReleaseDC(nullptr, screen);
+        if (g_deskDC && g_deskBmp) {
+            g_deskOld = SelectObject(g_deskDC, g_deskBmp);
+            if (ScreenWithoutUs(g_deskDC, vs)) {
+                g_deskRc = vs;
+                g_deskFromScreen = true;
+                g_deskTick = GetTickCount64();
+                return g_deskDC;
+            }
+        }
+        FreeDesktopPicture();  // couldn't: Windows' desktop, as before
+        if (g_deskBmp) DeleteObject(g_deskBmp);
+        if (g_deskDC) DeleteDC(g_deskDC);
+        g_deskDC = nullptr;
+        g_deskBmp = nullptr;
+        app = nullptr;
+    }
+    HWND shell = GetShellWindow();
     if (!shell) return nullptr;
     GetWindowRect(shell, &g_deskRc);
     int w = g_deskRc.right - g_deskRc.left, h = g_deskRc.bottom - g_deskRc.top;
@@ -7409,29 +7475,7 @@ static HDC DesktopPicture() {
         return nullptr;
     }
     g_deskOld = SelectObject(g_deskDC, g_deskBmp);
-    if (!PrintWindow(shell, g_deskDC, PW_RENDERFULLCONTENT) && app) {
-        // The app's window couldn't be drawn: Windows' desktop, as before
-        FreeDesktopPicture();
-        g_deskTick = 0;
-        HWND desk = GetShellWindow();
-        if (!desk) return nullptr;
-        GetWindowRect(desk, &g_deskRc);
-        w = g_deskRc.right - g_deskRc.left;
-        h = g_deskRc.bottom - g_deskRc.top;
-        HDC screen2 = GetDC(nullptr);
-        g_deskDC = CreateCompatibleDC(screen2);
-        g_deskBmp = CreateCompatibleBitmap(screen2, w, h);
-        ReleaseDC(nullptr, screen2);
-        if (!g_deskDC || !g_deskBmp) {
-            if (g_deskBmp) DeleteObject(g_deskBmp);
-            if (g_deskDC) DeleteDC(g_deskDC);
-            g_deskDC = nullptr;
-            g_deskBmp = nullptr;
-            return nullptr;
-        }
-        g_deskOld = SelectObject(g_deskDC, g_deskBmp);
-        PrintWindow(desk, g_deskDC, PW_RENDERFULLCONTENT);
-    }
+    PrintWindow(shell, g_deskDC, PW_RENDERFULLCONTENT);
     g_deskTick = GetTickCount64();
     return g_deskDC;
 }
@@ -7502,6 +7546,8 @@ static bool ApplyCapture(Widget* wd, const RECT& rc, std::vector<UINT32>&& px) {
     return true;
 }
 
+static bool ShowsDesktop(Widget* wd);
+
 static void Capture(Widget* wd) {
     RECT rc = CaptureRect(wd);
     int w = rc.right - rc.left, h = rc.bottom - rc.top;
@@ -7532,6 +7578,13 @@ static void Capture(Widget* wd) {
                 GetSystemMetrics(SM_XVIRTUALSCREEN) + GetSystemMetrics(SM_CXVIRTUALSCREEN),
                 GetSystemMetrics(SM_YVIRTUALSCREEN) + GetSystemMetrics(SM_CYVIRTUALSCREEN)};
     } else if (HDC desk = DesktopPicture()) {
+        if (g_deskFromScreen && !ShowsDesktop(wd)) {  // a window is over it on the screen: the glass stays as it was
+            SelectObject(dc, old);
+            DeleteObject(bmp);
+            DeleteDC(dc);
+            ReleaseDC(nullptr, screen);
+            return;
+        }
         BitBlt(dc, 0, 0, w, h, desk, rc.left - g_deskRc.left, rc.top - g_deskRc.top, SRCCOPY);
         area = g_deskRc;
     }
@@ -7678,7 +7731,12 @@ static D2D1_COLOR_F CfgRgb(UINT32 c) {
     return D2D1::ColorF(((c >> 16) & 0xFF) / 255.f, ((c >> 8) & 0xFF) / 255.f, (c & 0xFF) / 255.f, 1.0f);
 }
 static bool g_cfgDrawLocked = false;
-static D2D1_COLOR_F CfgAccent() { return g_cfgDrawLocked ? Fg(0.30f) : CfgRgb(g_darkText ? 0x007AFF : 0x0A84FF); }
+// Greyed out (the option doesn't apply to this theme): the same blue, faded, as on the Mac
+static D2D1_COLOR_F CfgAccent() {
+    D2D1_COLOR_F c = CfgRgb(g_darkText ? 0x007AFF : 0x0A84FF);
+    if (g_cfgDrawLocked) c.a *= 0.35f;
+    return c;
+}
 static bool InRect(const D2D1_RECT_F& r, D2D1_POINT_2F p) {
     return p.x >= r.left && p.x < r.right && p.y >= r.top && p.y < r.bottom;
 }
