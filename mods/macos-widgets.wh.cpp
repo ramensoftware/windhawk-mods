@@ -4633,10 +4633,6 @@ struct Widget {
     UINT64 capHash = 0;    // of the last picture taken behind it: the same picture doesn't rebuild the glass
     ULONGLONG capTick = 0;
     float lum = -1;
-    bool covered = false;      // a window is over it (see Covered)
-    ULONGLONG coverTick = 0;
-    int textDark = -1;         // automatic text: black (1) or white (0) chosen from the glass behind it (-1: not yet)
-    ULONGLONG textFlip = 0;    // when it last changed
     ComPtr<ID2D1Bitmap> snap;
     ComPtr<ID2D1Effect> source, blurFx, mapXf, disp, color;
     ComPtr<ID2D1Bitmap> map;
@@ -7375,94 +7371,9 @@ static void FreeDesktopPicture() {
     g_deskTick = 0;
 }
 
-// Animated-wallpaper apps (Wallpaper Engine, Lively...) draw in a window of their own behind the icons, which the
-// desktop's own picture doesn't contain (it keeps showing Windows' wallpaper). That window lives in a "WorkerW":
-// before Windows 11 24H2 a top-level one right after the one holding the icons; since 24H2 a child of Progman
-static HWND WallpaperAppWindow() {
-    // The app's window: inside Progman's WorkerW (24H2 and later), or a top-level WorkerW without the icons (earlier)
-    auto inside = [](HWND box, bool topLevelWorker) -> HWND {
-        for (HWND c = GetWindow(box, GW_CHILD); c; c = GetWindow(c, GW_HWNDNEXT)) {
-            if (!IsWindowVisible(c)) continue;
-            wchar_t cls[64] = L"";
-            GetClassNameW(c, cls, 64);
-            if (!wcscmp(cls, L"SHELLDLL_DefView")) continue;
-            if (!wcscmp(cls, L"WorkerW")) {
-                HWND a = GetWindow(c, GW_CHILD);
-                while (a && !IsWindowVisible(a)) a = GetWindow(a, GW_HWNDNEXT);
-                if (a) return a;
-                continue;
-            }
-            if (topLevelWorker || box == GetShellWindow()) return c;
-        }
-        return nullptr;
-    };
-    if (HWND progman = GetShellWindow())
-        if (HWND a = inside(progman, false)) return a;
-    for (HWND w = nullptr; (w = FindWindowExW(nullptr, w, L"WorkerW", nullptr)) != nullptr;)
-        if (IsWindowVisible(w) && !FindWindowExW(w, nullptr, L"SHELLDLL_DefView", nullptr))
-            if (HWND a = inside(w, true)) return a;
-    return nullptr;
-}
-
-static bool g_deskFromScreen = false;  // the picture is the screen (an animated wallpaper): only where it shows the desktop
-
-static BOOL CALLBACK CollectOurWindows(HWND h, LPARAM lp) {
-    if (IsWindowVisible(h)) ((std::vector<HWND>*)lp)->push_back(h);
-    return TRUE;
-}
-
-// An animated wallpaper can't be drawn into a picture (it's DirectX): the screen is read instead, with our own windows
-// hidden from the capture for that moment only (they stay on the screen), as the live glass does all the time
-static bool ScreenWithoutUs(HDC into, const RECT& area) {
-    std::vector<HWND> ours;
-    EnumThreadWindows(GetCurrentThreadId(), CollectOurWindows, (LPARAM)&ours);
-    for (HWND h : ours) SetWindowDisplayAffinity(h, WDA_EXCLUDEFROMCAPTURE);
-    static auto flush = [] {
-        HMODULE dwm = LoadLibraryExW(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-        return dwm ? (HRESULT(WINAPI*)())(void*)GetProcAddress(dwm, "DwmFlush") : nullptr;
-    }();
-    // The change shows from the next frame the compositor makes
-    for (int i = 0; i < 2; i++) {
-        if (flush) flush();
-        else Sleep(17);
-    }
-    HDC screen = GetDC(nullptr);
-    BOOL ok = BitBlt(into, 0, 0, area.right - area.left, area.bottom - area.top, screen, area.left, area.top, SRCCOPY);
-    ReleaseDC(nullptr, screen);
-    for (HWND h : ours) SetWindowDisplayAffinity(h, WDA_NONE);
-    return ok;
-}
-
 static HDC DesktopPicture() {
-    // An animated wallpaper is read from the screen, which takes a moment: not more often than every 6 s
-    if (g_deskDC && GetTickCount64() - g_deskTick < (g_deskFromScreen ? 6000u : 3000u)) return g_deskDC;
+    if (g_deskDC && GetTickCount64() - g_deskTick < 3000) return g_deskDC;
     FreeDesktopPicture();
-    g_deskFromScreen = false;
-    HWND app = WallpaperAppWindow();
-    if (app) {
-        RECT vs = {GetSystemMetrics(SM_XVIRTUALSCREEN), GetSystemMetrics(SM_YVIRTUALSCREEN),
-                   GetSystemMetrics(SM_XVIRTUALSCREEN) + GetSystemMetrics(SM_CXVIRTUALSCREEN),
-                   GetSystemMetrics(SM_YVIRTUALSCREEN) + GetSystemMetrics(SM_CYVIRTUALSCREEN)};
-        HDC screen = GetDC(nullptr);
-        g_deskDC = CreateCompatibleDC(screen);
-        g_deskBmp = CreateCompatibleBitmap(screen, vs.right - vs.left, vs.bottom - vs.top);
-        ReleaseDC(nullptr, screen);
-        if (g_deskDC && g_deskBmp) {
-            g_deskOld = SelectObject(g_deskDC, g_deskBmp);
-            if (ScreenWithoutUs(g_deskDC, vs)) {
-                g_deskRc = vs;
-                g_deskFromScreen = true;
-                g_deskTick = GetTickCount64();
-                return g_deskDC;
-            }
-        }
-        FreeDesktopPicture();  // couldn't: Windows' desktop, as before
-        if (g_deskBmp) DeleteObject(g_deskBmp);
-        if (g_deskDC) DeleteDC(g_deskDC);
-        g_deskDC = nullptr;
-        g_deskBmp = nullptr;
-        app = nullptr;
-    }
     HWND shell = GetShellWindow();
     if (!shell) return nullptr;
     GetWindowRect(shell, &g_deskRc);
@@ -7551,9 +7462,6 @@ static bool ApplyCapture(Widget* wd, const RECT& rc, std::vector<UINT32>&& px) {
     return true;
 }
 
-static bool Covered(Widget* wd);
-static bool IsDesktopWidget(const Widget* wd);
-
 static void Capture(Widget* wd) {
     RECT rc = CaptureRect(wd);
     int w = rc.right - rc.left, h = rc.bottom - rc.top;
@@ -7584,13 +7492,6 @@ static void Capture(Widget* wd) {
                 GetSystemMetrics(SM_XVIRTUALSCREEN) + GetSystemMetrics(SM_CXVIRTUALSCREEN),
                 GetSystemMetrics(SM_YVIRTUALSCREEN) + GetSystemMetrics(SM_CYVIRTUALSCREEN)};
     } else if (HDC desk = DesktopPicture()) {
-        if (g_deskFromScreen && IsDesktopWidget(wd) && Covered(wd)) {  // a window is over it on the screen: the glass stays as it was
-            SelectObject(dc, old);
-            DeleteObject(bmp);
-            DeleteDC(dc);
-            ReleaseDC(nullptr, screen);
-            return;
-        }
         BitBlt(dc, 0, 0, w, h, desk, rc.left - g_deskRc.left, rc.top - g_deskRc.top, SRCCOPY);
         area = g_deskRc;
     }
@@ -8714,19 +8615,7 @@ static void Render(Widget* wd) {
     Theme t = g_ui.theme;
     g_darkText = t == Theme::Light ? true : t == Theme::Tinted ? Luma(ColorOf(g_ui.tintColor)) > 0.6f : false;
     if (g_ui.textColor >= 0) g_darkText = g_ui.textColor == 1;
-    else if ((t == Theme::Glass || t == Theme::Frost) && wd->lum >= 0) {
-        // With a margin, and at most every 2 s: an animated wallpaper close to the middle (a pulsing light, leaves
-        // moving) would otherwise flip the text between black and white over and over
-        ULONGLONG now = GetTickCount64();
-        if (wd->textDark < 0) {
-            wd->textDark = wd->lum > 0.55f;
-            wd->textFlip = now;
-        } else if (now - wd->textFlip > 2000 && (wd->textDark ? wd->lum < 0.45f : wd->lum > 0.65f)) {
-            wd->textDark = !wd->textDark;
-            wd->textFlip = now;
-        }
-        g_darkText = wd->textDark == 1;
-    }
+    else if ((t == Theme::Glass || t == Theme::Frost) && wd->lum >= 0) g_darkText = wd->lum > 0.55f;
 
     RECT bind = {0, 0, wd->pw, wd->ph};
     if (FAILED(wd->rt->BindDC(wd->memDC, &bind))) return;
@@ -8914,13 +8803,8 @@ static bool WidgetsBelowDesktop() {
     return false;
 }
 
-static void WallpaperChanged();
-
 static void CALLBACK OnForeground(HWINEVENTHOOK, DWORD, HWND h, LONG obj, LONG, DWORD, DWORD) {
     if (obj == OBJID_WINDOW && h && IsDeskClass(h)) PostThreadMessageW(g_uiThreadId, WM_APP_DESK, 0, 0);
-    // An animated-wallpaper app tells nobody when it changes the wallpaper, but choosing one means using its window
-    // and leaving it: then the glass is taken again (the live glass follows the screen by itself)
-    if (obj == OBJID_WINDOW && !g_ui.liveGlass && WallpaperAppWindow()) WallpaperChanged();
 }
 
 // ---------------------------------------------------------------------------
@@ -9943,8 +9827,6 @@ static void RunMenu(int id, const std::wstring& key) {
 static LRESULT WidgetProcInner(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 
 // Nothing thrown in a widget may reach Explorer (an exception crossing Windows' code would take the taskbar down)
-static void WallpaperChanged();
-
 static LRESULT CALLBACK WidgetProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     try {
         return WidgetProcInner(hwnd, msg, wp, lp);
@@ -10180,12 +10062,6 @@ static LRESULT WidgetProcInner(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             // A device was connected or disconnected (sent to every top-level window): batteries read again, a
             // moment later, once Windows has its level (one widget is enough to ask)
             if (wd && wd->kind == W_BATTERY && wp == 0x0007 /* DBT_DEVNODES_CHANGED */) g_batteryRefreshAt = GetTickCount64() + 2000;
-            break;
-        case WM_SETTINGCHANGE:
-        case WM_THEMECHANGED:
-        case WM_DISPLAYCHANGE:
-            // Sent to every top-level window: the wallpaper, the theme or the screens may have changed
-            if (wd && IsDesktopWidget(wd)) WallpaperChanged();
             break;
         case WM_DPICHANGED:
             if (wd && (settings || menu || wd->kind == W_PICKER)) {
@@ -11085,37 +10961,6 @@ static void TakeGlassBox() {
     for (auto& b : box) OnGlassShot(b.release());
 }
 
-// Is any window over the widget's glass, even a little? (the widgets sit right above the desktop, so every window
-// above them in the z-order that overlaps counts). Its picture would then carry that window's colors. Asked often:
-// the answer is kept for 150 ms
-static bool Covered(Widget* wd) {
-    ULONGLONG now = GetTickCount64();
-    if (now - wd->coverTick < 150) return wd->covered;
-    wd->coverTick = now;
-    static auto getAttr = [] {
-        HMODULE dwm = LoadLibraryExW(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-        return dwm ? (HRESULT(WINAPI*)(HWND, DWORD, PVOID, DWORD))(void*)GetProcAddress(dwm, "DwmGetWindowAttribute") : nullptr;
-    }();
-    RECT r;
-    GetWindowRect(wd->hwnd, &r);
-    int m = (int)std::lround(kMargin * wd->scale);
-    InflateRect(&r, -m, -m);  // the glass itself, not the shadow around it
-    wd->covered = false;
-    for (HWND w = GetTopWindow(nullptr); w && w != wd->hwnd; w = GetWindow(w, GW_HWNDNEXT)) {
-        if (!IsWindowVisible(w) || IsIconic(w) || IsOurWindow(w) || IsDeskClass(w)) continue;
-        LONG ex = GetWindowLongW(w, GWL_EXSTYLE);
-        if (ex & WS_EX_TRANSPARENT) continue;  // click-through overlays (recorders, game overlays) show what's under them
-        DWORD cloaked = 0;
-        if (getAttr && SUCCEEDED(getAttr(w, 14 /* DWMWA_CLOAKED */, &cloaked, sizeof(cloaked))) && cloaked) continue;
-        RECT wr, x;
-        if (GetWindowRect(w, &wr) && IntersectRect(&x, &wr, &r)) {
-            wd->covered = true;
-            break;
-        }
-    }
-    return wd->covered;
-}
-
 static void OnGlassShot(GlassShot* shot) {
     Widget* wd = nullptr;
     for (Widget* w : g_widgets)
@@ -11129,9 +10974,7 @@ static void OnGlassShot(GlassShot* shot) {
         // Still: only a picture of where it is now. Moving: the newest picture, even of a few pixels back (it is drawn
         // at its own place on the screen, and the border around the glass covers the difference)
         bool sameSize = now.right - now.left == shot->rc.right - shot->rc.left && now.bottom - now.top == shot->rc.bottom - shot->rc.top;
-        // A window over it: its picture would show the window, so the glass keeps the last one of the desktop
-        bool hidden = !moving && wd != g_cfg.wd && Covered(wd);
-        if (!hidden && (moving ? sameSize : EqualRect(&now, &shot->rc)) && ApplyCapture(wd, shot->rc, std::move(shot->px))) Render(wd);
+        if ((moving ? sameSize : EqualRect(&now, &shot->rc)) && ApplyCapture(wd, shot->rc, std::move(shot->px))) Render(wd);
     }
     delete shot;
 }
@@ -11152,77 +10995,6 @@ static bool ShowsDesktop(Widget* wd) {
         return false;  // a window is over it
     }
     return true;
-}
-
-// A new wallpaper (or theme, or slideshow picture) is faded in by Windows over about a second: the glass is taken
-// again a few times after it, so it ends up with the new picture whatever the mode (without the live glass it's never
-// retaken by itself)
-static ULONGLONG g_reglassAt[4] = {};
-
-static void WallpaperChanged() {
-    ULONGLONG now = GetTickCount64();
-    g_reglassAt[0] = now + 150;
-    g_reglassAt[1] = now + 700;
-    g_reglassAt[2] = now + 1500;
-    g_reglassAt[3] = now + 3500;
-}
-
-// Slideshows and Spotlight don't always tell the windows: the wallpaper's file is watched too (every few seconds)
-static std::wstring WallpaperSignature() {
-    wchar_t path[MAX_PATH] = {};
-    SystemParametersInfoW(SPI_GETDESKWALLPAPER, MAX_PATH, path, 0);
-    std::wstring sig = path;
-    WIN32_FILE_ATTRIBUTE_DATA fa;
-    if (path[0] && GetFileAttributesExW(path, GetFileExInfoStandard, &fa))
-        sig += L"|" + std::to_wstring(fa.ftLastWriteTime.dwLowDateTime) + L"|" + std::to_wstring(fa.nFileSizeLow);
-    sig += L"|" + std::to_wstring(GetSysColor(COLOR_DESKTOP));
-    return sig;
-}
-
-static void WallpaperTick() {
-    static unsigned tick = 0;
-    static std::wstring last;
-    if (tick++ % 4 == 0) {
-        std::wstring sig = WallpaperSignature();
-        if (!last.empty() && sig != last) WallpaperChanged();
-        last = sig;
-    }
-    // An animated-wallpaper app changes the picture without telling anyone: without the live glass, two widgets a
-    // second are taken again in turn (an unchanged picture costs nothing more: ApplyCapture skips it)
-    if (!g_ui.liveGlass && !g_drag.wd && tick % 2 == 0 && WallpaperAppWindow()) {
-        std::vector<Widget*> due;
-        for (Widget* wd : g_widgets)
-            if (wd->rt && wd->kind != W_GHOST && wd->kind != W_GRID) due.push_back(wd);
-        std::sort(due.begin(), due.end(), [](Widget* a, Widget* b) { return a->capTick < b->capTick; });
-        for (size_t i = 0; i < due.size() && i < 4; i++) {
-            Capture(due[i]);
-            Render(due[i]);
-        }
-    }
-}
-
-static void ReglassAll() {
-    FreeDesktopPicture();  // taken again, with the new wallpaper
-    for (Widget* wd : g_widgets)
-        if (wd->rt && wd->kind != W_GHOST && wd->kind != W_GRID) {
-            Capture(wd);
-            Render(wd);
-        }
-    if (g_cfg.wd) {
-        Capture(g_cfg.wd);
-        Render(g_cfg.wd);
-    }
-}
-
-static void ReglassIfDue() {
-    ULONGLONG now = GetTickCount64();
-    bool due = false;
-    for (auto& t : g_reglassAt)
-        if (t && now >= t) {
-            t = 0;
-            due = true;
-        }
-    if (due && !g_drag.wd) ReglassAll();
 }
 
 static void LiveGlassTick() {
@@ -11333,7 +11105,6 @@ static DWORD WINAPI UiThread(LPVOID) {
                     if (msg.wParam == g_glassTimer) {
                         if (g_ui.liveGlass) PublishGlassTargets();
                         TakeGlassBox();  // pictures whose message was lost (e.g. in the file picker's loop)
-                        ReglassIfDue();
                         continue;
                     }
                     if (msg.wParam == g_secondTimer) {
@@ -11350,7 +11121,6 @@ static DWORD WINAPI UiThread(LPVOID) {
                         if (g_menu.wd && GetForegroundWindow() != g_menu.wd->hwnd && GetTickCount64() - g_menu.opened > 1500)
                             CloseMenu();
                         if (g_ui.liveGlass) LiveGlassTick();
-                        WallpaperTick();
                         RenderTick();
                         continue;
                     }
