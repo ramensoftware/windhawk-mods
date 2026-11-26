@@ -99,6 +99,8 @@ Select your Windows version in settings for correct functionality:
 
 ## Credits
 
+Changes in v2.6.0 contributed by [Anqarium](https://github.com/Anqarium) (Desktop Window Keys).
+
 Changes in v2.5.0 contributed by [Meteoni](https://github.com/meteoni).
 
 ## See Also
@@ -131,11 +133,11 @@ Changes in v2.5.0 contributed by [Meteoni](https://github.com/meteoni).
 
 - EnableMoveWindow: true
   $name: '[Move Window] Enable'
-  $description: Enable Alt+Shift+1-9 (or chosen modifier) to move windows between desktops
+  $description: Enable Alt+Shift+1-9 (or chosen modifier) to move windows between desktops, plus the Move to Previous/Next Desktop keys
 
 - MoveWindowModifier: alt+shift
   $name: '[Move Window] Modifier'
-  $description: 'Modifier keys for moving active window to desktop (combined with number keys 1-9). Combine with +: alt, ctrl, shift, win. Examples: alt+shift, ctrl+alt, win+shift'
+  $description: 'Modifier keys for moving the active window to a desktop by number (1-9) and for the Move to Previous/Next Desktop keys. Combine with +: alt, ctrl, shift, win. Examples: alt+shift, ctrl+alt, win+shift'
 
 - MovePrevDesktopKey: ""
   $name: '[Move Window] Move to Previous Desktop Key'
@@ -183,11 +185,11 @@ Changes in v2.5.0 contributed by [Meteoni](https://github.com/meteoni).
 
 - PinKey: "P"
   $name: '[Pin Window] Key'
-  $description: 'Key to pin/unpin the active window to all desktops. When Unpin Key is set, this key only pins. Leave blank to disable this hotkey. Examples: P, W, #, ;, \'
+  $description: 'Key to pin/unpin the active window to all desktops, using the Previous/Next/Last-used Desktop modifier. When Unpin Key is set, this key only pins. Leave blank to disable this hotkey. Examples: P, W, #, ;, \'
 
 - UnpinKey: ""
   $name: '[Pin Window] Unpin Key'
-  $description: 'Key to unpin the active window from all desktops. Leave blank to keep the Pin key as a pin/unpin toggle. When set, the Pin key only pins and this key only unpins. Examples: O, U, Down'
+  $description: 'Key to unpin the active window from all desktops, using the Previous/Next/Last-used Desktop modifier. Leave blank to keep the Pin key as a pin/unpin toggle. When set, the Pin key only pins and this key only unpins. Examples: O, U, Down'
 
 */
 // ==/WindhawkModSettings==
@@ -628,7 +630,8 @@ void LoadSettings() {
   g_lastDesktopKey = ReadHotkeySetting(L"LastDesktopKey");
   g_pinKey = ReadHotkeySetting(L"PinKey");
   g_unpinKey = ReadHotkeySetting(L"UnpinKey");
-  // With no unpin key, the pin key keeps its original toggle behavior.
+  // Requested split mode; RegisterHotkeys confirms that the unpin hotkey was
+  // actually registered and falls back to toggle behavior otherwise.
   g_splitPinKeys = g_unpinKey != 0;
 
   Wh_Log(L"LoadSettings: animateDesktopSwitch=%d, splitPinKeys=%d", g_animateDesktopSwitch, g_splitPinKeys);
@@ -1506,17 +1509,25 @@ void RegisterHotkeys(HWND hwnd) {
   if (g_enablePinWindow) {
     if (g_pinKey) {
       BOOL ok = RegisterHotKey(hwnd, HK_PIN, g_utilityModifiers | MOD_NOREPEAT, g_pinKey);
-      Wh_Log(L"RegisterHotKey PIN (%s): modifiers=0x%X, vk=0x%X, result=%d, error=%lu",
-             g_splitPinKeys ? L"pin only" : L"toggle", g_utilityModifiers, g_pinKey, ok,
-             ok ? 0 : GetLastError());
+      Wh_Log(L"RegisterHotKey PIN: modifiers=0x%X, vk=0x%X, result=%d, error=%lu",
+             g_utilityModifiers, g_pinKey, ok, ok ? 0 : GetLastError());
     } else {
       Wh_Log(L"RegisterHotKey PIN: disabled by blank key setting");
     }
 
+    // Only split pin/unpin when the unpin hotkey is actually registered. If it
+    // is blank, or registration fails (same key as pin, or the combination is
+    // taken by another program), keep the pin key as a toggle so windows can
+    // still be unpinned.
+    g_splitPinKeys = false;
     if (g_unpinKey) {
       BOOL ok = RegisterHotKey(hwnd, HK_UNPIN, g_utilityModifiers | MOD_NOREPEAT, g_unpinKey);
       Wh_Log(L"RegisterHotKey UNPIN: modifiers=0x%X, vk=0x%X, result=%d, error=%lu",
              g_utilityModifiers, g_unpinKey, ok, ok ? 0 : GetLastError());
+      g_splitPinKeys = ok != FALSE;
+      if (!ok) {
+        Wh_Log(L"RegisterHotKey UNPIN failed; PIN keeps toggle behavior");
+      }
     }
   }
 }
