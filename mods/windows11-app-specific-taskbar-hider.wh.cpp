@@ -23,6 +23,18 @@ to reach a timeline scrollbar in DaVinci Resolve, or a horizontal scrollbar in
 Photoshop/InDesign) will not bring the taskbar back or steal focus from your
 app.
 
+## How it differs from similar mods
+
+* *Taskbar auto-hide fine tuning* can keep the taskbar from showing (its
+  "Never" mode), but always and for all apps, and it needs Windows' auto-hide
+  to be on.
+* *Taskbar auto-hide when maximized* turns auto-hide on and off based on
+  window state, and its program list holds exclusions, not triggers.
+
+This mod is triggered by a list of programs being focused or running. While
+none of them is active, the taskbar works exactly as you configured it, with
+no auto-hide, and Windows' auto-hide setting is never changed.
+
 ## How it works
 
 The mod hooks the APIs the shell uses to show and activate the taskbar
@@ -381,12 +393,24 @@ bool IsAnyTargetProcessRunning(const std::vector<std::wstring>& targets) {
         return false;
     }
 
+    // Only count processes in the current session, so that apps running for
+    // other signed-in users (fast user switching, remote sessions) don't
+    // hide this user's taskbar.
+    DWORD currentSessionId = 0;
+    if (!ProcessIdToSessionId(GetCurrentProcessId(), &currentSessionId)) {
+        CloseHandle(hSnapshot);
+        return false;
+    }
+
     bool found = false;
     PROCESSENTRY32W pe{};
     pe.dwSize = sizeof(pe);
     if (Process32FirstW(hSnapshot, &pe)) {
         do {
-            if (ExeNameMatches(pe.szExeFile, targets)) {
+            DWORD sessionId = 0;
+            if (ExeNameMatches(pe.szExeFile, targets) &&
+                ProcessIdToSessionId(pe.th32ProcessID, &sessionId) &&
+                sessionId == currentSessionId) {
                 found = true;
                 break;
             }
