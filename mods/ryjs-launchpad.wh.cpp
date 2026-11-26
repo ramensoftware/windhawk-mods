@@ -4,7 +4,7 @@
 // @name:zh-CN      流光启动台
 // @description     A fullscreen Start replacement with expanded groups, free group layout, manual and web entries, themes, bilingual UI and instant search
 // @description:zh-CN 全屏应用启动器：展开分组、自由分组布局、手动与网址入口、主题、中英双语与即时搜索
-// @version         1.5.9
+// @version         1.5.10
 // @author          Fangyu Guo (ryjs)
 // @github          https://github.com/ryjs140
 // @homepage        https://github.com/ryjs140/ryjs-launchpad
@@ -229,9 +229,10 @@ Clicking outside the icons or switching to another window closes it.
   Explorer starts and even if you never open the launcher. This includes direct
   web entries and eligible `.url` / browser-shortcut entries discovered on the
   Desktop and Public Desktop. Saving or manually refreshing an entry also
-  requests its icon. **Background website icon download** in Settings > Help
-  turns the automatic app-list requests off; saving and manual refresh still
-  download, and cached icons still work. The default is on.
+  requests its icon. **Background website icon download**, on the Grid page of
+  the built-in settings window (Website icons group) and on Windhawk's settings
+  page, turns the automatic app-list requests off; saving and manual refresh
+  still download, and cached icons still work. The default is on.
   The page is read to find its declared icon, with `/favicon.ico` as the
   fallback. Declared icons can be hosted on a different server than the page
   you entered (a CDN, a third party, or a private/intranet host). Requests have
@@ -1396,6 +1397,7 @@ inline constexpr Resource resources[] = {
     {L"Warning colour", L"警示颜色"},
     {L"Warning light", L"警示光效"},
     {L"Warning strength (%)", L"警示强度 (%)"},
+    {L"Website icons", L"网站图标"},
     {L"What \"Run the program below\" starts. A command line such as \"C:\\Program Files\\App\\app.exe\" --flag, or a shortcut, file, folder or web address", L"选择“运行下方程序”时执行的命令。可填写带参数的程序路径、快捷方式、文件、文件夹或网址。"},
     {L"Where the grid opens. Monitors 2 to 4 are the other monitors, counted left to right. If the picked monitor is not connected, it opens where the mouse is.", L"选择启动器显示的位置。显示器 2 至 4 按从左到右排列；所选显示器未连接时，使用鼠标所在的显示器。"},
     {L"Where the grid opens. The list shows the monitors connected right now, main first, then the others left to right. If the picked monitor is not connected, it opens where the mouse is.", L"选择启动器显示的位置。列表实时显示当前连接的显示器：主显示器在前，其余按从左到右排列；所选显示器未连接时，使用鼠标所在的显示器。"},
@@ -12340,7 +12342,7 @@ static std::vector<SetField> Set_MakeFields() {
 {K::Number, L"powerShadowOpacity", L"Power icon shadow opacity", L"Shadow strength behind the power dock glyphs. It is separate from the text shadow.", L"72", {}, 0, 100, 3, L"Power icon shadow"},
 {K::Number, L"powerShadowBlur", L"Power icon shadow blur", L"Blur radius for the power dock glyphs, at 100% display scaling.", L"2", {}, 0, 6, 3, L"Power icon shadow"},
 {K::Number, L"glowDistance", L"Glow trigger distance", L"Sets how far the nearest app icon reacts outside its bounds and how quickly its rim lights as the pointer moves away from the icon centre. At 80, a small movement lights the facing edge.", L"24", {}, 0, 80, 2, L"Appearance"},
-{K::Check, L"webIconBackgroundFetch", L"Background website icon download", L"Fetch missing icons for websites and desktop URL shortcuts after the app list loads. Turn off to allow downloads only when you save or manually refresh an entry; cached icons still work.", L"1", {}, 0, 100, 3, L"Network"},
+{K::Check, L"webIconBackgroundFetch", L"Background website icon download", L"Fetch missing icons for websites and desktop URL shortcuts after the app list loads. Turn off to allow downloads only when you save or manually refresh an entry; cached icons still work.", L"1", {}, 0, 100, 1, L"Website icons"},
 // Custom settings end
 {K::Choice, L"interfaceLanguage", L"Interface language", L"Follow Windows display language. Save to apply; app names stay unchanged.", L"auto", {{L"auto", L"Automatic (Windows)"}, {L"zh-CN", L"Simplified Chinese"}, {L"en", L"English"}}, 0, 100, 2, L"Language"},
 {K::Choice, L"uiFont", L"Interface font", L"Choose a locally installed font. Applies to text only; symbol icons use their own font.", L"auto", {{L"auto", L"Automatic (language default)"}}, 0, 100, 2, L"Typography"},
@@ -18584,7 +18586,30 @@ function Import-Complete($checked) {
     $effective=Object-Map $checked.manifest.effective_settings
     # These settings turn a key/button into command execution. An imported
     # archive must not silently arm them; retain this PC's current host values.
+    # The private store may hold this PC's own overrides for them, which must
+    # survive the import exactly as if the archive had never touched them.
+    $localOverrides=@{}
+    $localSettingsPath=Join-Path $job.storage 'ui-settings.ini'
+    if (Test-Path -LiteralPath $localSettingsPath) {
+        $localIni=Read-Ini ([IO.File]::ReadAllBytes($localSettingsPath))
+        if ($localIni.ContainsKey('meta') -and $localIni['meta']['version'] -eq '1' -and
+            $localIni.ContainsKey('present') -and $localIni.ContainsKey('host') -and
+            $localIni.ContainsKey('values')) {
+            foreach ($key in @('program','winKeyAction','shiftWinKeyAction','startButtonAction')) {
+                if ($localIni['present'][$key] -ne '1') { continue }
+                if (!$localIni['host'].ContainsKey($key) -or !$localIni['values'].ContainsKey($key)) { continue }
+                $baseline=if ($hostSettings.ContainsKey($key)) { [string]$hostSettings[$key] } else { '' }
+                # A private value applies only while the Windhawk value it was
+                # saved against is still current. Otherwise the host value
+                # already wins, and importing a stale override would resurrect it.
+                if ((Decode-Value $localIni['host'][$key]) -ceq $baseline) {
+                    $localOverrides[$key]=Decode-Value $localIni['values'][$key]
+                }
+            }
+        }
+    }
     foreach ($key in @('program','winKeyAction','shiftWinKeyAction','startButtonAction')) { $effective.Remove($key) }
+    foreach ($key in $localOverrides.Keys) { $effective[$key]=$localOverrides[$key] }
     $ui=Join-Path $stage 'ui-settings.ini'
     if (Test-Path -LiteralPath $ui) { [IO.File]::Copy($ui,(Join-Path $stage 'import-original-ui-settings.ini'),$true) }
     $text="[meta]`r`nversion=1`r`n"
@@ -21311,11 +21336,10 @@ BOOL Wh_ModInit() {
         Wh_Log(L"Lumiflow storage is damaged or unsupported; opening read-only.");
     }
     LoadSettings();
-    if (!EnsureStartLatchSubclass()) {
-        Wh_Log(L"The taskbar reset subclass is required; Start was not replaced");
-        CloseHandle(g_integrationLease); g_integrationLease = nullptr;
-        return FALSE;
-    }
+    // The Start-latch subclass is installed on demand, by ClearStartButtonLatch,
+    // when the first reset is requested. Wh_ModInit runs before Explorer creates
+    // Shell_TrayWnd, so requiring the window here would refuse to load on every
+    // sign-in and Explorer restart, not only in a race.
     if (!HookShowStartView()) {
         RemoveStartLatchSubclass();
         CloseHandle(g_integrationLease); g_integrationLease = nullptr;
@@ -21371,6 +21395,15 @@ void Wh_ModUninit() {
     WaitForSingleObject(g_thread, INFINITE);
     CloseHandle(g_thread);
     g_thread = nullptr;
+    // A HideNow that passed the stopping gate just before it closed could still
+    // have reinstalled the subclass after RemoveStartLatchSubclass, leaving
+    // Explorer to call into this image once it is unloaded. The launcher thread
+    // is joined now, so nothing can request a reset any more: look the taskbar
+    // up again and remove the subclass a last time. Removing one that is not
+    // installed does nothing.
+    if (HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr))
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(taskbar, StartLatchSubclassProc);
+    g_startLatchWindow = nullptr;
     CloseHandle(g_readyEvent);
     g_readyEvent = nullptr;
     // All module callbacks are joined: hooks were removed by Windhawk, the
