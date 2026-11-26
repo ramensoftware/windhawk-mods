@@ -36,7 +36,7 @@ The Direct2D **Modern Genie** mesh-warp engine, animation hooks, UI Automation t
 - Extends the Direct2D Genie lamp-curve geometry to support **Left** and **Right** side-anchored docks in addition to Bottom.
 - Adds configurable **Fallback target** options (Taskbar UIA, Bottom center, Bottom right) and optional Dock IPC targeting.
 
-> **Important:** Do **not** enable this mod at the same time as `macos-minimize-animation` — both hook the same window transition APIs across all processes and will play duplicate animations.
+> **Important:** Do **not** enable this mod at the same time as `macos-minimize-animation`, `windows-animations`, or `genie-minimize-animation` — they hook the same window transition APIs across all processes and will play duplicate animations.
 */
 // ==/WindhawkModReadme==
 
@@ -3099,6 +3099,10 @@ LRESULT HandleDefWindowProc(HWND hWnd,
         }
         const int nCmdShow =
             static_cast<int>(static_cast<short>(HIWORD(wParam)));
+        if ((cmd == kRemoteCmdMinimize && !IsMinimizeCmd(nCmdShow)) ||
+            (cmd == kRemoteCmdRestore && !IsRestoreCmd(nCmdShow))) {
+            return 0;
+        }
         const uint32_t packed =
             static_cast<uint32_t>(static_cast<uintptr_t>(lParam));
         auto showFn = ShowWindow_Original ? ShowWindow_Original : ShowWindow;
