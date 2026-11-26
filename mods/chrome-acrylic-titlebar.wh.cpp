@@ -406,7 +406,7 @@ constexpr wchar_t kBrowserFrameProperty[] = L"Windhawk.ChromeAcrylicTitlebar.Fra
 // later (the toolbar) can repaint the tint after clearing their background.
 constexpr wchar_t kIncognitoProperty[] = L"Windhawk.ChromeAcrylicTitlebar.Incognito";
 LONG_PTR RealStyle(HWND window);
-void QueueNativeCaption(HWND window);
+void QueueNativeCaption();
 
 bool IsBrowserFrameWindow(HWND window) {
     return window && GetPropW(window, kBrowserFrameProperty) != nullptr;
@@ -422,7 +422,7 @@ void MarkBrowserFrame(HWND window) {
                                 sizeof(backdrop));
     // Changing the style sends window messages, so don't do it while Chrome is
     // painting.
-    QueueNativeCaption(window);
+    QueueNativeCaption();
 }
 
 // ---------------------------------------------------------------------------
@@ -826,30 +826,32 @@ void ApplyNativeCaption(HWND window) {
 
 // Applies the caption fix on a thread-pool thread. SetWindowLong from another
 // thread reaches Chrome's UI thread as a sent message, which it handles back in
-// its message loop instead of in the middle of painting. Each pending callback
-// holds a reference to this module, so the mod can unload while one is queued.
-void CALLBACK NativeCaptionCallback(PTP_CALLBACK_INSTANCE instance, void* context) {
-    ApplyNativeCaption(static_cast<HWND>(context));
-    HMODULE self = nullptr;
-    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                           reinterpret_cast<LPCWSTR>(&NativeCaptionCallback), &self)) {
-        FreeLibraryWhenCallbackReturns(instance, self);
+// its message loop instead of in the middle of painting. A single work object
+// goes over the process's windows; ApplyNativeCaption skips unmarked windows
+// and windows that are already done, so submitting it several times is
+// harmless. Wh_ModBeforeUninit waits for it before restoring the windows.
+SRWLOCK g_captionWorkLock = SRWLOCK_INIT;
+PTP_WORK g_captionWork = nullptr;
+
+BOOL CALLBACK ApplyCaptionWindow(HWND window, LPARAM) {
+    DWORD process = 0;
+    GetWindowThreadProcessId(window, &process);
+    if (process == GetCurrentProcessId()) {
+        ApplyNativeCaption(window);
     }
+    return TRUE;
 }
 
-void QueueNativeCaption(HWND window) {
-    if (!g_captionFixActive.load(std::memory_order_acquire)) {
-        return;
+void CALLBACK NativeCaptionWork(PTP_CALLBACK_INSTANCE, void*, PTP_WORK) {
+    EnumWindows(ApplyCaptionWindow, 0);
+}
+
+void QueueNativeCaption() {
+    AcquireSRWLockShared(&g_captionWorkLock);
+    if (g_captionWork && g_captionFixActive.load(std::memory_order_acquire)) {
+        SubmitThreadpoolWork(g_captionWork);
     }
-    HMODULE self = nullptr;
-    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                            reinterpret_cast<LPCWSTR>(&NativeCaptionCallback), &self)) {
-        return;
-    }
-    if (!TrySubmitThreadpoolCallback(NativeCaptionCallback, window, nullptr)) {
-        FreeLibrary(self);
-    }
+    ReleaseSRWLockShared(&g_captionWorkLock);
 }
 
 BOOL CALLBACK SyncCaptionWindow(HWND window, LPARAM) {
@@ -926,7 +928,9 @@ bool ResolveAddresses(HMODULE module, void** result) {
         return false;
     }
     std::memcpy(result, address, sizeof(address));
-    return address[kTransparent] && address[kFrameOnPaint];
+    // Without HWNDForView no window could be marked, which would leave windows
+    // transparent without the backdrop and caption changes, so it's required too.
+    return address[kTransparent] && address[kFrameOnPaint] && address[kHwndForView];
 }
 
 DWORD WINAPI LookupWorker(void*) {
@@ -1170,20 +1174,27 @@ BOOL Wh_ModInit() {
         Wh_Log(L"Caption button fix unavailable");
     }
 
-    if (GetModuleHandleW(L"chrome.dll")) {
-        // Handled in Wh_ModAfterInit, once the hooks above are active.
-        return TRUE;
+    // When chrome.dll is already loaded, Wh_ModAfterInit handles it once the
+    // hooks above are active.
+    if (!GetModuleHandleW(L"chrome.dll")) {
+        const HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
+        const auto loader =
+            kernelBase ? reinterpret_cast<decltype(&LoadLibraryExW)>(
+                             GetProcAddress(kernelBase, "LoadLibraryExW"))
+                       : nullptr;
+        if (!loader ||
+            !WindhawkUtils::SetFunctionHook(loader, LoadLibraryExW_Hook,
+                                            &g_origLoadLibraryExW)) {
+            Wh_Log(L"Could not hook LoadLibraryExW");
+            return FALSE;
+        }
     }
-    const HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
-    const auto loader =
-        kernelBase ? reinterpret_cast<decltype(&LoadLibraryExW)>(
-                         GetProcAddress(kernelBase, "LoadLibraryExW"))
-                   : nullptr;
-    if (!loader ||
-        !WindhawkUtils::SetFunctionHook(loader, LoadLibraryExW_Hook,
-                                        &g_origLoadLibraryExW)) {
-        Wh_Log(L"Could not hook LoadLibraryExW");
-        return FALSE;
+    // Created last, so that no failing path above has to close it.
+    if (g_captionHooksInstalled) {
+        g_captionWork = CreateThreadpoolWork(NativeCaptionWork, nullptr, nullptr);
+        if (!g_captionWork) {
+            Wh_Log(L"Caption button fix unavailable");
+        }
     }
     return TRUE;
 }
@@ -1214,6 +1225,17 @@ void Wh_ModSettingsChanged() {
 void Wh_ModBeforeUninit() {
     g_captionStopping.store(true, std::memory_order_release);
     g_captionFixActive.store(false, std::memory_order_release);
+    // Let a queued caption fix finish before the windows are restored below.
+    AcquireSRWLockExclusive(&g_captionWorkLock);
+    const PTP_WORK captionWork = g_captionWork;
+    g_captionWork = nullptr;
+    ReleaseSRWLockExclusive(&g_captionWorkLock);
+    if (captionWork) {
+        // No lock is held here: a running callback may be waiting for Chrome's
+        // UI thread to handle the style change.
+        WaitForThreadpoolWorkCallbacks(captionWork, TRUE);
+        CloseThreadpoolWork(captionWork);
+    }
     AcquireSRWLockExclusive(&g_lock);
     g_stopping = true;
     g_active.store(false, std::memory_order_release);
