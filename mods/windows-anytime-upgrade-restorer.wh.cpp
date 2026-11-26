@@ -5,9 +5,8 @@
 // @version         1.0
 // @author          RandomGuy5747
 // @github          https://github.com/RandomGuy5747
-// @include         explorer.exe
+// @include         windhawk.exe
 // @include         WindowsAnytimeUpgradeui.exe
-// @architecture    x86-64
 // @compilerOptions -lwinhttp -lbcrypt -ladvapi32 -lshell32 -luser32
 // ==/WindhawkMod==
 
@@ -16,9 +15,9 @@
 # Windows Anytime Upgrade Control Panel Restorer
 
 Restores the decorational Windows Anytime Upgrade Application. You can launch it from "Control Panel\System and Security".
-This mod downloads WindowsAnytimeUpgradeUI.exe and dui70.dll from the Microsoft Symbol Server (msdl.microsoft.com), an uses these files for the application.
+This mod downloads WindowsAnytimeUpgradeui.exe and dui70.dll from the Microsoft Symbol Server (msdl.microsoft.com) and uses these files for the application. Downloads happen on the first tool-process start after enabling the mod, and again whenever a cached file is missing or fails validation. The files are stored in Windhawk mod storage and are checked against pinned SHA-256 hashes before use.
 
-Supported Languages are English, Italian, Spanish, French, Portuguese, and German. It'll automatically set the language based of the curent Windows Display Language.
+Supported languages are English, Italian, Spanish, French, Portuguese, and German. The language is selected automatically based on the current Windows display language.
 
 Not-supported languages will use English.
 
@@ -40,6 +39,7 @@ This application should only show "Windows Anytime Upgrade is not in this editio
 #include <algorithm>
 #include <array>
 #include <map>
+#include <optional>
 #include <cstring>
 #include <cwchar>
 #include <string>
@@ -50,16 +50,13 @@ namespace {
 
 constexpr wchar_t kExeName[] = L"WindowsAnytimeUpgradeui.exe";
 constexpr wchar_t kDllName[] = L"dui71.dll";
-// Official Microsoft symbol server first (index = TimeDateStamp + SizeOfImage).
+// Official Microsoft Symbol Server (index = TimeDateStamp + SizeOfImage).
 // dui71.dll is the Windows 7 RTM DUI70.dll (6.1.7600.16385) under another name.
-// The GitHub mirror is only a last-resort fallback; remove it to use Microsoft only.
 constexpr const wchar_t* kExeUrls[] = {
     L"https://msdl.microsoft.com/download/symbols/WindowsAnytimeUpgradeui.exe/4A5BC99662000/WindowsAnytimeUpgradeui.exe",
-    L"https://github.com/RandomGuy5747/anytimeupgrade-mod/raw/refs/heads/main/WindowsAnytimeUpgradeui.exe",
 };
 constexpr const wchar_t* kDllUrls[] = {
     L"https://msdl.microsoft.com/download/symbols/dui70.dll/4A5BDF25f2000/dui70.dll",
-    L"https://github.com/RandomGuy5747/anytimeupgrade-mod/raw/refs/heads/main/dui71.dll",
 };
 constexpr BYTE kExeSha256[32] = {0x5f, 0x7b, 0x02, 0x2f, 0x81, 0x99, 0x9f, 0x80, 0x0e, 0x1f, 0xbc, 0xc6, 0x35, 0x5d, 0x47, 0xe2, 0xd3, 0xe8, 0xa9, 0xa5, 0x96, 0x1f, 0x99, 0x6f, 0x9a, 0xc5, 0xb8, 0x62, 0xa5, 0x73, 0x35, 0x18};
 constexpr BYTE kDllSha256[32] = {0x98, 0xd2, 0x1e, 0xff, 0xf5, 0x11, 0xe4, 0x07, 0x33, 0x6a, 0x22, 0x64, 0x20, 0x70, 0x1e, 0x82, 0x55, 0x4d, 0xa0, 0x1f, 0xa0, 0x56, 0x61, 0x30, 0x38, 0x36, 0xb6, 0x86, 0x0d, 0x63, 0x74, 0x9d};
@@ -80,12 +77,10 @@ using Bytes = std::vector<BYTE>;
 
 std::atomic<bool> g_stopping{false};
 std::atomic<HINTERNET> g_activeRequest{nullptr};
-std::thread g_worker;
+[[clang::no_destroy]] std::optional<std::thread> g_worker;
 std::wstring g_storageDir;
 std::wstring g_localizedDir;
 std::vector<std::wstring> g_createdRegistryKeys;
-HANDLE g_singletonEvent = nullptr;
-bool g_primaryInstance = false;
 bool g_registrationInstalled = false;
 
 struct InternetHandle {
@@ -110,13 +105,13 @@ struct InternetHandle {
     }
 };
 
-static bool IsExplorerProcess() {
+static bool IsAnytimeUpgradeUiProcess() {
     wchar_t path[MAX_PATH] = {};
     const DWORD length = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
     if (!length || length >= ARRAYSIZE(path)) return false;
     const wchar_t* fileName = wcsrchr(path, L'\\');
     fileName = fileName ? fileName + 1 : path;
-    return _wcsicmp(fileName, L"explorer.exe") == 0;
+    return _wcsicmp(fileName, kExeName) == 0;
 }
 
 static std::wstring GetStorageDirectory() {
@@ -1277,8 +1272,28 @@ static bool IsOurRegistrationKey(const std::wstring& path) {
 
 static void DeleteOwnedTree(const std::wstring& path) {
     if (!IsOurRegistrationKey(path)) return;
-    RegDeleteTreeW(HKEY_CURRENT_USER, path.c_str());
-    RegDeleteKeyW(HKEY_CURRENT_USER, path.c_str());
+
+    HKEY key = nullptr;
+    const LSTATUS openStatus = RegOpenKeyExW(
+        HKEY_CURRENT_USER, path.c_str(), 0,
+        DELETE | KEY_ENUMERATE_SUB_KEYS | KEY_QUERY_VALUE | KEY_WOW64_64KEY,
+        &key);
+    if (openStatus == ERROR_SUCCESS) {
+        const LSTATUS treeStatus = RegDeleteTreeW(key, nullptr);
+        if (treeStatus != ERROR_SUCCESS) {
+            Wh_Log(L"Anytime Upgrade: RegDeleteTree failed for %s (error=%ld)",
+                   path.c_str(), treeStatus);
+        }
+        RegCloseKey(key);
+    }
+
+    const LSTATUS deleteStatus = RegDeleteKeyExW(
+        HKEY_CURRENT_USER, path.c_str(), KEY_WOW64_64KEY, 0);
+    if (deleteStatus != ERROR_SUCCESS && deleteStatus != ERROR_FILE_NOT_FOUND &&
+        deleteStatus != ERROR_PATH_NOT_FOUND) {
+        Wh_Log(L"Anytime Upgrade: RegDeleteKeyEx failed for %s (error=%ld)",
+               path.c_str(), deleteStatus);
+    }
 }
 
 static bool EnsureVolatilePath(const std::wstring& relativePath) {
@@ -1354,17 +1369,30 @@ static void RemoveCreatedRegistryKeys() {
                   return left.size() > right.size();
               });
     for (const auto& path : g_createdRegistryKeys) {
-        RegDeleteKeyW(HKEY_CURRENT_USER, path.c_str());
+        const LSTATUS status = RegDeleteKeyExW(
+            HKEY_CURRENT_USER, path.c_str(), KEY_WOW64_64KEY, 0);
+        if (status != ERROR_SUCCESS && status != ERROR_FILE_NOT_FOUND &&
+            status != ERROR_PATH_NOT_FOUND) {
+            Wh_Log(L"Anytime Upgrade: could not remove temporary registry key %s (error=%ld)",
+                   path.c_str(), status);
+        }
     }
     g_createdRegistryKeys.clear();
 }
 
 static void NotifyControlPanel() {
-    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST | SHCNF_FLUSH, nullptr, nullptr);
-    DWORD_PTR result = 0;
-    SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0,
-                        reinterpret_cast<LPARAM>(L"Control Panel"),
-                        SMTO_ABORTIFHUNG, 3000, &result);
+    // Refresh only an already-open Control Panel folder. Do not broadcast
+    // WM_SETTINGCHANGE or SHCNE_ASSOCCHANGED to every application in the session.
+    PIDLIST_ABSOLUTE controlPanelPidl = nullptr;
+    const HRESULT hr = SHGetSpecialFolderLocation(
+        nullptr, CSIDL_CONTROLS, &controlPanelPidl);
+    if (SUCCEEDED(hr) && controlPanelPidl) {
+        SHChangeNotify(SHCNE_UPDATEDIR, SHCNF_IDLIST, controlPanelPidl, nullptr);
+        ILFree(controlPanelPidl);
+    } else {
+        Wh_Log(L"Anytime Upgrade: could not resolve the Control Panel folder for refresh (error=0x%08X)",
+               static_cast<unsigned>(hr));
+    }
 }
 
 static bool RegisterControlPanelItem() {
@@ -1420,7 +1448,6 @@ static bool RegisterControlPanelItem() {
     ok = ok && SetRegistryString(clsidKey, L"InfoTip", L"Open Windows Anytime Upgrade");
     ok = ok && SetRegistryString(clsidKey, L"System.ApplicationName", kCanonicalName);
     ok = ok && SetRegistryString(clsidKey, L"System.ControlPanel.Category", L"5");
-    ok = ok && SetRegistryString(clsidKey, kMarkerName, kMarkerValue);
     ok = ok && SetRegistryString(clsidKey, kMarkerName, kMarkerValue);
     ok = ok && SetRegistryString(iconKey, nullptr, icon);
     ok = ok && SetRegistryString(commandKey, nullptr, command);
@@ -1667,67 +1694,45 @@ static void InstallResourceFallbackHooks() {
 
 } // namespace
 
-BOOL Wh_ModInit() {
-    if (!IsExplorerProcess()) {
-        wchar_t path[MAX_PATH] = {};
-        const DWORD length = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
-        if (length && length < ARRAYSIZE(path)) {
-            const wchar_t* fileName = wcsrchr(path, L'\\');
-            fileName = fileName ? fileName + 1 : path;
-            if (_wcsicmp(fileName, kExeName) == 0) {
-                SelectStringTable();
-                InstallDirectUIResourceHook();
-                InstallAnytimeUpgradeStringHook();
-                InstallResourceFallbackHooks();
-                return TRUE;
-            }
-        }
-        return TRUE;
-    }
+// The UI executable is still injected separately so its resource hooks remain
+// local to WindowsAnytimeUpgradeui.exe. All downloading and registry work runs
+// in the dedicated Windhawk tool process instead of Explorer.
+bool g_isAnytimeUpgradeUiProcess = false;
+bool g_isToolModProcessLauncher = false;
+HANDLE g_toolModProcessMutex = nullptr;
 
-    // Only the primary injected Explorer instance should own the per-user registration.
-    SetLastError(ERROR_SUCCESS);
-    g_singletonEvent = CreateEventW(nullptr, TRUE, FALSE,
-                                    L"Local\\Windhawk.WindowsAnytimeUpgradeRestorer.Owner");
-    if (!g_singletonEvent) {
-        Wh_Log(L"Anytime Upgrade: could not create the instance guard (error=%lu)", GetLastError());
-        return FALSE;
-    }
-    if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        CloseHandle(g_singletonEvent);
-        g_singletonEvent = nullptr;
-        return TRUE;
-    }
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
 
-    g_primaryInstance = true;
+BOOL WhTool_ModInit() {
     g_stopping.store(false);
     g_storageDir = GetStorageDirectory();
     if (g_storageDir.empty()) {
         Wh_Log(L"Anytime Upgrade: Windhawk storage path is unavailable");
-        CloseHandle(g_singletonEvent);
-        g_singletonEvent = nullptr;
-        g_primaryInstance = false;
         return FALSE;
     }
 
     try {
-        g_worker = std::thread(SetupWorker);
+        g_worker.emplace(SetupWorker);
     } catch (...) {
-        Wh_Log(L"Anytime Upgrade: could not start the download worker");
-        CloseHandle(g_singletonEvent);
-        g_singletonEvent = nullptr;
-        g_primaryInstance = false;
+        Wh_Log(L"Anytime Upgrade: could not start the setup worker");
         return FALSE;
     }
     return TRUE;
 }
 
-void Wh_ModUninit() {
-    if (!g_primaryInstance) return;
+void WhTool_ModSettingsChanged() {
+}
 
+void WhTool_ModUninit() {
     g_stopping.store(true);
     CancelActiveRequest();
-    if (g_worker.joinable()) g_worker.join();
+    if (g_worker && g_worker->joinable()) {
+        g_worker->join();
+    }
+    g_worker.reset();
 
     if (g_registrationInstalled) {
         RemoveCreatedRegistryKeys();
@@ -1737,10 +1742,171 @@ void Wh_ModUninit() {
     } else if (!g_createdRegistryKeys.empty()) {
         RemoveCreatedRegistryKeys();
     }
+}
 
-    if (g_singletonEvent) {
-        CloseHandle(g_singletonEvent);
-        g_singletonEvent = nullptr;
+BOOL Wh_ModInit() {
+    // The application process only installs its resource hooks.
+    if (IsAnytimeUpgradeUiProcess()) {
+        g_isAnytimeUpgradeUiProcess = true;
+        SelectStringTable();
+        InstallDirectUIResourceHook();
+        InstallAnytimeUpgradeStringHook();
+        InstallResourceFallbackHooks();
+        return TRUE;
     }
-    g_primaryInstance = false;
+
+    // Windhawk tool-mod launcher implementation (Windhawk 1.7.3 compatible).
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR commandLine[MAX_PATH + 2 +
+                      (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher || g_isAnytimeUpgradeUiProcess) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher || g_isAnytimeUpgradeUiProcess) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
