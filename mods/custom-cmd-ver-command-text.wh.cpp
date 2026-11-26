@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              custom-cmd-ver-command-text
 // @name            Custom CMD "ver" Command Text
-// @description     A simple mod that lets you customize the command prompt "ver" command text safely when typed at the prompt
-// @version         1.0
+// @description     A simple mod that lets you customize the command prompt "ver" command text
+// @version         1.1
 // @author          RandomGuy5747
 // @github          https://github.com/RandomGuy5747
 // @include         cmd.exe
@@ -11,9 +11,9 @@
 // ==WindhawkModReadme==
 /*
 # Custom CMD "ver" Command Text
-A simple mod that lets you customize the command prompt "ver" command text.
+A simple mod that lets you customize the command prompt "ver" command text WITHOUT breaking scripts. You can customize it in the settings tab.
 
-You can customize it in the settings tab. This mod specifically targets the `ver` command typed directly at the active prompt, leaving scripts and internal operations unaffected.
+For questions, bugs or suggestions, refer to this thread: https://winclassic.net/thread/3900/custom-command-prompt-ver-text
 
 Preview:
 
