@@ -9,7 +9,7 @@
 // @include         control.exe
 // @include         dllhost.exe
 // @include         svchost.exe
-// @architecture    x86-64
+// @architecture    amd64
 // @compilerOptions -lwininet -ladvapi32 -lole32 -lshell32
 // ==/WindhawkMod==
 
@@ -46,7 +46,9 @@ The applet appears under **Hardware and Sound** in Control Panel Category view, 
 
 Network access: the mod sends three fixed HTTPS GET requests, for `biocpl.dll`, `dui70.dll` and `duser.dll` under `https://msdl.microsoft.com/download/symbols/` (the server may redirect to Microsoft's blob storage). The requests carry no user data, only the user agent `Microsoft-Symbol-Server/10.0.0.0`. The downloaded files are checked against a pinned size and SHA-256 before use. The download is performed whenever the mod has no verified cached copy: on first use, and again after the mod is disabled if "Keep cached Microsoft binaries when disabled" is off. There is no setting that turns the download off.
 
-Note: an internet connection is required on first use, and it might take a moment to load the applet while the mod downloads the required dependencies. After the first-time download completes, refresh or reopen Control Panel.
+Architecture: only 64-bit Windows on x64 is supported. The Windows 7 binaries are x64-only and cannot be loaded into the native ARM64 Explorer, so the mod is not available on ARM64.
+
+Note: an internet connection is required on first use, and it might take a moment to load the applet while the mod downloads the required dependencies. If the download fails (for example, no network when Explorer starts), the mod retries by itself every few minutes (2 minutes, doubling up to 30 minutes). After the first-time download completes, refresh or reopen Control Panel.
 */
 // ==/WindhawkModReadme==
 
@@ -3460,9 +3462,11 @@ static bool BuildAndWriteBinaries(const std::wstring& binDir, const Bytes& rawBi
     return true;
 }
 
-static void RunExplorerSetup() {
+// Returns false only when the Windows 7 binaries could not be obtained (e.g. no network),
+// i.e. when trying again later can help; every other outcome returns true.
+static bool RunExplorerSetupOnce() {
     const std::wstring dir = StorageDir();
-    if (dir.empty()) return;
+    if (dir.empty()) return true;
     const std::wstring dlDir = dir + L"\\dl";
     const std::wstring binDir = dir + L"\\bin";
 
@@ -3470,7 +3474,7 @@ static void RunExplorerSetup() {
     if (mtx) {
         HANDLE hs[] = {mtx, g_stopEvent};
         const DWORD wait = WaitForMultipleObjects(g_stopEvent ? 2u : 1u, hs, FALSE, 120000u);
-        if (wait == WAIT_OBJECT_0 + 1) { CloseHandle(mtx); return; }
+        if (wait == WAIT_OBJECT_0 + 1) { CloseHandle(mtx); return true; }
     }
     auto releaseMtx = [&]() { if (mtx) { ReleaseMutex(mtx); CloseHandle(mtx); } };
 
@@ -3483,7 +3487,7 @@ static void RunExplorerSetup() {
         g_shuttingDown.load() || !GetVerifiedFile(dlDir, kFiles[2], rawDuser)) {
         Wh_Log(L"Setup aborted: unable to obtain verified Windows 7 binaries from msdl.microsoft.com");
         releaseMtx();
-        return;
+        return g_shuttingDown.load();
     }
 
     const Lang lang = CurrentLang();
@@ -3491,19 +3495,32 @@ static void RunExplorerSetup() {
     std::wstring cplPath;
     if (!BuildAndWriteBinaries(binDir, rawBio, rawDui, rawDuser, lang, patchedBio, cplPath)) {
         releaseMtx();
-        return;
+        return true;
     }
     releaseMtx();
 
-    if (g_shuttingDown.load()) return;
+    if (g_shuttingDown.load()) return true;
     if (!LoadVerifiedBioModules(binDir, rawDui, cplPath, patchedBio)) {
         Wh_Log(L"Failed to load verified private biometric modules");
-        return;
+        return true;
     }
 
     PublishRegistration(binDir, false);
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
     Wh_Log(L"Windows 7 Biometric Devices applet active (%s)", GetLangTable(lang).code);
+    return true;
+}
+
+// Retries a failed download on a long, growing interval (2 min, doubling, capped at 30 min),
+// so the applet appears by itself once the network is back. Stops as soon as the mod unloads.
+static void RunExplorerSetup() {
+    DWORD delayMs = 2u * 60u * 1000u;
+    const DWORD maxDelayMs = 30u * 60u * 1000u;
+    while (!g_shuttingDown.load()) {
+        if (RunExplorerSetupOnce()) return;
+        if (!g_stopEvent || WaitForSingleObject(g_stopEvent, delayMs) == WAIT_OBJECT_0) return;
+        delayMs = std::min<DWORD>(delayMs * 2u, maxDelayMs);
+    }
 }
 
 static bool LoadDllHostPayload(const std::wstring& binDir, const std::wstring& dlDir) {
@@ -3530,14 +3547,6 @@ static bool LoadDllHostPayload(const std::wstring& binDir, const std::wstring& d
     return true;
 }
 
-static bool IsProcessAmd64() {
-#if defined(_M_AMD64) || defined(__x86_64__)
-    return true;
-#else
-    return false;
-#endif
-}
-
 #endif  // BIO_GENERATOR_ONLY
 
 }  // namespace
@@ -3549,7 +3558,6 @@ static bool IsProcessAmd64() {
 #ifndef BIO_GENERATOR_ONLY
 
 static BOOL ModInitImpl() {
-    if (!IsProcessAmd64()) return FALSE;
     LoadSettings();
 
     wchar_t exe[MAX_PATH] = {};
