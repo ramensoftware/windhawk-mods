@@ -7552,6 +7552,7 @@ static bool ApplyCapture(Widget* wd, const RECT& rc, std::vector<UINT32>&& px) {
 }
 
 static bool Covered(Widget* wd);
+static bool IsDesktopWidget(const Widget* wd);
 
 static void Capture(Widget* wd) {
     RECT rc = CaptureRect(wd);
@@ -7583,7 +7584,7 @@ static void Capture(Widget* wd) {
                 GetSystemMetrics(SM_XVIRTUALSCREEN) + GetSystemMetrics(SM_CXVIRTUALSCREEN),
                 GetSystemMetrics(SM_YVIRTUALSCREEN) + GetSystemMetrics(SM_CYVIRTUALSCREEN)};
     } else if (HDC desk = DesktopPicture()) {
-        if (g_deskFromScreen && wd != g_cfg.wd && Covered(wd)) {  // a window is over it on the screen: the glass stays as it was
+        if (g_deskFromScreen && IsDesktopWidget(wd) && Covered(wd)) {  // a window is over it on the screen: the glass stays as it was
             SelectObject(dc, old);
             DeleteObject(bmp);
             DeleteDC(dc);
