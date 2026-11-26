@@ -86,7 +86,7 @@ follows what changes behind it, up to 20 times a second and only where something
 and follows the widget while you drag it: videos and animated wallpapers show in the glass. Off, the glass uses a still
 picture of the wallpaper and the icons, taken again when the wallpaper changes (animated-wallpaper apps such as Wallpaper
 Engine included), and is lighter; the widgets then also show in screenshots. With an animated-wallpaper app running,
-the glass is read from the screen when you leave the app's window and every 15 seconds: at those instants the widgets
+the glass is read from the screen when the active window changes and every 6 seconds: at those instants the widgets
 are left out of screen captures and recordings for a fraction of a second.
 
 ## Network access
@@ -7496,8 +7496,8 @@ static bool ScreenWithoutUs(HDC into, const RECT& area) {
 
 static HDC DesktopPicture() {
     // An animated wallpaper is read from the screen, which hides the widgets from captures for an instant: not more
-    // often than every 15 s (and right after leaving the app's window, see OnForeground)
-    if (g_deskDC && GetTickCount64() - g_deskTick < (g_deskFromScreen ? 15000u : 3000u)) return g_deskDC;
+    // often than every 6 s (and right after the active window changes, see OnForeground)
+    if (g_deskDC && GetTickCount64() - g_deskTick < (g_deskFromScreen ? 6000u : 3000u)) return g_deskDC;
     FreeDesktopPicture();
     g_deskFromScreen = false;
     HWND app = WallpaperAppWindow();
@@ -8967,37 +8967,13 @@ static bool WidgetsBelowDesktop() {
 
 static void WallpaperChanged();
 
-// The folder of the program a window belongs to
-static std::wstring WindowAppFolder(HWND h) {
-    DWORD pid = 0;
-    if (!h || !GetWindowThreadProcessId(h, &pid) || !pid) return L"";
-    HANDLE p = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (!p) return L"";
-    wchar_t path[MAX_PATH * 2] = L"";
-    DWORD n = MAX_PATH * 2;
-    BOOL ok = QueryFullProcessImageNameW(p, 0, path, &n);
-    CloseHandle(p);
-    if (!ok) return L"";
-    std::wstring dir = path;
-    size_t slash = dir.find_last_of(L'\\');
-    return Lower(slash == std::wstring::npos ? dir : dir.substr(0, slash + 1));
-}
-
 static void CALLBACK OnForeground(HWINEVENTHOOK, DWORD, HWND h, LONG obj, LONG, DWORD, DWORD) {
-    if (obj != OBJID_WINDOW || !h) return;
-    if (IsDeskClass(h)) PostMessageW(g_msgWnd, WM_APP_DESK, 0, 0);
+    if (obj == OBJID_WINDOW && h && IsDeskClass(h)) PostMessageW(g_msgWnd, WM_APP_DESK, 0, 0);
     // An animated-wallpaper app tells nobody when it changes the wallpaper, but choosing one means using its window
-    // and leaving it: when the window left belongs to that app (its own program, or another one from its folder, as
-    // Wallpaper Engine's settings), the glass is taken again. Only without the live glass, which follows the screen
-    static HWND last = nullptr;
-    HWND left = last;
-    last = h;
-    if (g_ui.liveGlass || !left || left == h) return;
-    HWND app = WallpaperAppWindow();
-    if (!app) return;
-    std::wstring appDir = WindowAppFolder(app), leftDir = WindowAppFolder(left);
-    if (appDir.empty() || leftDir.empty()) return;
-    if (leftDir.rfind(appDir, 0) == 0 || appDir.rfind(leftDir, 0) == 0) WallpaperChanged();
+    // and leaving it: on any change of the active window the glass is taken again (the live glass follows the screen
+    // by itself). Its own windows can't be told apart reliably (they belong to helper programs that vary by app and
+    // version), and checking them made the glass miss the change
+    if (obj == OBJID_WINDOW && !g_ui.liveGlass && WallpaperAppWindow()) WallpaperChanged();
 }
 
 // ---------------------------------------------------------------------------
