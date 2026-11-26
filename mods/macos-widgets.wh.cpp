@@ -9816,6 +9816,8 @@ static void RunMenu(int id, const std::wstring& key) {
 static LRESULT WidgetProcInner(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 
 // Nothing thrown in a widget may reach Explorer (an exception crossing Windows' code would take the taskbar down)
+static void WallpaperChanged();
+
 static LRESULT CALLBACK WidgetProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     try {
         return WidgetProcInner(hwnd, msg, wp, lp);
@@ -10047,6 +10049,12 @@ static LRESULT WidgetProcInner(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             if (wd && !settings && !menu && !g_placing) pos->flags |= SWP_NOZORDER;
             return 0;
         }
+        case WM_SETTINGCHANGE:
+        case WM_THEMECHANGED:
+        case WM_DISPLAYCHANGE:
+            // Sent to every top-level window: the wallpaper, the theme or the screens may have changed
+            if (wd && IsDesktopWidget(wd)) WallpaperChanged();
+            break;
         case WM_DPICHANGED:
             if (wd && (settings || menu || wd->kind == W_PICKER)) {
                 wd->scale = HIWORD(wp) / 96.0f;
@@ -10981,6 +10989,64 @@ static bool ShowsDesktop(Widget* wd) {
     return true;
 }
 
+// A new wallpaper (or theme, or slideshow picture) is faded in by Windows over about a second: the glass is taken
+// again a few times after it, so it ends up with the new picture whatever the mode (without the live glass it's never
+// retaken by itself)
+static ULONGLONG g_reglassAt[3] = {};
+
+static void WallpaperChanged() {
+    ULONGLONG now = GetTickCount64();
+    g_reglassAt[0] = now + 300;
+    g_reglassAt[1] = now + 1500;
+    g_reglassAt[2] = now + 3500;
+}
+
+// Slideshows and Spotlight don't always tell the windows: the wallpaper's file is watched too (every few seconds)
+static std::wstring WallpaperSignature() {
+    wchar_t path[MAX_PATH] = {};
+    SystemParametersInfoW(SPI_GETDESKWALLPAPER, MAX_PATH, path, 0);
+    std::wstring sig = path;
+    WIN32_FILE_ATTRIBUTE_DATA fa;
+    if (path[0] && GetFileAttributesExW(path, GetFileExInfoStandard, &fa))
+        sig += L"|" + std::to_wstring(fa.ftLastWriteTime.dwLowDateTime) + L"|" + std::to_wstring(fa.nFileSizeLow);
+    sig += L"|" + std::to_wstring(GetSysColor(COLOR_DESKTOP));
+    return sig;
+}
+
+static void WallpaperTick() {
+    static unsigned tick = 0;
+    static std::wstring last;
+    if (tick++ % 4 == 0) {
+        std::wstring sig = WallpaperSignature();
+        if (!last.empty() && sig != last) WallpaperChanged();
+        last = sig;
+    }
+}
+
+static void ReglassAll() {
+    FreeDesktopPicture();  // taken again, with the new wallpaper
+    for (Widget* wd : g_widgets)
+        if (wd->rt && wd->kind != W_GHOST && wd->kind != W_GRID) {
+            Capture(wd);
+            Render(wd);
+        }
+    if (g_cfg.wd) {
+        Capture(g_cfg.wd);
+        Render(g_cfg.wd);
+    }
+}
+
+static void ReglassIfDue() {
+    ULONGLONG now = GetTickCount64();
+    bool due = false;
+    for (auto& t : g_reglassAt)
+        if (t && now >= t) {
+            t = 0;
+            due = true;
+        }
+    if (due && !g_drag.wd) ReglassAll();
+}
+
 static void LiveGlassTick() {
     if (g_ddaOn) return;  // the glass thread is doing it, much more often
     std::vector<Widget*> due;
@@ -11089,6 +11155,7 @@ static DWORD WINAPI UiThread(LPVOID) {
                     if (msg.wParam == g_glassTimer) {
                         if (g_ui.liveGlass) PublishGlassTargets();
                         TakeGlassBox();  // pictures whose message was lost (e.g. in the file picker's loop)
+                        ReglassIfDue();
                         continue;
                     }
                     if (msg.wParam == g_secondTimer) {
@@ -11105,6 +11172,7 @@ static DWORD WINAPI UiThread(LPVOID) {
                         if (g_menu.wd && GetForegroundWindow() != g_menu.wd->hwnd && GetTickCount64() - g_menu.opened > 1500)
                             CloseMenu();
                         if (g_ui.liveGlass) LiveGlassTick();
+                        WallpaperTick();
                         RenderTick();
                         continue;
                     }
