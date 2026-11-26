@@ -86,7 +86,7 @@ follows what changes behind it, up to 20 times a second and only where something
 and follows the widget while you drag it: videos and animated wallpapers show in the glass. Off, the glass uses a still
 picture of the wallpaper and the icons, taken again when the wallpaper changes (animated-wallpaper apps such as Wallpaper
 Engine included), and is lighter; the widgets then also show in screenshots. With an animated-wallpaper app running,
-the glass is read from the screen when the active window changes and every 6 seconds: at those instants the widgets
+the glass is read from the screen when the active window changes and every 2 seconds: at those instants the widgets
 are left out of screen captures and recordings for a fraction of a second.
 
 ## Network access
@@ -7495,9 +7495,8 @@ static bool ScreenWithoutUs(HDC into, const RECT& area) {
 }
 
 static HDC DesktopPicture() {
-    // An animated wallpaper is read from the screen, which hides the widgets from captures for an instant: not more
-    // often than every 6 s (and right after the active window changes, see OnForeground)
-    if (g_deskDC && GetTickCount64() - g_deskTick < (g_deskFromScreen ? 6000u : 3000u)) return g_deskDC;
+    // Kept a moment, so the widgets taken one after another share one picture (ReglassAll takes a new one)
+    if (g_deskDC && GetTickCount64() - g_deskTick < 3000u) return g_deskDC;
     FreeDesktopPicture();
     g_deskFromScreen = false;
     HWND app = WallpaperAppWindow();
@@ -11210,6 +11209,8 @@ static std::wstring WallpaperSignature() {
     return sig;
 }
 
+static void ReglassAll();
+
 static void WallpaperTick() {
     static unsigned tick = 0;
     static std::wstring last;
@@ -11218,18 +11219,11 @@ static void WallpaperTick() {
         if (!last.empty() && sig != last) WallpaperChanged();
         last = sig;
     }
-    // An animated-wallpaper app changes the picture without telling anyone: without the live glass, two widgets a
-    // second are taken again in turn (an unchanged picture costs nothing more: ApplyCapture skips it)
-    if (!g_ui.liveGlass && !g_drag.wd && tick % 2 == 0 && WallpaperAppWindow()) {
-        std::vector<Widget*> due;
-        for (Widget* wd : g_widgets)
-            if (wd->rt && wd->kind != W_GHOST && wd->kind != W_GRID) due.push_back(wd);
-        std::sort(due.begin(), due.end(), [](Widget* a, Widget* b) { return a->capTick < b->capTick; });
-        for (size_t i = 0; i < due.size() && i < 4; i++) {
-            Capture(due[i]);
-            Render(due[i]);
-        }
-    }
+    // An animated-wallpaper app changes the picture without telling anyone (its playlist, its tray menu): without the
+    // live glass, the screen is read every 2 s and every widget takes its part at once (one whose part didn't change
+    // costs nothing more: ApplyCapture skips it). Taking a few widgets at a time made a new wallpaper reach the last
+    // ones only after ~10 s
+    if (!g_ui.liveGlass && !g_drag.wd && tick % 2 == 0 && WallpaperAppWindow()) ReglassAll();
 }
 
 static void ReglassAll() {
