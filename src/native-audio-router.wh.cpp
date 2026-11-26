@@ -22,6 +22,8 @@ Settings. Use a row's arrow to select a device or follow the system default.
 The menu uses the Windows per-application output setting. Apps that retain
 their original audio stream may require restarting playback.
 
+![Output device menu in Windows 11 Quick Settings](https://raw.githubusercontent.com/KKKKeybird/native-audio-router/main/docs/images/taskbar-output-menu.png)
+
 Open Quick Settings once before enabling the mod, then reopen the Sound output
 page. This preview was loaded on Windows 11 x64 build 26300.9974 with Windhawk
 1.7.3. Runtime support depends on the shell symbols and row model.
@@ -69,16 +71,6 @@ namespace X = winrt::Windows::UI::Xaml;
 namespace C = X::Controls;
 namespace F = winrt::Windows::Foundation;
 namespace Core = winrt::Windows::UI::Core;
-
-constexpr wchar_t templateSymbol[] =
-    L"?OnApplyTemplate@?$produce@UVolumeMixerList@implementation@ControlCenter@winrt@@"
-    L"UIFrameworkElementOverrides@Xaml@UI@Windows@4@@impl@winrt@@UEAAHXZ";
-constexpr wchar_t focusSymbol[] =
-    L"?OnGotFocus@?$produce@UVolumeMixerList@implementation@ControlCenter@winrt@@"
-    L"UIControlOverrides@Controls@Xaml@UI@Windows@4@@impl@winrt@@UEAAHPEAX@Z";
-constexpr wchar_t loadedSymbol[] =
-    L"?OnVolumeMixerListLoaded@VolumeMixerList@implementation@ControlCenter@winrt@@"
-    L"QEAAXUIInspectable@Foundation@Windows@4@URoutedEventArgs@Xaml@UI@74@@Z";
 
 HRESULT (WINAPI* originalTemplate)(void*);
 HRESULT (WINAPI* originalFocus)(void*, void*);
@@ -641,16 +633,18 @@ void Restore() {
 BOOL Wh_ModInit() {
     const auto module = GetModuleHandleW(L"ControlCenter.dll");
     if (!module) return FALSE;
-    const WH_HOOK_SYMBOLS_OPTIONS options{
-        .optionsSize = sizeof(WH_HOOK_SYMBOLS_OPTIONS),
-        .noUndecoratedSymbols = TRUE,
-    };
     const WindhawkUtils::SYMBOL_HOOK controlCenterDllHooks[]{
-        {{templateSymbol}, &originalTemplate, OnTemplate},
-        {{focusSymbol}, &originalFocus, OnFocus},
-        {{loadedSymbol}, &originalLoaded, OnLoaded},
+        {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::ControlCenter::implementation::VolumeMixerList,struct winrt::Windows::UI::Xaml::IFrameworkElementOverrides>::OnApplyTemplate(void))"},
+         &originalTemplate, OnTemplate},
+        {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::ControlCenter::implementation::VolumeMixerList,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnGotFocus(void *))"},
+         &originalFocus, OnFocus},
+        {{LR"(public: void __cdecl winrt::ControlCenter::implementation::VolumeMixerList::OnVolumeMixerListLoaded(struct winrt::Windows::Foundation::IInspectable,struct winrt::Windows::UI::Xaml::RoutedEventArgs))"},
+         &originalLoaded, OnLoaded},
     };
-    return WindhawkUtils::HookSymbols(module, controlCenterDllHooks, ARRAYSIZE(controlCenterDllHooks), &options);
+    const bool resolved = WindhawkUtils::HookSymbols(module, controlCenterDllHooks,
+                                                    ARRAYSIZE(controlCenterDllHooks));
+    Wh_Log(L"ControlCenter mixer hooks resolved: %d", resolved);
+    return resolved;
 }
 
 void Wh_ModBeforeUninit() {
