@@ -3,7 +3,7 @@
 // @name Native Audio Router
 // @description Choose a Windows output device from each Quick Settings mixer row
 // @description:zh-CN 在任务栏原生音量合成器中选择逐应用输出设备
-// @version 0.0.2
+// @version 0.0.5
 // @architecture x86-64
 // @include ShellHost.exe
 // @compilerOptions -lruntimeobject -loleaut32 -lole32
@@ -119,6 +119,7 @@ struct Change {
     winrt::weak_ref<F::IInspectable> model;
     winrt::hstring original;
     winrt::hstring applied;
+    ULONGLONG verifyUntil{};
 };
 
 std::vector<Row> rows;
@@ -201,6 +202,27 @@ bool UniqueName(const Selection& state, const winrt::hstring& name) {
     return std::ranges::count(state.names, name) == 1;
 }
 
+auto FindChange(const F::IInspectable& model) {
+    return std::ranges::find_if(changes, [&model](const auto& entry) {
+        return entry.model.get() == model;
+    });
+}
+
+void UpdateMenuIndex(const F::IInspectable& model, Selection& selection,
+                     std::optional<uint32_t> reported) {
+    const auto change = FindChange(model);
+    if (change != changes.end() && GetTickCount64() < change->verifyUntil) {
+        const auto requested = std::ranges::find(selection.names, change->applied);
+        if (requested != selection.names.end() && UniqueName(selection, change->applied)) {
+            const auto index = static_cast<uint32_t>(requested - selection.names.begin());
+            if (reported && *reported == index) change->verifyUntil = 0;
+            selection.index = static_cast<int32_t>(index);
+            return;
+        }
+    }
+    if (reported && *reported < selection.names.size()) selection.index = static_cast<int32_t>(*reported);
+}
+
 void Select(const F::IInspectable& model, const Selection& shown, int32_t index, uint64_t generation) {
     const auto current = ReadSelection(model);
     if (!current || generation != endpointGeneration.load()) return;
@@ -208,25 +230,28 @@ void Select(const F::IInspectable& model, const Selection& shown, int32_t index,
         std::erase_if(outputCache, [&model](const auto& entry) { return entry.model.get() == model; });
         return;
     }
-    if (current->index != shown.index || current->index == index ||
-        !UniqueName(*current, current->names[index]) ||
+    if (!UniqueName(*current, current->names[index]) ||
         !UniqueName(*current, current->names[current->index])) {
         return;
     }
-    auto change = std::ranges::find_if(changes, [&model](const auto& entry) {
-        return entry.model.get() == model;
-    });
-    if (change == changes.end()) {
-        changes.push_back({winrt::make_weak(model), current->names[current->index], current->names[index]});
-    } else {
-        if (change->applied != current->names[current->index]) {
-            change->original = current->names[current->index];
-        }
-        change->applied = current->names[index];
-    }
+    auto change = FindChange(model);
+    const auto now = GetTickCount64();
+    const auto& reported = current->names[current->index];
+    const auto& requested = current->names[index];
+    const bool awaiting = change != changes.end() && now < change->verifyUntil;
+    if (awaiting ? change->applied == requested : current->index == index) return;
+    const bool newChange = change == changes.end();
+    if (newChange) changes.reserve(changes.size() + 1);
     Property(model, L"SelectedOutput").SetValue(model, winrt::box_value(index));
-    const auto after = ReadSelection(model);
-    Wh_Log(L"Requested native output index %d, reported %d", index, after ? after->index : -1);
+    const auto verifyUntil = GetTickCount64() + 1500;
+    if (newChange) {
+        changes.push_back({winrt::make_weak(model), reported, requested, verifyUntil});
+    } else {
+        if (!awaiting && change->applied != reported) change->original = reported;
+        change->applied = requested;
+        change->verifyUntil = verifyUntil;
+    }
+    Wh_Log(L"Requested native output index %d", index);
 }
 
 void ClearMenu(Row& row) {
@@ -305,7 +330,10 @@ void UpdateMenuRequest(Row& row) {
         });
         outputCache.push_back({winrt::make_weak(model), generation, *selection});
     }
-    if (opening) ShowMenu(row, slider, model, *selection, generation);
+    if (opening) {
+        UpdateMenuIndex(model, *selection, static_cast<uint32_t>(selection->index));
+        ShowMenu(row, slider, model, *selection, generation);
+    }
 }
 
 template <typename Collection, typename Item>
@@ -378,10 +406,12 @@ void AddRow(const C::Slider& slider) {
                 return entry.generation == generation && entry.model.get() == model;
             });
             if (cached != outputCache.end()) {
-                const auto selected = ReadSelectedIndex(model);
-                if (selected && *selected < cached->selection.names.size() &&
+                const auto change = FindChange(model);
+                const bool awaiting = change != changes.end() && GetTickCount64() < change->verifyUntil;
+                const auto selected = awaiting ? std::nullopt : ReadSelectedIndex(model);
+                if ((awaiting || (selected && *selected < cached->selection.names.size())) &&
                     generation == endpointGeneration.load()) {
-                    cached->selection.index = static_cast<int32_t>(*selected);
+                    UpdateMenuIndex(model, cached->selection, selected);
                     Wh_Log(L"Reused cached output list");
                     ShowMenu(*row, slider, model, cached->selection, generation);
                     return;
