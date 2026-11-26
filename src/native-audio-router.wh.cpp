@@ -3,7 +3,7 @@
 // @name Native Audio Router
 // @description Choose a Windows output device from each Quick Settings mixer row
 // @description:zh-CN 在任务栏原生音量合成器中选择逐应用输出设备
-// @version 0.0.2
+// @version 0.0.3
 // @architecture x86-64
 // @include ShellHost.exe
 // @compilerOptions -lruntimeobject -loleaut32 -lole32
@@ -13,6 +13,8 @@
 #include <windows.h>
 #include <unknwn.h>
 #include <mmdeviceapi.h>
+#include <initguid.h>
+#include <functiondiscoverykeys_devpkey.h>
 #undef GetCurrentTime
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
@@ -72,8 +74,8 @@ struct EndpointNotifications : winrt::implements<EndpointNotifications, IMMNotif
     HRESULT STDMETHODCALLTYPE OnDefaultDeviceChanged(EDataFlow flow, ERole, LPCWSTR) noexcept override {
         return flow == eRender ? Invalidate() : S_OK;
     }
-    HRESULT STDMETHODCALLTYPE OnPropertyValueChanged(LPCWSTR, const PROPERTYKEY) noexcept override {
-        return Invalidate();
+    HRESULT STDMETHODCALLTYPE OnPropertyValueChanged(LPCWSTR, const PROPERTYKEY key) noexcept override {
+        return IsEqualPropertyKey(key, PKEY_Device_FriendlyName) ? Invalidate() : S_OK;
     }
 
     static HRESULT Invalidate() noexcept {
@@ -97,6 +99,9 @@ struct Row {
     ULONGLONG deadline{};
     MenuRequest request{MenuRequest::None};
     winrt::weak_ref<F::IInspectable> requestModel;
+    winrt::weak_ref<F::IInspectable> observedModel;
+    uint64_t observedGeneration{};
+    bool resolved{};
 };
 
 struct Mixer {
@@ -119,6 +124,7 @@ struct Change {
     winrt::weak_ref<F::IInspectable> model;
     winrt::hstring original;
     winrt::hstring applied;
+    ULONGLONG verifyUntil{};
 };
 
 std::vector<Row> rows;
@@ -201,6 +207,27 @@ bool UniqueName(const Selection& state, const winrt::hstring& name) {
     return std::ranges::count(state.names, name) == 1;
 }
 
+auto FindChange(const F::IInspectable& model) {
+    return std::ranges::find_if(changes, [&model](const auto& entry) {
+        return entry.model.get() == model;
+    });
+}
+
+void UpdateMenuIndex(const F::IInspectable& model, Selection& selection,
+                     std::optional<uint32_t> reported) {
+    const auto change = FindChange(model);
+    if (change != changes.end() && GetTickCount64() < change->verifyUntil) {
+        const auto requested = std::ranges::find(selection.names, change->applied);
+        if (requested != selection.names.end() && UniqueName(selection, change->applied)) {
+            const auto index = static_cast<uint32_t>(requested - selection.names.begin());
+            if (reported && *reported == index) change->verifyUntil = 0;
+            selection.index = static_cast<int32_t>(index);
+            return;
+        }
+    }
+    if (reported && *reported < selection.names.size()) selection.index = static_cast<int32_t>(*reported);
+}
+
 void Select(const F::IInspectable& model, const Selection& shown, int32_t index, uint64_t generation) {
     const auto current = ReadSelection(model);
     if (!current || generation != endpointGeneration.load()) return;
@@ -208,25 +235,28 @@ void Select(const F::IInspectable& model, const Selection& shown, int32_t index,
         std::erase_if(outputCache, [&model](const auto& entry) { return entry.model.get() == model; });
         return;
     }
-    if (current->index != shown.index || current->index == index ||
-        !UniqueName(*current, current->names[index]) ||
+    if (!UniqueName(*current, current->names[index]) ||
         !UniqueName(*current, current->names[current->index])) {
         return;
     }
-    auto change = std::ranges::find_if(changes, [&model](const auto& entry) {
-        return entry.model.get() == model;
-    });
-    if (change == changes.end()) {
-        changes.push_back({winrt::make_weak(model), current->names[current->index], current->names[index]});
-    } else {
-        if (change->applied != current->names[current->index]) {
-            change->original = current->names[current->index];
-        }
-        change->applied = current->names[index];
-    }
+    auto change = FindChange(model);
+    const auto now = GetTickCount64();
+    const auto& reported = current->names[current->index];
+    const auto& requested = current->names[index];
+    const bool awaiting = change != changes.end() && now < change->verifyUntil;
+    if (awaiting ? change->applied == requested : current->index == index) return;
+    const bool newChange = change == changes.end();
+    if (newChange) changes.reserve(changes.size() + 1);
     Property(model, L"SelectedOutput").SetValue(model, winrt::box_value(index));
-    const auto after = ReadSelection(model);
-    Wh_Log(L"Requested native output index %d, reported %d", index, after ? after->index : -1);
+    const auto verifyUntil = GetTickCount64() + 1500;
+    if (newChange) {
+        changes.push_back({winrt::make_weak(model), reported, requested, verifyUntil});
+    } else {
+        if (!awaiting && change->applied != reported) change->original = reported;
+        change->applied = requested;
+        change->verifyUntil = verifyUntil;
+    }
+    Wh_Log(L"Requested native output index %d", index);
 }
 
 void ClearMenu(Row& row) {
@@ -237,6 +267,7 @@ void ClearMenu(Row& row) {
 
 void ShowMenu(Row& row, const C::Slider& slider, const F::IInspectable& model,
               const Selection& shown, uint64_t generation) {
+    if (shown.names.size() <= 1) return;
     ClearMenu(row);
     const auto& menu = row.menu;
     for (int32_t i = 0; i < static_cast<int32_t>(shown.names.size()); ++i) {
@@ -277,6 +308,24 @@ void RequestMenu(Row& row, const F::IInspectable& model, MenuRequest request) {
     row.deadline = GetTickCount64() + 1800;
 }
 
+void PrepareRow(Row& row, const F::IInspectable& model, uint64_t generation) {
+    row.observedModel = winrt::make_weak(model);
+    row.observedGeneration = generation;
+    row.resolved = false;
+    const auto cached = std::ranges::find_if(outputCache, [&model, generation](const auto& entry) {
+        return entry.generation == generation && entry.model.get() == model;
+    });
+    if (cached != outputCache.end()) {
+        row.resolved = true;
+        row.button.Visibility(cached->selection.names.size() > 1
+                                  ? X::Visibility::Visible : X::Visibility::Collapsed);
+        return;
+    }
+    RequestMenu(row, model, MenuRequest::Warm);
+    row.refresh.Interval(std::chrono::milliseconds(150 + 40 * std::min<size_t>(rows.size(), 10)));
+    row.refresh.Start();
+}
+
 void UpdateMenuRequest(Row& row) {
     const auto slider = row.slider.get();
     const auto model = row.requestModel.get();
@@ -297,6 +346,8 @@ void UpdateMenuRequest(Row& row) {
     }
     StopRequest(row);
     if (!selection) return;
+    row.resolved = true;
+    row.button.Visibility(selection->names.size() > 1 ? X::Visibility::Visible : X::Visibility::Collapsed);
 
     if (endpointEnumerator) {
         std::erase_if(outputCache, [&model, generation](const auto& entry) {
@@ -305,7 +356,10 @@ void UpdateMenuRequest(Row& row) {
         });
         outputCache.push_back({winrt::make_weak(model), generation, *selection});
     }
-    if (opening) ShowMenu(row, slider, model, *selection, generation);
+    if (opening) {
+        UpdateMenuIndex(model, *selection, static_cast<uint32_t>(selection->index));
+        ShowMenu(row, slider, model, *selection, generation);
+    }
 }
 
 template <typename Collection, typename Item>
@@ -326,12 +380,22 @@ void RemoveRow(Row& row) {
     }
 }
 
-void AddRow(const C::Slider& slider) {
+void AddRow(const C::Slider& slider, bool retryUnresolved) {
     const auto grid = X::Media::VisualTreeHelper::GetParent(slider).try_as<C::Grid>();
     if (!grid || grid.ColumnDefinitions().Size() == 0) return;
+    const auto generation = endpointGeneration.load();
     const auto existing = std::ranges::find_if(rows, [&grid](const auto& row) { return row.grid.get() == grid; });
     if (existing != rows.end()) {
-        existing->slider = winrt::make_weak(slider);
+        if (existing->slider.get() != slider || existing->observedGeneration != generation ||
+            !existing->observedModel.get() ||
+            (retryUnresolved && !existing->resolved && existing->request == MenuRequest::None)) {
+            existing->slider = winrt::make_weak(slider);
+            if (const auto model = Model(slider)) {
+                if (existing->observedModel.get() != model) existing->button.Visibility(X::Visibility::Collapsed);
+                StopRequest(*existing);
+                PrepareRow(*existing, model, generation);
+            }
+        }
         return;
     }
     const auto model = Model(slider);
@@ -347,6 +411,7 @@ void AddRow(const C::Slider& slider) {
     icon.Glyph(L"\uE70D");
     icon.FontSize(10);
     button.Content(icon);
+    button.Visibility(X::Visibility::Collapsed);
     button.Padding({3, 0, 3, 0});
     button.MinWidth(24);
     button.MinHeight(24);
@@ -374,14 +439,18 @@ void AddRow(const C::Slider& slider) {
             if (!model) return;
 
             const auto generation = endpointGeneration.load();
+            row->observedModel = winrt::make_weak(model);
+            row->observedGeneration = generation;
             const auto cached = std::ranges::find_if(outputCache, [&model, generation](const auto& entry) {
                 return entry.generation == generation && entry.model.get() == model;
             });
             if (cached != outputCache.end()) {
-                const auto selected = ReadSelectedIndex(model);
-                if (selected && *selected < cached->selection.names.size() &&
+                const auto change = FindChange(model);
+                const bool awaiting = change != changes.end() && GetTickCount64() < change->verifyUntil;
+                const auto selected = awaiting ? std::nullopt : ReadSelectedIndex(model);
+                if ((awaiting || (selected && *selected < cached->selection.names.size())) &&
                     generation == endpointGeneration.load()) {
-                    cached->selection.index = static_cast<int32_t>(*selected);
+                    UpdateMenuIndex(model, cached->selection, selected);
                     Wh_Log(L"Reused cached output list");
                     ShowMenu(*row, slider, model, cached->selection, generation);
                     return;
@@ -415,20 +484,11 @@ void AddRow(const C::Slider& slider) {
     C::Grid::SetColumn(button, static_cast<int>(columns.Size()));
     C::Grid::SetRow(button, C::Grid::GetRow(slider));
     rows.push_back({winrt::make_weak(grid), winrt::make_weak(slider), column, button,
-                    menu, click, {}, refresh, tick, 0, MenuRequest::None, {}});
+                    menu, click, {}, refresh, tick, 0, MenuRequest::None, {}, {}, 0, false});
     try {
         columns.Append(column);
         grid.Children().Append(button);
-        if (endpointEnumerator) {
-            const auto generation = endpointGeneration.load();
-            if (std::ranges::none_of(outputCache, [&model, generation](const auto& entry) {
-                    return entry.generation == generation && entry.model.get() == model;
-                })) {
-                RequestMenu(rows.back(), model, MenuRequest::Warm);
-                refresh.Interval(std::chrono::milliseconds(80 + 30 * std::min<size_t>(rows.size(), 10)));
-                refresh.Start();
-            }
-        }
+        PrepareRow(rows.back(), model, generation);
     } catch (...) {
         RemoveRow(rows.back());
         rows.pop_back();
@@ -437,7 +497,7 @@ void AddRow(const C::Slider& slider) {
     Wh_Log(L"Added native output menu to AppVolumeLevel row");
 }
 
-void Scan(const X::FrameworkElement& mixer) {
+void Scan(const X::FrameworkElement& mixer, bool retryUnresolved = false) {
     std::erase_if(rows, [](auto& row) {
         if (row.grid.get()) return false;
         RemoveRow(row);
@@ -448,7 +508,7 @@ void Scan(const X::FrameworkElement& mixer) {
         auto node = std::move(pending.back());
         pending.pop_back();
         if (const auto slider = node.try_as<C::Slider>(); slider && slider.Name() == L"AppVolumeLevel") {
-            AddRow(slider);
+            AddRow(slider, retryUnresolved);
         }
         for (int i = X::Media::VisualTreeHelper::GetChildrenCount(node);
              i > 0 && pending.size() < budget; --i) {
@@ -485,7 +545,7 @@ void Discover(void* object) noexcept {
             });
             mixers.push_back({weak, event});
         }
-        Scan(mixer);
+        Scan(mixer, true);
     } catch (...) {
         Wh_Log(L"Mixer hook failed (0x%08X)", static_cast<unsigned>(winrt::to_hresult().value));
     }
