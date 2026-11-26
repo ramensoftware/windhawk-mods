@@ -2,7 +2,7 @@
 // @id              taskbar-edge-color-match
 // @name            Taskbar Edge Color Match
 // @description     Standalone mod that matches the Windows 11 taskbar color to the edge strip, majority screen color, or mixed mode, with true transparency on desktop, rounded corners, and top-to-bottom fade animation.
-// @version         2.5.71
+// @version         2.5.72
 // @author          Nitin Patel
 // @github          https://github.com/nitinp94
 // @include         explorer.exe
@@ -261,6 +261,19 @@ HWND FindCurrentProcessTaskbarWnd() {
     return hTaskbarWnd;
 }
 
+struct PanelColorUpdate {
+    HWND hwnd;
+    COLORREF color;
+    COLORREF trayBgColor;
+    bool adaptiveTheme;
+    bool forceReassert;
+    bool transparentNow;
+    bool hideRectangularFillForCorners;
+    bool startTopToBottomAnim;
+    bool topToBottomAnimEnabled;
+    int animSpeedPct;
+};
+
 struct AsyncTaskbarDispatch {
     RunFromWindowThreadProc_t proc;
     void* procParam;
@@ -300,7 +313,7 @@ static LRESULT CALLBACK AsyncTaskbarWndProc(HWND hWnd, UINT msg, WPARAM wParam, 
                 }
             }
             if (item->ownsProcParam) {
-                delete static_cast<struct PanelColorUpdate*>(item->procParam);
+                delete static_cast<PanelColorUpdate*>(item->procParam);
             }
         }
         return 0;
@@ -1251,19 +1264,6 @@ void WINAPI AttachAllTaskbars(void*) try {
         0);
 } catch (...) {
 }
-
-struct PanelColorUpdate {
-    HWND hwnd;
-    COLORREF color;
-    COLORREF trayBgColor;
-    bool adaptiveTheme;
-    bool forceReassert;
-    bool transparentNow;
-    bool hideRectangularFillForCorners;
-    bool startTopToBottomAnim;
-    bool topToBottomAnimEnabled;
-    int animSpeedPct;
-};
 
 void WINAPI ApplyPanelColorOnTaskbarThread(void* param) try {
     struct PendingGuard {
@@ -2497,7 +2497,7 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    Wh_Log(L"Taskbar Edge Color Match v2.5.71 initialized");
+    Wh_Log(L"Taskbar Edge Color Match v2.5.72 initialized");
     return TRUE;
 }
 
