@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              win7-biometric-devices-restorer
 // @name            Windows 7 Biometric Devices Applet Restorer
-// @description     This mod restores the Windows 7 Biometric Devices Control Panel applet on Windows 10 and Windows 11.
+// @description     This mod restores the Windows 7 Biometric Devices Control Panel applet on Windows 10 and Windows 11
 // @version         1.0.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
@@ -21,18 +21,30 @@ This mod restores the classic Windows 7 Biometric Devices Control Panel applet t
 
 **IMPORTANT:** `svchost.exe` must be included in the mod's target processes for this mod to start and work properly.
 
+### What the mod does inside `svchost.exe`
+
+The mod only activates in the service hosts that run the **RpcSs** (RPC / COM), **DcomLaunch** and **Appinfo** (UAC) services; it does nothing in any other `svchost.exe` instance. In those hosts it hooks the registry read/open functions and *serves* a few registrations to COM and UAC that do not exist in the real registry (nothing is written to the registry):
+
+- a "Virtual Factory" class `{0142E4D1-FB7A-11DC-BA4A-000FFE7AB428}` with `Elevation\Enabled=1`, served by `shpafact.dll`;
+- an AppID for that class with a `DllSurrogate`;
+- the `IWinBioPolicy` interface and its type library.
+
+This is needed **only** for the elevated "Change biometric settings" page: COM elevation starts an elevated `dllhost.exe`, which loads the mod's private `biocpl-<lang>.dll` from the mod's storage folder. The rest of the applet works without it, but the mod will not start unless `svchost.exe` is included.
+
 ## Screenshot
 
 ![Biometric Devices](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/biometricdevice.png)
 
 ## About
 
-The mod downloads the original Windows 7 binaries from Microsoft's public symbol server on first use, verifies them with pinned SHA-256 hashes, applies the necessary compatibility patches, and registers the applet virtually so that no permanent system files or registry keys are modified.
+The mod downloads the original Windows 7 binaries from Microsoft's public symbol server (`msdl.microsoft.com`, over HTTPS, using the system proxy settings) on first use, verifies them with pinned SHA-256 hashes, applies the necessary compatibility patches, and registers the applet virtually so that no permanent system files or registry keys are modified.
 
 It supports 6 languages: English, Italian, French, Spanish, Portuguese, and German.
 The language can follow the Windows UI language or be set to a specific locale.
 
 The applet appears under **Hardware and Sound** in Control Panel Category view, in Large / Small Icons view, in Control Panel Search, and can also be opened directly with `control /name Microsoft.BiometricDevices`.
+
+Network access: the mod sends three fixed HTTPS GET requests, for `biocpl.dll`, `dui70.dll` and `duser.dll` under `https://msdl.microsoft.com/download/symbols/` (the server may redirect to Microsoft's blob storage). The requests carry no user data, only the user agent `Microsoft-Symbol-Server/10.0.0.0`. The downloaded files are checked against a pinned size and SHA-256 before use. The download is performed whenever the mod has no verified cached copy: on first use, and again after the mod is disabled if "Keep cached Microsoft binaries when disabled" is off. There is no setting that turns the download off.
 
 Note: an internet connection is required on first use, and it might take a moment to load the applet while the mod downloads the required dependencies. After the first-time download completes, refresh or reopen Control Panel.
 */
@@ -73,6 +85,7 @@ Note: an internet connection is required on first use, and it might take a momen
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <shared_mutex>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -1527,7 +1540,9 @@ static std::atomic<int> g_langSetting{0};
 static std::atomic<bool> g_showTasks{true};
 static std::atomic<bool> g_shuttingDown{false};
 static HANDLE g_stopEvent = nullptr;
-static std::optional<std::thread> g_setupThread;
+// no_destroy: Explorer exits without Wh_ModUninit, so a still-joinable std::thread
+// would call std::terminate() from its destructor during process shutdown.
+[[clang::no_destroy]] static std::optional<std::thread> g_setupThread;
 static std::atomic<HMODULE> g_hDui{nullptr};
 static std::atomic<HMODULE> g_hBioCpl{nullptr};
 
@@ -1743,13 +1758,50 @@ static bool GetVerifiedFile(const std::wstring& dlDir, const FileSpec& spec, Byt
     return true;
 }
 
-static HMODULE LoadVerifiedModule(const std::wstring& path, const Bytes& expected) {
-    Bytes disk;
-    if (!ReadWholeFile(path, disk) || disk != expected) {
+// Verifies the file through a handle that denies writers and deletes (FILE_SHARE_READ only),
+// then loads it while that handle is still open, so the verified bytes are the loaded bytes
+// (no TOCTOU). Dependencies are searched in System32 only; b7dui.dll is loaded first, so
+// biocpl's import of it binds to the module that is already in memory.
+static HMODULE LoadVerifiedModuleImpl(const std::wstring& path, const Bytes& expected) {
+    HANDLE h = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                           FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) {
+        Wh_Log(L"Cannot open for verification: %s", path.c_str());
+        return nullptr;
+    }
+    struct HandleCloser {
+        HANDLE& h;
+        ~HandleCloser() { if (h != INVALID_HANDLE_VALUE) CloseHandle(h); }
+    } closer{h};
+    LARGE_INTEGER sz{};
+    bool ok = GetFileSizeEx(h, &sz) && sz.QuadPart > 0 &&
+              static_cast<unsigned long long>(sz.QuadPart) == expected.size();
+    if (ok) {
+        Bytes disk(expected.size());
+        size_t got = 0;
+        while (ok && got < disk.size()) {
+            DWORD rd = 0;
+            const DWORD chunk = static_cast<DWORD>(std::min<size_t>(disk.size() - got, 1u << 20));
+            if (!ReadFile(h, disk.data() + got, chunk, &rd, nullptr) || rd == 0) ok = false;
+            else got += rd;
+        }
+        ok = ok && disk == expected;
+    }
+    if (!ok) {
         Wh_Log(L"Verification mismatch before LoadLibrary: %s", path.c_str());
         return nullptr;
     }
-    return LoadLibraryExW(path.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+    // The handle stays open (closed by HandleCloser) until LoadLibraryExW has returned.
+    return LoadLibraryExW(path.c_str(), nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+}
+
+static HMODULE LoadVerifiedModule(const std::wstring& path, const Bytes& expected) {
+    try {
+        return LoadVerifiedModuleImpl(path, expected);
+    } catch (...) {
+        Wh_Log(L"Exception while verifying/loading: %s", path.c_str());
+        return nullptr;
+    }
 }
 
 // ============================================================================
@@ -1788,17 +1840,27 @@ static void SetTable(std::shared_ptr<const Table> t) {
     g_table = std::move(t);
 }
 
-static bool ContainsKeywordI(LPCWSTR s) {
-    if (!s) return false;
-    for (; *s; ++s) {
-        if (_wcsnicmp(s, L"clsid", 5) == 0 ||
-            _wcsnicmp(s, L"appid", 5) == 0 ||
-            _wcsnicmp(s, L"interface", 9) == 0 ||
-            _wcsnicmp(s, L"typelib", 7) == 0 ||
-            _wcsnicmp(s, L"controlpanel", 12) == 0 ||
-            _wcsnicmp(s, L"shell extensions", 16) == 0) {
-            return true;
+// Narrow pre-filter: true only if the subkey names one of this mod's GUIDs or is
+// ...\ControlPanel\NameSpace. Everything else is passed straight to the real API.
+static bool MayBeVirtual(LPCWSTR sub) {
+    if (!sub || !*sub) return false;
+    const wchar_t* const guids[] = {
+        kAppletClsid, kVirtualFactoryClsid, kElemProviderClsid, kInitializerClsid, kWinBioPolicyClsid,
+        kTaskHandler1Clsid, kTaskHandler2Clsid, kTaskHandler3Clsid, kIWinBioPolicyIid, kWinBioPolicyLibId,
+    };
+    for (const wchar_t* p = sub; *p; ++p) {
+        if (*p != L'{') continue;
+        for (const wchar_t* g : guids) {
+            if (_wcsnicmp(p, g, 38) == 0) return true;
         }
+    }
+    static const wchar_t kNs[] = L"controlpanel\\namespace";
+    size_t len = wcslen(sub);
+    while (len > 0 && sub[len - 1] == L'\\') --len;
+    const size_t nsLen = (sizeof(kNs) / sizeof(kNs[0])) - 1;
+    if (len >= nsLen && _wcsnicmp(sub + len - nsLen, kNs, nsLen) == 0 &&
+        (len == nsLen || sub[len - nsLen - 1] == L'\\')) {
+        return true;
     }
     return false;
 }
@@ -1852,6 +1914,7 @@ static bool IsNamespaceParent(const std::wstring& lowerPath) {
     if (lowerPath.find(L"wow6432node") != std::wstring::npos) return false;
     if (lowerPath.find(L"hkey_current_user") != std::wstring::npos) return false;
     if (lowerPath.find(L"hkey_users") != std::wstring::npos) return false;
+    if (lowerPath.find(L"\\registry\\user") != std::wstring::npos) return false;
     return EndsWithKey(lowerPath, L"controlpanel\\namespace");
 }
 
@@ -1861,8 +1924,10 @@ struct TrackedHandle {
     bool fake = false;
 };
 
-static std::mutex g_handleMutex;
+static std::shared_mutex g_handleMutex;
 static std::unordered_map<HKEY, TrackedHandle> g_handles;
+// Number of entries in g_handles; lets the hot path skip the lock while nothing is tracked.
+static std::atomic<size_t> g_handleCount{0};
 static HKEY g_scratchRoot = nullptr;
 static std::wstring g_scratchPath;
 
@@ -1920,24 +1985,28 @@ static RegEnumValueW_t    RegEnumValueW_Orig;
 static RegQueryInfoKeyW_t RegQueryInfoKeyW_Orig;
 
 static HKEY NewFakeHandle(const std::wstring& lowerPath) {
-    std::lock_guard<std::mutex> lk(g_handleMutex);
+    std::unique_lock<std::shared_mutex> lk(g_handleMutex);
     HKEY root = EnsureScratchRootLocked();
     if (!root) return nullptr;
     HKEY dup = nullptr;
     if (RegOpenKeyExW_Orig(root, nullptr, 0, KEY_READ, &dup) != ERROR_SUCCESS || !dup) return nullptr;
     g_handles[dup] = {lowerPath, true};
+    g_handleCount.store(g_handles.size(), std::memory_order_release);
     return dup;
 }
 
+// Real handles are tracked only for ...\ControlPanel\NameSpace parents, which the enum/query hooks
+// must recognise; every other real key is resolved on demand with NtQueryKey.
 static void TrackRealHandle(HKEY h, const std::wstring& lowerPath) {
     if (!h) return;
-    std::lock_guard<std::mutex> lk(g_handleMutex);
+    std::unique_lock<std::shared_mutex> lk(g_handleMutex);
     g_handles[h] = {lowerPath, false};
+    g_handleCount.store(g_handles.size(), std::memory_order_release);
 }
 
 static bool LookupHandle(HKEY h, std::wstring& path, bool& fake) {
-    if (!h) return false;
-    std::lock_guard<std::mutex> lk(g_handleMutex);
+    if (!h || g_handleCount.load(std::memory_order_acquire) == 0) return false;
+    std::shared_lock<std::shared_mutex> lk(g_handleMutex);
     auto it = g_handles.find(h);
     if (it == g_handles.end()) return false;
     path = it->second.path;
@@ -1946,21 +2015,60 @@ static bool LookupHandle(HKEY h, std::wstring& path, bool& fake) {
 }
 
 static void UntrackHandle(HKEY h) {
-    if (!h) return;
-    std::lock_guard<std::mutex> lk(g_handleMutex);
+    if (!h || g_handleCount.load(std::memory_order_acquire) == 0) return;
+    std::unique_lock<std::shared_mutex> lk(g_handleMutex);
     g_handles.erase(h);
+    g_handleCount.store(g_handles.size(), std::memory_order_release);
 }
 
 static void ForgetAllHandles() {
-    std::lock_guard<std::mutex> lk(g_handleMutex);
+    std::unique_lock<std::shared_mutex> lk(g_handleMutex);
     g_handles.clear();
+    g_handleCount.store(0, std::memory_order_release);
+}
+
+// Lowercase NT path of a real key (\registry\machine\...), via NtQueryKey(KeyNameInformation).
+static bool QueryRealKeyPath(HKEY h, std::wstring& out) {
+    using NtQueryKey_t = LONG(NTAPI*)(HANDLE, int, PVOID, ULONG, PULONG);
+    static const NtQueryKey_t fn = reinterpret_cast<NtQueryKey_t>(reinterpret_cast<void*>(
+        GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtQueryKey")));
+    if (!fn || !h) return false;
+    std::vector<unsigned char> buf(1024);
+    for (int attempt = 0; attempt < 3; ++attempt) {
+        ULONG need = 0;
+        const LONG st = fn(h, 3 /*KeyNameInformation*/, buf.data(), static_cast<ULONG>(buf.size()), &need);
+        if (st >= 0) {
+            const ULONG bytes = *reinterpret_cast<ULONG*>(buf.data());
+            if (bytes + sizeof(ULONG) > buf.size()) return false;
+            out.assign(reinterpret_cast<const wchar_t*>(buf.data() + sizeof(ULONG)), bytes / sizeof(wchar_t));
+            out = LowerStr(out);
+            return true;
+        }
+        if (st == static_cast<LONG>(0x80000005) || st == static_cast<LONG>(0xC0000023)) {
+            buf.resize(std::max<size_t>(need, buf.size() * 2));
+            continue;
+        }
+        return false;
+    }
+    return false;
+}
+
+// Decides whether an open/create/get on (hKey, sub) can concern a virtual key and, if so,
+// produces the parent's lowercase path. Returns false => caller must use the real API unchanged.
+static bool ResolveBase(HKEY hKey, LPCWSTR sub, std::wstring& base, bool& baseFake) {
+    baseFake = false;
+    if (LookupHandle(hKey, base, baseFake)) return true;  // fake handle or namespace parent
+    if (!MayBeVirtual(sub)) return false;
+    const wchar_t* pre = PredefinedName(hKey);
+    if (*pre) { base = pre; return true; }
+    return QueryRealKeyPath(hKey, base);
 }
 
 static void ReleaseScratchRoot() {
     HKEY root = nullptr;
     std::wstring path;
     {
-        std::lock_guard<std::mutex> lk(g_handleMutex);
+        std::unique_lock<std::shared_mutex> lk(g_handleMutex);
         root = g_scratchRoot;
         g_scratchRoot = nullptr;
         path = std::move(g_scratchPath);
@@ -1984,12 +2092,14 @@ static std::shared_ptr<const Table> BuildTable(const std::wstring& binDir, Lang 
     const std::wstring cplPath = binDir + L"\\" + CplDllFileName(lang);
     const std::wstring tasksPath = binDir + L"\\" + TasksXmlFileName(lang);
     const std::wstring dispName = LookupString(lang, 1u);
+    // Win7 tooltip text (string id 2) as a literal, so it shows in all 6 languages without a resource lookup
+    const std::wstring infoTip = LookupString(lang, 2u);
     const std::wstring applet = L"clsid\\" + LowerStr(kAppletClsid);
 
     std::vector<Val> appletVals = {
         S(L"", REG_SZ, dispName),
         S(L"LocalizedString", REG_EXPAND_SZ, L"@" + cplPath + L",-1"),
-        S(L"InfoTip", REG_EXPAND_SZ, L"@" + cplPath + L",-2"),
+        S(L"InfoTip", REG_SZ, infoTip),
         S(L"System.ApplicationName", REG_SZ, L"Microsoft.BiometricDevices"),
         S(L"System.ControlPanel.Category", REG_SZ, L"2"),
         D(L"{305CA226-D286-468e-B848-2B2E8E697B74} 2", 2u),
@@ -2135,31 +2245,29 @@ static LSTATUS HandleOpen(HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions, REGSAM s
     }
     std::wstring basePath;
     bool baseFake = false;
-    const bool tracked = LookupHandle(hKey, basePath, baseFake);
-    if (!tracked) basePath = PredefinedName(hKey);
-
-    if (tracked || ContainsKeywordI(lpSubKey)) {
-        const std::wstring full = JoinPath(basePath, lpSubKey);
-        const auto table = GetTable();
-        if (table && FindKey(*table, full)) {
-            if (!phkResult) return ERROR_INVALID_PARAMETER;
-            HKEY fakeH = NewFakeHandle(full);
-            if (fakeH) {
-                *phkResult = fakeH;
-                return ERROR_SUCCESS;
-            }
-        }
-        if (baseFake) return ERROR_FILE_NOT_FOUND;
-
-        HKEY realOut = nullptr;
-        const LSTATUS st = RegOpenKeyExW_Orig(hKey, lpSubKey, ulOptions, samDesired, &realOut);
-        if (st == ERROR_SUCCESS && realOut) {
-            TrackRealHandle(realOut, full);
-            if (phkResult) *phkResult = realOut;
-        }
-        return st;
+    if (!ResolveBase(hKey, lpSubKey, basePath, baseFake)) {
+        return RegOpenKeyExW_Orig(hKey, lpSubKey, ulOptions, samDesired, phkResult);
     }
-    return RegOpenKeyExW_Orig(hKey, lpSubKey, ulOptions, samDesired, phkResult);
+
+    const std::wstring full = JoinPath(basePath, lpSubKey);
+    const auto table = GetTable();
+    if (table && FindKey(*table, full)) {
+        if (!phkResult) return ERROR_INVALID_PARAMETER;
+        HKEY fakeH = NewFakeHandle(full);
+        if (fakeH) {
+            *phkResult = fakeH;
+            return ERROR_SUCCESS;
+        }
+    }
+    if (baseFake) return ERROR_FILE_NOT_FOUND;
+
+    HKEY realOut = nullptr;
+    const LSTATUS st = RegOpenKeyExW_Orig(hKey, lpSubKey, ulOptions, samDesired, &realOut);
+    if (st == ERROR_SUCCESS && realOut) {
+        if (IsNamespaceParent(full)) TrackRealHandle(realOut, full);
+        if (phkResult) *phkResult = realOut;
+    }
+    return st;
 }
 
 static LSTATUS WINAPI RegOpenKeyExW_Hook(HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions, REGSAM samDesired, PHKEY phkResult) {
@@ -2171,11 +2279,20 @@ static LSTATUS WINAPI RegOpenKeyExW_Hook(HKEY hKey, LPCWSTR lpSubKey, DWORD ulOp
 }
 
 static LSTATUS WINAPI RegOpenKeyW_Hook(HKEY hKey, LPCWSTR lpSubKey, PHKEY phkResult) {
+    // Only calls that concern a virtual key are rerouted; everything else (including the
+    // NULL/empty subkey case that returns hKey itself) goes to the real RegOpenKeyW unchanged.
     try {
-        return HandleOpen(hKey, lpSubKey, 0, KEY_READ, phkResult);
+        if (lpSubKey && *lpSubKey && phkResult) {
+            std::wstring base;
+            bool baseFake = false;
+            if (ResolveBase(hKey, lpSubKey, base, baseFake)) {
+                // RegOpenKeyW opens with MAXIMUM_ALLOWED, so the real-handle path must too.
+                return HandleOpen(hKey, lpSubKey, 0, MAXIMUM_ALLOWED, phkResult);
+            }
+        }
     } catch (...) {
-        return RegOpenKeyW_Orig(hKey, lpSubKey, phkResult);
     }
+    return RegOpenKeyW_Orig(hKey, lpSubKey, phkResult);
 }
 
 static LSTATUS WINAPI RegCreateKeyExW_Hook(HKEY hKey, LPCWSTR lpSubKey, DWORD Reserved, LPWSTR lpClass,
@@ -2187,9 +2304,7 @@ static LSTATUS WINAPI RegCreateKeyExW_Hook(HKEY hKey, LPCWSTR lpSubKey, DWORD Re
         }
         std::wstring basePath;
         bool baseFake = false;
-        const bool tracked = LookupHandle(hKey, basePath, baseFake);
-        if (!tracked) basePath = PredefinedName(hKey);
-        if (tracked || ContainsKeywordI(lpSubKey)) {
+        if (ResolveBase(hKey, lpSubKey, basePath, baseFake)) {
             const std::wstring full = JoinPath(basePath, lpSubKey);
             const auto table = GetTable();
             if (table && FindKey(*table, full)) {
@@ -2206,7 +2321,7 @@ static LSTATUS WINAPI RegCreateKeyExW_Hook(HKEY hKey, LPCWSTR lpSubKey, DWORD Re
             const LSTATUS st = RegCreateKeyExW_Orig(hKey, lpSubKey, Reserved, lpClass, dwOptions, samDesired,
                                                     lpSec, &realOut, lpdwDisposition);
             if (st == ERROR_SUCCESS && realOut) {
-                TrackRealHandle(realOut, full);
+                if (IsNamespaceParent(full)) TrackRealHandle(realOut, full);
                 if (phkResult) *phkResult = realOut;
             }
             return st;
@@ -2249,9 +2364,7 @@ static LSTATUS WINAPI RegGetValueW_Hook(HKEY hKey, LPCWSTR lpSubKey, LPCWSTR lpV
         }
         std::wstring basePath;
         bool baseFake = false;
-        const bool tracked = LookupHandle(hKey, basePath, baseFake);
-        if (!tracked) basePath = PredefinedName(hKey);
-        if (tracked || ContainsKeywordI(lpSubKey)) {
+        if (ResolveBase(hKey, lpSubKey, basePath, baseFake)) {
             const std::wstring full = JoinPath(basePath, lpSubKey);
             const auto table = GetTable();
             const Key* k = table ? FindKey(*table, full) : nullptr;
@@ -2788,6 +2901,27 @@ static bool ShouldFastFailNow(bool isOpenSession, WbioSvcState& outSvc, bool& ou
     return false;
 }
 
+struct InFlightGuard {
+    ~InFlightGuard() { g_inFlightProbes.fetch_sub(1, std::memory_order_acq_rel); }
+};
+
+// Worker threads are tracked and joined in JoinWorkers() (called from Wh_ModBeforeUninit), so the
+// mod image can never be unmapped while a worker is still running its code.
+static std::mutex g_workersMutex;
+static std::vector<HANDLE> g_workers;
+
+static void JoinWorkers() {
+    std::vector<HANDLE> workers;
+    {
+        std::lock_guard<std::mutex> lk(g_workersMutex);
+        workers.swap(g_workers);
+    }
+    for (HANDLE h : workers) {
+        WaitForSingleObject(h, INFINITE);  // bounded by WinBio's own RPC timeouts
+        CloseHandle(h);
+    }
+}
+
 template <typename StateT>
 static bool LaunchAndWait(const std::shared_ptr<StateT>& state,
                           DWORD(WINAPI* proc)(LPVOID),
@@ -2795,34 +2929,46 @@ static bool LaunchAndWait(const std::shared_ptr<StateT>& state,
     state->hDone = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!state->hDone) return false;
 
-    HMODULE hSelf = nullptr;
-    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                            reinterpret_cast<LPCWSTR>(proc), &hSelf)) {
-        CloseHandle(state->hDone);
-        state->hDone = nullptr;
-        return false;
-    }
-    state->hSelf = hSelf;
-
     auto* threadArg = new (std::nothrow) std::shared_ptr<StateT>(state);
     if (!threadArg) {
-        FreeLibrary(hSelf);
         CloseHandle(state->hDone);
         state->hDone = nullptr;
         return false;
     }
 
-    g_inFlightProbes.fetch_add(1, std::memory_order_acq_rel);
-    HANDLE hThread = CreateThread(nullptr, 0, proc, threadArg, 0, nullptr);
-    if (!hThread) {
-        g_inFlightProbes.fetch_sub(1, std::memory_order_acq_rel);
-        delete threadArg;
-        FreeLibrary(hSelf);
-        CloseHandle(state->hDone);
-        state->hDone = nullptr;
-        return false;
+    {
+        std::lock_guard<std::mutex> lk(g_workersMutex);
+        if (g_shuttingDown.load(std::memory_order_acquire)) {
+            delete threadArg;
+            CloseHandle(state->hDone);
+            state->hDone = nullptr;
+            return false;
+        }
+        // Drop handles of workers that already finished.
+        for (size_t i = 0; i < g_workers.size();) {
+            if (WaitForSingleObject(g_workers[i], 0) == WAIT_OBJECT_0) {
+                CloseHandle(g_workers[i]);
+                g_workers.erase(g_workers.begin() + static_cast<std::ptrdiff_t>(i));
+            } else {
+                ++i;
+            }
+        }
+        g_inFlightProbes.fetch_add(1, std::memory_order_acq_rel);
+        HANDLE hThread = CreateThread(nullptr, 0, proc, threadArg, 0, nullptr);
+        if (!hThread) {
+            g_inFlightProbes.fetch_sub(1, std::memory_order_acq_rel);
+            delete threadArg;
+            CloseHandle(state->hDone);
+            state->hDone = nullptr;
+            return false;
+        }
+        try {
+            g_workers.push_back(hThread);
+        } catch (...) {
+            // Could not record the handle; the worker still runs, but cannot be joined.
+            CloseHandle(hThread);
+        }
     }
-    CloseHandle(hThread);
 
     const DWORD wait = WaitForSingleObject(state->hDone, timeoutMs);
     if (wait == WAIT_OBJECT_0) return true;
@@ -2838,7 +2984,6 @@ static bool LaunchAndWait(const std::shared_ptr<StateT>& state,
 
 struct EnumUnitsState {
     HANDLE hDone = nullptr;
-    HMODULE hSelf = nullptr;
     std::atomic<bool> claimed{false};
     WinBioEnumBiometricUnits_t fnEnum = nullptr;
     WinBioFree_t fnFree = nullptr;
@@ -2853,12 +2998,11 @@ struct EnumUnitsState {
 };
 
 static DWORD WINAPI EnumUnitsThreadProc(LPVOID param) {
-    HMODULE hSelf = nullptr;
-    {
+    try {
+        InFlightGuard guard;
         std::unique_ptr<std::shared_ptr<EnumUnitsState>> holder(
             static_cast<std::shared_ptr<EnumUnitsState>*>(param));
         std::shared_ptr<EnumUnitsState> st = std::move(*holder);
-        hSelf = st->hSelf;
 
         PVOID units = nullptr;
         SIZE_T count = 0;
@@ -2878,14 +3022,14 @@ static DWORD WINAPI EnumUnitsThreadProc(LPVOID param) {
                 if (units && st->fnFree) st->fnFree(units);
             }
         }
-        g_inFlightProbes.fetch_sub(1, std::memory_order_acq_rel);
+    } catch (...) {
+        Wh_Log(L"[bio] worker threw an exception");
     }
-    FreeLibraryAndExitThread(hSelf, 0);
+    return 0;
 }
 
 struct GetCredState {
     HANDLE hDone = nullptr;
-    HMODULE hSelf = nullptr;
     std::atomic<bool> claimed{false};
     WinBioGetCredentialState_t fnGetCred = nullptr;
     BioIdentityRaw identity{};
@@ -2899,12 +3043,11 @@ struct GetCredState {
 };
 
 static DWORD WINAPI GetCredThreadProc(LPVOID param) {
-    HMODULE hSelf = nullptr;
-    {
+    try {
+        InFlightGuard guard;
         std::unique_ptr<std::shared_ptr<GetCredState>> holder(
             static_cast<std::shared_ptr<GetCredState>*>(param));
         std::shared_ptr<GetCredState> st = std::move(*holder);
-        hSelf = st->hSelf;
 
         ULONG cred = kWinBioCredentialNotSet;
         const HRESULT hr = st->fnGetCred ? st->fnGetCred(st->identity, st->type, &cred)
@@ -2920,14 +3063,14 @@ static DWORD WINAPI GetCredThreadProc(LPVOID param) {
         } else if (SUCCEEDED(hr)) {
             ClearFastFail();
         }
-        g_inFlightProbes.fetch_sub(1, std::memory_order_acq_rel);
+    } catch (...) {
+        Wh_Log(L"[bio] worker threw an exception");
     }
-    FreeLibraryAndExitThread(hSelf, 0);
+    return 0;
 }
 
 struct OpenSessionState {
     HANDLE hDone = nullptr;
-    HMODULE hSelf = nullptr;
     std::atomic<bool> claimed{false};
     WinBioOpenSession_t fnOpen = nullptr;
     WinBioCloseSession_t fnClose = nullptr;
@@ -2947,12 +3090,11 @@ struct OpenSessionState {
 };
 
 static DWORD WINAPI OpenSessionThreadProc(LPVOID param) {
-    HMODULE hSelf = nullptr;
-    {
+    try {
+        InFlightGuard guard;
         std::unique_ptr<std::shared_ptr<OpenSessionState>> holder(
             static_cast<std::shared_ptr<OpenSessionState>*>(param));
         std::shared_ptr<OpenSessionState> st = std::move(*holder);
-        hSelf = st->hSelf;
 
         ULONG* pUnits = st->units.empty() ? nullptr : st->units.data();
         const SIZE_T nUnits = st->units.size();
@@ -2975,9 +3117,10 @@ static DWORD WINAPI OpenSessionThreadProc(LPVOID param) {
                 if (sess && st->fnClose) st->fnClose(sess);
             }
         }
-        g_inFlightProbes.fetch_sub(1, std::memory_order_acq_rel);
+    } catch (...) {
+        Wh_Log(L"[bio] worker threw an exception");
     }
-    FreeLibraryAndExitThread(hSelf, 0);
+    return 0;
 }
 
 static HRESULT WINAPI WinBioEnumBiometricUnits_Shim(ULONG factor, PVOID* unitSchemaArray, SIZE_T* unitCount) {
@@ -3405,7 +3548,7 @@ static bool IsProcessAmd64() {
 
 #ifndef BIO_GENERATOR_ONLY
 
-BOOL Wh_ModInit() {
+static BOOL ModInitImpl() {
     if (!IsProcessAmd64()) return FALSE;
     LoadSettings();
 
@@ -3477,7 +3620,7 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+static BOOL ModSettingsChangedImpl(BOOL* bReload) {
     const Lang oldLang = CurrentLang();
     const bool oldTasks = g_showTasks.load(std::memory_order_acquire);
     LoadSettings();
@@ -3515,7 +3658,7 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     return TRUE;
 }
 
-void Wh_ModBeforeUninit() {
+static void ModBeforeUninitImpl() {
     if (g_role != ProcessRole::Explorer) return;
     g_shuttingDown.store(true);
     bio_shim::RestorePatchedIats();
@@ -3524,9 +3667,11 @@ void Wh_ModBeforeUninit() {
     if (g_setupThread && g_setupThread->joinable()) g_setupThread->join();
     g_setupThread.reset();
     bio_shim::RestorePatchedIats();
+    // Wait for any WinBio probe thread still running mod code before the image is unloaded.
+    bio_shim::JoinWorkers();
 }
 
-void Wh_ModUninit() {
+static void ModUninitImpl() {
     bool keepFiles = true;
     if (g_role == ProcessRole::Explorer) {
         bio_shim::RestorePatchedIats();
@@ -3556,6 +3701,43 @@ void Wh_ModUninit() {
         }
     }
     g_role = ProcessRole::Other;
+}
+
+BOOL Wh_ModInit() {
+    try {
+        return ModInitImpl();
+    } catch (...) {
+        Wh_Log(L"Wh_ModInit threw an exception");
+        return FALSE;
+    }
+}
+
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+    try {
+        return ModSettingsChangedImpl(bReload);
+    } catch (...) {
+        Wh_Log(L"Wh_ModSettingsChanged threw an exception");
+        return TRUE;
+    }
+}
+
+void Wh_ModBeforeUninit() {
+    try {
+        ModBeforeUninitImpl();
+    } catch (...) {
+        Wh_Log(L"Wh_ModBeforeUninit threw an exception");
+        // Still make sure nothing keeps running mod code past unload.
+        try { bio_shim::JoinWorkers(); } catch (...) {}
+    }
+}
+
+void Wh_ModUninit() {
+    try {
+        ModUninitImpl();
+    } catch (...) {
+        Wh_Log(L"Wh_ModUninit threw an exception");
+        g_role = ProcessRole::Other;
+    }
 }
 
 #else
