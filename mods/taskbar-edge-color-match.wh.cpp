@@ -2,7 +2,7 @@
 // @id              taskbar-edge-color-match
 // @name            Taskbar Edge Color Match
 // @description     Standalone mod that matches the Windows 11 taskbar color to the edge strip, majority screen color, or mixed mode, with true transparency on desktop, rounded corners, and top-to-bottom fade animation.
-// @version         2.5.73
+// @version         2.5.74
 // @author          Nitin Patel
 // @github          https://github.com/nitinp94
 // @license         GPL-3.0
@@ -54,7 +54,7 @@ Matches the Windows 11 taskbar background color in real time—**standalone**, w
   $name: Transparent when on desktop
   $description: Makes the taskbar transparent in any theme when on the desktop (including when windows are minimized or tray icons are hovered/clicked). When off, the panel stays visible at Panel opacity.
 - panelOpacityPercent: 100
-  $name: Panel opacity (10-100%)
+  $name: Panel opacity (100-100%)
   $description: Controls the opacity of the color-matched taskbar background panel when active.
 - panelCornerRadius: 0
   $name: Panel corner radius (0-24 px)
@@ -659,7 +659,6 @@ bool HookTaskbarDllSymbols() {
         return false;
     }
 
-    // taskbar.dll
     WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
          &CTaskBand_ITaskListWndSite_vftable},
