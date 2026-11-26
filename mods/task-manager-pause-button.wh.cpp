@@ -2,7 +2,7 @@
 // @id              task-manager-pause-button
 // @name            Task Manager Pause Button
 // @description     Add a native Pause/Resume button to Processes and Details in Windows 11 Task Manager.
-// @version         1.1.0
+// @version         1.1.1
 // @author          Luiz Bizzio
 // @github          https://github.com/luizbizzio
 // @homepage        https://github.com/luizbizzio/task-manager-pause-button
@@ -31,34 +31,6 @@ Windows 11 Task Manager on the Processes and Details pages.
 The button controls Task Manager's refresh hold on Processes and Details.
 The mod does not suspend apps, stop Windows processes, or change the
 Real time update speed setting.
-
-## Compatibility and limitations
-
-- Uses Task Manager's Processes and Details navigation symbols and public
-  XAML APIs. Windhawk resolves symbols through its normal symbol cache.
-  When both pages share the same navigation function, the mod hooks it only
-  once. Windows updates may change private functions.
-- Uses Task Manager's Ctrl-key refresh hold through `GetKeyState` calls made
-  directly by `Taskmgr.exe`. While paused, some Task Manager keyboard actions
-  may behave as if Ctrl is held, including Run new task (Ctrl+click can open
-  Command Prompt instead of the normal dialog). This does not affect other apps.
-- Recognizes the tested Task Manager command-bar layout independently of
-  display language: one command bar with four native buttons, with Run new
-  task in the first position. Falls back to English/Portuguese labels or
-  recognizable control identifiers on other layouts. Visual-tree traversal
-  skips unrelated Page subtrees; shared shell command bars remain eligible.
-  Other Windows versions can have different layouts, so all languages/builds
-  are not guaranteed.
-- The native button inherits Task Manager's XAML theme, including its own
-  Light/Dark appearance; no fixed foreground/background colors are applied.
-  Pause/Resume labels are in English regardless of the Task Manager language.
-- Keeps Pause active when switching between Processes and Details. Uses the
-  public `Frame.Navigated` event to resume on other pages and to retry the
-  command-bar search if the toolbar was not ready, without repeating successful
-  scans. If a Windows build lacks the optional Details navigation symbol,
-  visiting Processes first enables the Frame fallback.
-- If the button is missing, close and reopen Task Manager with the mod enabled.
-- No background applications are needed.
 
 ## Source and feedback
 
@@ -109,28 +81,15 @@ std::atomic<bool> g_stopping{false};
 std::atomic<bool> g_paused{false};
 std::atomic<unsigned> g_insertions{0};
 
-uintptr_t g_taskBegin{};
-uintptr_t g_taskEnd{};
+using IsUpdateEnabled_t = bool (__cdecl *)(void* self);
+IsUpdateEnabled_t g_isUpdateEnabledOriginal{};
 
-using GetKeyState_t = decltype(&GetKeyState);
-GetKeyState_t g_getKeyOriginal{};
-
-bool IsCtrl(int vk) noexcept {
-    return vk == VK_CONTROL || vk == VK_LCONTROL || vk == VK_RCONTROL;
-}
-
-bool CalledByTaskManager(uintptr_t returnAddress) noexcept {
-    return returnAddress >= g_taskBegin && returnAddress < g_taskEnd;
-}
-
-SHORT WINAPI GetKeyState_Hook(int vk) {
-    SHORT value = g_getKeyOriginal(vk);
+bool __cdecl IsUpdateEnabled_Hook(void* self) {
     if (g_paused.load(std::memory_order_relaxed) &&
-        !g_stopping.load(std::memory_order_relaxed) && IsCtrl(vk) &&
-        CalledByTaskManager(reinterpret_cast<uintptr_t>(__builtin_return_address(0)))) {
-        value = static_cast<SHORT>(value | 0x8000);
+        !g_stopping.load(std::memory_order_acquire)) {
+        return false;
     }
-    return value;
+    return g_isUpdateEnabledOriginal(self);
 }
 
 struct BarEntry {
@@ -843,19 +802,6 @@ void ForgetTerminatedThread(DWORD threadId) {
     ForgetHookScanThread(threadId);
 }
 
-bool FindTaskManagerRange() {
-    auto* start = reinterpret_cast<BYTE*>(GetModuleHandleW(nullptr));
-    if (!start) return false;
-    auto* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(start);
-    if (dos->e_magic != IMAGE_DOS_SIGNATURE) return false;
-    auto* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(start + dos->e_lfanew);
-    if (nt->Signature != IMAGE_NT_SIGNATURE) return false;
-    g_taskBegin = reinterpret_cast<uintptr_t>(start);
-    g_taskEnd = g_taskBegin + nt->OptionalHeader.SizeOfImage;
-    return g_taskBegin < g_taskEnd;
-}
-
-
 // Called on the XAML thread during Processes/Details page navigation.
 // Returns true only after all matched bars have usable Pause buttons.
 // Frame.Navigated may retry when the entry hook ran before the toolbar was
@@ -1297,19 +1243,20 @@ BOOL Wh_ModInit() {
     g_navigationEvents = 0;
     g_dispatchMsg = RegisterWindowMessageW(
         L"Windhawk.TaskManagerPauseButton.SynchronousUI");
-    if (!g_dispatchMsg || !FindTaskManagerRange()) return FALSE;
+    if (!g_dispatchMsg) return FALSE;
 
     HMODULE host = GetModuleHandleW(nullptr);
     if (!host) return FALSE;
 
-    // Resolve all four navigation symbols, but do not hook until we can
-    // compare addresses. Identical C++/WinRT produce<> bodies may be folded
-    // into one function by the linker; hook that function only once.
+    // Resolve the navigation symbols before hooking them. The linker may
+    // fold identical C++/WinRT produce<> bodies into the same function.
     PageNavigation_t processesTo{};
     PageNavigation_t detailsTo{};
     PageNavigation_t processesFrom{};
     PageNavigation_t detailsFrom{};
     WindhawkUtils::SYMBOL_HOOK taskmgrExeHooks[] = {
+        {{L"public: bool __cdecl TmTraceControl::IsUpdateEnabled(void)"},
+         &g_isUpdateEnabledOriginal, IsUpdateEnabled_Hook},
         {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::TaskManagerApp::implementation::ProcessesPage,struct winrt::Windows::UI::Xaml::Controls::IPageOverrides>::OnNavigatedTo(void *)"},
          &processesTo},
         {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::TaskManagerApp::implementation::DetailsPage,struct winrt::Windows::UI::Xaml::Controls::IPageOverrides>::OnNavigatedTo(void *)"},
@@ -1321,7 +1268,7 @@ BOOL Wh_ModInit() {
     };
     if (!WindhawkUtils::HookSymbols(host, taskmgrExeHooks,
                                     ARRAYSIZE(taskmgrExeHooks))) {
-        Wh_Log(L"Navigation symbol resolution failed (cache or PDB unavailable)");
+        Wh_Log(L"Required update or navigation symbol hook unavailable");
         return FALSE;
     }
     if (!processesTo ||
@@ -1369,12 +1316,7 @@ BOOL Wh_ModInit() {
            sharedExit ? L"shared" :
            detailsExitHooked ? L"ok" : L"unavailable");
 
-    // Intentionally unchanged: preserve the tested GetKeyState-based refresh
-    // hold, including its Taskmgr.exe return-address restriction.
-    if (!WindhawkUtils::SetFunctionHook(
-            GetKeyState, GetKeyState_Hook, &g_getKeyOriginal)) return FALSE;
-
-    Wh_Log(L"Ready: Processes hook, Details hook=%s, Frame.Navigated fallback",
+    Wh_Log(L"Ready: Update hook, Processes hook, Details hook=%s, Frame.Navigated fallback",
            g_detailsToUsesProcessesHook ? L"shared" :
            g_detailsToOriginal ? L"separate" : L"unavailable");
     return TRUE;
@@ -1422,3 +1364,4 @@ void Wh_ModUninit() {
     Wh_Log(L"Uninit finished: inserted=%u terminatedThreads=%u cleanupErrors=%u",
            g_insertions.load(), terminatedThreads, g_cleanupFailures.load());
 }
+
