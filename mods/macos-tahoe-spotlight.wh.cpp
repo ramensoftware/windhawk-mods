@@ -4556,12 +4556,8 @@ std::wstring ReadUserStatsData(PCWSTR prefix, PCWSTR legacyKey, size_t legacyBuf
         }
         return {};
     }
-    if (legacyKey && *legacyKey && legacyBuf > 0) {
-        std::wstring raw(legacyBuf, L'\0');
-        size_t len = Wh_GetStringValue(legacyKey, raw.data(), raw.size());
-        raw.resize(len);
-        return raw;
-    }
+    (void)legacyKey;
+    (void)legacyBuf;
     return {};
 }
 
@@ -8501,6 +8497,8 @@ void ExecuteSearchResultItem(const SearchResult& r,
             HideSpotlight(false);
             if (!elevated && IsPackagedId(id)) {
                 ActivatePackagedAumid(id);
+            } else if (!target.empty() && NativeSystemPath(target) != target) {
+                ShellLaunchTarget(target, args, elevated);
             } else {
                 ShellLaunchTarget(!launch.empty() ? launch : target, args,
                                   elevated);
