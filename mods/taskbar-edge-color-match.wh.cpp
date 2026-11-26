@@ -2,7 +2,7 @@
 // @id              taskbar-edge-color-match
 // @name            Taskbar Edge Color Match
 // @description     Standalone mod that matches the Windows 11 taskbar color to the edge strip, majority screen color, or mixed mode, with true transparency on desktop, rounded corners, and top-to-bottom fade animation.
-// @version         2.5.69
+// @version         2.5.70
 // @author          Nitin Patel
 // @github          https://github.com/nitinp94
 // @include         explorer.exe
@@ -629,7 +629,6 @@ static HMODULE GetSystemTrayModuleHandle() {
 
 static bool HookTaskbarViewMeasureOverride(HMODULE mod) {
     if (!mod) return false;
-    // Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
         {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Windows::UI::Xaml::IFrameworkElementOverrides>::MeasureOverride(struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size *))"},
          reinterpret_cast<void**>(&TaskbarFrame_MeasureOverride_Original),
@@ -2497,7 +2496,7 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    Wh_Log(L"Taskbar Edge Color Match v2.5.69 initialized");
+    Wh_Log(L"Taskbar Edge Color Match v2.5.70 initialized");
     return TRUE;
 }
 
