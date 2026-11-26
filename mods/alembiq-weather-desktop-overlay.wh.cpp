@@ -2,18 +2,7 @@
 // @id              alembiq-weather-desktop-overlay
 // @name            Desktop Weather & Particles Overlay
 // @description     Atmospheric effects and live weather forecast visualization for the Windows desktop (Direct2D overlay)
-// @version         1.8.4
-// @author          alembiq
-// @github          https://github.com/alembiqspace
-// @include         windhawk.exe
-// @compilerOptions -ld2d1 -ldwrite -lwininet -luser32 -lgdi32 -lshell32
-// ==/WindhawkMod==
-
-// ==WindhawkMod==
-// @id              alembiq-weather-desktop-overlay
-// @name            Desktop Weather & Particles Overlay
-// @description     Direct2D weather precipitation, atmospheric, ecological, and flood-level overlay for the Windows desktop with live forecast integration, interactive floating HUD, and performance quality scaling.
-// @version         2.9.18
+// @version         1.8.4.2
 // @author          alembiq
 // @github          https://github.com/alembiqspace
 // @include         windhawk.exe
@@ -24,6 +13,9 @@
 /*
 A lightweight **Direct2D** weather and atmosphere overlay for the Windows desktop. It brings live weather precipitation, volumetric-style drifting clouds, a UV-reactive sun and lunar-phase moon, atmospheric layers, air quality, pollen, flood-level water, and a draggable temperature button with an interactive control & forecast table without cluttering icons or windows.
 
+### Preview
+![Desktop Weather & Particles Overlay preview](https://raw.githubusercontent.com/alembiqspace/windhawk-mods/main/screenshots/desktop-weather-overlay-preview.png)
+
 ### Features
 - **Performance Quality Scaling:** `[System] Performance mode` (`low`, `medium`, `high`) scales particle counts, cloud layers, sun rays, moon detail, lightning branches, wave smoothness, rain splashes on `high`, and HUD detail.
 - **Precipitation (`[Precipitation]`):** Supports `off`, `auto`, `rain`, `snow`, and `hail` with configurable fall direction, `auto` (forecast precipitation-driven speed scaled per snow/rain/hail) or `custom` fall speed, and intensity.
@@ -31,6 +23,17 @@ A lightweight **Direct2D** weather and atmosphere overlay for the Windows deskto
 - **Effects (`[Effects]`):** Wind gusts, frost/heat tint, night stars, air quality haze/particles, floating pollen, flood-level water, and atmospheric layers (`dust`, `fog`, `smog`, `thunderstorm`, `aurora`, `mirage`, `rainbow`).
 - **Custom & Playful Units:** Configure standard or playful units in settings for temperature, wind, cloud cover, precipitation, UV index, and air quality.
 - **Draggable Temperature Button & Interactive Table:** Drag the circular button (shows a gear icon when no temperature forecast is available yet) or click it to open an auto-sized table with unified forecast fields, `auto` multi-provider aggregation, italic/50%-opacity styling for unsupported fields, and `(i)` hover tooltips showing source and sync time.
+
+### Network & Privacy
+- **No requests until location is set:** By default `coords` is empty (`""`) and no automatic fallback coordinates are used, so no network requests are made until you enter valid `lat/lon` coordinates.
+- **External endpoints & what is sent:**
+  - `www.7timer.info` (`/bin/api.pl`): sends `lat` and `lon` coordinates.
+  - `api.met.no` (`/weatherapi/locationforecast/2.0/compact`): sends `lat` and `lon` coordinates.
+  - `api.open-meteo.com` (`/v1/forecast`) and `air-quality-api.open-meteo.com` (`/v1/air-quality`): sends `lat` and `lon` coordinates.
+  - `api.weatherapi.com`, `api.openweathermap.org`, `weather.visualcrossing.com`, `api.tomorrow.io`: contacted only when their respective API key is configured; sends `lat`, `lon`, and the API key in the query string.
+  - Custom JSON API (`customApiUrl`) / Local file (`localWeatherPath`): contacts the configured URL (substituting `{lat}`, `{lon}`, `{key}`) or reads the local JSON file.
+- **When requests happen:** At startup when coordinates are configured, on the configured `updateIntervalMin` interval (default `30` min), on retry after a failed fetch, or when the forecast source or coordinates change.
+- **How to disable:** Leave `coords` empty or set `[Weather] Primary source` to `off`.
 */
 // ==/WindhawkModReadme==
 
@@ -61,9 +64,9 @@ A lightweight **Direct2D** weather and atmosphere overlay for the Windows deskto
 - taskbarAsBorder: true
   $name: "[System] Taskbar as a border"
   $description: "When enabled in above_taskbar mode, uses the taskbar work area bottom edge as the lower screen border. Default: true."
-- customOffset: "0/0/0/10"
-  $name: "[System] Custom offset (px)"
-  $description: "Insets in px formatted as 'left/right/top/bottom' (4th value sets bottom offset when bottomBoundaryMode is custom_offset). Default: '0/0/0/10'."
+- customOffset: "10"
+  $name: "[System] Bottom inset (px)"
+  $description: "Bottom margin offset in pixels applied in custom_offset mode (0 to 1000). Default: '10'."
 - multiMonitorMode: primary
   $name: "[System] Monitors"
   $description: "Render on primary monitor or all monitors. Allowed: primary, all. Default: primary."
@@ -72,7 +75,7 @@ A lightweight **Direct2D** weather and atmosphere overlay for the Windows deskto
     - all: All monitors
 - targetFps: 60
   $name: "[System] Target FPS (30 or 60)"
-  $description: "Target frame rate (30 or 60). Any other value resets to 60."
+  $description: "Target frame rate for active fast motion (30 or 60). Any other value resets to 60."
 - pauseOnFullscreen: true
   $name: "[System] Pause on fullscreen apps"
   $description: "Pauses rendering while a fullscreen app is active. Default: true."
@@ -121,12 +124,12 @@ A lightweight **Direct2D** weather and atmosphere overlay for the Windows deskto
 - tomorrowIoKey: ""
   $name: "[Weather] Tomorrow.io API key (*)"
   $description: "API key for Tomorrow.io."
-- coords: "44.7866/20.4489"
+- coords: ""
   $name: "[Weather] Latitude/Longitude"
-  $description: "Format: lat/lon (e.g. 44.7866/20.4489). Latitude -90..90, longitude -180..180. Default: Belgrade (44.7866/20.4489)."
+  $description: "Format: lat/lon (e.g. 44.7866/20.4489). Latitude -90..90, longitude -180..180. Empty by default (no requests until set)."
 - customApiUrl: ""
   $name: "[Weather] Custom JSON API URL"
-  $description: "HTTP/HTTPS JSON endpoint (use {lat}, {lon}, {key} placeholders if needed)."
+  $description: "HTTP/HTTPS JSON endpoint (supports {lat}, {lon}, {key} placeholders)."
 - localWeatherPath: ""
   $name: "[Weather] Local weather file path"
   $description: "Path to local JSON weather file. Default: empty."
@@ -200,9 +203,9 @@ A lightweight **Direct2D** weather and atmosphere overlay for the Windows deskto
 - hudFontSizePx: 12
   $name: "[HUD] Font size (px)"
   $description: "Base font size in pixels for the HUD table (9 to 22). Default: 12."
-- hudButtonGeometry: "4-92/88"
+- hudButtonGeometry: "92/88"
   $name: "[HUD] Fallback button center X/Y (%)"
-  $description: "Format: radius-centerX/centerY in % (0..100; X left->right, Y bottom->top) when no dragged position is set. Default: 4-92/88."
+  $description: "Format: centerX/centerY in % (0..100; X left->right, Y bottom->top) when no dragged position is set. Default: 92/88."
 - hudButtonPos: ""
   $name: "[HUD] Initial relative button X/Y (0..1)"
   $description: "Optional relative position 'x/y' for the button; empty uses hudButtonGeometry."
@@ -337,45 +340,97 @@ A lightweight **Direct2D** weather and atmosphere overlay for the Windows deskto
 - effectDust: auto
   $name: "[Effects] Dust"
   $description: "Airborne dust haze (auto triggers on strong dry wind or low visibility). Allowed: auto, on, off."
+  $options:
+    - auto: Auto
+    - on: On
+    - off: Off
 - effectFog: auto
   $name: "[Effects] Fog"
   $description: "Soft mist/fog layer (auto triggers on fog code or high humidity with low visibility). Allowed: auto, on, off."
+  $options:
+    - auto: Auto
+    - on: On
+    - off: Off
 - effectSmog: auto
   $name: "[Effects] Smog"
   $description: "Smog layer (auto triggers on calm wind with reduced visibility/haze). Allowed: auto, on, off."
+  $options:
+    - auto: Auto
+    - on: On
+    - off: Off
 - effectThunderstorm: auto
   $name: "[Effects] Thunderstorm"
   $description: "Storm atmosphere with branched lightning flashes. Allowed: auto, on, off."
+  $options:
+    - auto: Auto
+    - on: On
+    - off: Off
 - effectAurora: auto
   $name: "[Effects] Aurora"
   $description: "Smooth animated aurora curtains in upper screen area (auto triggers at night with clear/low clouds). Allowed: auto, on, off."
+  $options:
+    - auto: Auto
+    - on: On
+    - off: Off
 - effectMirage: auto
   $name: "[Effects] Mirage"
   $description: "Soft horizon shimmer wave band (auto triggers on hot daytime weather). Allowed: auto, on, off."
+  $options:
+    - auto: Auto
+    - on: On
+    - off: Off
 - effectRainbow: auto
   $name: "[Effects] Rainbow"
   $description: "Multi-band rainbow arc (auto triggers on daytime partly-cloudy/post-rain/misty conditions). Allowed: auto, on, off."
+  $options:
+    - auto: Auto
+    - on: On
+    - off: Off
 - rainbowGeometry: "55-50/15"
   $name: "[Effects] Rainbow radius-center X/Y"
   $description: "Format: radius-centerX/centerY in % (0..100; radius 0 = off, 100 = min(width, height); X left->right, Y bottom->top). Default: 55-50/15."
 - effectWindStreams: auto
   $name: "[Effects] Wind gusts & streams"
   $description: "Animated wind streaks on strong gusts (auto triggers when wind gusts >= 32 km/h or wind >= 24 km/h). Allowed: auto, on, off."
+  $options:
+    - auto: Auto
+    - on: On
+    - off: Off
 - effectThermal: auto
   $name: "[Effects] Frost / Heat tint"
   $description: "Subtle frost rim at <= 0 C or warm heat haze at >= 30 C apparent temperature. Allowed: auto, on, off."
+  $options:
+    - auto: Auto
+    - on: On
+    - off: Off
 - effectNightStars: auto
   $name: "[Effects] Night stars"
   $description: "Twinkling stars in upper sky at night with low cloud cover. Allowed: auto, on, off."
+  $options:
+    - auto: Auto
+    - on: On
+    - off: Off
 - effectAirQuality: auto
   $name: "[Effects] Air quality (AQI / PM2.5)"
   $description: "Air quality haze & micro-particles (auto triggers on elevated AQI / PM2.5). Allowed: auto, on, off."
+  $options:
+    - auto: Auto
+    - on: On
+    - off: Off
 - effectPollen: auto
   $name: "[Effects] Pollen particles"
   $description: "Floating pollen motes (auto triggers on elevated pollen index in air quality data). Allowed: auto, on, off."
+  $options:
+    - auto: Auto
+    - on: On
+    - off: Off
 - effectFloodWater: auto
   $name: "[Effects] Rising water / flood level"
   $description: "Animated water band along the bottom boundary (auto triggers on heavy rain/precipitation). Allowed: auto, on, off."
+  $options:
+    - auto: Auto
+    - on: On
+    - off: Off
 
 # --- 7. COLORS (CONFIG ONLY, '/' LISTS) ---
 - skyPrecipColors: "#6BB8FF/#FBFDFF/#C2E6FF/#E6ECF7/#FFD152/#DCE7FF"
@@ -497,13 +552,6 @@ struct MonitorCanvasRect {
     float bottomLimitRelY = 0.0f;
 };
 
-struct CustomInsetsPx {
-    int left = 0;
-    int right = 0;
-    int top = 0;
-    int bottom = 10;
-};
-
 struct ForecastSnapshot {
     bool valid = false;
     bool lastFetchFailed = false;
@@ -561,7 +609,7 @@ struct Settings {
     PerformanceMode performanceMode = PerformanceMode::High;
     std::wstring bottomBoundaryMode = L"above_taskbar";
     bool taskbarAsBorder = true;
-    CustomInsetsPx customOffset{0, 0, 0, 10};
+    int bottomInsetPx = 10;
     std::wstring multiMonitorMode = L"primary";
     int targetFps = 60;
     bool pauseOnFullscreen = true;
@@ -573,10 +621,10 @@ struct Settings {
     std::wstring openweathermapKey;
     std::wstring visualCrossingKey;
     std::wstring tomorrowIoKey;
-    bool hasValidCoords = true;
-    std::wstring coordsRaw = L"44.7866/20.4489";
-    double latitude = 44.7866;
-    double longitude = 20.4489;
+    bool hasValidCoords = false;
+    std::wstring coordsRaw;
+    double latitude = 0.0;
+    double longitude = 0.0;
     std::wstring customApiUrl;
     std::wstring localWeatherPath;
     int updateIntervalMin = 30;
@@ -591,7 +639,7 @@ struct Settings {
     bool forecastHudEnabled = false;
     float hudButtonRadiusPx = 24.0f;
     float hudFontSizePx = 12.0f;
-    ArcGeometry hudButtonGeom{4, 92, 88};
+    ArcGeometry hudButtonGeom{24, 92, 88};
     bool hasCustomBtnPos = false;
     double hudBtnRelX = 0.92;
     double hudBtnRelY = 0.12;
@@ -716,6 +764,10 @@ std::mutex g_mutex;
 Settings g_settings;
 bool g_arcCacheDirty = true;
 ForecastSnapshot g_forecast;
+bool g_forecastDirty = true;
+std::wstring g_lastFetchedSource;
+double g_lastFetchedLat = 0.0;
+double g_lastFetchedLon = 0.0;
 
 HWND g_overlayHwnd = nullptr;
 HANDLE g_weatherWakeEvent = nullptr;
@@ -775,38 +827,7 @@ float GetQualityScale(PerformanceMode mode) {
 }
 
 bool HasAnyForecastConsumer(const Settings& cfg) {
-    if (cfg.primarySource != L"off" && cfg.hasValidCoords) {
-        return true;
-    }
-    return cfg.forecastHudEnabled ||
-           cfg.precipitationMode == PrecipMode::Auto ||
-           cfg.precipFallDirection == FallDirMode::Auto ||
-           cfg.precipSpeedMode == PrecipSpeedMode::Auto ||
-           cfg.cloudsMode == TriStateMode::Auto ||
-           cfg.sunMode == TriStateMode::Auto ||
-           cfg.sunMotionMode == CelestialMotionMode::LtrLineForecast ||
-           cfg.sunMotionMode == CelestialMotionMode::LtrArcForecast ||
-           cfg.sunMotionMode == CelestialMotionMode::RtlLineForecast ||
-           cfg.sunMotionMode == CelestialMotionMode::RtlArcForecast ||
-           cfg.sunMotionMode == CelestialMotionMode::VerticalForecast ||
-           cfg.moonMotionMode == CelestialMotionMode::LtrLineForecast ||
-           cfg.moonMotionMode == CelestialMotionMode::LtrArcForecast ||
-           cfg.moonMotionMode == CelestialMotionMode::RtlLineForecast ||
-           cfg.moonMotionMode == CelestialMotionMode::RtlArcForecast ||
-           cfg.moonMotionMode == CelestialMotionMode::VerticalForecast ||
-           cfg.effectDust == TriStateMode::Auto ||
-           cfg.effectFog == TriStateMode::Auto ||
-           cfg.effectSmog == TriStateMode::Auto ||
-           cfg.effectThunderstorm == TriStateMode::Auto ||
-           cfg.effectAurora == TriStateMode::Auto ||
-           cfg.effectMirage == TriStateMode::Auto ||
-           cfg.effectRainbow == TriStateMode::Auto ||
-           cfg.effectWindStreams == TriStateMode::Auto ||
-           cfg.effectThermal == TriStateMode::Auto ||
-           cfg.effectNightStars == TriStateMode::Auto ||
-           cfg.effectAirQuality == TriStateMode::Auto ||
-           cfg.effectPollen == TriStateMode::Auto ||
-           cfg.effectFloodWater == TriStateMode::Auto;
+    return cfg.primarySource != L"off" && cfg.hasValidCoords;
 }
 
 bool NeedsAirQualityFetch(const Settings& cfg) {
@@ -984,41 +1005,59 @@ bool TryParseCoordsString(const std::wstring& raw, double& outLat, double& outLo
     return true;
 }
 
-void ParseCustomInsetsString(const std::wstring& raw, CustomInsetsPx& outInsets) {
-    outInsets = CustomInsetsPx{0, 0, 0, 10};
-    std::vector<std::wstring> parts;
-    std::wstringstream ss(Trim(raw));
-    std::wstring item;
-    while (std::getline(ss, item, L'/')) {
-        parts.push_back(Trim(item));
+int ParseBottomInsetString(const std::wstring& raw, int defVal) {
+    std::wstring s = Trim(raw);
+    if (s.empty()) {
+        return defVal;
     }
-    if (parts.size() != 4) {
+    size_t lastSlash = s.rfind(L'/');
+    std::wstring token = (lastSlash != std::wstring::npos) ? Trim(s.substr(lastSlash + 1)) : s;
+    try {
+        int v = std::stoi(token);
+        if (v < 0 || v > 1000) {
+            return defVal;
+        }
+        return v;
+    } catch (...) {
+        return defVal;
+    }
+}
+
+void ParseHudButtonGeometryString(const std::wstring& raw, ArcGeometry defGeom, ArcGeometry& outGeom) {
+    outGeom = defGeom;
+    std::wstring s = Trim(raw);
+    size_t dash = s.find(L'-');
+    size_t slash = s.find(L'/');
+    if (slash == std::wstring::npos) {
         return;
     }
+    std::wstring xPart = (dash != std::wstring::npos && slash > dash)
+        ? Trim(s.substr(dash + 1, slash - dash - 1))
+        : Trim(s.substr(0, slash));
+    std::wstring yPart = Trim(s.substr(slash + 1));
 
-    auto parseSide = [](const std::wstring& p, int defVal, int& outV) -> bool {
+    auto isIntStr = [](const std::wstring& p) -> bool {
         if (p.empty()) {
-            outV = defVal;
-            return true;
-        }
-        try {
-            int v = std::stoi(p);
-            if (v < -500 || v > 1000) {
-                return false;
-            }
-            outV = v;
-            return true;
-        } catch (...) {
             return false;
         }
+        for (wchar_t c : p) {
+            if (!iswdigit(c)) {
+                return false;
+            }
+        }
+        return true;
     };
-
-    CustomInsetsPx parsed;
-    if (parseSide(parts[0], 0, parsed.left) &&
-        parseSide(parts[1], 0, parsed.right) &&
-        parseSide(parts[2], 0, parsed.top) &&
-        parseSide(parts[3], 10, parsed.bottom)) {
-        outInsets = parsed;
+    if (!isIntStr(xPart) || !isIntStr(yPart)) {
+        return;
+    }
+    try {
+        int x = std::stoi(xPart);
+        int y = std::stoi(yPart);
+        if (x < 0 || x > 100 || y < 0 || y > 100) {
+            return;
+        }
+        outGeom = {defGeom.radius, x, y};
+    } catch (...) {
     }
 }
 
@@ -1478,64 +1517,28 @@ const wchar_t* WindDegToCompass(double deg) {
     if (norm < 0.0) {
         norm += 360.0;
     }
-    if (norm >= 337.5 || norm < 22.5) {
-        return L"N";
-    }
-    if (norm < 67.5) {
-        return L"NE";
-    }
-    if (norm < 112.5) {
-        return L"E";
-    }
-    if (norm < 157.5) {
-        return L"SE";
-    }
-    if (norm < 202.5) {
-        return L"S";
-    }
-    if (norm < 247.5) {
-        return L"SW";
-    }
-    if (norm < 292.5) {
-        return L"W";
-    }
+    if (norm >= 337.5 || norm < 22.5) return L"N";
+    if (norm < 67.5) return L"NE";
+    if (norm < 112.5) return L"E";
+    if (norm < 157.5) return L"SE";
+    if (norm < 202.5) return L"S";
+    if (norm < 247.5) return L"SW";
+    if (norm < 292.5) return L"W";
     return L"NW";
 }
 
 const wchar_t* WmoCodeToLabel(int code) {
-    if (code < 0) {
-        return L"No forecast";
-    }
-    if (code == 0) {
-        return L"Clear sky";
-    }
-    if (code == 1) {
-        return L"Mainly clear";
-    }
-    if (code == 2) {
-        return L"Partly cloudy";
-    }
-    if (code == 3) {
-        return L"Overcast";
-    }
-    if (code == 45 || code == 48) {
-        return L"Fog";
-    }
-    if (code >= 51 && code <= 57) {
-        return L"Drizzle";
-    }
-    if ((code >= 61 && code <= 67) || (code >= 80 && code <= 82)) {
-        return L"Rain";
-    }
-    if (code == 71 || code == 73 || code == 75 || code == 77 || code == 85 || code == 86) {
-        return L"Snow";
-    }
-    if (code == 95) {
-        return L"Thunderstorm";
-    }
-    if (code == 96 || code == 99) {
-        return L"Thunderstorm + Hail";
-    }
+    if (code < 0) return L"No forecast";
+    if (code == 0) return L"Clear sky";
+    if (code == 1) return L"Mainly clear";
+    if (code == 2) return L"Partly cloudy";
+    if (code == 3) return L"Overcast";
+    if (code == 45 || code == 48) return L"Fog";
+    if (code >= 51 && code <= 57) return L"Drizzle";
+    if ((code >= 61 && code <= 67) || (code >= 80 && code <= 82)) return L"Rain";
+    if (code == 71 || code == 73 || code == 75 || code == 77 || code == 85 || code == 86) return L"Snow";
+    if (code == 95) return L"Thunderstorm";
+    if (code == 96 || code == 99) return L"Thunderstorm + Hail";
     return L"Mixed weather";
 }
 
@@ -1697,58 +1700,26 @@ bool TryParseHexColorStrict(const std::wstring& hexRaw, float defaultAlpha, D2D1
 
 void ApplySkyPrecipColors(const std::wstring& raw, Settings& cfg) {
     std::vector<std::wstring> parts = SplitSlashTokens(raw);
-    if (parts.size() > 0) {
-        TryParseHexColorStrict(parts[0], 0.78f, cfg.colorRain);
-    }
-    if (parts.size() > 1) {
-        cfg.hasCustomSnowColor = TryParseHexColorStrict(parts[1], 0.96f, cfg.colorSnow);
-    }
-    if (parts.size() > 2) {
-        TryParseHexColorStrict(parts[2], 0.95f, cfg.colorHail);
-    }
-    if (parts.size() > 3) {
-        cfg.hasCustomCloudsColor = TryParseHexColorStrict(parts[3], 0.34f, cfg.colorClouds);
-    }
-    if (parts.size() > 4) {
-        cfg.hasCustomSunColor = TryParseHexColorStrict(parts[4], 0.88f, cfg.colorSun);
-    }
-    if (parts.size() > 5) {
-        cfg.hasCustomMoonColor = TryParseHexColorStrict(parts[5], 0.94f, cfg.colorMoon);
-    }
+    if (parts.size() > 0) TryParseHexColorStrict(parts[0], 0.78f, cfg.colorRain);
+    if (parts.size() > 1) cfg.hasCustomSnowColor = TryParseHexColorStrict(parts[1], 0.96f, cfg.colorSnow);
+    if (parts.size() > 2) TryParseHexColorStrict(parts[2], 0.95f, cfg.colorHail);
+    if (parts.size() > 3) cfg.hasCustomCloudsColor = TryParseHexColorStrict(parts[3], 0.34f, cfg.colorClouds);
+    if (parts.size() > 4) cfg.hasCustomSunColor = TryParseHexColorStrict(parts[4], 0.88f, cfg.colorSun);
+    if (parts.size() > 5) cfg.hasCustomMoonColor = TryParseHexColorStrict(parts[5], 0.94f, cfg.colorMoon);
 }
 
 void ApplyEffectsColors(const std::wstring& raw, Settings& cfg) {
     std::vector<std::wstring> parts = SplitSlashTokens(raw);
-    if (parts.size() > 0) {
-        cfg.hasCustomDustColor = TryParseHexColorStrict(parts[0], 0.28f, cfg.colorDust);
-    }
-    if (parts.size() > 1) {
-        cfg.hasCustomFogColor = TryParseHexColorStrict(parts[1], 0.35f, cfg.colorFog);
-    }
-    if (parts.size() > 2) {
-        cfg.hasCustomSmogColor = TryParseHexColorStrict(parts[2], 0.36f, cfg.colorSmog);
-    }
-    if (parts.size() > 3) {
-        cfg.hasCustomThunderstormColor = TryParseHexColorStrict(parts[3], 0.95f, cfg.colorThunderstorm);
-    }
-    if (parts.size() > 4) {
-        cfg.hasCustomAuroraColor = TryParseHexColorStrict(parts[4], 0.32f, cfg.colorAurora);
-    }
-    if (parts.size() > 5) {
-        cfg.hasCustomMirageColor = TryParseHexColorStrict(parts[5], 0.25f, cfg.colorMirage);
-    }
-    if (parts.size() > 6) {
-        cfg.hasCustomRainbowColor = TryParseHexColorStrict(parts[6], 0.35f, cfg.colorRainbow);
-    }
-    if (parts.size() > 7) {
-        cfg.hasCustomAirQualityColor = TryParseHexColorStrict(parts[7], 0.24f, cfg.colorAirQuality);
-    }
-    if (parts.size() > 8) {
-        cfg.hasCustomPollenColor = TryParseHexColorStrict(parts[8], 0.72f, cfg.colorPollen);
-    }
-    if (parts.size() > 9) {
-        cfg.hasCustomFloodWaterColor = TryParseHexColorStrict(parts[9], 0.42f, cfg.colorFloodWater);
-    }
+    if (parts.size() > 0) cfg.hasCustomDustColor = TryParseHexColorStrict(parts[0], 0.28f, cfg.colorDust);
+    if (parts.size() > 1) cfg.hasCustomFogColor = TryParseHexColorStrict(parts[1], 0.35f, cfg.colorFog);
+    if (parts.size() > 2) cfg.hasCustomSmogColor = TryParseHexColorStrict(parts[2], 0.36f, cfg.colorSmog);
+    if (parts.size() > 3) cfg.hasCustomThunderstormColor = TryParseHexColorStrict(parts[3], 0.95f, cfg.colorThunderstorm);
+    if (parts.size() > 4) cfg.hasCustomAuroraColor = TryParseHexColorStrict(parts[4], 0.32f, cfg.colorAurora);
+    if (parts.size() > 5) cfg.hasCustomMirageColor = TryParseHexColorStrict(parts[5], 0.25f, cfg.colorMirage);
+    if (parts.size() > 6) cfg.hasCustomRainbowColor = TryParseHexColorStrict(parts[6], 0.35f, cfg.colorRainbow);
+    if (parts.size() > 7) cfg.hasCustomAirQualityColor = TryParseHexColorStrict(parts[7], 0.24f, cfg.colorAirQuality);
+    if (parts.size() > 8) cfg.hasCustomPollenColor = TryParseHexColorStrict(parts[8], 0.72f, cfg.colorPollen);
+    if (parts.size() > 9) cfg.hasCustomFloodWaterColor = TryParseHexColorStrict(parts[9], 0.42f, cfg.colorFloodWater);
 }
 
 void LoadSettingsFromWh() {
@@ -1763,7 +1734,7 @@ void LoadSettingsFromWh() {
     next.performanceMode = ParsePerformanceMode(readStr(L"performanceMode", L"high"));
     next.bottomBoundaryMode = ToLower(Trim(readStr(L"bottomBoundaryMode", L"above_taskbar")));
     next.taskbarAsBorder = Wh_GetIntSetting(L"taskbarAsBorder") != 0;
-    ParseCustomInsetsString(readStr(L"customOffset", L"0/0/0/10"), next.customOffset);
+    next.bottomInsetPx = ParseBottomInsetString(readStr(L"customOffset", L"10"), 10);
     next.multiMonitorMode = ToLower(Trim(readStr(L"multiMonitorMode", L"primary")));
     int fpsRaw = Wh_GetIntSetting(L"targetFps");
     next.targetFps = (fpsRaw == 30 || fpsRaw == 60) ? fpsRaw : 60;
@@ -1776,13 +1747,11 @@ void LoadSettingsFromWh() {
     next.openweathermapKey = Trim(readStr(L"openweathermapKey", L""));
     next.visualCrossingKey = Trim(readStr(L"visualCrossingKey", L""));
     next.tomorrowIoKey = Trim(readStr(L"tomorrowIoKey", L""));
-    next.coordsRaw = Trim(readStr(L"coords", L"44.7866/20.4489"));
+    next.coordsRaw = Trim(readStr(L"coords", L""));
     next.hasValidCoords = TryParseCoordsString(next.coordsRaw, next.latitude, next.longitude);
-    if (!next.hasValidCoords && next.primarySource != L"off" && next.primarySource != L"local_file") {
-        next.coordsRaw = L"44.7866/20.4489";
-        next.latitude = 44.7866;
-        next.longitude = 20.4489;
-        next.hasValidCoords = true;
+    if (!next.hasValidCoords) {
+        next.latitude = 0.0;
+        next.longitude = 0.0;
     }
     next.customApiUrl = Trim(readStr(L"customApiUrl", L""));
     next.localWeatherPath = Trim(readStr(L"localWeatherPath", L""));
@@ -1798,8 +1767,16 @@ void LoadSettingsFromWh() {
     next.forecastHudEnabled = ToLower(Trim(readStr(L"forecastHudMode", L"off"))) == L"on";
     next.hudButtonRadiusPx = static_cast<float>(ParseIntRangeOrDefault(Wh_GetIntSetting(L"hudButtonRadiusPx"), 14, 96, 24));
     next.hudFontSizePx = static_cast<float>(ParseIntRangeOrDefault(Wh_GetIntSetting(L"hudFontSizePx"), 9, 22, 12));
-    ParseArcGeometryString(readStr(L"hudButtonGeometry", L"4-92/88"), ArcGeometry{4, 92, 88}, next.hudButtonGeom);
+    ParseHudButtonGeometryString(readStr(L"hudButtonGeometry", L"92/88"), ArcGeometry{24, 92, 88}, next.hudButtonGeom);
+
     std::wstring savedBtnPos = readStr(L"hudButtonPos", L"");
+    if (savedBtnPos.empty()) {
+        LPCWSTR persistedPos = Wh_GetStringSetting(L"hudButtonPos");
+        if (persistedPos) {
+            savedBtnPos = Trim(persistedPos);
+            Wh_FreeStringSetting(persistedPos);
+        }
+    }
     size_t slashPos = savedBtnPos.find(L'/');
     if (slashPos != std::wstring::npos) {
         double rx = 0.0;
@@ -1866,12 +1843,24 @@ void LoadSettingsFromWh() {
     }
     TryParseHexColorStrict(readStr(L"colorHudText", L"#F0F5FC"), 0.96f, next.colorHudText);
 
+    bool wakeWeather = false;
     {
         std::lock_guard<std::mutex> lock(g_mutex);
+        bool sourceOrCoordsChanged = (next.primarySource != g_lastFetchedSource) ||
+                                      (next.hasValidCoords &&
+                                       (std::abs(next.latitude - g_lastFetchedLat) > 1e-6 ||
+                                        std::abs(next.longitude - g_lastFetchedLon) > 1e-6));
+        if (!next.hasValidCoords) {
+            g_forecast = ForecastSnapshot{};
+        }
+        if (sourceOrCoordsChanged) {
+            g_forecastDirty = true;
+            wakeWeather = true;
+        }
         g_settings = next;
         g_arcCacheDirty = true;
     }
-    if (g_weatherWakeEvent) {
+    if (wakeWeather && g_weatherWakeEvent) {
         SetEvent(g_weatherWakeEvent);
     }
 }
@@ -1880,21 +1869,42 @@ void ApplyRuntimeButtonPosition(float cx, float cy) {
     if (g_canvasWidth <= 1 || g_canvasHeight <= 1) {
         return;
     }
+    double rx = std::clamp(static_cast<double>(cx) / static_cast<double>(g_canvasWidth), 0.02, 0.98);
+    double ry = std::clamp(static_cast<double>(cy) / static_cast<double>(g_canvasHeight), 0.02, 0.98);
     std::lock_guard<std::mutex> lock(g_mutex);
     g_settings.hasCustomBtnPos = true;
-    g_settings.hudBtnRelX = std::clamp(static_cast<double>(cx) / static_cast<double>(g_canvasWidth), 0.02, 0.98);
-    g_settings.hudBtnRelY = std::clamp(static_cast<double>(cy) / static_cast<double>(g_canvasHeight), 0.02, 0.98);
+    g_settings.hudBtnRelX = rx;
+    g_settings.hudBtnRelY = ry;
 }
 
 void CommitEditedFieldValue(HudFieldId fieldId, const std::wstring& val) {
     std::wstring trimmed = Trim(val);
+    bool wakeWeather = false;
     {
         std::lock_guard<std::mutex> lock(g_mutex);
         switch (fieldId) {
-            case HudFieldId::Coords:
+            case HudFieldId::Coords: {
+                double newLat = 0.0;
+                double newLon = 0.0;
+                bool validNow = TryParseCoordsString(trimmed, newLat, newLon);
+                bool coordsChanged = validNow &&
+                                     (!g_settings.hasValidCoords ||
+                                      std::abs(newLat - g_lastFetchedLat) > 1e-6 ||
+                                      std::abs(newLon - g_lastFetchedLon) > 1e-6);
                 g_settings.coordsRaw = trimmed;
-                g_settings.hasValidCoords = TryParseCoordsString(trimmed, g_settings.latitude, g_settings.longitude);
+                g_settings.hasValidCoords = validNow;
+                if (validNow) {
+                    g_settings.latitude = newLat;
+                    g_settings.longitude = newLon;
+                } else {
+                    g_forecast = ForecastSnapshot{};
+                }
+                if (coordsChanged) {
+                    g_forecastDirty = true;
+                    wakeWeather = true;
+                }
                 break;
+            }
             case HudFieldId::CloudsIntensity: {
                 double v = 35.0;
                 if (TryParseDoubleStrict(trimmed, v)) {
@@ -1947,7 +1957,7 @@ void CommitEditedFieldValue(HudFieldId fieldId, const std::wstring& val) {
         }
         g_arcCacheDirty = true;
     }
-    if (g_weatherWakeEvent) {
+    if (wakeWeather && g_weatherWakeEvent) {
         SetEvent(g_weatherWakeEvent);
     }
 }
@@ -1973,15 +1983,12 @@ void CycleSettingOption(const std::wstring& actionId) {
     }
 
     auto nextTri = [](TriStateMode m) -> TriStateMode {
-        if (m == TriStateMode::Auto) {
-            return TriStateMode::On;
-        }
-        if (m == TriStateMode::On) {
-            return TriStateMode::Off;
-        }
+        if (m == TriStateMode::Auto) return TriStateMode::On;
+        if (m == TriStateMode::On) return TriStateMode::Off;
         return TriStateMode::Auto;
     };
 
+    bool wakeWeather = false;
     {
         std::lock_guard<std::mutex> lock(g_mutex);
         Settings& cur = g_settings;
@@ -2004,6 +2011,8 @@ void CycleSettingOption(const std::wstring& actionId) {
                 }
             }
             cur.primarySource = order[idx];
+            g_forecastDirty = true;
+            wakeWeather = true;
         } else if (actionId == L"cycle_clouds") {
             cur.cloudsMode = nextTri(cur.cloudsMode);
         } else if (actionId == L"cycle_sun") {
@@ -2059,13 +2068,13 @@ void CycleSettingOption(const std::wstring& actionId) {
         }
         g_arcCacheDirty = true;
     }
-    if (g_weatherWakeEvent) {
+    if (wakeWeather && g_weatherWakeEvent) {
         SetEvent(g_weatherWakeEvent);
     }
 }
 
 std::string HttpGetUtf8(const std::wstring& url,
-                        const std::wstring& userAgent = L"Mozilla/5.0 (Windows NT 10.0; Win64; x64) WindhawkWeatherOverlay/2.9") {
+                        const std::wstring& userAgent = L"WindhawkWeatherOverlay/2.9") {
     URL_COMPONENTSW parts = {};
     parts.dwStructSize = sizeof(parts);
     wchar_t host[256] = {};
@@ -2076,7 +2085,7 @@ std::string HttpGetUtf8(const std::wstring& url,
     parts.dwUrlPathLength = _countof(path);
 
     if (!InternetCrackUrlW(url.c_str(), 0, 0, &parts)) {
-        Wh_Log(L"InternetCrackUrlW failed: %u (%s)", GetLastError(), url.c_str());
+        Wh_Log(L"InternetCrackUrlW failed: %u", GetLastError());
         return {};
     }
 
@@ -2118,15 +2127,10 @@ std::string HttpGetUtf8(const std::wstring& url,
                 }
                 Wh_Log(L"HTTP GET 200 OK (%zu bytes) from %s", response.size(), host);
             } else {
-                char errBuf[321] = {};
-                DWORD errRead = 0;
-                InternetReadFile(hRequest, errBuf, 320, &errRead);
-                errBuf[errRead] = '\0';
-                Wh_Log(L"HTTP GET unexpected status: %u (err=%u) from %s | body: %S",
-                       statusCode, GetLastError(), host, errBuf);
+                Wh_Log(L"HTTP GET unexpected status: %u (err=%u) from %s", statusCode, GetLastError(), host);
             }
         } else {
-            Wh_Log(L"HttpSendRequestW failed: %u for %s", GetLastError(), url.c_str());
+            Wh_Log(L"HttpSendRequestW failed: %u for %s", GetLastError(), host);
         }
     }
 
@@ -2139,45 +2143,19 @@ std::string HttpGetUtf8(const std::wstring& url,
 }
 
 double EstimatePrecipMmFromWmo(int code) {
-    if (code == 51 || code == 56) {
-        return 0.3;
-    }
-    if (code == 53) {
-        return 0.8;
-    }
-    if (code == 55 || code == 57) {
-        return 1.8;
-    }
-    if (code == 61 || code == 80) {
-        return 1.5;
-    }
-    if (code == 63 || code == 81) {
-        return 4.0;
-    }
-    if (code == 65 || code == 82) {
-        return 8.5;
-    }
-    if (code == 66) {
-        return 1.5;
-    }
-    if (code == 67) {
-        return 5.0;
-    }
-    if (code == 71 || code == 85) {
-        return 0.8;
-    }
-    if (code == 73 || code == 77) {
-        return 2.2;
-    }
-    if (code == 75 || code == 86) {
-        return 5.5;
-    }
-    if (code == 95) {
-        return 6.0;
-    }
-    if (code == 96 || code == 99) {
-        return 9.0;
-    }
+    if (code == 51 || code == 56) return 0.3;
+    if (code == 53) return 0.8;
+    if (code == 55 || code == 57) return 1.8;
+    if (code == 61 || code == 80) return 1.5;
+    if (code == 63 || code == 81) return 4.0;
+    if (code == 65 || code == 82) return 8.5;
+    if (code == 66) return 1.5;
+    if (code == 67) return 5.0;
+    if (code == 71 || code == 85) return 0.8;
+    if (code == 73 || code == 77) return 2.2;
+    if (code == 75 || code == 86) return 5.5;
+    if (code == 95) return 6.0;
+    if (code == 96 || code == 99) return 9.0;
     return 0.0;
 }
 
@@ -3067,25 +3045,21 @@ bool ParseTomorrowIoJson(const std::string& json, ForecastSnapshot& outSnap) {
 }
 
 bool FetchSingleWeatherSource(const std::wstring& src, const Settings& cfg, ForecastSnapshot& outSnap) {
-    if (src == L"off" || src == L"auto") {
+    if (src == L"off" || src == L"auto" || !cfg.hasValidCoords) {
         return false;
     }
+    const std::wstring amp(1, static_cast<wchar_t>(38));
     std::wstring latStr = FormatCoordDot(cfg.latitude);
     std::wstring lonStr = FormatCoordDot(cfg.longitude);
     std::wstring apiKey = GetProviderApiKey(src, cfg);
 
     if (src == L"open_meteo") {
-        if (!cfg.hasValidCoords) {
-            return false;
-        }
-        const std::wstring amp(1, static_cast<wchar_t>(38));
         std::wstring url =
             L"https://api.open-meteo.com/v1/forecast?latitude=" + latStr +
             amp + L"longitude=" + lonStr +
-            amp + L"current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,wind_gusts_10m,is_day,uv_index" +
+            amp + L"current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,wind_gusts_10m,is_day,uv_index,pressure_msl,dew_point_2m,visibility" +
             amp + L"daily=sunrise,sunset" +
             amp + L"timezone=auto";
-        Wh_Log(L"Fetching Open-Meteo: %s", url.c_str());
         std::string body = HttpGetUtf8(url);
         if (body.empty() || !ParseWeatherJson(body, outSnap, L"Open-Meteo")) {
             return false;
@@ -3105,57 +3079,51 @@ bool FetchSingleWeatherSource(const std::wstring& src, const Settings& cfg, Fore
         return true;
     }
     if (src == L"met_norway") {
-        if (!cfg.hasValidCoords) {
-            return false;
-        }
         std::wstring url = L"https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=" +
-                           latStr + L"&lon=" + lonStr;
+                           latStr + amp + L"lon=" + lonStr;
         std::string body = HttpGetUtf8(url, L"WindhawkWeatherOverlay/2.9 github.com/alembiqspace");
         return !body.empty() && ParseMetNorwayJson(body, outSnap);
     }
     if (src == L"seven_timer") {
-        if (!cfg.hasValidCoords) {
-            return false;
-        }
         std::wstring url = L"https://www.7timer.info/bin/api.pl?lon=" + lonStr +
-                           L"&lat=" + latStr + L"&product=civil&output=json";
+                           amp + L"lat=" + latStr + amp + L"product=civil" + amp + L"output=json";
         std::string body = HttpGetUtf8(url);
         return !body.empty() && ParseSevenTimerJson(body, outSnap);
     }
     if (src == L"weatherapi") {
-        if (!cfg.hasValidCoords || apiKey.empty()) {
+        if (apiKey.empty()) {
             return false;
         }
         std::wstring url = L"https://api.weatherapi.com/v1/current.json?key=" + apiKey +
-                           L"&q=" + latStr + L"," + lonStr + L"&aqi=yes";
+                           amp + L"q=" + latStr + L"," + lonStr + amp + L"aqi=yes";
         std::string body = HttpGetUtf8(url);
         return !body.empty() && ParseWeatherApiJson(body, outSnap);
     }
     if (src == L"openweathermap") {
-        if (!cfg.hasValidCoords || apiKey.empty()) {
+        if (apiKey.empty()) {
             return false;
         }
         std::wstring url = L"https://api.openweathermap.org/data/2.5/weather?lat=" + latStr +
-                           L"&lon=" + lonStr + L"&appid=" + apiKey + L"&units=metric";
+                           amp + L"lon=" + lonStr + amp + L"appid=" + apiKey + amp + L"units=metric";
         std::string body = HttpGetUtf8(url);
         return !body.empty() && ParseOpenWeatherMapJson(body, outSnap);
     }
     if (src == L"visual_crossing") {
-        if (!cfg.hasValidCoords || apiKey.empty()) {
+        if (apiKey.empty()) {
             return false;
         }
         std::wstring url = L"https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/" +
                            latStr + L"," + lonStr +
-                           L"?unitGroup=metric&include=current&key=" + apiKey + L"&contentType=json";
+                           L"?unitGroup=metric" + amp + L"include=current" + amp + L"key=" + apiKey + amp + L"contentType=json";
         std::string body = HttpGetUtf8(url);
         return !body.empty() && ParseVisualCrossingJson(body, outSnap);
     }
     if (src == L"tomorrow_io") {
-        if (!cfg.hasValidCoords || apiKey.empty()) {
+        if (apiKey.empty()) {
             return false;
         }
         std::wstring url = L"https://api.tomorrow.io/v4/weather/realtime?location=" +
-                           latStr + L"," + lonStr + L"&apikey=" + apiKey;
+                           latStr + L"," + lonStr + amp + L"apikey=" + apiKey;
         std::string body = HttpGetUtf8(url);
         return !body.empty() && ParseTomorrowIoJson(body, outSnap);
     }
@@ -3166,6 +3134,7 @@ bool FetchSingleWeatherSource(const std::wstring& src, const Settings& cfg, Fore
         std::wstring resolvedUrl = cfg.customApiUrl;
         resolvedUrl = ReplaceAllSubstrings(resolvedUrl, L"{lat}", latStr);
         resolvedUrl = ReplaceAllSubstrings(resolvedUrl, L"{lon}", lonStr);
+        resolvedUrl = ReplaceAllSubstrings(resolvedUrl, L"{key}", cfg.weatherapiKey);
         std::string body = HttpGetUtf8(resolvedUrl);
         return !body.empty() && ParseWeatherJson(body, outSnap, L"Custom API");
     }
@@ -3327,14 +3296,22 @@ bool FetchAutoAggregatedForecast(const Settings& cfg, ForecastSnapshot& outSnap)
 void WeatherWorkerLoop() {
     while (g_running.load()) {
         Settings cfg;
+        bool needFetch = false;
         int intervalSec = 1800;
         {
             std::lock_guard<std::mutex> lock(g_mutex);
             cfg = g_settings;
             intervalSec = cfg.updateIntervalMin * 60;
+            needFetch = (cfg.primarySource != L"off") && HasAnyForecastConsumer(cfg) && g_forecastDirty;
+            if (needFetch) {
+                g_forecastDirty = false;
+                g_lastFetchedSource = cfg.primarySource;
+                g_lastFetchedLat = cfg.latitude;
+                g_lastFetchedLon = cfg.longitude;
+            }
         }
         DWORD waitMs = static_cast<DWORD>(intervalSec) * 1000;
-        if ((cfg.primarySource != L"off") && HasAnyForecastConsumer(cfg)) {
+        if (needFetch) {
             ForecastSnapshot snap;
             bool ok = (cfg.primarySource == L"auto")
                 ? FetchAutoAggregatedForecast(cfg, snap)
@@ -3349,9 +3326,13 @@ void WeatherWorkerLoop() {
                 {
                     std::lock_guard<std::mutex> lock(g_mutex);
                     g_forecast.lastFetchFailed = true;
+                    g_forecastDirty = true;
                 }
                 waitMs = std::min<DWORD>(waitMs, 60000);
             }
+        } else if (cfg.primarySource != L"off" && HasAnyForecastConsumer(cfg)) {
+            std::lock_guard<std::mutex> lock(g_mutex);
+            g_forecastDirty = true;
         }
         if (g_weatherWakeEvent) {
             WaitForSingleObject(g_weatherWakeEvent, waitMs);
@@ -3373,9 +3354,8 @@ int ComputeBottomLimitYForRect(const Settings& cfg, int monTop, int monBottom, i
             baseBottom = std::min(baseBottom, static_cast<int>(trayRect.top));
         }
     } else if (cfg.bottomBoundaryMode == L"custom_offset") {
-        baseBottom -= cfg.customOffset.bottom;
+        baseBottom -= cfg.bottomInsetPx;
     }
-    baseBottom -= cfg.customOffset.bottom;
     return std::clamp(baseBottom, monTop + 10, monBottom);
 }
 
@@ -3434,7 +3414,7 @@ void UpdateCanvasGeometry(const Settings& cfg) {
     if (g_monitorRects.empty()) {
         g_monitorRects.push_back(MonitorCanvasRect{
             0.0f, 0.0f, static_cast<float>(g_canvasWidth), static_cast<float>(g_canvasHeight),
-            static_cast<float>(g_canvasHeight - cfg.customOffset.bottom)
+            static_cast<float>(g_canvasHeight - cfg.bottomInsetPx)
         });
     }
 }
@@ -3443,7 +3423,7 @@ int ComputeBottomLimitY(const Settings& cfg) {
     if (!g_monitorRects.empty()) {
         return static_cast<int>(g_canvasTop + g_monitorRects.front().bottomLimitRelY);
     }
-    return std::clamp(g_canvasTop + g_canvasHeight - cfg.customOffset.bottom, g_canvasTop + 10, g_canvasTop + g_canvasHeight);
+    return std::clamp(g_canvasTop + g_canvasHeight - cfg.bottomInsetPx, g_canvasTop + 10, g_canvasTop + g_canvasHeight);
 }
 
 bool IsFullscreenAppActive() {
@@ -3475,7 +3455,9 @@ bool IsFullscreenAppActive() {
 bool IsWindowCloaked(HWND hwnd) {
     constexpr DWORD kDwmwaCloaked = 14;
     using DwmGetWindowAttributeFn = HRESULT(WINAPI*)(HWND, DWORD, PVOID, DWORD);
-    static HMODULE hDwmapi = GetModuleHandleW(L"dwmapi.dll") ? GetModuleHandleW(L"dwmapi.dll") : LoadLibraryW(L"dwmapi.dll");
+    static HMODULE hDwmapi = GetModuleHandleW(L"dwmapi.dll")
+        ? GetModuleHandleW(L"dwmapi.dll")
+        : LoadLibraryExW(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!hDwmapi) {
         return false;
     }
@@ -3549,15 +3531,13 @@ HWND FindDesktopInsertAfter(const std::wstring& mode, HWND overlay) {
     if (defView) {
         HWND parent = GetParent(defView);
         if (parent && parent != progman) {
-            HWND afterParent = GetWindow(parent, GW_HWNDNEXT);
-            if (afterParent && afterParent != overlay) {
-                return afterParent;
+            if (parent != overlay) {
+                return parent;
             }
             return HWND_BOTTOM;
         }
-        HWND afterDef = GetWindow(defView, GW_HWNDNEXT);
-        if (afterDef && afterDef != overlay) {
-            return afterDef;
+        if (progman && progman != overlay) {
+            return progman;
         }
     }
     return HWND_BOTTOM;
@@ -3570,10 +3550,6 @@ void PositionDesktopOverlay(HWND overlay, const std::wstring& mode, bool forceSh
     HWND insertAfter = FindDesktopInsertAfter(mode, overlay);
     SetWindowPos(overlay, insertAfter, g_canvasLeft, g_canvasTop, g_canvasWidth, g_canvasHeight,
                  SWP_NOACTIVATE | (forceShow ? SWP_SHOWWINDOW : 0));
-    HWND defView = FindDesktopIconsWindow();
-    if (defView && mode == L"auto") {
-        SetWindowPos(defView, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-    }
 }
 
 bool IsRelPointInsideHud(float relX, float relY) {
@@ -4752,8 +4728,7 @@ std::wstring BuildMetricTooltip(const MetricMeta& meta) {
 
 void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
                            const Settings& cfg, const ForecastSnapshot& snap,
-                           bool activePrecip, const GeneralEffectsState& activeFx,
-                           float cloudPct01, float uvIndex, double moonPhase01, int bottomLimitY) {
+                           float uvIndex, double moonPhase01, int bottomLimitY) {
     float btnR = cfg.hudButtonRadiusPx;
     bool expanded = g_hudExpanded.load();
     bool showGearIcon = (!expanded && !snap.valid);
@@ -5213,12 +5188,9 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
         rt->DrawTextW(labelText.c_str(), static_cast<UINT32>(labelText.size()), g_hudCircleFormat,
                       D2D1::RectF(btnCx - btnR, btnCy - btnR, btnCx + btnR, btnCy + btnR), brush);
     }
-    (void)activePrecip;
-    (void)activeFx;
-    (void)cloudPct01;
 }
 
-void RenderFrame(const Settings& cfg, const ForecastSnapshot& snap, bool activePrecip, const GeneralEffectsState& fx,
+void RenderFrame(const Settings& cfg, const ForecastSnapshot& snap, const GeneralEffectsState& fx,
                  float cloudPct01, float uvIndex, double moonPhase01,
                  int bottomLimitY, float precipVx, double timeSec, bool forceArcDirty,
                  bool hasCursor, float curRelX, float curRelY) {
@@ -5303,7 +5275,7 @@ void RenderFrame(const Settings& cfg, const ForecastSnapshot& snap, bool activeP
     if (fx.floodWater) {
         DrawFloodWaterLayer(g_surface.rt, g_surface.sharedBrush, cfg, snap, k, timeSec);
     }
-    DrawForecastHudWidget(g_surface.rt, g_surface.sharedBrush, cfg, snap, activePrecip, fx, cloudPct01, uvIndex, moonPhase01, bottomLimitY);
+    DrawForecastHudWidget(g_surface.rt, g_surface.sharedBrush, cfg, snap, uvIndex, moonPhase01, bottomLimitY);
 
     if (FAILED(g_surface.rt->EndDraw())) {
         CleanupSurface(g_surface);
@@ -5379,7 +5351,6 @@ void RenderWorkerLoop() {
     std::mt19937 rng(static_cast<unsigned>(GetTickCount64()));
     auto startTime = std::chrono::steady_clock::now();
     auto lastTime = startTime;
-    int zOrderTick = 0;
     int prevLeft = INT32_MIN;
     int prevTop = INT32_MIN;
     int prevW = -1;
@@ -5453,7 +5424,7 @@ void RenderWorkerLoop() {
         }
 
         auto now = std::chrono::steady_clock::now();
-        float dt = std::clamp(std::chrono::duration<float>(now - lastTime).count(), 0.001f, 0.05f);
+        float dt = std::clamp(std::chrono::duration<float>(now - lastTime).count(), 0.001f, 0.25f);
         double timeSec = std::chrono::duration<double>(now - startTime).count();
         lastTime = now;
 
@@ -5530,14 +5501,9 @@ void RenderWorkerLoop() {
             lastTime = std::chrono::steady_clock::now();
             continue;
         }
-        if (g_overlayHwnd) {
-            if (!IsWindowVisible(g_overlayHwnd)) {
-                ShowWindow(g_overlayHwnd, SW_SHOWNA);
-                PositionDesktopOverlay(g_overlayHwnd, cfg.layerAttachMode, true);
-            } else if (++zOrderTick >= 20) {
-                zOrderTick = 0;
-                PositionDesktopOverlay(g_overlayHwnd, cfg.layerAttachMode, false);
-            }
+        if (g_overlayHwnd && !IsWindowVisible(g_overlayHwnd)) {
+            ShowWindow(g_overlayHwnd, SW_SHOWNA);
+            PositionDesktopOverlay(g_overlayHwnd, cfg.layerAttachMode, true);
         }
 
         if (activeFx.thunderstorm) {
@@ -5589,14 +5555,18 @@ void RenderWorkerLoop() {
             }
         }
 
-        RenderFrame(cfg, snap, activePrecip, activeFx, cloudPct01, uvIndex, moonPhase01,
+        RenderFrame(cfg, snap, activeFx, cloudPct01, uvIndex, moonPhase01,
                     ComputeBottomLimitY(cfg), windCloudVx, timeSec, forceArcDirty,
                     hasCursor, curRelX, curRelY);
 
-        bool hasAnimatedMotion = !g_falling.empty() || activeFx.thunderstorm || activeFx.aurora || activeFx.mirage ||
-                                 activeFx.windStreams || activeFx.nightStars || activeFx.airQuality ||
-                                 activeFx.pollen || activeFx.floodWater || (cloudPct01 > 0.01f) || sunActive || moonActive;
-        WaitWithMessagePump(hasAnimatedMotion ? static_cast<DWORD>(1000 / cfg.targetFps) : 120);
+        bool hasFastMotion = !g_falling.empty() || activeFx.thunderstorm || activeFx.aurora || activeFx.mirage ||
+                             activeFx.windStreams || activeFx.nightStars || activeFx.airQuality ||
+                             activeFx.pollen || activeFx.floodWater || g_hudExpanded.load();
+        bool hasSlowMotion = (cloudPct01 > 0.01f) || sunActive || moonActive;
+        DWORD waitMs = hasFastMotion
+            ? static_cast<DWORD>(1000 / cfg.targetFps)
+            : (hasSlowMotion ? 300 : 500);
+        WaitWithMessagePump(waitMs);
     }
 
     if (g_overlayHwnd) {
@@ -5646,9 +5616,18 @@ void WhTool_ModUninit() {
     }
 }
 
+// The mod is going to be injected into windhawk.exe, which is a tool mod
+// process. Create a process with the same command line, passing the
+// `-tool-mod` parameter, which will be injected into a new non-tool-mod
+// process, and then exit the tool mod process.
+
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
-void WINAPI EntryPoint_Hook() { ExitThread(0); }
+
+void WINAPI EntryPoint_Hook() {
+    // Exit the tool mod process.
+    ExitThread(0);
+}
 
 BOOL Wh_ModInit() {
     bool isService = false;
@@ -5657,8 +5636,10 @@ BOOL Wh_ModInit() {
     int argc;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
     }
+
     for (int i = 1; i < argc; i++) {
         if (wcscmp(argv[i], L"-service") == 0 ||
             wcscmp(argv[i], L"-service-start") == 0 ||
@@ -5667,6 +5648,7 @@ BOOL Wh_ModInit() {
             break;
         }
     }
+
     for (int i = 1; i < argc - 1; i++) {
         if (wcscmp(argv[i], L"-tool-mod") == 0) {
             isToolModProcess = true;
@@ -5676,31 +5658,47 @@ BOOL Wh_ModInit() {
             break;
         }
     }
+
     LocalFree(argv);
+
     if (isService) {
         return FALSE;
     }
+
     if (isCurrentToolModProcess) {
         g_toolModProcessMutex = CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-        if (!g_toolModProcessMutex || GetLastError() == ERROR_ALREADY_EXISTS) {
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
         }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod process is already running");
+            ExitProcess(1);
+        }
+
         if (!WhTool_ModInit()) {
             ExitProcess(1);
         }
-        IMAGE_DOS_HEADER* dosHeader = reinterpret_cast<IMAGE_DOS_HEADER*>(GetModuleHandleW(nullptr));
-        IMAGE_NT_HEADERS* ntHeaders = reinterpret_cast<IMAGE_NT_HEADERS*>(reinterpret_cast<BYTE*>(dosHeader) + dosHeader->e_lfanew);
-        Wh_SetFunctionHook(reinterpret_cast<BYTE*>(dosHeader) + ntHeaders->OptionalHeader.AddressOfEntryPoint,
-                           reinterpret_cast<void*>(EntryPoint_Hook), nullptr);
+
+        IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)GetModuleHandleW(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders = (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+        DWORD entryPointRva = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRva;
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
     }
+
     if (isToolModProcess) {
         return FALSE;
     }
+
     DWORD sessionId;
     if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0) {
+        Wh_Log(L"Session 0 process, skipping");
         return FALSE;
     }
+
     g_isToolModProcessLauncher = true;
     return TRUE;
 }
@@ -5709,19 +5707,27 @@ void Wh_ModAfterInit() {
     if (!g_isToolModProcessLauncher) {
         return;
     }
+
     WCHAR windhawkPath[MAX_PATH];
-    if (!GetModuleFileNameW(nullptr, windhawkPath, ARRAYSIZE(windhawkPath))) {
+    DWORD windhawkPathLen = GetModuleFileNameW(nullptr, windhawkPath, ARRAYSIZE(windhawkPath));
+    if (!windhawkPathLen || windhawkPathLen == ARRAYSIZE(windhawkPath)) {
+        Wh_Log(L"GetModuleFileNameW failed");
         return;
     }
+
     WCHAR commandLine[MAX_PATH * 2];
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", windhawkPath, WH_MOD_ID);
+
     STARTUPINFO si = {sizeof(si)};
     si.dwFlags = STARTF_FORCEOFFFEEDBACK;
     PROCESS_INFORMATION pi;
-    if (CreateProcessW(windhawkPath, commandLine, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
+    if (!CreateProcessW(windhawkPath, commandLine, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
+        Wh_Log(L"CreateProcessW failed: %u", GetLastError());
+        return;
     }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
 }
 
 void Wh_ModSettingsChanged() {
