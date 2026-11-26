@@ -519,11 +519,18 @@ int ParseWindowsVersion(PCWSTR str) {
 DWORD GetWindowsUpdateBuildRevision() {
   DWORD ubr = 0;
   DWORD size = sizeof(ubr);
-  if (RegGetValueW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion", L"UBR",
-                   RRF_RT_REG_DWORD, nullptr, &ubr, &size) != ERROR_SUCCESS) {
-    return 0;
+  // Windhawk 1.7.3's tool-mod host is 32-bit, so HKLM\SOFTWARE is redirected
+  // to WOW6432Node by default. Ask for the native 64-bit view first; fall back
+  // to the default view on 32-bit Windows, where the flag is not applicable.
+  LSTATUS status =
+      RegGetValueW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion", L"UBR",
+                   RRF_RT_REG_DWORD | RRF_SUBKEY_WOW6464KEY, nullptr, &ubr, &size);
+  if (status != ERROR_SUCCESS) {
+    size = sizeof(ubr);
+    status = RegGetValueW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion", L"UBR",
+                          RRF_RT_REG_DWORD, nullptr, &ubr, &size);
   }
-  return ubr;
+  return status == ERROR_SUCCESS ? ubr : 0;
 }
 
 // Best-effort mapping from the real build to the version entry. The 22621/22631
