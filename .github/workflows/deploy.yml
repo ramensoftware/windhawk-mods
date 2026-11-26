@@ -17,7 +17,8 @@ concurrency:
   cancel-in-progress: true
 
 # The workflow token pushes the pages branch, and reads the pull requests and
-# their comments for the external catalog.
+# their comments for the external catalog. Only the steps that do so get it, so
+# that the tools and packages the other steps run can't push with it.
 permissions:
   contents: write
   issues: read
@@ -34,13 +35,11 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          persist-credentials: false
       - name: Setup Python
         uses: actions/setup-python@v7
         with:
           python-version: '3.x'
-          cache-dependency-path: '.github/requirements.txt'
-      - name: Install Python dependencies
-        run: python -m pip install -r .github/requirements.txt
       - name: Clone last deployed content
         run: |
           # The deployed content has image paths that are derived from URLs,
@@ -54,7 +53,7 @@ jobs:
           # collapse image paths that differ only by case during checkout or,
           # later, when staging the updated content for deployment. The setting
           # persists in the clone's config and is reused by the deploy step.
-          git clone -c core.ignorecase=false --branch pages --depth 1 https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git "${{ runner.temp }}/last_deploy"
+          git clone -c core.ignorecase=false --branch pages --depth 1 https://github.com/${{ github.repository }}.git "${{ runner.temp }}/last_deploy"
       - name: Cache Windhawk
         id: cache-windhawk
         uses: actions/cache@v6
@@ -68,6 +67,7 @@ jobs:
           installer_path="${{ runner.temp }}/windhawk_setup.exe"
           echo "Downloading $installer_url to $installer_path"
           curl -L "$installer_url" -o "$installer_path"
+          (cd "${{ runner.temp }}" && echo "5116cc1703384aac88b8d7a3b57f172aea5da32b6df7355fb2f8247d23813c8f windhawk_setup.exe" | sha256sum -c)
 
           extract_path="${{ runner.temp }}\windhawk"
           echo "Extracting $installer_path to $extract_path"
@@ -95,8 +95,9 @@ jobs:
       - name: Install dependencies
         # The dev dependencies are type declarations, used by editors and by
         # type checking. Nothing here consumes them, as tsx strips types without
-        # checking them.
-        run: npm install --omit=dev
+        # checking them. No install scripts run: esbuild, the only package with
+        # one, finds its binary without it.
+        run: npm ci --omit=dev --ignore-scripts
       - name: Prepare static content
         run: npx tsx deploy.ts
         env:
@@ -117,6 +118,8 @@ jobs:
           export PATH="$(cygpath -u '${{ runner.temp }}/image_tools'):$PATH"
           python scripts/archive_mod_images.py
       - name: Deploy
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           src_dir=.
           deploy_dir="${{ runner.temp }}/last_deploy"
@@ -124,8 +127,6 @@ jobs:
 
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          # echo Cloning the repository
-          # git clone --branch $deploy_branch --depth 1 --filter=blob:none --no-checkout https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git "$deploy_dir"
           echo Adding generated files to the repository
           git --git-dir="$deploy_dir/.git" --work-tree="$src_dir" add -A
           touch "$deploy_dir/.nojekyll"
@@ -133,4 +134,4 @@ jobs:
           echo Committing changes
           git -C "$deploy_dir" diff-index --cached --quiet HEAD || git --git-dir="$deploy_dir/.git" --work-tree="$src_dir" commit -m "deploy: ${{ github.sha }}"
           echo Pushing to GitHub
-          git -C "$deploy_dir" push origin $deploy_branch
+          git -C "$deploy_dir" push "https://x-access-token:$GITHUB_TOKEN@github.com/${{ github.repository }}.git" $deploy_branch

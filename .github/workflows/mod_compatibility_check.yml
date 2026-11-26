@@ -66,10 +66,18 @@ jobs:
             installer_args='/DEVTOOLS'
           fi
 
+          case "${{ matrix.version }}" in
+            1.6.1) installer_sha256=a37f8d5be2216f55c9c624fed32272b6baab68a67c2b8c2f5f1d5e86b889d244 ;;
+            1.7.3) installer_sha256=5116cc1703384aac88b8d7a3b57f172aea5da32b6df7355fb2f8247d23813c8f ;;
+            2.0.0-alpha.8) installer_sha256=7327471e2d93a8c58481321cce546632adb146cf125d17d7144d0e7d2a064967 ;;
+            *) echo "::error::No installer SHA-256 for ${{ matrix.version }}"; exit 1 ;;
+          esac
+
           installer_url="https://github.com/ramensoftware/windhawk/releases/download/$release_tag/windhawk_setup.exe"
           installer_path="${{ runner.temp }}/windhawk_setup.exe"
           echo "Downloading $installer_url to $installer_path"
           curl -L "$installer_url" -o "$installer_path"
+          (cd "${{ runner.temp }}" && echo "$installer_sha256 windhawk_setup.exe" | sha256sum -c)
 
           extract_path="${{ runner.temp }}\windhawk"
           echo "Extracting $installer_path to $extract_path"
