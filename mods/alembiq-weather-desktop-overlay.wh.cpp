@@ -2,7 +2,7 @@
 // @id              alembiq-weather-desktop-overlay
 // @name            Desktop Weather & Particles Overlay
 // @description     Atmospheric effects and live weather forecast visualization for the Windows desktop (Direct2D overlay)
-// @version         1.8.4.3
+// @version         1.8.4.4
 // @author          alembiq
 // @github          https://github.com/alembiqspace
 // @include         windhawk.exe
@@ -12,9 +12,6 @@
 // ==WindhawkModReadme==
 /*
 A lightweight **Direct2D** weather and atmosphere overlay for the Windows desktop. It brings live weather precipitation, volumetric-style drifting clouds, a UV-reactive sun and lunar-phase moon, atmospheric layers, air quality, pollen, flood-level water, and a draggable temperature button with an interactive control & forecast table without cluttering icons or windows.
-
-### Preview
-![Desktop Weather & Particles Overlay preview](https://raw.githubusercontent.com/alembiqspace/windhawk-mods/main/screenshots/desktop-weather-overlay-preview.png)
 
 ### Features
 - **Performance Quality Scaling:** `[System] Performance mode` (`low`, `medium`, `high`) scales particle counts, cloud layers, sun rays, moon detail, lightning branches, wave smoothness, rain splashes on `high`, and HUD detail.
@@ -493,10 +490,6 @@ enum class CelestialMotionMode {
 enum class CelestialMonitorMode { Primary, All };
 enum class FallDirMode { Auto, Down, DownLeft, DownRight };
 enum class ExpandedSection { None, Sky, Precipitation, Effects };
-enum class HudFieldId {
-    None, Coords, CloudsIntensity, SunUvOverride,
-    MoonPhaseOverride, PrecipSpeedMps, PrecipIntensity, EffectsIntensity
-};
 
 enum class TempUnit { Celsius, Fahrenheit, Kelvin, BodyRatio, WaterFreeze, PizzaOven };
 enum class WindUnit { Kmh, Ms, Mph, Knots, Beaufort, BreezeRatio };
@@ -728,7 +721,6 @@ struct Settings {
 struct InteractiveControl {
     D2D1_RECT_F rect{};
     std::wstring actionId;
-    HudFieldId fieldId = HudFieldId::None;
     std::wstring btnText;
     D2D1_COLOR_F tint = D2D1::ColorF(0.35f, 0.68f, 1.0f, 0.90f);
     std::wstring tooltipText;
@@ -794,8 +786,6 @@ float g_dragStartBtnCy = 0.0f;
 int g_hudScrollPx = 0;
 int g_hudMaxScrollPx = 0;
 ExpandedSection g_expandedSection = ExpandedSection::None;
-HudFieldId g_focusedField = HudFieldId::None;
-std::wstring g_editBuffer;
 float g_hoverRelX = -1000.0f;
 float g_hoverRelY = -1000.0f;
 std::vector<InteractiveControl> g_hudControls;
@@ -1876,91 +1866,6 @@ void ApplyRuntimeButtonPosition(float cx, float cy) {
     g_settings.hudBtnRelY = ry;
 }
 
-void CommitEditedFieldValue(HudFieldId fieldId, const std::wstring& val) {
-    std::wstring trimmed = Trim(val);
-    bool wakeWeather = false;
-    {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        switch (fieldId) {
-            case HudFieldId::Coords: {
-                double newLat = 0.0;
-                double newLon = 0.0;
-                bool validNow = TryParseCoordsString(trimmed, newLat, newLon);
-                bool coordsChanged = validNow &&
-                                     (!g_settings.hasValidCoords ||
-                                      std::abs(newLat - g_lastFetchedLat) > 1e-6 ||
-                                      std::abs(newLon - g_lastFetchedLon) > 1e-6);
-                g_settings.coordsRaw = trimmed;
-                g_settings.hasValidCoords = validNow;
-                if (validNow) {
-                    g_settings.latitude = newLat;
-                    g_settings.longitude = newLon;
-                } else if (!HasAnyForecastConsumer(g_settings)) {
-                    g_forecast = ForecastSnapshot{};
-                }
-                if (coordsChanged) {
-                    g_forecastDirty = true;
-                    wakeWeather = true;
-                }
-                break;
-            }
-            case HudFieldId::CloudsIntensity: {
-                double v = 35.0;
-                if (TryParseDoubleStrict(trimmed, v)) {
-                    g_settings.cloudsIntensity = std::clamp(static_cast<int>(std::llround(v)), 0, 100);
-                }
-                break;
-            }
-            case HudFieldId::SunUvOverride: {
-                double v = -1.0;
-                if (trimmed.empty() || (TryParseDoubleStrict(trimmed, v) && std::abs(v + 1.0) < 1e-6)) {
-                    g_settings.sunUvOverride = -1.0;
-                } else if (TryParseDoubleStrict(trimmed, v) && v >= 0.0 && v <= 20.0) {
-                    g_settings.sunUvOverride = v;
-                }
-                break;
-            }
-            case HudFieldId::MoonPhaseOverride: {
-                double v = -1.0;
-                if (trimmed.empty() || (TryParseDoubleStrict(trimmed, v) && std::abs(v + 1.0) < 1e-6)) {
-                    g_settings.moonPhaseOverride = -1.0;
-                } else if (TryParseDoubleStrict(trimmed, v) && v >= 0.0 && v <= 1.0) {
-                    g_settings.moonPhaseOverride = v;
-                }
-                break;
-            }
-            case HudFieldId::PrecipSpeedMps: {
-                double v = 6.5;
-                if (TryParseDoubleStrict(trimmed, v) && v >= 0.1 && v <= 50.0) {
-                    g_settings.precipSpeedMode = PrecipSpeedMode::Custom;
-                    g_settings.precipFallSpeedMps = v;
-                }
-                break;
-            }
-            case HudFieldId::PrecipIntensity: {
-                double v = 25.0;
-                if (TryParseDoubleStrict(trimmed, v)) {
-                    g_settings.precipIntensity = std::clamp(static_cast<int>(std::llround(v)), 0, 100);
-                }
-                break;
-            }
-            case HudFieldId::EffectsIntensity: {
-                double v = 25.0;
-                if (TryParseDoubleStrict(trimmed, v)) {
-                    g_settings.effectsIntensity = std::clamp(static_cast<int>(std::llround(v)), 0, 100);
-                }
-                break;
-            }
-            default:
-                break;
-        }
-        g_arcCacheDirty = true;
-    }
-    if (wakeWeather && g_weatherWakeEvent) {
-        SetEvent(g_weatherWakeEvent);
-    }
-}
-
 void ToggleExclusiveSection(ExpandedSection sec) {
     std::lock_guard<std::mutex> lock(g_hudUiMutex);
     g_expandedSection = (g_expandedSection == sec) ? ExpandedSection::None : sec;
@@ -2923,7 +2828,6 @@ bool ParseVisualCrossingJson(const std::string& json, ForecastSnapshot& outSnap)
     double windKmh = 0.0;
     if (ExtractNumberScoped(json, curPos, "windspeed", windKmh)) {
         outSnap.windSpeedKmh = std::max(0.0, windKmh);
-        outSnap.windGustsKmh = outSnap.windSpeedKmh;
         outSnap.mWind.available = true;
     }
     double gustKmh = outSnap.windSpeedKmh;
@@ -3474,7 +3378,10 @@ bool IsWindowCloaked(HWND hwnd) {
     return pfn && SUCCEEDED(pfn(hwnd, kDwmwaCloaked, &cloaked, sizeof(cloaked))) && cloaked != 0;
 }
 
-bool IsDesktopOccluded() {
+bool IsDesktopOccluded(bool pauseOnFullscreen) {
+    if (!pauseOnFullscreen) {
+        return false;
+    }
     HWND progman = FindWindowW(L"Progman", nullptr);
     HWND defView = nullptr;
     HWND workerW = nullptr;
@@ -3526,7 +3433,17 @@ HWND FindDesktopIconsWindow() {
     return defView;
 }
 
-HWND FindDesktopInsertAfter(const std::wstring& mode, HWND overlay) {
+HWND FindDesktopInsertAfter(const std::wstring& mode, bool hudEnabled, HWND overlay) {
+    if (hudEnabled) {
+        HWND defView = FindDesktopIconsWindow();
+        if (defView) {
+            HWND aboveDef = GetWindow(defView, GW_HWNDPREV);
+            if (aboveDef && aboveDef != overlay) {
+                return aboveDef;
+            }
+        }
+        return HWND_TOPMOST;
+    }
     if (mode == L"desktop_bottom") {
         return HWND_BOTTOM;
     }
@@ -3551,13 +3468,18 @@ HWND FindDesktopInsertAfter(const std::wstring& mode, HWND overlay) {
     return HWND_BOTTOM;
 }
 
-void PositionDesktopOverlay(HWND overlay, const std::wstring& mode, bool forceShow) {
+void PositionDesktopOverlay(HWND overlay, const std::wstring& mode, bool hudEnabled, bool forceShow) {
     if (!overlay) {
         return;
     }
-    HWND insertAfter = FindDesktopInsertAfter(mode, overlay);
-    SetWindowPos(overlay, insertAfter, g_canvasLeft, g_canvasTop, g_canvasWidth, g_canvasHeight,
-                 SWP_NOACTIVATE | (forceShow ? SWP_SHOWWINDOW : 0));
+    HWND insertAfter = FindDesktopInsertAfter(mode, hudEnabled, overlay);
+    UINT flags = SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS | (forceShow ? SWP_SHOWWINDOW : 0);
+    if (insertAfter == HWND_TOPMOST) {
+        SetWindowPos(overlay, HWND_TOPMOST, g_canvasLeft, g_canvasTop, g_canvasWidth, g_canvasHeight, flags);
+        SetWindowPos(overlay, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+        return;
+    }
+    SetWindowPos(overlay, insertAfter, g_canvasLeft, g_canvasTop, g_canvasWidth, g_canvasHeight, flags);
 }
 
 bool IsRelPointInsideHud(float relX, float relY) {
@@ -3632,8 +3554,6 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         }
         if (g_hudExpanded.load()) {
             std::wstring actionToRun;
-            HudFieldId fieldToFocus = HudFieldId::None;
-            std::wstring initialFieldText;
             {
                 std::lock_guard<std::mutex> lock(g_hudUiMutex);
                 for (const auto& ctrl : g_hudControls) {
@@ -3642,48 +3562,8 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                         if (!ctrl.actionId.empty()) {
                             actionToRun = ctrl.actionId;
                         }
-                        if (ctrl.fieldId != HudFieldId::None) {
-                            fieldToFocus = ctrl.fieldId;
-                            Settings cur;
-                            {
-                                std::lock_guard<std::mutex> slock(g_mutex);
-                                cur = g_settings;
-                            }
-                            wchar_t numBuf[64] = {};
-                            if (fieldToFocus == HudFieldId::Coords) {
-                                initialFieldText = cur.coordsRaw;
-                            } else if (fieldToFocus == HudFieldId::CloudsIntensity) {
-                                swprintf_s(numBuf, L"%d", cur.cloudsIntensity);
-                                initialFieldText = numBuf;
-                            } else if (fieldToFocus == HudFieldId::SunUvOverride) {
-                                swprintf_s(numBuf, L"%.1f", cur.sunUvOverride);
-                                initialFieldText = numBuf;
-                            } else if (fieldToFocus == HudFieldId::MoonPhaseOverride) {
-                                swprintf_s(numBuf, L"%.2f", cur.moonPhaseOverride);
-                                initialFieldText = numBuf;
-                            } else if (fieldToFocus == HudFieldId::PrecipSpeedMps) {
-                                swprintf_s(numBuf, L"%.1f", cur.precipFallSpeedMps);
-                                initialFieldText = numBuf;
-                            } else if (fieldToFocus == HudFieldId::PrecipIntensity) {
-                                swprintf_s(numBuf, L"%d", cur.precipIntensity);
-                                initialFieldText = numBuf;
-                            } else if (fieldToFocus == HudFieldId::EffectsIntensity) {
-                                swprintf_s(numBuf, L"%d", cur.effectsIntensity);
-                                initialFieldText = numBuf;
-                            }
-                        }
                         break;
                     }
-                }
-                if (fieldToFocus != HudFieldId::None) {
-                    g_focusedField = fieldToFocus;
-                    g_editBuffer = initialFieldText;
-                } else if (actionToRun.empty()) {
-                    if (!g_editBuffer.empty() && g_focusedField != HudFieldId::None) {
-                        CommitEditedFieldValue(g_focusedField, g_editBuffer);
-                    }
-                    g_focusedField = HudFieldId::None;
-                    g_editBuffer.clear();
                 }
             }
             if (!actionToRun.empty()) {
@@ -3735,8 +3615,6 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                     std::lock_guard<std::mutex> lock(g_hudUiMutex);
                     g_hudScrollPx = 0;
                     g_expandedSection = ExpandedSection::None;
-                    g_focusedField = HudFieldId::None;
-                    g_editBuffer.clear();
                 }
             }
             return 0;
@@ -3748,40 +3626,6 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             ? std::clamp(g_hudScrollPx + ((delta > 0) ? -48 : 48), 0, g_hudMaxScrollPx)
             : 0;
         return 0;
-    } else if (msg == WM_KEYDOWN) {
-        HudFieldId activeField = HudFieldId::None;
-        std::wstring bufCopy;
-        bool shouldCommit = false;
-        {
-            std::lock_guard<std::mutex> lock(g_hudUiMutex);
-            activeField = g_focusedField;
-            if (activeField != HudFieldId::None) {
-                if (wParam == VK_RETURN) {
-                    bufCopy = g_editBuffer;
-                    shouldCommit = true;
-                    g_focusedField = HudFieldId::None;
-                    g_editBuffer.clear();
-                } else if (wParam == VK_ESCAPE) {
-                    g_focusedField = HudFieldId::None;
-                    g_editBuffer.clear();
-                } else if (wParam == VK_BACK && !g_editBuffer.empty()) {
-                    g_editBuffer.pop_back();
-                }
-                return 0;
-            }
-        }
-        if (shouldCommit) {
-            CommitEditedFieldValue(activeField, bufCopy);
-        }
-    } else if (msg == WM_CHAR) {
-        wchar_t ch = static_cast<wchar_t>(wParam);
-        if (ch >= 32 && ch != 127) {
-            std::lock_guard<std::mutex> lock(g_hudUiMutex);
-            if (g_focusedField != HudFieldId::None && g_editBuffer.size() < 120) {
-                g_editBuffer.push_back(ch);
-                return 0;
-            }
-        }
     }
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
@@ -4820,19 +4664,17 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
         std::wstring actionId;
         std::wstring btnLabel;
         D2D1_COLOR_F btnTint = D2D1::ColorF(0.35f, 0.68f, 1.0f, 0.90f);
-        HudFieldId editField = HudFieldId::None;
     };
 
     std::vector<HudRow> rows;
     wchar_t buf[96] = {};
     rows.push_back({
         L"FORECAST", snap.valid ? (snap.sourceLabel + L"  " + snap.lastUpdateText) : L"No data",
-        true, false, true, L"", L"", L"", D2D1::ColorF(0, 0, 0, 0), HudFieldId::None
+        true, false, true, L"", L"", L"", D2D1::ColorF(0, 0, 0, 0)
     });
     rows.push_back({
-        L"Coords", cfg.coordsRaw.empty() ? L"(empty)" : cfg.coordsRaw, false, false, true, L"",
-        L"cycle_source", FormatProviderHudBadge(cfg.primarySource), ComputeProviderStatusTint(snap),
-        cfg.primarySource != L"off" ? HudFieldId::Coords : HudFieldId::None
+        L"Coords", cfg.coordsRaw.empty() ? L"(not set)" : cfg.coordsRaw, false, false, cfg.hasValidCoords, L"",
+        L"cycle_source", FormatProviderHudBadge(cfg.primarySource), ComputeProviderStatusTint(snap)
     });
 
     auto addMetricRow = [&](const wchar_t* name, const MetricMeta& meta, const std::wstring& valStr) {
@@ -4846,8 +4688,7 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
             BuildMetricTooltip(meta),
             L"",
             L"",
-            D2D1::ColorF(0, 0, 0, 0),
-            HudFieldId::None
+            D2D1::ColorF(0, 0, 0, 0)
         });
     };
 
@@ -4874,7 +4715,7 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
 
     rows.push_back({
         L"[Sky]", expSec == ExpandedSection::Sky ? L"Expanded" : L"Collapsed", true, false, true, L"",
-        L"sec_sky", expSec == ExpandedSection::Sky ? L"HIDE" : L"OPEN", sectionGrayTint, HudFieldId::None
+        L"sec_sky", expSec == ExpandedSection::Sky ? L"HIDE" : L"OPEN", sectionGrayTint
     });
     if (expSec == ExpandedSection::Sky) {
         auto cB = triBadge(cfg.cloudsMode);
@@ -4883,18 +4724,16 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
             L"Clouds",
             cfg.cloudsMode == TriStateMode::On ? buf : L"",
             false, false, true, L"",
-            L"cycle_clouds", cB.first, cB.second,
-            cfg.cloudsMode == TriStateMode::On ? HudFieldId::CloudsIntensity : HudFieldId::None
+            L"cycle_clouds", cB.first, cB.second
         });
 
         auto sB = triBadge(cfg.sunMode);
-        swprintf_s(buf, L"%.1f", uvIndex);
+        swprintf_s(buf, L"UV %.1f", uvIndex);
         rows.push_back({
             L"Sun",
             cfg.sunMode == TriStateMode::On ? buf : L"",
             false, false, true, L"",
-            L"cycle_sun", sB.first, sB.second,
-            cfg.sunMode == TriStateMode::On ? HudFieldId::SunUvOverride : HudFieldId::None
+            L"cycle_sun", sB.first, sB.second
         });
 
         auto mB = triBadge(cfg.moonMode);
@@ -4903,22 +4742,20 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
             L"Moon",
             cfg.moonMode == TriStateMode::On ? buf : L"",
             false, false, true, L"",
-            L"cycle_moon", mB.first, mB.second,
-            cfg.moonMode == TriStateMode::On ? HudFieldId::MoonPhaseOverride : HudFieldId::None
+            L"cycle_moon", mB.first, mB.second
         });
 
         rows.push_back({
             L"Over clouds", L"", false, false, true, L"",
             L"toggle_celestial_front",
             cfg.celestialInFrontOfClouds ? L"FRONT" : L"DIM",
-            D2D1::ColorF(0.65f, 0.78f, 0.95f, 0.9f),
-            HudFieldId::None
+            D2D1::ColorF(0.65f, 0.78f, 0.95f, 0.9f)
         });
     }
 
     rows.push_back({
         L"[Precipitation]", expSec == ExpandedSection::Precipitation ? L"Expanded" : L"Collapsed", true, false, true, L"",
-        L"sec_precip", expSec == ExpandedSection::Precipitation ? L"HIDE" : L"OPEN", sectionGrayTint, HudFieldId::None
+        L"sec_precip", expSec == ExpandedSection::Precipitation ? L"HIDE" : L"OPEN", sectionGrayTint
     });
     if (expSec == ExpandedSection::Precipitation) {
         const wchar_t* pModeStr = (cfg.precipitationMode == PrecipMode::Auto)
@@ -4938,14 +4775,14 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
                 providerPrecipStr = L"rain";
             }
         }
-        rows.push_back({L"Mode", providerPrecipStr, false, false, true, L"", L"cycle_precip_mode", pModeStr, D2D1::ColorF(0.35f, 0.72f, 1.0f, 0.9f), HudFieldId::None});
+        rows.push_back({L"Mode", providerPrecipStr, false, false, true, L"", L"cycle_precip_mode", pModeStr, D2D1::ColorF(0.35f, 0.72f, 1.0f, 0.9f)});
 
         const wchar_t* dStr = (cfg.precipFallDirection == FallDirMode::Auto)
             ? L"AUTO"
             : ((cfg.precipFallDirection == FallDirMode::Down)
                 ? L"DOWN"
                 : ((cfg.precipFallDirection == FallDirMode::DownLeft) ? L"LEFT" : L"RIGHT"));
-        rows.push_back({L"Direction", L"", false, false, true, L"", L"cycle_precip_dir", dStr, D2D1::ColorF(0.45f, 0.78f, 1.0f, 0.9f), HudFieldId::None});
+        rows.push_back({L"Direction", L"", false, false, true, L"", L"cycle_precip_dir", dStr, D2D1::ColorF(0.45f, 0.78f, 1.0f, 0.9f)});
 
         swprintf_s(buf, L"%.1f m/s", cfg.precipFallSpeedMps);
         rows.push_back({
@@ -4954,8 +4791,7 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
             false, false, true, L"",
             L"cycle_precip_speed",
             cfg.precipSpeedMode == PrecipSpeedMode::Auto ? L"AUTO" : L"CUSTOM",
-            D2D1::ColorF(0.35f, 0.68f, 1.0f, 0.9f),
-            cfg.precipSpeedMode == PrecipSpeedMode::Custom ? HudFieldId::PrecipSpeedMps : HudFieldId::None
+            D2D1::ColorF(0.35f, 0.68f, 1.0f, 0.9f)
         });
 
         swprintf_s(buf, L"%d%%", cfg.precipIntensity);
@@ -4963,14 +4799,13 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
         rows.push_back({
             L"Intensity",
             showPrecipInt ? buf : L"",
-            false, false, true, L"", L"", L"", D2D1::ColorF(0, 0, 0, 0),
-            showPrecipInt ? HudFieldId::PrecipIntensity : HudFieldId::None
+            false, false, true, L"", L"", L"", D2D1::ColorF(0, 0, 0, 0)
         });
     }
 
     rows.push_back({
         L"[Effects]", expSec == ExpandedSection::Effects ? L"Expanded" : L"Collapsed", true, false, true, L"",
-        L"sec_effects", expSec == ExpandedSection::Effects ? L"HIDE" : L"OPEN", sectionGrayTint, HudFieldId::None
+        L"sec_effects", expSec == ExpandedSection::Effects ? L"HIDE" : L"OPEN", sectionGrayTint
     });
     if (expSec == ExpandedSection::Effects) {
         swprintf_s(buf, L"%d%%", cfg.effectsIntensity);
@@ -4984,14 +4819,13 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
         rows.push_back({
             L"Intensity",
             anyManualFx ? buf : L"",
-            false, false, true, L"", L"", L"", D2D1::ColorF(0, 0, 0, 0),
-            anyManualFx ? HudFieldId::EffectsIntensity : HudFieldId::None
+            false, false, true, L"", L"", L"", D2D1::ColorF(0, 0, 0, 0)
         });
 
         auto addFxRow = [&](const wchar_t* name, TriStateMode m, bool providerVal, bool hasProvData, const wchar_t* act) {
             auto b = triBadge(m);
             std::wstring provState = (snap.valid && hasProvData) ? (providerVal ? L"active" : L"none") : L"--";
-            rows.push_back({name, provState, false, false, true, L"", act, b.first, b.second, HudFieldId::None});
+            rows.push_back({name, provState, false, false, true, L"", act, b.first, b.second});
         };
         addFxRow(L"Dust", cfg.effectDust, snap.effects.dust, snap.mWind.available || snap.mVisibility.available, L"cycle_fx_dust");
         addFxRow(L"Fog", cfg.effectFog, snap.effects.fog, snap.mCondition.available || snap.mHumidity.available, L"cycle_fx_fog");
@@ -5011,7 +4845,7 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
     const wchar_t* perfStr = (cfg.performanceMode == PerformanceMode::High)
         ? L"HIGH"
         : ((cfg.performanceMode == PerformanceMode::Medium) ? L"MEDIUM" : L"LOW");
-    rows.push_back({L"Performance", L"", true, false, true, L"", L"cycle_perf", perfStr, D2D1::ColorF(0.30f, 0.85f, 0.65f, 0.9f), HudFieldId::None});
+    rows.push_back({L"Performance", L"", true, false, true, L"", L"cycle_perf", perfStr, D2D1::ColorF(0.30f, 0.85f, 0.65f, 0.9f)});
 
     std::vector<InteractiveControl> nextControls;
     std::wstring activeTooltip;
@@ -5056,15 +4890,11 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
 
         int maxScroll = needsScroll ? static_cast<int>(std::ceil(totalContentH - cardH)) : 0;
         int scrollPx = 0;
-        HudFieldId focusedField = HudFieldId::None;
-        std::wstring editBuf;
         {
             std::lock_guard<std::mutex> lock(g_hudUiMutex);
             g_hudMaxScrollPx = maxScroll;
             g_hudScrollPx = needsScroll ? std::clamp(g_hudScrollPx, 0, maxScroll) : 0;
             scrollPx = g_hudScrollPx;
-            focusedField = g_focusedField;
-            editBuf = g_editBuffer;
         }
 
         D2D1_ROUNDED_RECT cardRect = D2D1::RoundedRect(D2D1::RectF(left, top, left + cardW, top + cardH), 10.0f, 10.0f);
@@ -5130,27 +4960,14 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
                     cursorX -= (infoSize + 8.0f);
                 }
 
-                if (!r.value.empty() || r.editField != HudFieldId::None) {
-                    bool isEditing = (r.editField != HudFieldId::None && focusedField == r.editField);
-                    std::wstring dispVal = isEditing ? (editBuf + L"|") : r.value;
+                if (!r.value.empty()) {
                     D2D1_RECT_F valRect = D2D1::RectF(cursorX - valW, curY + 2.0f, cursorX, curY + h - 2.0f);
-                    if (r.editField != HudFieldId::None) {
-                        brush->SetOpacity(1.0f);
-                        brush->SetColor(isEditing
-                            ? D2D1::ColorF(0.22f, 0.45f, 0.78f, 0.35f)
-                            : D2D1::ColorF(cfg.colorHudText.r, cfg.colorHudText.g, cfg.colorHudText.b, 0.08f));
-                        rt->FillRoundedRectangle(D2D1::RoundedRect(valRect, 4.0f, 4.0f), brush);
-                        InteractiveControl ic;
-                        ic.rect = valRect;
-                        ic.fieldId = r.editField;
-                        nextControls.push_back(ic);
-                    }
                     D2D1_COLOR_F valCol = cfg.colorHudText;
                     valCol.a *= rowAlphaMul;
                     brush->SetColor(valCol);
                     IDWriteTextFormat* valFmt = r.available ? g_hudBodyFormat : g_hudItalicFormat;
                     valFmt->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
-                    rt->DrawTextW(dispVal.c_str(), static_cast<UINT32>(dispVal.size()), valFmt,
+                    rt->DrawTextW(r.value.c_str(), static_cast<UINT32>(r.value.size()), valFmt,
                                   D2D1::RectF(valRect.left + 4.0f, curY, valRect.right - 4.0f, curY + h), brush);
                     valFmt->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
                 }
@@ -5373,6 +5190,7 @@ void RenderWorkerLoop() {
     int prevTop = INT32_MIN;
     int prevW = -1;
     int prevH = -1;
+    bool prevHudEnabled = false;
     bool prevCursorNearSky = false;
 
     while (g_running.load()) {
@@ -5395,16 +5213,18 @@ void RenderWorkerLoop() {
         UpdateCanvasGeometry(cfg);
 
         bool geometryChanged = (g_canvasLeft != prevLeft || g_canvasTop != prevTop ||
-                                g_canvasWidth != prevW || g_canvasHeight != prevH);
+                                g_canvasWidth != prevW || g_canvasHeight != prevH ||
+                                cfg.forecastHudEnabled != prevHudEnabled);
         if (geometryChanged) {
             prevLeft = g_canvasLeft;
             prevTop = g_canvasTop;
             prevW = g_canvasWidth;
             prevH = g_canvasHeight;
+            prevHudEnabled = cfg.forecastHudEnabled;
             forceArcDirty = true;
         }
 
-        if ((cfg.pauseOnFullscreen && IsFullscreenAppActive()) || IsDesktopOccluded()) {
+        if ((cfg.pauseOnFullscreen && IsFullscreenAppActive()) || IsDesktopOccluded(cfg.pauseOnFullscreen)) {
             if (g_overlayHwnd && IsWindowVisible(g_overlayHwnd)) {
                 ShowWindow(g_overlayHwnd, SW_HIDE);
             }
@@ -5419,9 +5239,9 @@ void RenderWorkerLoop() {
                 wc.lpszClassName, L"DesktopWeatherOverlay", WS_POPUP,
                 g_canvasLeft, g_canvasTop, g_canvasWidth, g_canvasHeight,
                 nullptr, nullptr, wc.hInstance, nullptr);
-            PositionDesktopOverlay(g_overlayHwnd, cfg.layerAttachMode, true);
+            PositionDesktopOverlay(g_overlayHwnd, cfg.layerAttachMode, cfg.forecastHudEnabled, true);
         } else if (geometryChanged) {
-            PositionDesktopOverlay(g_overlayHwnd, cfg.layerAttachMode, true);
+            PositionDesktopOverlay(g_overlayHwnd, cfg.layerAttachMode, cfg.forecastHudEnabled, true);
         }
 
         bool hasCursor = false;
@@ -5522,7 +5342,7 @@ void RenderWorkerLoop() {
         }
         if (g_overlayHwnd && !IsWindowVisible(g_overlayHwnd)) {
             ShowWindow(g_overlayHwnd, SW_SHOWNA);
-            PositionDesktopOverlay(g_overlayHwnd, cfg.layerAttachMode, true);
+            PositionDesktopOverlay(g_overlayHwnd, cfg.layerAttachMode, cfg.forecastHudEnabled, true);
         }
 
         if (activeFx.thunderstorm) {
