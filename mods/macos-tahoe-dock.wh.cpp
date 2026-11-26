@@ -7,7 +7,7 @@
 // @github          https://github.com/Badalemo
 // @include         windhawk.exe
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -luuid -lshell32 -lshlwapi -lpropsys -ldwmapi -ld2d1 -ld3d11 -ldxgi -ldwrite -lwindowscodecs -lgdi32 -luser32 -lversion -lshcore -lcomctl32 -lcomdlg32 -ladvapi32
-// @license         MIT
+// @license         GPL-3.0
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -22,7 +22,17 @@ A standalone **macOS 26 Tahoe Liquid Glass Dock** for Windows 11.
 ## Features
 - **True Optical Liquid Glass**: Real-time DXGI Desktop Duplication with 32-bit float Apple-squircle curved-lens refraction (`CLSID_D2D1DisplacementMap`), crisp blur, saturation boost, dark-mode highlight limiter, outer dark separation hairline, sculpted inner bevel halo, dual-corner Fresnel catchlight rim, and Clear/Dark/Default/Tinted icon styles. Press **Win+Ctrl+Shift+G** (or right-click Dock → *Liquid Glass → Freeze Glass for Screenshot*) to freeze glass for screenshots.
 - **True macOS Dock + Windows Taskbar Sync**: Live two-way Windows Taskbar pin sync (`IPinnedList3`, including Microsoft Store/UWP & PWA apps), native **Pin to Taskbar / Unpin from Taskbar**, Windows Jump Lists (**Recent** items), **Shift+Click** new window, **Ctrl+Shift+Click / Run as administrator**, smooth cosine-bell magnification, live window preview flyouts, Liquid Glass menus & Control Panel, **1-click icon changer** (`.png/.icns/.ico/.jpg/.webp`), drag-to-reorder & drag-off-to-unpin, OLE file drag-and-drop, and multi-folder Stacks.
-- **Companion Mods (Optional)**: Pair seamlessly with `macos-tahoe-menubar`, `macos-tahoe-apps-launcher`, `macos-tahoe-minimize`, and `macos-tahoe-spotlight` from Windhawk Explore for a modular macOS suite without bloated single-mod coupling.
+
+## Comparison with Existing Dock Mods
+Compared to [`mac-island-dock`](https://windhawk.net/mods/mac-island-dock), [`macos-style-dock`](https://windhawk.net/mods/macos-style-dock), and [`desktop-icon-dock`](https://windhawk.net/mods/desktop-icon-dock), **macOS 26 Tahoe Dock** runs as a standalone taskbar replacement in its own dedicated process while providing live two-way Windows Taskbar pin sync (`IPinnedList3`), Jump Lists, folder/Downloads stacks, DXGI curved-lens optical refraction glass, and an integrated Liquid Glass settings panel.
+
+## Important Notes
+- **Hide Windows taskbar** (off by default): when enabled, changes Windows' taskbar auto-hide setting (`ABM_SETSTATE`) while the dock runs and restores it on unload and startup. If the process terminates unexpectedly, auto-hide may remain enabled until the dock restarts or you toggle it in Windows Settings.
+- **Taskbar pins**: pinning/unpinning from the dock menu, dropping apps onto the dock, or dragging pinned apps off the dock updates your Windows taskbar pins via `IPinnedList3`.
+- **Optical Liquid Glass**: captures the screen behind the dock locally in GPU memory while active (`Win+Ctrl+Shift+G` freezes the frame for screenshots).
+
+## Credits & License
+Licensed under **GPL-3.0**. The DXGI Desktop Duplication Liquid Glass refraction engine, PaintCode squircle geometry, blur interop, and `.icns` reader are adapted from **MacOS Style Dock** by **Zach Vaughn** (`GPL-3.0`).
 
 ## Custom Icons
 Right-click any icon in the dock and choose **Options → Change Icon…** (or **Change Icon…** on Finder/Apps/Downloads/Trash) to pick any `.png`, `.icns` (native macOS icon), `.ico`, `.jpg`, or `.webp` file — changes apply instantly and persist automatically.
@@ -147,17 +157,16 @@ You can also set **Custom icons folder** for bulk overrides:
 - showAppsButton: true
   $name: Show Apps (Start) button
   $description: Show an Apps launcher button beside Finder.
-- appsButtonAction: tahoeApps
+- appsButtonAction: start
   $name: Apps button action
   $description: Action when clicking the Apps button beside Finder.
   $options:
-  - tahoeApps: Tahoe Apps Launcher (Categorized Search Overlay)
   - start: Open Windows Start menu
   - allApps: Open Applications folder
 - customIconsFolder: ""
   $name: Custom icons folder
   $description: Optional directory of PNG icon overrides (finder.png, apps.png, trash.png, trash-full.png, downloads.png, <exe>.png).
-- hideTaskbar: true
+- hideTaskbar: false
   $name: Hide Windows taskbar
   $description: Hide the Windows taskbar while the dock is active and restore it on unload.
 - clickActiveToMinimize: false
@@ -246,6 +255,10 @@ constexpr UINT kWmAppDeferredAction = WM_APP + 105;
 constexpr UINT kWmAppGlassFrame = WM_APP + 106;
 constexpr UINT kWmAppShellNotify = WM_APP + 107;
 constexpr UINT kWmAppTaskbarPinsChanged = WM_APP + 108;
+constexpr UINT kWmAppDeviceLost = WM_APP + 109;
+
+inline std::atomic<bool> g_deviceLostPending{false};
+void PostDeviceLostMessage();
 
 constexpr UINT_PTR kTimerCursorPoll = 1;
 constexpr UINT_PTR kTimerTaskbarGuard = 2;
@@ -407,7 +420,7 @@ enum class AppearanceMode { Auto = 0, Light = 1, Dark = 2 };
 enum class GlassStyle { Clear = 0, Tinted = 1 };
 enum class GlassRefraction { Lens = 0, Reflection = 1, Stretch = 2, Off = 3 };
 enum class DockIconStyle { Clear = 0, Dark = 1, Default = 2, Tinted = 3 };
-enum class AppsButtonAction { TahoeApps = 0, Start = 1, AllApps = 2 };
+enum class AppsButtonAction { Start = 0, AllApps = 1 };
 enum class StackViewStyle { Fan = 0, Grid = 1, List = 2 };
 
 struct DockSettings {
@@ -454,15 +467,37 @@ struct DockSettings {
     std::wstring downloadsFolder;
     bool showFinder = true;
     bool showAppsButton = true;
-    AppsButtonAction appsButtonAction = AppsButtonAction::TahoeApps;
+    AppsButtonAction appsButtonAction = AppsButtonAction::Start;
     std::wstring customIconsFolder;
-    bool hideTaskbar = true;
+    bool hideTaskbar = false;
     bool clickActiveToMinimize = false;
     bool bringAllWindows = false;
 
 };
 
 DockSettings g_settings;
+
+std::wstring NativeSystemPath(const std::wstring& path) {
+    static const bool wow64 = [] {
+        BOOL w = FALSE;
+        return IsWow64Process(GetCurrentProcess(), &w) && w;
+    }();
+    if (!wow64 || path.empty()) {
+        return path;
+    }
+    WCHAR winDir[MAX_PATH]{};
+    UINT n = GetWindowsDirectoryW(winDir, ARRAYSIZE(winDir));
+    if (n == 0 || n >= ARRAYSIZE(winDir)) {
+        return path;
+    }
+    std::wstring prefix = std::wstring(winDir) + L"\\System32\\";
+    if (path.size() > prefix.size() &&
+        _wcsnicmp(path.c_str(), prefix.c_str(), prefix.size()) == 0) {
+        return std::wstring(winDir) + L"\\Sysnative\\" +
+               path.substr(prefix.size());
+    }
+    return path;
+}
 
 std::wstring ReadWhStringSetting(PCWSTR name) {
     PCWSTR val = Wh_GetStringSetting(name);
@@ -491,6 +526,62 @@ std::wstring ReadWhStringValue(PCWSTR name, PCWSTR defVal = L"") {
     Wh_GetStringValue(name, buf.data(), buf.size());
     buf.resize(wcslen(buf.c_str()));
     return buf;
+}
+
+void SaveNumberedStringList(PCWSTR prefix,
+                            const std::vector<std::wstring>& entries) {
+    std::wstring countKey = std::wstring(prefix) + L"_count";
+    int prevCount = Wh_GetIntValue(countKey.c_str(), 0);
+    int newCount = static_cast<int>(entries.size());
+    Wh_SetIntValue(countKey.c_str(), newCount);
+    for (int i = 0; i < newCount; ++i) {
+        std::wstring key = std::wstring(prefix) + L"_" + std::to_wstring(i);
+        std::wstring val = entries[static_cast<size_t>(i)];
+        for (wchar_t& ch : val) {
+            if (ch == L'\r' || ch == L'\n') ch = L' ';
+        }
+        Wh_SetStringValue(key.c_str(), val.c_str());
+    }
+    for (int i = newCount; i < prevCount; ++i) {
+        std::wstring key = std::wstring(prefix) + L"_" + std::to_wstring(i);
+        Wh_DeleteValue(key.c_str());
+    }
+}
+
+std::vector<std::wstring> LoadNumberedStringList(PCWSTR prefix,
+                                                 PCWSTR legacyKey) {
+    std::vector<std::wstring> out;
+    std::wstring countKey = std::wstring(prefix) + L"_count";
+    int count = Wh_GetIntValue(countKey.c_str(), -1);
+    if (count >= 0) {
+        out.reserve(static_cast<size_t>(std::min(count, 4096)));
+        for (int i = 0; i < count; ++i) {
+            std::wstring key =
+                std::wstring(prefix) + L"_" + std::to_wstring(i);
+            std::wstring val = ReadWhStringValue(key.c_str());
+            if (!val.empty()) {
+                out.push_back(std::move(val));
+            }
+        }
+        return out;
+    }
+    if (legacyKey && *legacyKey) {
+        std::wstring raw = ReadWhStringValue(legacyKey);
+        size_t pos = 0;
+        while (pos < raw.size()) {
+            size_t nl = raw.find(L'\n', pos);
+            if (nl == std::wstring::npos) nl = raw.size();
+            std::wstring line = raw.substr(pos, nl - pos);
+            pos = nl + 1;
+            if (!line.empty()) {
+                out.push_back(std::move(line));
+            }
+        }
+        if (!out.empty()) {
+            SaveNumberedStringList(prefix, out);
+        }
+    }
+    return out;
 }
 
 void ClearRuntimeOverrides() {
@@ -666,12 +757,10 @@ void LoadSettings(bool clearOverrides = false) {
     s.showAppsButton = Wh_GetIntSetting(L"showAppsButton") != 0;
 
     std::wstring aba = ReadWhStringSetting(L"appsButtonAction");
-    if (aba == L"start") {
-        s.appsButtonAction = AppsButtonAction::Start;
-    } else if (aba == L"allApps") {
+    if (aba == L"allApps") {
         s.appsButtonAction = AppsButtonAction::AllApps;
     } else {
-        s.appsButtonAction = AppsButtonAction::TahoeApps;
+        s.appsButtonAction = AppsButtonAction::Start;
     }
 
     s.customIconsFolder = ReadWhStringSetting(L"customIconsFolder");
@@ -1243,16 +1332,18 @@ bool InitGraphics(wuc::Compositor const& compositor) {
     }
 
     g_gfx.deviceReplacedToken = g_gfx.compGraphics.RenderingDeviceReplaced(
-        [](wuc::CompositionGraphicsDevice const& sender,
+        [](wuc::CompositionGraphicsDevice const&,
            wuc::RenderingDeviceReplacedEventArgs const&) {
-            if (InitD3DAndD2D()) {
-                auto gfxInterop =
-                    sender.as<ICompositionGraphicsDeviceInteropLocal>();
-                gfxInterop->SetRenderingDevice(g_gfx.d2dDevice.get());
-            }
-            OnGraphicsDeviceLost();
+            PostDeviceLostMessage();
         });
     return true;
+}
+
+inline bool IsDeviceLostHresult(HRESULT hr) {
+    return hr == DXGI_ERROR_DEVICE_REMOVED ||
+           hr == DXGI_ERROR_DEVICE_RESET ||
+           hr == D2DERR_RECREATE_TARGET ||
+           hr == static_cast<HRESULT>(0x80000013);
 }
 
 template <typename Fn>
@@ -1267,6 +1358,9 @@ bool DrawCompositionSurface(wuc::CompositionDrawingSurface const& surface,
     HRESULT hr = interop->BeginDraw(nullptr, __uuidof(ID2D1DeviceContext),
                                     dc.put_void(), &offset);
     if (FAILED(hr) || !dc) {
+        if (IsDeviceLostHresult(hr)) {
+            PostDeviceLostMessage();
+        }
         return false;
     }
 
@@ -1282,6 +1376,9 @@ bool DrawCompositionSurface(wuc::CompositionDrawingSurface const& surface,
         ok = false;
     }
     HRESULT endHr = interop->EndDraw();
+    if (IsDeviceLostHresult(endHr)) {
+        PostDeviceLostMessage();
+    }
     return ok && SUCCEEDED(endHr);
 }
 
@@ -1496,7 +1593,7 @@ constexpr GUID kClsidD2D12DAffineTransform = {
     0x4cfc,
     {0x90, 0x8c, 0xe4, 0xa7, 0x4f, 0x62, 0xc9, 0x6c}};
 
-extern bool g_quitting;
+extern std::atomic<bool> g_quitting;
 HWND GetGlassNotifyHwnd();
 bool IsDockHoverAnimating();
 void ApplyCaptureExclusionToAllModWindows(bool excluded);
@@ -3380,15 +3477,16 @@ winrt::com_ptr<IWICBitmapSource> LoadIconFromPath(const std::wstring& path,
     if (path.empty()) {
         return nullptr;
     }
+    std::wstring accessPath = NativeSystemPath(path);
     winrt::com_ptr<IShellItem> item;
-    if (SUCCEEDED(SHCreateItemFromParsingName(path.c_str(), nullptr,
+    if (SUCCEEDED(SHCreateItemFromParsingName(accessPath.c_str(), nullptr,
                                               IID_PPV_ARGS(item.put())))) {
         if (auto bmp = LoadShellItemIcon(item.get(), sizePx)) {
             return bmp;
         }
     }
     SHFILEINFOW sfi{};
-    if (SHGetFileInfoW(path.c_str(), 0, &sfi, sizeof(sfi),
+    if (SHGetFileInfoW(accessPath.c_str(), 0, &sfi, sizeof(sfi),
                        SHGFI_ICON | SHGFI_LARGEICON) &&
         sfi.hIcon) {
         auto bmp = LoadWicBitmapFromHIcon(sfi.hIcon);
@@ -4324,38 +4422,25 @@ std::unordered_map<std::wstring, std::wstring> g_customIcons;  // key -> file pa
 
 void LoadCustomIcons() {
     g_customIcons.clear();
-    std::wstring raw = ReadWhStringValue(L"custom_icons_v1");
-    size_t pos = 0;
-    while (pos < raw.size()) {
-        size_t nl = raw.find(L'\n', pos);
-        if (nl == std::wstring::npos) {
-            nl = raw.size();
-        }
-        std::wstring_view line(raw.data() + pos, nl - pos);
-        pos = nl + 1;
+    for (const auto& line :
+         LoadNumberedStringList(L"custom_icons_v2", L"custom_icons_v1")) {
         size_t sep = line.find(L'\x1F');
-        if (sep != std::wstring_view::npos && sep > 0 &&
-            sep + 1 < line.size()) {
-            g_customIcons[std::wstring(line.substr(0, sep))] =
-                std::wstring(line.substr(sep + 1));
+        if (sep != std::wstring::npos && sep > 0 && sep + 1 < line.size()) {
+            g_customIcons[line.substr(0, sep)] = line.substr(sep + 1);
         }
     }
 }
 
 void SaveCustomIcons() {
-    std::wstring out;
+    std::vector<std::wstring> entries;
+    entries.reserve(g_customIcons.size());
     for (const auto& [k, v] : g_customIcons) {
         if (k.empty() || v.empty()) {
             continue;
         }
-        if (!out.empty()) {
-            out.push_back(L'\n');
-        }
-        out += k;
-        out.push_back(L'\x1F');
-        out += v;
+        entries.push_back(k + L"\x1F" + v);
     }
-    Wh_SetStringValue(L"custom_icons_v1", out.c_str());
+    SaveNumberedStringList(L"custom_icons_v2", entries);
 }
 
 std::wstring CustomIconStorageKey(const DockItem& item, bool trashFullSlot = false) {
@@ -4923,7 +5008,7 @@ struct WindowTrackerState {
 };
 
 WindowTrackerState g_tracker;
-extern bool g_quitting;
+extern std::atomic<bool> g_quitting;
 
 void ScheduleWindowRefresh();
 void ScheduleFullscreenCheck();
@@ -4934,11 +5019,12 @@ std::wstring GetFileDescriptionFromPath(const std::wstring& path) {
     if (path.empty()) {
         return {};
     }
+    std::wstring accessPath = NativeSystemPath(path);
     DWORD dummy = 0;
-    DWORD sz = GetFileVersionInfoSizeW(path.c_str(), &dummy);
+    DWORD sz = GetFileVersionInfoSizeW(accessPath.c_str(), &dummy);
     if (sz > 0) {
         std::vector<BYTE> buf(sz);
-        if (GetFileVersionInfoW(path.c_str(), 0, sz, buf.data())) {
+        if (GetFileVersionInfoW(accessPath.c_str(), 0, sz, buf.data())) {
             struct LangCp {
                 WORD lang;
                 WORD cp;
@@ -5322,6 +5408,9 @@ std::vector<TrackedWindow> EnumerateTrackedWindows() {
 
 winrt::com_ptr<IWICBitmapSource> CaptureWindowSnapshot(HWND hwnd,
                                                        const RECT& rc) {
+    if (!hwnd || !IsWindow(hwnd) || IsHungAppWindow(hwnd)) {
+        return nullptr;
+    }
     int w = rc.right - rc.left;
     int h = rc.bottom - rc.top;
     if (w <= 8 || h <= 8 || w > 4096 || h > 4096) {
@@ -5549,7 +5638,8 @@ bool AppsMatch(const std::wstring& aumidA,
         if (EqualsIgnoreCase(aumidA, aumidB)) {
             return true;
         }
-        if (IsDistinctAppAumid(aumidA) || IsDistinctAppAumid(aumidB)) {
+        if (IsDistinctAppAumid(aumidA) || IsDistinctAppAumid(aumidB) ||
+            IsRealAumid(aumidA) || IsRealAumid(aumidB)) {
             return false;
         }
     }
@@ -5566,102 +5656,100 @@ std::wstring SanitizeField(std::wstring_view sv) {
     std::wstring out;
     out.reserve(sv.size());
     for (wchar_t ch : sv) {
-        if (ch != L'\n' && ch != L'\r' && ch != L'\x1F') {
+        if (ch != L'\n' && ch != L'\r' && ch != L'\x1F' && ch != L'\x1E') {
             out.push_back(ch);
         }
     }
     return out;
 }
 
-std::wstring SerializeStoredApps(const std::vector<StoredApp>& list) {
+std::wstring SerializeStoredAppEntry(const StoredApp& a) {
     std::wstring out;
-    for (size_t i = 0; i < list.size(); ++i) {
-        if (i > 0) {
-            out.push_back(L'\n');
-        }
-        const auto& a = list[i];
-        out += (a.isAumid ? L"aumid" : L"path");
-        out.push_back(L'\x1F');
-        out += SanitizeField(a.aumid);
-        out.push_back(L'\x1F');
-        out += SanitizeField(a.path);
-        out.push_back(L'\x1F');
-        out += SanitizeField(a.args);
-        out.push_back(L'\x1F');
-        out += SanitizeField(a.workdir);
-        out.push_back(L'\x1F');
-        out += SanitizeField(a.name);
-    }
+    out += (a.isAumid ? L"aumid" : L"path");
+    out.push_back(L'\x1F');
+    out += SanitizeField(a.aumid);
+    out.push_back(L'\x1F');
+    out += SanitizeField(a.path);
+    out.push_back(L'\x1F');
+    out += SanitizeField(a.args);
+    out.push_back(L'\x1F');
+    out += SanitizeField(a.workdir);
+    out.push_back(L'\x1F');
+    out += SanitizeField(a.name);
     return out;
 }
 
-std::vector<StoredApp> DeserializeStoredApps(const std::wstring& raw) {
+std::optional<StoredApp> DeserializeStoredAppEntry(std::wstring_view line) {
+    if (line.empty()) {
+        return std::nullopt;
+    }
+    std::array<std::wstring, 6> fields;
+    size_t fpos = 0;
+    for (int fi = 0; fi < 6; ++fi) {
+        size_t sep = line.find(L'\x1F', fpos);
+        if (sep == std::wstring_view::npos) {
+            fields[fi] = std::wstring(line.substr(fpos));
+            break;
+        }
+        fields[fi] = std::wstring(line.substr(fpos, sep - fpos));
+        fpos = sep + 1;
+    }
+    StoredApp app;
+    app.isAumid = (fields[0] == L"aumid");
+    app.aumid = std::move(fields[1]);
+    app.path = std::move(fields[2]);
+    app.args = std::move(fields[3]);
+    app.workdir = std::move(fields[4]);
+    app.name = std::move(fields[5]);
+    if (app.aumid.empty() && app.path.empty()) {
+        return std::nullopt;
+    }
+    return app;
+}
+
+std::vector<StoredApp> LoadStoredAppList(PCWSTR prefix, PCWSTR legacyKey) {
     std::vector<StoredApp> list;
-    size_t pos = 0;
-    while (pos < raw.size()) {
-        size_t nl = raw.find(L'\n', pos);
-        if (nl == std::wstring::npos) {
-            nl = raw.size();
-        }
-        std::wstring_view line(raw.data() + pos, nl - pos);
-        pos = nl + 1;
-        if (line.empty()) {
-            continue;
-        }
-        std::array<std::wstring, 6> fields;
-        size_t fpos = 0;
-        for (int fi = 0; fi < 6; ++fi) {
-            size_t sep = line.find(L'\x1F', fpos);
-            if (sep == std::wstring_view::npos) {
-                fields[fi] = std::wstring(line.substr(fpos));
-                break;
-            }
-            fields[fi] = std::wstring(line.substr(fpos, sep - fpos));
-            fpos = sep + 1;
-        }
-        StoredApp app;
-        app.isAumid = (fields[0] == L"aumid");
-        app.aumid = std::move(fields[1]);
-        app.path = std::move(fields[2]);
-        app.args = std::move(fields[3]);
-        app.workdir = std::move(fields[4]);
-        app.name = std::move(fields[5]);
-        if (!app.aumid.empty() || !app.path.empty()) {
-            list.push_back(std::move(app));
+    for (const auto& line : LoadNumberedStringList(prefix, legacyKey)) {
+        if (auto app = DeserializeStoredAppEntry(line)) {
+            list.push_back(std::move(*app));
         }
     }
     return list;
 }
 
+void SaveStoredAppList(PCWSTR prefix, const std::vector<StoredApp>& list) {
+    std::vector<std::wstring> entries;
+    entries.reserve(list.size());
+    for (const auto& a : list) {
+        entries.push_back(SerializeStoredAppEntry(a));
+    }
+    SaveNumberedStringList(prefix, entries);
+}
+
 void SavePinnedApps() {
-    Wh_SetStringValue(L"pinned_v1", SerializeStoredApps(g_pinnedApps).c_str());
+    SaveStoredAppList(L"pinned_v2", g_pinnedApps);
 }
 
 void SaveRecentApps() {
-    Wh_SetStringValue(L"recents_v1", SerializeStoredApps(g_recentApps).c_str());
+    SaveStoredAppList(L"recents_v2", g_recentApps);
 }
 
 void SavePinnedFolders() {
-    std::wstring out;
+    std::vector<std::wstring> entries;
+    entries.reserve(g_pinnedFolders.size());
     for (const auto& f : g_pinnedFolders) {
-        if (!out.empty()) out.push_back(L'\n');
-        out += SanitizeField(f.path) + L"\x1F" + SanitizeField(f.name) +
-               L"\x1F" + std::to_wstring(f.viewMode) + L"\x1F" +
-               std::to_wstring(f.sortMode);
+        entries.push_back(SanitizeField(f.path) + L"\x1F" +
+                          SanitizeField(f.name) + L"\x1F" +
+                          std::to_wstring(f.viewMode) + L"\x1F" +
+                          std::to_wstring(f.sortMode));
     }
-    Wh_SetStringValue(L"pinned_folders_v1", out.c_str());
+    SaveNumberedStringList(L"pinned_folders_v2", entries);
 }
 
 void LoadPinnedFolders() {
     g_pinnedFolders.clear();
-    std::wstring raw = ReadWhStringValue(L"pinned_folders_v1");
-    if (raw.empty()) return;
-    size_t pos = 0;
-    while (pos <= raw.size()) {
-        size_t nl = raw.find(L'\n', pos);
-        std::wstring line = (nl == std::wstring::npos)
-                                ? raw.substr(pos)
-                                : raw.substr(pos, nl - pos);
+    for (const auto& line :
+         LoadNumberedStringList(L"pinned_folders_v2", L"pinned_folders_v1")) {
         if (!line.empty()) {
             std::vector<std::wstring> cols;
             size_t cpos = 0;
@@ -5684,8 +5772,6 @@ void LoadPinnedFolders() {
                 g_pinnedFolders.push_back(std::move(pf));
             }
         }
-        if (nl == std::wstring::npos) break;
-        pos = nl + 1;
     }
 }
 
@@ -5817,7 +5903,8 @@ bool FileExistsNonDir(const std::wstring& path) {
     if (path.empty()) {
         return false;
     }
-    DWORD attr = GetFileAttributesW(path.c_str());
+    std::wstring accessPath = NativeSystemPath(path);
+    DWORD attr = GetFileAttributesW(accessPath.c_str());
     return attr != INVALID_FILE_ATTRIBUTES &&
            !(attr & FILE_ATTRIBUTE_DIRECTORY);
 }
@@ -5971,32 +6058,19 @@ std::optional<StoredApp> ResolveShortcutFile(const std::wstring& lnkPath) {
 }
 
 std::vector<std::wstring> LoadPinnedOrderOverlay() {
-    std::vector<std::wstring> order;
-    std::wstring raw = ReadWhStringValue(L"dock_pin_order_v1");
-    size_t pos = 0;
-    while (pos < raw.size()) {
-        size_t nl = raw.find(L'\n', pos);
-        if (nl == std::wstring::npos) {
-            nl = raw.size();
-        }
-        std::wstring key = raw.substr(pos, nl - pos);
-        pos = nl + 1;
-        if (!key.empty()) {
-            order.push_back(std::move(key));
-        }
-    }
-    return order;
+    return LoadNumberedStringList(L"dock_pin_order_v2", L"dock_pin_order_v1");
 }
 
 void SavePinnedOrderOverlay(const std::vector<StoredApp>& apps) {
-    std::wstring out;
-    for (size_t i = 0; i < apps.size(); ++i) {
-        std::wstring k = apps[i].IdentityKey();
-        if (k.empty()) continue;
-        if (!out.empty()) out.push_back(L'\n');
-        out += SanitizeField(k);
+    std::vector<std::wstring> entries;
+    entries.reserve(apps.size());
+    for (const auto& a : apps) {
+        std::wstring k = SanitizeField(a.IdentityKey());
+        if (!k.empty()) {
+            entries.push_back(std::move(k));
+        }
     }
-    Wh_SetStringValue(L"dock_pin_order_v1", out.c_str());
+    SaveNumberedStringList(L"dock_pin_order_v2", entries);
 }
 
 void ApplyPinOrderOverlay(std::vector<StoredApp>& apps) {
@@ -6214,7 +6288,7 @@ bool SyncPinnedAppsWithTaskbar(bool forceReload = false) {
 
 void SeedPinnedAppsIfNeeded() {
     LoadPinnedFolders();
-    g_recentApps = DeserializeStoredApps(ReadWhStringValue(L"recents_v1"));
+    g_recentApps = LoadStoredAppList(L"recents_v2", L"recents_v1");
     size_t beforeRecents = g_recentApps.size();
     g_recentApps.erase(
         std::remove_if(g_recentApps.begin(), g_recentApps.end(),
@@ -6233,7 +6307,7 @@ void SeedPinnedAppsIfNeeded() {
 
     // Fallback when IPinnedList3 COM server is unavailable
     if (Wh_GetIntValue(L"seeded", 0) != 0) {
-        g_pinnedApps = DeserializeStoredApps(ReadWhStringValue(L"pinned_v1"));
+        g_pinnedApps = LoadStoredAppList(L"pinned_v2", L"pinned_v1");
         return;
     }
 
@@ -6458,7 +6532,14 @@ DockWindowState g_dock;
 HANDLE g_uiThread = nullptr;
 DWORD g_uiThreadId = 0;
 winrt::Windows::System::DispatcherQueueController g_dqController{nullptr};
-bool g_quitting = false;
+std::atomic<bool> g_quitting{false};
+
+void PostDeviceLostMessage() {
+    if (g_dock.hwnd &&
+        !g_deviceLostPending.exchange(true, std::memory_order_acq_rel)) {
+        PostMessageW(g_dock.hwnd, kWmAppDeviceLost, 0, 0);
+    }
+}
 
 constexpr WCHAR kDockClassName[] = L"WindhawkMacOS27DockWnd";
 constexpr WCHAR kAppBarClassName[] = L"WindhawkMacOS27AppBarWnd";
@@ -6581,22 +6662,24 @@ void PollCursorState() {
     const RECT& mr = g_dock.monitorRect;
     float nearDist = 140.0f * g_dock.scale;
     bool nearEdge = false;
-    if (g_settings.position == DockPosition::Bottom) {
-        nearEdge = pt.y >= static_cast<LONG>(mr.bottom - nearDist);
-    } else if (g_settings.position == DockPosition::Left) {
-        nearEdge = pt.x <= static_cast<LONG>(mr.left + nearDist);
-    } else {
-        nearEdge = pt.x >= static_cast<LONG>(mr.right - nearDist);
+    if (PtInRect(&mr, pt)) {
+        if (g_settings.position == DockPosition::Bottom) {
+            nearEdge = pt.y >= static_cast<LONG>(mr.bottom - nearDist);
+        } else if (g_settings.position == DockPosition::Left) {
+            nearEdge = pt.x <= static_cast<LONG>(mr.left + nearDist);
+        } else {
+            nearEdge = pt.x >= static_cast<LONG>(mr.right - nearDist);
+        }
     }
 
     bool activeZone =
         insideWnd || atEdge || nearEdge || IsWindowPreviewFlyoutOpen();
     ULONGLONG idleMs = nowTick - g_dock.lastCursorMoveTick;
     UINT wantMs = activeZone
-                      ? 16u
+                      ? 100u
                       : ((moved || idleMs < 500)
-                             ? 50u
-                             : (idleMs < 1500 ? 120u : 250u));
+                             ? 100u
+                             : (idleMs < 1500 ? 150u : 250u));
     UpdateCursorTrackingTimer(wantMs);
 
     if (!moved && !g_dock.cursorInActive && !atEdge &&
@@ -6676,7 +6759,7 @@ void CheckFullscreenState() {
 
     if (!fs) {
         HWND fg = GetForegroundWindow();
-        if (fg && IsWindow(fg) && !IsIconic(fg)) {
+        if (fg && IsWindow(fg) && !IsIconic(fg) && !IsZoomed(fg)) {
             DWORD pid = 0;
             GetWindowThreadProcessId(fg, &pid);
             if (pid != GetCurrentProcessId()) {
@@ -6689,7 +6772,10 @@ void CheckFullscreenState() {
                     _wcsicmp(cls, L"Shell_SecondaryTrayWnd") == 0;
                 if (!isDesktop) {
                     RECT rc{};
-                    if (GetWindowRect(fg, &rc)) {
+                    if (SUCCEEDED(DwmGetWindowAttribute(
+                            fg, DWMWA_EXTENDED_FRAME_BOUNDS, &rc,
+                            sizeof(rc))) ||
+                        GetWindowRect(fg, &rc)) {
                         const RECT& mr = g_dock.monitorRect;
                         if (rc.left <= mr.left && rc.top <= mr.top &&
                             rc.right >= mr.right && rc.bottom >= mr.bottom) {
@@ -8559,35 +8645,13 @@ void ActivateWindowForce(HWND hwnd) {
         return;
     }
     if (IsIconic(hwnd)) {
-        ShowWindow(hwnd, SW_RESTORE);
+        ShowWindowAsync(hwnd, SW_RESTORE);
     }
     if (!SetForegroundWindow(hwnd)) {
         SwitchToThisWindow(hwnd, TRUE);
     }
 }
 
-struct DockCompanionIpc {
-    UINT msgToggleApps = 0;
-    UINT msgQueryIconCenter = 0;
-    UINT msgOpenDockSettings = 0;
-};
-DockCompanionIpc g_ipc;
-
-void TriggerCompanionAppsLauncherOrStart() {
-    if (HWND appsHost = FindWindowW(L"WindhawkMacOSTahoeAppsHost", nullptr)) {
-        if (g_ipc.msgToggleApps) {
-            PostMessageW(appsHost, g_ipc.msgToggleApps, 0, 0);
-            return;
-        }
-    }
-    INPUT inputs[2]{};
-    inputs[0].type = INPUT_KEYBOARD;
-    inputs[0].ki.wVk = VK_LWIN;
-    inputs[1].type = INPUT_KEYBOARD;
-    inputs[1].ki.wVk = VK_LWIN;
-    inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
-    SendInput(2, inputs, sizeof(INPUT));
-}
 void OpenTahoeSettingsPanel();
 void OpenFolderStackPopup(const std::wstring& folderPath,
                           const std::wstring& folderName,
@@ -8601,9 +8665,7 @@ bool LaunchAppItem(DockItem& item) {
         return true;
     }
     if (item.kind == DockItemKind::Apps) {
-        if (g_settings.appsButtonAction == AppsButtonAction::TahoeApps) {
-            TriggerCompanionAppsLauncherOrStart();
-        } else if (g_settings.appsButtonAction == AppsButtonAction::AllApps) {
+        if (g_settings.appsButtonAction == AppsButtonAction::AllApps) {
             ShellExecuteW(nullptr, L"open", L"explorer.exe",
                           L"shell:AppsFolder", nullptr, SW_SHOWNORMAL);
         } else {
@@ -8646,11 +8708,12 @@ bool LaunchAppItem(DockItem& item) {
         launched = ShellExecuteExW(&sei) != FALSE;
     }
     if (!launched && !item.path.empty()) {
+        std::wstring execPath = NativeSystemPath(item.path);
         SHELLEXECUTEINFOW sei{};
         sei.cbSize = sizeof(sei);
         sei.fMask = SEE_MASK_NOASYNC;
         sei.lpVerb = L"open";
-        sei.lpFile = item.path.c_str();
+        sei.lpFile = execPath.c_str();
         sei.lpParameters = item.args.empty() ? nullptr : item.args.c_str();
         sei.lpDirectory =
             item.workdir.empty() ? nullptr : item.workdir.c_str();
@@ -8700,11 +8763,12 @@ bool LaunchAppItemElevated(const DockItem& item) {
         }
     }
     if (!item.path.empty()) {
+        std::wstring execPath = NativeSystemPath(item.path);
         SHELLEXECUTEINFOW sei{};
         sei.cbSize = sizeof(sei);
         sei.fMask = SEE_MASK_NOASYNC;
         sei.lpVerb = L"runas";
-        sei.lpFile = item.path.c_str();
+        sei.lpFile = execPath.c_str();
         sei.lpParameters = item.args.empty() ? nullptr : item.args.c_str();
         sei.lpDirectory =
             item.workdir.empty() ? nullptr : item.workdir.c_str();
@@ -8834,10 +8898,11 @@ void HandleItemPrimaryClick(int idx) {
         for (HWND h : item.windows) {
             if (h != primary && IsWindow(h)) {
                 if (IsIconic(h)) {
-                    ShowWindow(h, SW_RESTORE);
+                    ShowWindowAsync(h, SW_RESTORE);
                 }
                 SetWindowPos(h, HWND_TOP, 0, 0, 0, 0,
-                             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
+                                 SWP_ASYNCWINDOWPOS);
             }
         }
         ActivateWindowForce(primary);
@@ -9336,8 +9401,11 @@ void PinItemToDock(const DockItem& item) {
                 if (safeName.empty()) {
                     safeName = L"Application";
                 }
-                std::wstring tempLnk =
-                    std::wstring(tempDir) + safeName + L".lnk";
+                std::wstring subDir = std::wstring(tempDir) + L"wh_tahoe_dock_" +
+                                      std::to_wstring(GetCurrentProcessId()) +
+                                      L"_" + std::to_wstring(GetTickCount64());
+                CreateDirectoryW(subDir.c_str(), nullptr);
+                std::wstring tempLnk = subDir + L"\\" + safeName + L".lnk";
 
                 winrt::com_ptr<IShellLinkW> lnk;
                 if (SUCCEEDED(CoCreateInstance(CLSID_ShellLink, nullptr,
@@ -9382,6 +9450,7 @@ void PinItemToDock(const DockItem& item) {
                         DeleteFileW(tempLnk.c_str());
                     }
                 }
+                RemoveDirectoryW(subDir.c_str());
             }
         }
 
@@ -9772,16 +9841,51 @@ void LaunchJumpListEntry(const JumpListEntry& e) {
     ShellExecuteExW(&sei);
 }
 
+bool IsProtectedSystemProcess(DWORD pid) {
+    if (pid == 0 || pid == GetCurrentProcessId()) {
+        return true;
+    }
+    HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!hProc) {
+        return false;
+    }
+    WCHAR exePath[MAX_PATH * 2]{};
+    DWORD len = ARRAYSIZE(exePath);
+    bool isProtected = false;
+    if (QueryFullProcessImageNameW(hProc, 0, exePath, &len) && len > 0) {
+        const wchar_t* base = PathFindFileNameW(exePath);
+        if (base && (_wcsicmp(base, L"explorer.exe") == 0 ||
+                     _wcsicmp(base, L"applicationframehost.exe") == 0)) {
+            isProtected = true;
+        }
+    }
+    CloseHandle(hProc);
+    return isProtected;
+}
+
 void QuitItemWindows(const std::vector<HWND>& hwnds, bool forceQuit) {
     if (forceQuit) {
         std::unordered_set<DWORD> pids;
         for (HWND h : hwnds) {
-            if (IsWindow(h)) {
-                DWORD pid = 0;
-                GetWindowThreadProcessId(h, &pid);
-                if (pid && pid != GetCurrentProcessId()) {
-                    pids.insert(pid);
+            if (!IsWindow(h)) {
+                continue;
+            }
+            DWORD pid = 0;
+            GetWindowThreadProcessId(h, &pid);
+            if (!pid) {
+                continue;
+            }
+            WCHAR cls[64]{};
+            GetClassNameW(h, cls, ARRAYSIZE(cls));
+            if (_wcsicmp(cls, L"ApplicationFrameWindow") == 0) {
+                DWORD childPid = FindCoreWindowChildPid(h, pid);
+                if (childPid == 0 || childPid == pid) {
+                    continue;
                 }
+                pid = childPid;
+            }
+            if (!IsProtectedSystemProcess(pid)) {
+                pids.insert(pid);
             }
         }
         for (DWORD pid : pids) {
@@ -9814,10 +9918,11 @@ void ShowAllItemWindows(const std::vector<HWND>& hwnds, HWND lastActive) {
     for (HWND h : hwnds) {
         if (h != primary && IsWindow(h)) {
             if (IsIconic(h)) {
-                ShowWindow(h, SW_RESTORE);
+                ShowWindowAsync(h, SW_RESTORE);
             }
             SetWindowPos(h, HWND_TOP, 0, 0, 0, 0,
-                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
+                             SWP_ASYNCWINDOWPOS);
         }
     }
     if (primary) {
@@ -10665,16 +10770,11 @@ void OpenContextMenuForDock(POINT ptScreen, float lx, float ly) {
                                    {}});
             }
         } else if (snap.kind == DockItemKind::Apps) {
-            bool tahoeHostRunning =
-                FindWindowW(L"WindhawkMacOSTahoeAppsHost", nullptr) != nullptr;
             entries.push_back(
                 {MenuEntry::Type::Action,
-                 (g_settings.appsButtonAction == AppsButtonAction::TahoeApps &&
-                  tahoeHostRunning)
-                     ? L"Open Tahoe Apps Launcher"
-                     : (g_settings.appsButtonAction == AppsButtonAction::AllApps
-                            ? L"Open Applications"
-                            : L"Open Start Menu"),
+                 (g_settings.appsButtonAction == AppsButtonAction::AllApps)
+                     ? L"Open Applications"
+                     : L"Open Start Menu",
                  false, true, [snap]() mutable { LaunchAppItem(snap); }, {}});
             addSep();
             entries.push_back({MenuEntry::Type::Action, L"Change Icon\u2026",
@@ -11032,7 +11132,16 @@ void OpenContextMenuForDock(POINT ptScreen, float lx, float ly) {
         entries.push_back({MenuEntry::Type::Action, L"Task Manager", false,
                            true,
                            [] {
-                               ShellExecuteW(nullptr, L"open", L"taskmgr.exe",
+                               WCHAR sysDir[MAX_PATH]{};
+                               UINT len = GetSystemDirectoryW(sysDir,
+                                                              ARRAYSIZE(sysDir));
+                               std::wstring tmPath =
+                                   (len > 0 && len < ARRAYSIZE(sysDir))
+                                       ? NativeSystemPath(
+                                             std::wstring(sysDir) +
+                                             L"\\taskmgr.exe")
+                                       : std::wstring(L"taskmgr.exe");
+                               ShellExecuteW(nullptr, L"open", tmPath.c_str(),
                                              nullptr, nullptr, SW_SHOWNORMAL);
                            },
                            {}});
@@ -11090,6 +11199,11 @@ void OnGraphicsDeviceLost() {
     g_menus.subPopup.liquidPlate.ResetGpuResources();
     ResetFlyoutGpuResources();
     ClearIconCache();
+    if (InitD3DAndD2D() && g_gfx.compGraphics && g_gfx.d2dDevice) {
+        auto gfxInterop =
+            g_gfx.compGraphics.as<ICompositionGraphicsDeviceInteropLocal>();
+        gfxInterop->SetRenderingDevice(g_gfx.d2dDevice.get());
+    }
     g_dock.tooltip.currentText.clear();
     RebuildShadowSurface();
     SyncItemIconsAndTheme();
@@ -11366,21 +11480,22 @@ void ApplyTaskbarHiding() {
         return;
     }
     HWND mainTray = FindWindowW(L"Shell_TrayWnd", nullptr);
+    if (!mainTray) {
+        return;
+    }
     if (!g_taskbarHider.hiddenByUs) {
         int saved = Wh_GetIntValue(L"restore_autohide", -1);
-        if (saved == -1 && mainTray) {
+        if (saved == -1) {
             APPBARDATA abd{.cbSize = sizeof(abd), .hWnd = mainTray};
             UINT state = static_cast<UINT>(SHAppBarMessage(ABM_GETSTATE, &abd));
             Wh_SetIntValue(L"restore_autohide", static_cast<int>(state));
         }
-        if (mainTray) {
-            APPBARDATA abd{.cbSize = sizeof(abd),
-                           .hWnd = mainTray,
-                           .lParam = ABS_AUTOHIDE};
-            SHAppBarMessage(ABM_SETSTATE, &abd);
-        }
+        APPBARDATA abd{.cbSize = sizeof(abd),
+                       .hWnd = mainTray,
+                       .lParam = ABS_AUTOHIDE};
+        SHAppBarMessage(ABM_SETSTATE, &abd);
         g_taskbarHider.hiddenByUs = true;
-    } else if (mainTray) {
+    } else {
         APPBARDATA abd{.cbSize = sizeof(abd), .hWnd = mainTray};
         UINT state = static_cast<UINT>(SHAppBarMessage(ABM_GETSTATE, &abd));
         if ((state & ABS_AUTOHIDE) == 0) {
@@ -11858,7 +11973,7 @@ void HandleDroppedFilesOnDock(const std::vector<std::wstring>& files,
         if (item.kind == DockItemKind::Trash) {
             ExecuteShellFileOp(
                 FO_DELETE, files, L"",
-                FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT);
+                FOF_ALLOWUNDO | FOF_WANTNUKEWARNING);
             ClearIconCache();
             SyncItemIconsAndTheme();
             RequestAnimationFrame();
@@ -14315,7 +14430,8 @@ LRESULT CALLBACK TahoeSettingsWndProc(HWND hwnd, UINT msg, WPARAM wp,
                 }
                 if (PointInRectF(g_settingsUi.rcResetBtn, lx, ly)) {
                     ClearRuntimeOverrides();
-                    Wh_SetStringValue(L"dock_pin_order_v1", L"");
+                    SaveNumberedStringList(L"dock_pin_order_v2", {});
+                    Wh_DeleteValue(L"dock_pin_order_v1");
                     ApplyLiveSettingsAfterOverride();
                     g_settingsUi.liquidPlate.dirty = true;
                     RefreshOpticalGlassPlatesOnly();
@@ -14453,111 +14569,6 @@ void AddAllOverlayWatchedRegions(std::vector<RECT>& watchList) {
     }
 }
 
-LRESULT QueryDockIconScreenCenter(HWND targetHwnd) {
-    if (!targetHwnd || !IsWindow(targetHwnd) || !g_dock.hwnd ||
-        g_items.empty()) {
-        return 0;
-    }
-    auto encodeRectCenter = [&](const D2D1_RECT_F& r) -> LRESULT {
-        if (r.right <= r.left || r.bottom <= r.top) {
-            return 0;
-        }
-        int cx = g_dock.windowRect.left +
-                 static_cast<int>(std::lround((r.left + r.right) * 0.5f));
-        int cy = g_dock.windowRect.top +
-                 static_cast<int>(std::lround((r.top + r.bottom) * 0.5f));
-        uint32_t px = static_cast<uint32_t>(std::clamp(cx + 16384, 0, 65535));
-        uint32_t py = static_cast<uint32_t>(std::clamp(cy + 16384, 0, 65535));
-        return static_cast<LRESULT>(px | (py << 16));
-    };
-    for (const auto& it : g_items) {
-        if (it.kind == DockItemKind::MinimizedWindow &&
-            it.minimizedHwnd == targetHwnd) {
-            if (LRESULT res = encodeRectCenter(it.iconRect)) {
-                return res;
-            }
-        }
-    }
-    for (const auto& it : g_items) {
-        if (std::find(it.windows.begin(), it.windows.end(), targetHwnd) !=
-            it.windows.end()) {
-            if (LRESULT res = encodeRectCenter(it.iconRect)) {
-                return res;
-            }
-        }
-    }
-    // Pass 3: match freshly launching/restoring windows by resolved app identity.
-    WindowIdentity wid = ResolveWindowIdentity(targetHwnd);
-    if (wid.isExplorerCabinet) {
-        for (const auto& it : g_items) {
-            if (it.kind == DockItemKind::Finder) {
-                if (LRESULT res = encodeRectCenter(it.iconRect)) {
-                    return res;
-                }
-            }
-        }
-    }
-    if (!wid.aumid.empty() || !wid.normPath.empty()) {
-        for (const auto& it : g_items) {
-            if ((it.kind == DockItemKind::App ||
-                 it.kind == DockItemKind::Recent) &&
-                AppsMatch(it.aumid, it.path, wid.aumid, wid.normPath)) {
-                if (LRESULT res = encodeRectCenter(it.iconRect)) {
-                    return res;
-                }
-            }
-        }
-    }
-    return 0;
-}
-
-bool HandleCompanionPinCopyData(const COPYDATASTRUCT* cds) {
-    if (!cds || cds->dwData != 0x54414831u || !cds->lpData ||
-        cds->cbData < sizeof(wchar_t)) {
-        return false;
-    }
-    size_t maxChars = cds->cbData / sizeof(wchar_t);
-    const wchar_t* raw = reinterpret_cast<const wchar_t*>(cds->lpData);
-    size_t actualLen = wcsnlen(raw, maxChars);
-    std::wstring payload(raw, actualLen);
-    size_t sep1 = payload.find(L'\x1F');
-    size_t sep2 = (sep1 != std::wstring::npos)
-                      ? payload.find(L'\x1F', sep1 + 1)
-                      : std::wstring::npos;
-    if (sep1 == std::wstring::npos || sep2 == std::wstring::npos) {
-        return false;
-    }
-    std::wstring path = payload.substr(0, sep1);
-    std::wstring aumid = payload.substr(sep1 + 1, sep2 - sep1 - 1);
-    std::wstring name = payload.substr(sep2 + 1);
-    std::optional<StoredApp> sa;
-    if (!path.empty() && ToLower(path).ends_with(L".lnk")) {
-        sa = ResolveShortcutFile(path);
-    }
-    if (!sa) {
-        StoredApp app;
-        app.isAumid = path.empty();
-        app.aumid = std::move(aumid);
-        app.path = std::move(path);
-        app.name = std::move(name);
-        sa = std::move(app);
-    }
-    if (sa && (!sa->path.empty() || !sa->aumid.empty() ||
-               !sa->shortcutPath.empty())) {
-        DockItem tmp;
-        tmp.kind = DockItemKind::App;
-        tmp.aumid = sa->aumid;
-        tmp.path = sa->path;
-        tmp.shortcutPath = sa->shortcutPath;
-        tmp.args = sa->args;
-        tmp.workdir = sa->workdir;
-        tmp.name = sa->name;
-        PinItemToDock(tmp);
-        return true;
-    }
-    return false;
-}
-
 // ============================================================================
 // 18. Window Procedure, UI Thread & Tool-Mod Boilerplate
 // ============================================================================
@@ -14567,18 +14578,13 @@ LRESULT CALLBACK DockWndProc(HWND hwnd,
                              WPARAM wParam,
                              LPARAM lParam) {
     try {
-        if (g_ipc.msgQueryIconCenter && msg == g_ipc.msgQueryIconCenter) {
-            return QueryDockIconScreenCenter(reinterpret_cast<HWND>(wParam));
-        }
-        if (g_ipc.msgOpenDockSettings && msg == g_ipc.msgOpenDockSettings) {
-            OpenTahoeSettingsPanel();
-            return 1;
-        }
         if (g_taskbarHider.taskbarCreatedMsg &&
             msg == g_taskbarHider.taskbarCreatedMsg) {
             if (g_settings.hideTaskbar) {
                 ApplyTaskbarHiding();
             }
+            g_dock.appBarRegistered = false;
+            g_dock.appBarFullscreen = false;
             UpdateAppBarReservation();
             if (SyncPinnedAppsWithTaskbar(true)) {
                 ReconcileDockItems(false);
@@ -14672,6 +14678,11 @@ LRESULT CALLBACK DockWndProc(HWND hwnd,
                 }
                 return 0;
 
+            case kWmAppDeviceLost:
+                g_deviceLostPending.store(false, std::memory_order_release);
+                OnGraphicsDeviceLost();
+                return 0;
+
             case WM_HOTKEY:
                 if (wParam == kHotkeyFreezeGlass) {
                     g_liquidCapture.frozen = !g_liquidCapture.frozen;
@@ -14755,9 +14766,15 @@ LRESULT CALLBACK DockWndProc(HWND hwnd,
                         }
                     }
                 }
+                TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE, hwnd, 0};
+                TrackMouseEvent(&tme);
                 PollCursorState();
                 return 0;
             }
+
+            case WM_MOUSELEAVE:
+                PollCursorState();
+                return 0;
 
             case WM_LBUTTONDOWN: {
                 CloseAllMenus();
@@ -14899,12 +14916,6 @@ LRESULT CALLBACK DockWndProc(HWND hwnd,
                 RequestAnimationFrame();
                 return 0;
 
-            case WM_COPYDATA:
-                return HandleCompanionPinCopyData(
-                           reinterpret_cast<const COPYDATASTRUCT*>(lParam))
-                           ? TRUE
-                           : FALSE;
-
             case kWmAppSettings: {
                 CloseWindowPreviewFlyout();
                 bool prevHide = g_settings.hideTaskbar;
@@ -14932,6 +14943,8 @@ LRESULT CALLBACK DockWndProc(HWND hwnd,
 
             case kWmAppQuit:
                 g_quitting = true;
+                RestoreTaskbar();
+                RemoveAppBar();
                 EndDividerResize(false);
                 EndInternalDockDrag(false);
                 CloseWindowPreviewFlyout();
@@ -14995,15 +15008,6 @@ bool CreateDockWindow(HINSTANCE hInst) {
     }
 
     g_taskbarHider.taskbarCreatedMsg = RegisterWindowMessageW(L"TaskbarCreated");
-    g_ipc.msgToggleApps = RegisterWindowMessageW(L"WindhawkMacOSTahoe_ToggleApps");
-    g_ipc.msgQueryIconCenter = RegisterWindowMessageW(L"WindhawkMacOSTahoe_QueryIconCenter");
-    g_ipc.msgOpenDockSettings = RegisterWindowMessageW(L"WindhawkMacOSTahoe_OpenDockSettings");
-    for (UINT m : {g_ipc.msgToggleApps, g_ipc.msgQueryIconCenter,
-                   g_ipc.msgOpenDockSettings, static_cast<UINT>(WM_COPYDATA)}) {
-        if (m) {
-            ChangeWindowMessageFilterEx(g_dock.hwnd, m, MSGFLT_ALLOW, nullptr);
-        }
-    }
     RegisterHotKey(g_dock.hwnd, kHotkeyFreezeGlass,
                    MOD_WIN | MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, 'G');
     SetTimer(g_dock.hwnd, kTimerCursorPoll, 100, nullptr);
@@ -15038,7 +15042,8 @@ DWORD WINAPI UiThreadProc(LPVOID) {
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     HRESULT oleHr = OleInitialize(nullptr);
 
-    HMODULE hCoreMsg = LoadLibraryW(L"CoreMessaging.dll");
+    HMODULE hCoreMsg = LoadLibraryExW(L"CoreMessaging.dll", nullptr,
+                                      LOAD_LIBRARY_SEARCH_SYSTEM32);
     using CreateDispatcherQueueController_t = HRESULT(WINAPI*)(
         DispatcherQueueOptions,
         ABI::Windows::System::IDispatcherQueueController**);
@@ -15210,12 +15215,20 @@ void WhTool_ModUninit() {
 
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
-// processes or hook other functions.
-////////////////////////////////////////////////////////////////////////////////
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
 
-bool g_isToolModProcessLauncher = false;
-HANDLE g_toolModProcessMutex = nullptr;
-HANDLE g_toolModClosingEvent = nullptr;
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
 
 void WINAPI EntryPoint_Hook() {
     Wh_Log(L">");
@@ -15223,7 +15236,7 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
-    DWORD sessionId = 0;
+    DWORD sessionId;
     if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
         sessionId == 0) {
         return FALSE;
@@ -15233,7 +15246,7 @@ BOOL Wh_ModInit() {
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
     int argc;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
         Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
@@ -15266,53 +15279,23 @@ BOOL Wh_ModInit() {
 
     if (isCurrentToolModProcess) {
         g_toolModProcessMutex =
-            CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
             Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
         }
 
         if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            CloseHandle(g_toolModProcessMutex);
-            g_toolModProcessMutex = nullptr;
-            ULONGLONG start = GetTickCount64();
-            for (;;) {
-                Sleep(100);
-                HANDLE m = CreateMutexW(nullptr, TRUE,
-                                        L"windhawk-tool-mod_" WH_MOD_ID);
-                if (m && GetLastError() != ERROR_ALREADY_EXISTS) {
-                    g_toolModProcessMutex = m;
-                    break;
-                }
-                if (m) {
-                    CloseHandle(m);
-                }
-                bool closing = false;
-                if (HANDLE ev = OpenEventW(
-                        SYNCHRONIZE, FALSE,
-                        L"windhawk-tool-mod-closing_" WH_MOD_ID)) {
-                    closing = WaitForSingleObject(ev, 0) == WAIT_OBJECT_0;
-                    CloseHandle(ev);
-                }
-                if (GetTickCount64() - start > (closing ? 12000u : 3000u)) {
-                    break;
-                }
-            }
-            if (!g_toolModProcessMutex) {
-                Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
-                ExitProcess(1);
-            }
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
         }
-
-        g_toolModClosingEvent = CreateEventW(
-            nullptr, TRUE, FALSE, L"windhawk-tool-mod-closing_" WH_MOD_ID);
 
         if (!WhTool_ModInit()) {
             ExitProcess(1);
         }
 
         IMAGE_DOS_HEADER* dosHeader =
-            (IMAGE_DOS_HEADER*)GetModuleHandleW(nullptr);
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
         IMAGE_NT_HEADERS* ntHeaders =
             (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
 
@@ -15337,8 +15320,8 @@ void Wh_ModAfterInit() {
     }
 
     WCHAR currentProcessPath[MAX_PATH];
-    switch (GetModuleFileNameW(nullptr, currentProcessPath,
-                               ARRAYSIZE(currentProcessPath))) {
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
         case 0:
         case ARRAYSIZE(currentProcessPath):
             Wh_Log(L"GetModuleFileName failed");
@@ -15351,9 +15334,9 @@ void Wh_ModAfterInit() {
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
                WH_MOD_ID);
 
-    HMODULE kernelModule = GetModuleHandleW(L"kernelbase.dll");
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
-        kernelModule = GetModuleHandleW(L"kernel32.dll");
+        kernelModule = GetModuleHandle(L"kernel32.dll");
         if (!kernelModule) {
             Wh_Log(L"No kernelbase.dll/kernel32.dll");
             return;
@@ -15376,8 +15359,8 @@ void Wh_ModAfterInit() {
         return;
     }
 
-    STARTUPINFOW si{
-        .cb = sizeof(STARTUPINFOW),
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
         .dwFlags = STARTF_FORCEOFFFEEDBACK,
     };
     PROCESS_INFORMATION pi;
@@ -15405,13 +15388,6 @@ void Wh_ModUninit() {
         return;
     }
 
-    if (g_toolModClosingEvent) {
-        SetEvent(g_toolModClosingEvent);
-    }
     WhTool_ModUninit();
-    if (g_toolModClosingEvent) {
-        CloseHandle(g_toolModClosingEvent);
-        g_toolModClosingEvent = nullptr;
-    }
     ExitProcess(0);
 }
