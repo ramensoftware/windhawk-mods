@@ -20,7 +20,8 @@ by how much you use each app. Press **Ctrl+Alt+W** to arrange, **Ctrl+Alt+R**
 to put every window back where it was. Nothing happens until you press a
 hotkey.
 
-![Five apps arranged by Tile Windows on one monitor](https://raw.githubusercontent.com/laurensanp/tile-windows/95335922cbbccc911ff82c0f7f17bb88e7aae497/windhawk/screenshot.png)
+![Five apps arranged by Tile Windows on one
+monitor](https://raw.githubusercontent.com/laurensanp/tile-windows/95335922cbbccc911ff82c0f7f17bb88e7aae497/windhawk/screenshot.png)
 
 * **Main monitor** gets only the apps you work in directly (weight 3 and up:
   editor, browser...). Chat, music and tools go to the other monitors.
@@ -958,6 +959,7 @@ void TileWindows(const Settings& settings) {
         // Apps that don't fit readably are minimized (least important first).
         // If an app refuses to get as small as its slot, its real size is
         // remembered and the layout is worked out again.
+        size_t count = 0;
         for (int pass = 0; pass < 8 && !g.empty(); pass++) {
             req.w.clear();
             req.needW.clear();
@@ -971,13 +973,10 @@ void TileWindows(const Settings& settings) {
             }
             Layout layout = GetBestLayout(req);
             g_lastSigs[m] = layout.sig;
-            while ((int)g.size() > layout.count) {
-                ShowWindow(g.back().hwnd, SW_SHOWMINNOACTIVE);
-                g.pop_back();
-            }
+            count = std::min((size_t)layout.count, g.size());
             bool again = false;
             std::vector<HWND> cannotMove;
-            for (size_t j = 0; j < g.size(); j++) {
+            for (size_t j = 0; j < count; j++) {
                 const Slot& s = layout.slots[j];
                 Placed placed = PlaceWindow(g[j].hwnd, s[0] + half, s[1] + half,
                                             s[2] - gap, s[3] - gap);
@@ -1006,6 +1005,11 @@ void TileWindows(const Settings& settings) {
                 break;
             }
         }
+        // Minimized only now that the layout is final: a slot freed by a
+        // window that can't be moved goes to the next app instead.
+        for (size_t j = count; j < g.size(); j++) {
+            ShowWindow(g[j].hwnd, SW_SHOWMINNOACTIVE);
+        }
     }
 
     Refocus(focus);
@@ -1020,7 +1024,11 @@ void TileWindows(const Settings& settings) {
 void RestoreWindows() {
     HWND focus = GetForegroundWindow();
     for (auto [hwnd, wp] : g_undo) {
-        if (!IsWindow(hwnd)) {
+        // Skip closed, hidden and hung windows: SetWindowPlacement would show
+        // a hidden window (an app closed to the tray, e.g. Discord) and block
+        // until a hung one responds.
+        if (!IsWindow(hwnd) || !IsWindowVisible(hwnd) ||
+            IsHungAppWindow(hwnd)) {
             continue;
         }
         bool maximized = wp.showCmd == SW_SHOWMAXIMIZED;
