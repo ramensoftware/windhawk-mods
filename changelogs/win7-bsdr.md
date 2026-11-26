@@ -1,3 +1,7 @@
+## 1.4 ([Nov 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/f1355869276b45e9dbbc9af1b738c6547b370120/mods/win7-bsdr.wh.cpp))
+
+* Fix the issue where enabling the logoff sequence makes the system automatically log on again after logging off if a user account has no password set (by @repensky)
+
 ## 1.3 ([Sep 24, 2026](https://github.com/ramensoftware/windhawk-mods/blob/0b31194932e041ef6da46e6bd165567d4b400099/mods/win7-bsdr.wh.cpp))
 
 * Hardcode Windows Vista style resources, as well as 35 languages from every available Vista/7 MUIs.

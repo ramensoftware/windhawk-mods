@@ -2,12 +2,41 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-25T20:02:08.000Z</updated>
+    <updated>2026-11-26T03:04:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Modern Run Dialog UI For Windows 10 & 11 6.0.2.0]]></title>
+        <id>https://windhawk.net/mods/modern-run-dialog-ui#7628a658eb94c96fd7c44415780ae2a80aaea6fc</id>
+        <link href="https://windhawk.net/mods/modern-run-dialog-ui"/>
+        <updated>2026-11-26T03:04:37.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Fixed dialog position drift when typing (#7877):</strong> Fixed an issue where the Run dialog would jump or shift away from fixed positions (such as Bottom Left) as suggestions expanded or shrank, especially in Compact Mini-Pill Mode. Resizing now atomically preserves the configured anchor.</li>
+<li><strong>Fixed Background Opacity on Windows 11 Blur &amp; other themes (#7902):</strong> Wired the <strong>Background Opacity (<code>30–255</code>)</strong> setting so it visibly adjusts the translucency/tint of <strong>Windows 11 Blur</strong>, <strong>Liquid Glass</strong>, and solid themes even when no custom background image or GIF is set.</li>
+</ul>
+]]></content>
+        <author>
+            <name>caotu2005</name>
+            <uri>https://github.com/caotu2005</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows Vista/7 Blocked Shutdown UX & Logoff Sequence 1.4]]></title>
+        <id>https://windhawk.net/mods/win7-bsdr#f1355869276b45e9dbbc9af1b738c6547b370120</id>
+        <link href="https://windhawk.net/mods/win7-bsdr"/>
+        <updated>2026-11-26T03:04:32.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix the issue where enabling the logoff sequence makes the system automatically log on again after logging off if a user account has no password set (by @repensky)</li>
+</ul>
+]]></content>
+        <author>
+            <name>Ingan121</name>
+            <uri>https://github.com/Ingan121</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Independent taskbar per monitor 1.7.2]]></title>
         <id>https://windhawk.net/mods/taskbar-independent-per-monitor#f11433e958a8f8a44449a19aefc096eedec76c22</id>
@@ -864,50 +893,6 @@ is created, the approach worked out in
         <author>
             <name>igoredm</name>
             <uri>https://github.com/igoredm</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Tabs Session Saver Revamped 1.0.0]]></title>
-        <id>https://windhawk.net/mods/explorer-tabs-session-saver-revamped#6e094d2b1e6df46729aed0eb81861b924423f0a3</id>
-        <link href="https://windhawk.net/mods/explorer-tabs-session-saver-revamped"/>
-        <updated>2026-11-25T06:02:26.000Z</updated>
-        <content type="html"><![CDATA[<h1>Explorer Tabs Session Saver Revamped</h1>
-<p>This mod saves your open File Explorer tabs and automatically restores them whenever you reopen File Explorer.</p>
-<p>It is an enhanced successor to <a href="https://windhawk.net/mods/explorer-tabs-session-saver">Explorer Tabs Session Saver</a> by <a href="https://github.com/noX1st">noX1st</a>, fixing several core issues and edge cases.</p>
-<p><img src="https://i.imgur.com/5ehPFaL.gif" alt="Demonstration"></p>
-<h3>Improvements Over the Original Mod</h3>
-<ul>
-<li><strong>No Extra &quot;Blank&quot; Tab on Restore:</strong> When File Explorer opens to a default start location (<em>Home</em> or <em>This PC</em>), the initial left-most tab is navigated in-place (<code>IWebBrowser2::Navigate</code> / <code>IShellBrowser::BrowseObject</code>) instead of spawning a separate <code>ShellExecuteExW</code> call for the first saved tab. If Explorer is opened for a specific folder (e.g. <em>&quot;Show in folder&quot;</em> or a folder shortcut), that folder and its selection are preserved and your saved tabs open alongside it.</li>
-<li><strong>Fixes Sidebar Auto-Scrolling to the Bottom:</strong> Prevents File Explorer's Navigation Pane (<code>SysTreeView32</code>) from jumping or flickering to the bottom when restoring tabs with Explorer Tab Utility.</li>
-<li><strong>Persistent Session Protection:</strong> Opening File Explorer and closing it immediately without interacting with the restored tabs will no longer delete or lose your saved session.</li>
-<li><strong>Atomic Multi-Tab Window Close:</strong> Ignores tabs belonging to a top-level Explorer window that is already in the middle of closing, preventing partial tab lists from overwriting your session when closing a multi-tab window.</li>
-<li><strong>Per-User UTF-8 Session Storage:</strong> Stores sessions per Windows user account (<code>LastExplorerTabs-&lt;SID&gt;.txt</code>) in UTF-8 so folder paths with accented or Unicode characters are preserved and multi-user accounts do not collide.</li>
-<li><strong>Clean Mod Reload / Unload:</strong> Joins worker threads and unsubclasses controls deterministically on unload.</li>
-</ul>
-<h3>Notes</h3>
-<ul>
-<li>Works independently of the built-in Windows feature <em>&quot;Restore previous folder windows at logon&quot;</em>.</li>
-<li><strong>Important:</strong> To restore tabs into a single File Explorer window, <a href="https://github.com/w4po/ExplorerTabUtility">Explorer Tab Utility</a> (with its <strong>&quot;Window Hook&quot;</strong> feature enabled) or a similar tab-merging utility is required. Otherwise, each tab will be restored in its own separate window.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Peter2oo1</name>
-            <uri>https://github.com/Peter2oo1</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Better Volume Mixer 1.6.4]]></title>
-        <id>https://windhawk.net/mods/better-volume-mixer#f58273a1d3e10723a01c3aac1e4f2fcc45ad327c</id>
-        <link href="https://windhawk.net/mods/better-volume-mixer"/>
-        <updated>2026-11-25T03:02:57.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed volume percentage changing sizes by itself</li>
-<li>Added a size option for the tray percentage</li>
-</ul>
-]]></content>
-        <author>
-            <name>0Allu</name>
-            <uri>https://github.com/0Allu</uri>
         </author>
     </entry>
 </feed>

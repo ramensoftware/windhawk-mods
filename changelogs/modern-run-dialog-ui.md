@@ -1,3 +1,8 @@
+## 6.0.2.0 ([Nov 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7628a658eb94c96fd7c44415780ae2a80aaea6fc/mods/modern-run-dialog-ui.wh.cpp))
+
+* **Fixed dialog position drift when typing (#7877):** Fixed an issue where the Run dialog would jump or shift away from fixed positions (such as Bottom Left) as suggestions expanded or shrank, especially in Compact Mini-Pill Mode. Resizing now atomically preserves the configured anchor.
+* **Fixed Background Opacity on Windows 11 Blur & other themes (#7902):** Wired the **Background Opacity (`30–255`)** setting so it visibly adjusts the translucency/tint of **Windows 11 Blur**, **Liquid Glass**, and solid themes even when no custom background image or GIF is set.
+
 ## 6.0.1.0 ([Nov 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/31ff71005f20ca3ced58d46d59953891913280e3/mods/modern-run-dialog-ui.wh.cpp))
 
 * **Dedicated WinUI 3 Settings App (Hosted in `windhawk.exe`):** Replaced the in-process settings popup with a standalone Windows 11 Settings–style window hosted in `windhawk.exe -tool-mod` (zero overlap with the Run dialog), featuring Direct2D SettingsExpander cards, ComboBox flyouts, and a 2D Hue-Saturation ColorPicker with 16 Fluent swatches.

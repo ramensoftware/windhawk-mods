@@ -676,6 +676,37 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/760b91ecf9f50687cd4b2ed315b32d32ad8372ea/mods/lockscreen-background.wh.cpp"
       }
     },
+    "macos-widgets": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795662511612,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795662511612,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Thiago Silva",
+        "compilerOptions": "-ld2d1 -ldwrite -lwinhttp -lruntimeobject -lole32 -loleaut32 -luser32 -lgdi32 -lshell32 -lwindowscodecs -lsetupapi -liphlpapi -luuid -ladvapi32 -lversion -lpdh",
+        "description": "macOS 27-style Liquid Glass desktop widgets, running in their own process (not inside Explorer)",
+        "donateUrl": "https://livepix.gg/kurokobr",
+        "github": "https://github.com/brideinflame-rgb",
+        "homepage": "https://github.com/brideinflame-rgb/Mac-OS-Widgets",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "MacOS Widgets",
+        "version": "1.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7965",
+      "source": {
+        "sha256": "0f6f415ca835bc58c414baa705f904121b6f6226533cd2b4543fcfd1b22aa521",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/9e8cffe30ae7dfe51f344bbf55f46751f2eb86fa/mods/macos-widgets.wh.cpp"
+      }
+    },
     "native-screen-recorder": {
       "details": {
         "defaultSorting": 0,
@@ -1321,6 +1352,35 @@
       "source": {
         "sha256": "94970972112e2297157e0b33c8c76cb50d12e3f69f37f49e9d81b606fe43303e",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/eff123923d62e2e66cd2b40e981c44fecf2dd746/mods/vision.wh.cpp"
+      }
+    },
+    "wheel-context-menu": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795662511612,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795662511612,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Johhannas Reyn",
+        "compilerOptions": "-ld2d1 -ldwrite -ldwmapi -lgdi32 -ladvapi32 -lshell32 -lshcore",
+        "description": "Replaces classic context menus with a fading, rotating wheel you can spin, scroll, type into and rearrange",
+        "github": "https://github.com/JohhannasReyn",
+        "homepage": "https://thegnosys.com",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Wheel Context Menu",
+        "version": "0.1"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7732",
+      "source": {
+        "sha256": "48e62693daf7282979294b808e347b5c2e01744984e64fc1eebedbde1854a07e",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/1120133d3c9133749fbd6d4a312e32bc6f24a0dc/mods/wheel-context-menu.wh.cpp"
       }
     },
     "win7-user-account-page-restorer": {
