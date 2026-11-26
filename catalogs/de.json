@@ -4281,7 +4281,7 @@
         "ratingUsers": 13,
         "reviews": 0,
         "trendingSorting": -0.08882972955921135,
-        "updated": 1782417872000,
+        "updated": 1795665695000,
         "users": 640
       },
       "metadata": {
@@ -4292,7 +4292,7 @@
           "*"
         ],
         "name": "Ctrl+Backspace Fix for Win32 Text Boxes",
-        "version": "1.0.1"
+        "version": "1.1"
       }
     },
     "cursor-auto-hide": {
@@ -4530,18 +4530,18 @@
         "ratingUsers": 2,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1794553493000,
+        "updated": 1795665711000,
         "users": 22
       },
       "metadata": {
         "author": "RandomGuy5747",
-        "description": "A simple mod that lets you customize the command prompt \"ver\" command text safely when typed at the prompt",
+        "description": "A simple mod that lets you customize the command prompt \"ver\" command text",
         "github": "https://github.com/RandomGuy5747",
         "include": [
           "cmd.exe"
         ],
         "name": "Custom CMD \"ver\" Command Text",
-        "version": "1.0"
+        "version": "1.1"
       }
     },
     "custom-corner-radius": {
@@ -8536,7 +8536,7 @@
         "ratingUsers": 32,
         "reviews": 0,
         "trendingSorting": 2.1086001422100082,
-        "updated": 1788621176000,
+        "updated": 1795665705000,
         "users": 1442
       },
       "metadata": {
@@ -8544,14 +8544,14 @@
           "x86-64"
         ],
         "author": "meteoni",
-        "compilerOptions": "-luser32",
-        "description": "Removes the long pre-animation lag caused by oversized wallpaper thumbnail requests on Windows 11.",
+        "compilerOptions": "-lole32 -luser32 -lshell32 -lgdi32 -ladvapi32 -luuid -lruntimeobject",
+        "description": "Makes virtual desktop switches and touchpad swipes start faster: caches wallpaper images, skips hidden windows, and requests a short performance boost.",
         "github": "https://github.com/Meteoni",
         "include": [
           "explorer.exe"
         ],
         "name": "Faster Virtual Desktop Switching",
-        "version": "1.0.1"
+        "version": "1.5.0"
       }
     },
     "favorites-in-navpane": {
@@ -21302,7 +21302,7 @@
         "ratingUsers": 24,
         "reviews": 0,
         "trendingSorting": 0.20982401733808023,
-        "updated": 1790780518000,
+        "updated": 1795665700000,
         "users": 1031
       },
       "metadata": {
@@ -21340,7 +21340,7 @@
         "license": "MIT",
         "name": "Titlebar For Everyone",
         "twitter": "https://twitter.com/Ingan121",
-        "version": "0.5"
+        "version": "0.6"
       }
     },
     "toast-auto-dismiss": {

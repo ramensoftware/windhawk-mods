@@ -1,3 +1,9 @@
+## 1.1 ([Nov 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/4e0a564186fa0f79c49e81942d2ab98725bfdcce/mods/ctrl-backspace-fix-for-win32-text-boxes.wh.cpp))
+
+* Improved word-wise deletion for Unicode punctuation, CJK ideographs, Japanese kana, and Korean Hangul.
+* Added support for ATL/WTL wrapped `Edit` controls, such as [Windhawk Symbol Helper](https://github.com/ramensoftware/windhawk-symbol-helper)'s results text box.
+* Treated masked password text as a single block to avoid leaking word boundaries.
+
 ## 1.0.1 ([Jun 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/8816b488b2a762412178f53c1e8eef2b974516bf/mods/ctrl-backspace-fix-for-win32-text-boxes.wh.cpp))
 
 Excluded the `Scintilla` control to resolve text corruption with Unicode characters that caused a crash in Notepad++.

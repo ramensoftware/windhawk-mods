@@ -2,12 +2,72 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-26T03:04:37.000Z</updated>
+    <updated>2026-11-26T04:01:51.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Custom CMD "ver" Command Text 1.1]]></title>
+        <id>https://windhawk.net/mods/custom-cmd-ver-command-text#6d372f22942b13c7bf1f93ef2b2ac3fa06859d58</id>
+        <link href="https://windhawk.net/mods/custom-cmd-ver-command-text"/>
+        <updated>2026-11-26T04:01:51.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Updated README</li>
+</ul>
+]]></content>
+        <author>
+            <name>RandomGuy5747</name>
+            <uri>https://github.com/RandomGuy5747</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Faster Virtual Desktop Switching 1.5.0]]></title>
+        <id>https://windhawk.net/mods/faster-virtual-desktop-switching#2a1753c5df5e0a840f4f281f0bfbaf033e27aa5b</id>
+        <link href="https://windhawk.net/mods/faster-virtual-desktop-switching"/>
+        <updated>2026-11-26T04:01:45.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Caches local wallpapers and prepares nearby desktops in the background, including when Explorer starts.</li>
+<li>Skips hidden windows during the transition and requests a brief Windows performance boost when a switch starts. Both options can be turned off.</li>
+<li>Adds controls for cache memory and how many nearby desktops to prepare. Set the thumbnail size limit to 0 to remove the cap.</li>
+</ul>
+]]></content>
+        <author>
+            <name>meteoni</name>
+            <uri>https://github.com/Meteoni</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Titlebar For Everyone 0.6]]></title>
+        <id>https://windhawk.net/mods/titlebar-for-everyone#013121014c41a33836d6634e1dec9815d15ef5cd</id>
+        <link href="https://windhawk.net/mods/titlebar-for-everyone"/>
+        <updated>2026-11-26T04:01:40.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Exclude Steam Big Picture windows and SteamVR windows</li>
+</ul>
+]]></content>
+        <author>
+            <name>Ingan121</name>
+            <uri>https://github.com/Ingan121</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Ctrl+Backspace Fix for Win32 Text Boxes 1.1]]></title>
+        <id>https://windhawk.net/mods/ctrl-backspace-fix-for-win32-text-boxes#4e0a564186fa0f79c49e81942d2ab98725bfdcce</id>
+        <link href="https://windhawk.net/mods/ctrl-backspace-fix-for-win32-text-boxes"/>
+        <updated>2026-11-26T04:01:35.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Improved word-wise deletion for Unicode punctuation, CJK ideographs, Japanese kana, and Korean Hangul.</li>
+<li>Added support for ATL/WTL wrapped <code>Edit</code> controls, such as <a href="https://github.com/ramensoftware/windhawk-symbol-helper">Windhawk Symbol Helper</a>'s results text box.</li>
+<li>Treated masked password text as a single block to avoid leaking word boundaries.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Kitsune</name>
+            <uri>https://github.com/AromaKitsune</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Modern Run Dialog UI For Windows 10 & 11 6.0.2.0]]></title>
         <id>https://windhawk.net/mods/modern-run-dialog-ui#7628a658eb94c96fd7c44415780ae2a80aaea6fc</id>
@@ -761,138 +821,6 @@ Shamenson.</p>
         <author>
             <name>DavidHiFi</name>
             <uri>https://github.com/DavidHiFi</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Shell Font Changer Plus 1.4.2]]></title>
-        <id>https://windhawk.net/mods/shell-font-changer-plus#61f97bf4cf94b9a4ff461ffd74376088e8fc2569</id>
-        <link href="https://windhawk.net/mods/shell-font-changer-plus"/>
-        <updated>2026-11-25T07:04:52.000Z</updated>
-        <content type="html"><![CDATA[<h1>Shell Font Changer Plus</h1>
-<p>Change the text font in File Explorer to any font you have installed, and make
-the text bigger or smaller. Icons and emoji keep their own glyphs, so buttons
-never turn into empty boxes.</p>
-<p><img src="https://raw.githubusercontent.com/DavidHiFi/davids-windhawk-mods/main/media/previews/shell-font-changer-plus.png" alt="Shell Font Changer Plus preview"></p>
-<h2>Features</h2>
-<ul>
-<li><strong>File Explorer text.</strong> The file list, the navigation pane and the column
-headers follow the font you pick.</li>
-<li><strong>Icons and emoji stay intact.</strong> Symbol and icon fonts keep their own glyphs,
-so buttons never show empty boxes.</li>
-<li><strong>Text size.</strong> Scale File Explorer's text from 75% to 200%. Rows, columns
-and boxes are laid out for the new size, headings stay larger than body text,
-and each monitor keeps its own scaling. The size covers all text Explorer
-draws itself: the desktop labels, context menus, the Run, Properties and
-copy dialogs, and the Windows 10 taskbar.</li>
-<li><strong>Weight is kept.</strong> Semibold and bold text stays semibold and bold.</li>
-<li><strong>Classic, themed and modern text.</strong> GDI text, visual-style themes and
-DirectWrite layouts are all covered.</li>
-<li><strong>Text fits its controls.</strong> Text that would overflow shrinks a little, to no
-less than 85% of its height or 80% of its width. If classic text still
-overflows, the original UI font draws it.</li>
-<li><strong>Clean to remove.</strong> The mod writes nothing to the registry, so turning it off
-leaves nothing behind.</li>
-</ul>
-<h2>How to use</h2>
-<p>Type an installed font family name in the settings, such as <code>FiraCode Nerd Font</code>
-or <code>Inter</code>. The field starts empty, so nothing changes until you pick a font.
-Leave it empty, or type <code>None</code>, to keep the original font.</p>
-<p>Set <strong>Text size</strong> to make the text bigger or smaller. It is a percentage of the
-size Windows picks: 100 keeps it as it is, 125 makes it a quarter bigger. It
-works with or without a font. With the font empty and the size at 100, the mod
-does nothing.</p>
-<p>If the font is not installed, or its name is 32 characters or longer, the font
-is left as it is and the Windhawk log says why. The text size still applies.</p>
-<p>Settings apply without reloading the mod. Explorer sizes its rows and boxes
-when it creates a window's fonts, so a new text size shows in windows opened
-after the change. Restart Explorer to resize the desktop and the windows that
-were already open, and again after turning the size back to 100 or turning the
-mod off. Turning the mod off and on again, or updating it, without that
-restart can make some text grow twice, and a restart fixes it.</p>
-<p>To fit its box, text drawn by DirectWrite never shrinks below its original
-size when only the size is changed, or below 85% of it with a font set. Text
-that ends in &quot;...&quot; keeps its size and its &quot;...&quot;.</p>
-<p>The Windows 11 command bar and address bar, Start, Search and Settings are
-drawn by XAML or web views and keep their fonts. The
-<a href="https://windhawk.net/mods/windows-11-file-explorer-styler">Windows 11 File Explorer Styler</a>,
-<a href="https://windhawk.net/mods/windows-11-start-menu-styler">Start Menu Styler</a> and
-<a href="https://windhawk.net/mods/windows-11-settings-styler">Settings Styler</a> can set
-fonts there. Windows that were already open may need to be reopened.</p>
-<p>Turn off the original Explorer Font Changer before you turn this one on.
-<a href="https://windhawk.net/mods/change-more-fonts">Change More Fonts</a> also changes
-fonts as they are created. If you use it, leave this mod's font empty so only
-one of them picks the font.</p>
-<h2>Credits</h2>
-<p>Based on <a href="https://windhawk.net/mods/explorer-font-changer">Explorer Font Changer</a>
-by Gabriela Cristei. MIT. The text size scales each font in proportion when it
-is created, the approach worked out in
-<a href="https://github.com/wodenwhel">wodenwhel</a>'s Explorer Font Size Changer.</p>
-]]></content>
-        <author>
-            <name>DavidHiFi</name>
-            <uri>https://github.com/DavidHiFi</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[No-Click Touchpad: Tap & Hold 1.1]]></title>
-        <id>https://windhawk.net/mods/no-click-touchpad-tap-and-hold#500c9a5ef28ce9c6b9bb00d85e14d8dadaaffebe</id>
-        <link href="https://windhawk.net/mods/no-click-touchpad-tap-and-hold"/>
-        <updated>2026-11-25T06:02:43.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added a &quot;Taps to right-click&quot; setting. With two taps, a single tap in the corner does nothing and a quick double tap right-clicks.</li>
-<li>&quot;Two taps, one tap left-clicks&quot; works the same, but a single corner tap left-clicks about half a second later.</li>
-</ul>
-]]></content>
-        <author>
-            <name>mario0318</name>
-            <uri>https://github.com/mario0318</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Touchpad Relaxed Hand Tracking 1.2.1]]></title>
-        <id>https://windhawk.net/mods/touchpad-relaxed-hand-tracking#579149e78863cacf0bd0d4922d9beac306d8507c</id>
-        <link href="https://windhawk.net/mods/touchpad-relaxed-hand-tracking"/>
-        <updated>2026-11-25T06:02:38.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>Steadier speed multiplier (improved &quot;flicks&quot;):</strong> the higher multiplier no longer drops at the start and end of each movement, when fingers don't move in unison (most noticeable with five fingers down). The lower multiplier now only takes over after a confirmed movement with fewer fingers.</li>
-<li><strong>No more accidental clicks with five fingers resting:</strong> touchpads usually report up to five contacts, and a thumb split in two at the pad's edge made the pad take turns among them; those swaps no longer click.</li>
-<li>5-3 fingers moving default speed Increased to 2.0 after this update's precision gain.</li>
-<li>Readme and settings review.</li>
-</ul>
-]]></content>
-        <author>
-            <name>3DDinosaur</name>
-            <uri>https://github.com/3DDinosaur</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Nimbus Menu 2.0.0]]></title>
-        <id>https://windhawk.net/mods/nimbus-menu#d24319c9fa752c9a0649de112ec7f8f2668cdfb1</id>
-        <link href="https://windhawk.net/mods/nimbus-menu"/>
-        <updated>2026-11-25T06:02:32.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Tray: the icons of the apps running in the background, next to the status area. Inline with arrows, behind one button (pin the ones you want outside), or in a grid or list panel. Clicks go to the app itself; the middle button pins; drag an icon onto another to reorder.</li>
-<li>Control center: one dock button opens do not disturb, Bluetooth, night light, shortcuts (project, cast, captions, accessibility), each monitor's brightness (DDC/CI), sound, power and any other item placed there. Each item opens its full panel inside it, and it scrolls on small screens.</li>
-<li>Every status item can be in the dock, the control center and Start at once, or off.</li>
-<li>Bluetooth: turn it on and off, paired devices with their battery, connect and disconnect headsets and speakers.</li>
-<li>Notifications: Windows' notifications also show as Nimbus cards (corner of your choice, paused under the mouse, never over games), with their buttons; a bell opens the list, newest first; Win+N can open it. Optional: hide Windows' own banners (asks first, restored when turned off). Its own sounds (15 to pick, or Windows' own), one for notifications and one for reminders.</li>
-<li>Player: what any app plays in Windows' media controls: cover, title, time, controls, shuffle and repeat, that app's volume, switch between apps. In the dock as the cover and title, the cover, the title, bars moving with the sound, or an icon.</li>
-<li>Devices: wireless batteries (Bluetooth, Xbox controllers, and USB receivers through BatteryHub when installed), with warnings at 20% and 10%.</li>
-<li>Notes and reminders: notes stay until deleted; reminders come as Nimbus notifications, late too if the PC was off.</li>
-<li>Shelf: drop files on the dock to keep them for a moment, then drag them anywhere; Ctrl+V turns a copied picture or text into a file.</li>
-<li>Start: smarter search (no accents needed, initials like &quot;vsc&quot;, one typo, common nicknames, what you open most first), keyboard navigation in every tab, power buttons that ask before restart or shut down, and a right-click menu with sign out, hibernate and restart to advanced options. All apps refreshes when an app is installed or removed.</li>
-<li>Power modes follow Windows' power plans (High performance, Balanced, Power saver).</li>
-<li>Its own settings window with a live preview; Windhawk's settings tab is empty on purpose (1.x settings carry over). A guided setup asks a few questions on the first run.</li>
-<li>Follows Windows' high contrast and &quot;Animation effects&quot; off.</li>
-<li>Start's Status tab in the control center's look (time, player, round switches, sliders, tray, power, rows), its parts in any order (&quot;Organize&quot;: drag them, or Alt + arrows), saved per account.</li>
-<li>Sound panel, simple (the default, as before) or complete (Settings › Status area › Sound): the apps playing on the left and every output on the right. Drag an app onto an output to play it there too, from one output to another to move it, × to take it off one; choose the default output and the one for calls. Complete is off by default because it changes Windows' sound output: the default and communications outputs (IPolicyConfig) and each app's output (the AudioPolicyConfig factory Windows' own Sound settings use), both undocumented by Microsoft; an app on a second output is a copy Nimbus plays through process loopback (documented, Windows 10 2004+) while it runs. An app that picks its own outputs (TeamSpeak, Discord) is muted on the one it's taken off. Going back to Simple puts everything back (every app on the default, copies off, those mutes undone). Listed in the readme's &quot;What it changes in Windows&quot;.</li>
-<li>Notification sounds stay audible during calls (Nimbus' audio session opts out of Windows' communications ducking).</li>
-<li>Many fixes: dock clicks on admin windows, panels anchored to their item, faster panels (slow reads moved to worker threads).</li>
-</ul>
-]]></content>
-        <author>
-            <name>igoredm</name>
-            <uri>https://github.com/igoredm</uri>
         </author>
     </entry>
 </feed>

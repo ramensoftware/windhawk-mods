@@ -1,3 +1,7 @@
+## 0.6 ([Nov 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/013121014c41a33836d6634e1dec9815d15ef5cd/mods/titlebar-for-everyone.wh.cpp))
+
+* Exclude Steam Big Picture windows and SteamVR windows
+
 ## 0.5 ([Sep 30, 2026](https://github.com/ramensoftware/windhawk-mods/blob/46656e53918bf748150677074046be05de1d8de4/mods/titlebar-for-everyone.wh.cpp))
 
 * Exclude more problematic Visual Studio dialogs
