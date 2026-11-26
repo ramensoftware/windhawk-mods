@@ -163,6 +163,7 @@ static UiLanguage userLanguage() {
 enum class UiString : size_t {
     Title,
     ConfigUnreadable,
+    StorageUnavailable,
     SaveFailed,
     Save,
     Cancel,
@@ -217,11 +218,16 @@ static constexpr PCWSTR strings[][5] = {
     {L"Taskbar Folders", L"Cartelle nella taskbar",
      L"Carpetas en la barra de tareas", L"Dossiers dans la barre des tâches",
      L"Ordner in der Taskleiste"},  // Title
-    {L"Couldn’t read cartelle.json. Check the file and its .bak copy before changing your folders.",
-     L"Impossibile leggere cartelle.json. Controlla il file e la copia .bak prima di modificare le cartelle.",
-     L"No se ha podido leer cartelle.json. Revisa el archivo y su copia .bak antes de cambiar las carpetas.",
-     L"Impossible de lire cartelle.json. Vérifiez le fichier et sa copie .bak avant de modifier vos dossiers.",
-     L"cartelle.json konnte nicht gelesen werden. Prüfen Sie die Datei und ihre .bak-Kopie, bevor Sie Ordner ändern."},  // ConfigUnreadable
+    {L"Couldn’t read the folder configuration. Check these files before changing your folders.\n\n{0}\n{0}.bak",
+     L"Impossibile leggere la configurazione delle cartelle. Controlla questi file prima di modificare le cartelle.\n\n{0}\n{0}.bak",
+     L"No se pudo leer la configuración de las carpetas. Revisa estos archivos antes de modificar las carpetas.\n\n{0}\n{0}.bak",
+     L"Impossible de lire la configuration des dossiers. Vérifiez ces fichiers avant de modifier vos dossiers.\n\n{0}\n{0}.bak",
+     L"Die Ordnerkonfiguration konnte nicht gelesen werden. Prüfen Sie diese Dateien, bevor Sie Ihre Ordner ändern.\n\n{0}\n{0}.bak"},  // ConfigUnreadable
+    {L"Windhawk’s mod storage is unavailable. Folder changes are disabled.",
+     L"L’archivio della mod di Windhawk non è disponibile. Le modifiche alle cartelle sono disattivate.",
+     L"El almacenamiento de la mod en Windhawk no está disponible. Los cambios en las carpetas están desactivados.",
+     L"Le stockage du mod dans Windhawk est indisponible. La modification des dossiers est désactivée.",
+     L"Der Mod-Speicher von Windhawk ist nicht verfügbar. Ordneränderungen sind deaktiviert."},  // StorageUnavailable
     {L"Windows couldn’t save the change. Your previous folders are still active.",
      L"Windows non ha salvato la modifica. Le cartelle precedenti sono ancora attive.",
      L"Windows no ha podido guardar el cambio. Se conservan las carpetas anteriores.",
@@ -406,6 +412,7 @@ struct AppFolder {
 using Model = std::vector<AppFolder>;
 static Model groups;
 static fs::path config;
+static fs::path failedReadPath;
 static bool loaded = false, locked = false;
 static std::atomic<bool> stopping = false;
 static void note(const wchar_t* text);
@@ -530,8 +537,8 @@ static void loadModel() {
         storage.resize(length);
 
         auto directory = fs::path(storage) / userSid();
-        fs::create_directories(directory);
         config = directory / L"folders.json";
+        fs::create_directories(directory);
         if (fs::exists(config)) {
             groups = decode(bytes(config));
             return;
@@ -541,7 +548,9 @@ static void loadModel() {
         auto legacy = knownPath(FOLDERID_LocalAppData) / L"TaskbarFolders" /
                       L"Xaml" / L"cartelle.json";
         if (fs::exists(legacy)) {
+            failedReadPath = legacy;
             groups = decode(bytes(legacy));
+            failedReadPath.clear();
             persist(groups);
         }
     } catch (...) {
@@ -580,7 +589,11 @@ template <typename T>
 static bool edit(T change) {
     loadModel();
     if (locked) {
-        note(uiText(UiString::ConfigUnreadable));
+        const auto& path = failedReadPath.empty() ? config : failedReadPath;
+        if (path.empty())
+            note(uiText(UiString::StorageUnavailable));
+        else
+            note(formatUi(UiString::ConfigUnreadable, path.wstring()).c_str());
         return false;
     }
     try {
