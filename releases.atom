@@ -2,12 +2,35 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-26T08:04:27.000Z</updated>
+    <updated>2026-11-26T22:02:28.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Uninstall Here 1.0.0]]></title>
+        <id>https://windhawk.net/mods/uninstall-here#44e2f253e00c07eeba6ec5de7c111d1600850018</id>
+        <link href="https://windhawk.net/mods/uninstall-here"/>
+        <updated>2026-11-26T22:02:28.000Z</updated>
+        <content type="html"><![CDATA[<h1>Uninstall Here</h1>
+<p>Open a desktop app's own uninstaller from the Windows 11 Start menu. Uninstall Here saves you a trip through <strong>Installed apps</strong> when it can identify the app's uninstaller.</p>
+<h2>How to use</h2>
+<p><strong>Start → All apps → right-click the app → Uninstall</strong></p>
+<p>Confirm the product name before its uninstaller opens. MSI products open Windows Installer in uninstall mode. Follow any subsequent prompts from the uninstaller or Windows.</p>
+<p>This mod targets 64-bit Windows 11. The <strong>All apps</strong> flow was tested on x64 build <code>26300.10075</code>.</p>
+<h2>If Installed apps still opens</h2>
+<p>Windows handles packaged apps and desktop apps without one identifiable registered installation.</p>
+<p>If you expected the app to work, enable logging for <strong>Uninstall Here</strong> in Windhawk and repeat the click. Include the app version, Windows build, and the mod's log entries in your report. <a href="https://github.com/luizbizzio/uninstall-here/issues">Report an issue</a></p>
+<h2>Screenshot</h2>
+<p><img src="https://raw.githubusercontent.com/luizbizzio/uninstall-here/main/assets/uninstall-here-cover.png" alt="The Uninstall command highlighted in the Windows 11 Start menu"></p>
+<p><a href="https://github.com/luizbizzio/uninstall-here">Project on GitHub</a></p>
+]]></content>
+        <author>
+            <name>Luiz Bizzio</name>
+            <uri>https://github.com/luizbizzio</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Desktop Clock & Weather 1.0.7]]></title>
         <id>https://windhawk.net/mods/desktop-clock-weather#9e30cde12c8838f10f8bca0cf40b5b213ec1ed54</id>
@@ -1194,35 +1217,6 @@ is created, the approach worked out in
         <author>
             <name>DavidHiFi</name>
             <uri>https://github.com/DavidHiFi</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Tabs Session Saver Revamped 1.0.0]]></title>
-        <id>https://windhawk.net/mods/explorer-tabs-session-saver-revamped#6e094d2b1e6df46729aed0eb81861b924423f0a3</id>
-        <link href="https://windhawk.net/mods/explorer-tabs-session-saver-revamped"/>
-        <updated>2026-11-25T06:02:26.000Z</updated>
-        <content type="html"><![CDATA[<h1>Explorer Tabs Session Saver Revamped</h1>
-<p>This mod saves your open File Explorer tabs and automatically restores them whenever you reopen File Explorer.</p>
-<p>It is an enhanced successor to <a href="https://windhawk.net/mods/explorer-tabs-session-saver">Explorer Tabs Session Saver</a> by <a href="https://github.com/noX1st">noX1st</a>, fixing several core issues and edge cases.</p>
-<p><img src="https://i.imgur.com/5ehPFaL.gif" alt="Demonstration"></p>
-<h3>Improvements Over the Original Mod</h3>
-<ul>
-<li><strong>No Extra &quot;Blank&quot; Tab on Restore:</strong> When File Explorer opens to a default start location (<em>Home</em> or <em>This PC</em>), the initial left-most tab is navigated in-place (<code>IWebBrowser2::Navigate</code> / <code>IShellBrowser::BrowseObject</code>) instead of spawning a separate <code>ShellExecuteExW</code> call for the first saved tab. If Explorer is opened for a specific folder (e.g. <em>&quot;Show in folder&quot;</em> or a folder shortcut), that folder and its selection are preserved and your saved tabs open alongside it.</li>
-<li><strong>Fixes Sidebar Auto-Scrolling to the Bottom:</strong> Prevents File Explorer's Navigation Pane (<code>SysTreeView32</code>) from jumping or flickering to the bottom when restoring tabs with Explorer Tab Utility.</li>
-<li><strong>Persistent Session Protection:</strong> Opening File Explorer and closing it immediately without interacting with the restored tabs will no longer delete or lose your saved session.</li>
-<li><strong>Atomic Multi-Tab Window Close:</strong> Ignores tabs belonging to a top-level Explorer window that is already in the middle of closing, preventing partial tab lists from overwriting your session when closing a multi-tab window.</li>
-<li><strong>Per-User UTF-8 Session Storage:</strong> Stores sessions per Windows user account (<code>LastExplorerTabs-&lt;SID&gt;.txt</code>) in UTF-8 so folder paths with accented or Unicode characters are preserved and multi-user accounts do not collide.</li>
-<li><strong>Clean Mod Reload / Unload:</strong> Joins worker threads and unsubclasses controls deterministically on unload.</li>
-</ul>
-<h3>Notes</h3>
-<ul>
-<li>Works independently of the built-in Windows feature <em>&quot;Restore previous folder windows at logon&quot;</em>.</li>
-<li><strong>Important:</strong> To restore tabs into a single File Explorer window, <a href="https://github.com/w4po/ExplorerTabUtility">Explorer Tab Utility</a> (with its <strong>&quot;Window Hook&quot;</strong> feature enabled) or a similar tab-merging utility is required. Otherwise, each tab will be restored in its own separate window.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Peter2oo1</name>
-            <uri>https://github.com/Peter2oo1</uri>
         </author>
     </entry>
 </feed>

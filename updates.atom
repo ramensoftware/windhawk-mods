@@ -2,12 +2,35 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-26T20:03:23.000Z</updated>
+    <updated>2026-11-26T22:02:28.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Uninstall Here 1.0.0]]></title>
+        <id>https://windhawk.net/mods/uninstall-here#44e2f253e00c07eeba6ec5de7c111d1600850018</id>
+        <link href="https://windhawk.net/mods/uninstall-here"/>
+        <updated>2026-11-26T22:02:28.000Z</updated>
+        <content type="html"><![CDATA[<h1>Uninstall Here</h1>
+<p>Open a desktop app's own uninstaller from the Windows 11 Start menu. Uninstall Here saves you a trip through <strong>Installed apps</strong> when it can identify the app's uninstaller.</p>
+<h2>How to use</h2>
+<p><strong>Start → All apps → right-click the app → Uninstall</strong></p>
+<p>Confirm the product name before its uninstaller opens. MSI products open Windows Installer in uninstall mode. Follow any subsequent prompts from the uninstaller or Windows.</p>
+<p>This mod targets 64-bit Windows 11. The <strong>All apps</strong> flow was tested on x64 build <code>26300.10075</code>.</p>
+<h2>If Installed apps still opens</h2>
+<p>Windows handles packaged apps and desktop apps without one identifiable registered installation.</p>
+<p>If you expected the app to work, enable logging for <strong>Uninstall Here</strong> in Windhawk and repeat the click. Include the app version, Windows build, and the mod's log entries in your report. <a href="https://github.com/luizbizzio/uninstall-here/issues">Report an issue</a></p>
+<h2>Screenshot</h2>
+<p><img src="https://raw.githubusercontent.com/luizbizzio/uninstall-here/main/assets/uninstall-here-cover.png" alt="The Uninstall command highlighted in the Windows 11 Start menu"></p>
+<p><a href="https://github.com/luizbizzio/uninstall-here">Project on GitHub</a></p>
+]]></content>
+        <author>
+            <name>Luiz Bizzio</name>
+            <uri>https://github.com/luizbizzio</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Remove UWP titlebars 2.1.0]]></title>
         <id>https://windhawk.net/mods/native-titlebars-uwp-lite#a4f6f237f3826e0cfe1bf568ba89aa7905c88727</id>
@@ -782,22 +805,6 @@ Enable only one session-restoration mod at a time.</p>
         <author>
             <name>RandomGuy5747</name>
             <uri>https://github.com/RandomGuy5747</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Faster Virtual Desktop Switching 1.5.0]]></title>
-        <id>https://windhawk.net/mods/faster-virtual-desktop-switching#2a1753c5df5e0a840f4f281f0bfbaf033e27aa5b</id>
-        <link href="https://windhawk.net/mods/faster-virtual-desktop-switching"/>
-        <updated>2026-11-26T04:01:45.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Caches local wallpapers and prepares nearby desktops in the background, including when Explorer starts.</li>
-<li>Skips hidden windows during the transition and requests a brief Windows performance boost when a switch starts. Both options can be turned off.</li>
-<li>Adds controls for cache memory and how many nearby desktops to prepare. Set the thumbnail size limit to 0 to remove the cap.</li>
-</ul>
-]]></content>
-        <author>
-            <name>meteoni</name>
-            <uri>https://github.com/Meteoni</uri>
         </author>
     </entry>
 </feed>

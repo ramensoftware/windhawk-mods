@@ -283,7 +283,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 0],
         "ratingUsers": 0,
         "trendingSorting": 0,
-        "updated": 1795414058697,
+        "updated": 1795730697920,
         "users": 0
       },
       "metadata": {
@@ -299,12 +299,12 @@
         ],
         "license": "MIT",
         "name": "Desktop Shortcut Cleaner",
-        "version": "1.2.3"
+        "version": "1.4.1"
       },
       "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7859",
       "source": {
-        "sha256": "302413a958c18256f92707a246ab37fe8e3db8fd482fd0091f8e795ac7911234",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/d1d6c86d8315a11cb247af6c43826bc496df77b8/mods/desktop-shortcut-cleaner.wh.cpp"
+        "sha256": "145d075383a9ad0bf2c7ea39eb7030fdef5e60543afb1b256f801ddb31e5ab2b",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/3b6e1a37e85523f28f9d91b4c15cda38d5a3b164/mods/desktop-shortcut-cleaner.wh.cpp"
       }
     },
     "desktop-weather-overlay": {
@@ -1387,40 +1387,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/d6c26ce332b2eb14e42ee941a895f082e3207cf2/mods/ultimate-minimize-animation.wh.cpp"
       }
     },
-    "uninstall-here": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795471852872,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795626308581,
-        "users": 0
-      },
-      "metadata": {
-        "architecture": [
-          "x86-64"
-        ],
-        "author": "Luiz Bizzio",
-        "compilerOptions": "-ladvapi32 -lole32 -loleaut32 -lruntimeobject -lmsi -lshell32 -luser32 -luuid -lversion -lwintrust -lcrypt32",
-        "description": "Uninstall desktop apps directly from Start without opening Settings or Control Panel.",
-        "donateUrl": "https://github.com/sponsors/luizbizzio",
-        "github": "https://github.com/luizbizzio",
-        "homepage": "https://github.com/luizbizzio/uninstall-here",
-        "include": [
-          "StartMenuExperienceHost.exe"
-        ],
-        "license": "Apache-2.0",
-        "name": "Uninstall Here",
-        "version": "1.0.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7876",
-      "source": {
-        "sha256": "f4843cad7ae02d06a0735dec43685212d4169425f84ba9ba6abc671fc38a8941",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/cf10fae0baa4142d00134a73c7355fec62caac98/mods/uninstall-here.wh.cpp"
-      }
-    },
     "vision": {
       "details": {
         "defaultSorting": 0,
@@ -1479,6 +1445,37 @@
       "source": {
         "sha256": "48e62693daf7282979294b808e347b5c2e01744984e64fc1eebedbde1854a07e",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/1120133d3c9133749fbd6d4a312e32bc6f24a0dc/mods/wheel-context-menu.wh.cpp"
+      }
+    },
+    "win7-default-programs-applet-restorer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795730697920,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795730697920,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "babamohammed",
+        "compilerOptions": "-lwinhttp -lole32 -loleaut32 -lshell32 -lshlwapi -luuid -lcomctl32 -lbcrypt -ladvapi32",
+        "description": "This mod restores the classic Default Programs Control Panel pages on Windows 10 and 11",
+        "github": "https://github.com/babamohammed2022",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Windows 7 Default Programs Restorer",
+        "version": "1.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7966",
+      "source": {
+        "sha256": "008002a10ff82266242865d442baad199ba06b77c2a721bf6e41f95bede7fbcf",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/4660826e777aa9e7752b1ae9cebd946fe0de3664/mods/win7-default-programs-applet-restorer.wh.cpp"
       }
     },
     "win7-user-account-page-restorer": {
