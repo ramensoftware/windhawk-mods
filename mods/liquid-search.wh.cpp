@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              liquid-search
 // @name            Liquid Search
-// @description     Liquid-glass search bar with spring animations, hover zoom, a glass context menu, recents, file browser, clipboard history and all-drive file search            
+// @description     Liquid-glass search bar with spring animations, hover zoom, a glass context menu, recents, file browser, clipboard history and all-drive file search
 // @version         3.4.0
 // @author          itzderix
 // @include         windhawk.exe
@@ -13,11 +13,23 @@
 /*
 # Liquid Search
 
-![Spotlight for Windows](https://raw.githubusercontent.com/itzderix/spotlight-screenshots/main/Screenshot%202026-11-24%20122542%20%282%29.png)
+![Liquid Search](https://raw.githubusercontent.com/itzderix/spotlight-screenshots/main/Screenshot%202026-11-24%20122542%20%282%29.png)
 
-A liquid-glass Spotlight-style search bar: a frosted, blurred-desktop glass panel with themes,
+A liquid-glass search bar: a frosted, blurred-desktop glass panel with themes,
 smooth open / close and selection animations, hover zoom and a draggable layout. The right-click
 menu is drawn in the same glass.
+
+## How it differs from Spotlight Launcher
+
+[Spotlight Launcher](https://github.com/DavidRaveloU/Spotlight-Launcher-Windhawk) by DavidRaveloU is a similar
+launcher, and its author was fine with this being published separately. Both share some features (app search,
+file browser, clipboard history, calculator). Liquid Search differs in:
+
+* the liquid-glass look: a frosted, blurred-desktop panel with themes and a glass-styled context menu;
+* spring-based open / close and selection animations, hover zoom and a draggable bar;
+* a persistent index of all drives for file search;
+* a browser picker for web search;
+* cut / copy / paste / delete for files in the context menu.
 
 ## Demos
 
@@ -363,9 +375,9 @@ enum {
     M_TCUT, M_TCOPY, M_TPASTE, M_TSELALL, M_DELETE
 };
 
-static const wchar_t* kClass = L"WindhawkSpotlightWnd";
+static const wchar_t* kClass = L"WindhawkLiquidSearchWnd";
 static const wchar_t* kPlaceholder = L"Liquid Search";
-static const wchar_t* kMenuClass = L"WindhawkSpotlightMenu";
+static const wchar_t* kMenuClass = L"WindhawkLiquidSearchMenu";
 
 static HANDLE g_thread = nullptr;
 static DWORD g_threadId = 0;
@@ -1171,11 +1183,32 @@ static bool ReadClipText(std::wstring& out) {
     return false;
 }
 
+static bool ClipboardOptedOut() {
+    static UINT kExclude = RegisterClipboardFormatW(L"ExcludeClipboardContentFromMonitorProcessing");
+    static UINT kIgnore = RegisterClipboardFormatW(L"Clipboard Viewer Ignore");
+    static UINT kHistory = RegisterClipboardFormatW(L"CanIncludeInClipboardHistory");
+    if (IsClipboardFormatAvailable(kExclude) || IsClipboardFormatAvailable(kIgnore)) return true;
+    if (!IsClipboardFormatAvailable(kHistory)) return false;
+    bool optedOut = true;  // present but unreadable -> skip
+    for (int k = 0; k < 5; k++) {
+        if (OpenClipboard(g_hwnd)) {
+            HANDLE h = GetClipboardData(kHistory);
+            if (h && GlobalSize(h) >= sizeof(DWORD)) {
+                const DWORD* p = (const DWORD*)GlobalLock(h);
+                if (p) { optedOut = (*p == 0); GlobalUnlock(h); }
+            }
+            CloseClipboard();
+            break;
+        }
+        Sleep(15);
+    }
+    return optedOut;
+}
+
 static void OnClipUpdate() {
     if (!S.clipOn || g_sid.empty()) return;
     if (GetClipboardOwner() == g_hwnd) return;  // our own copies
-    static UINT excl = RegisterClipboardFormatW(L"ExcludeClipboardContentFromMonitorProcessing");
-    if (IsClipboardFormatAvailable(excl)) return;  // password managers
+    if (ClipboardOptedOut()) return;            // password managers and other private copies
     if (!IsClipboardFormatAvailable(CF_UNICODETEXT)) return;
     std::wstring t;
     if (ReadClipText(t)) ClipAdd(t);
@@ -2716,6 +2749,7 @@ static void DoHide() {
     if (!g_hwnd) return;
     CloseMenu();
     KillTimer(g_hwnd, TIMER_ANIM);
+    KillTimer(g_hwnd, TIMER_BLINK);
     KillTimer(g_hwnd, TIMER_HOVER);
     KillTimer(g_hwnd, TIMER_IDLE);
     g_anim = ANIM_NONE;
@@ -2912,6 +2946,7 @@ static void ShowWnd() {
     g_shownTick = GetTickCount64();
     g_lastInput = g_shownTick;
     GetCursorPos(&g_lastPt);
+    SetTimer(g_hwnd, TIMER_BLINK, 530, nullptr);
     SetTimer(g_hwnd, TIMER_HOVER, 16, nullptr);
     SetTimer(g_hwnd, TIMER_IDLE, 250, nullptr);
     if (animate) {
@@ -3930,6 +3965,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             g_dragging = false;
             g_selecting = false;
             return 0;
+        case WM_THEMECHANGED:
+            if (g_theme) CloseThemeData(g_theme);
+            g_theme = OpenThemeData(hwnd, L"CompositedWindow::Window");
+            return 0;
         case WM_DESTROY:
             KillTimer(hwnd, TIMER_BLINK);
             KillTimer(hwnd, TIMER_ANIM);
@@ -3967,7 +4006,7 @@ static DWORD WINAPI UiThread(LPVOID) {
     RegisterClassExW(&mc);
 
     g_hwnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW, kClass,
-                             L"Spotlight", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr, hi, nullptr);
+                             L"Liquid Search", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr, hi, nullptr);
     if (g_hwnd) {
         g_theme = OpenThemeData(g_hwnd, L"CompositedWindow::Window");
         g_menuWnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
@@ -3980,7 +4019,6 @@ static DWORD WINAPI UiThread(LPVOID) {
         g_dpi = MonDpi(MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY));
         ApplyScale();
         RegisterHot();
-        SetTimer(g_hwnd, TIMER_BLINK, 530, nullptr);
 
         MSG m;
         while (GetMessageW(&m, nullptr, 0, 0) > 0) {
