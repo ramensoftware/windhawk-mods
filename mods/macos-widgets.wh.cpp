@@ -83,8 +83,9 @@ their sizes and places; "Restore backup…" brings everything back, on this PC o
 ## Live glass
 The glass is made by the mod from a picture of what is behind the widget, as in Siri Plus. With "Live glass" on, the glass
 follows what changes behind it, up to 20 times a second and only where something changed (Windows' Desktop Duplication),
-and follows the widget while you drag it: videos and animated wallpapers show in the glass. Off, the glass uses the
-wallpaper and the icons, and is lighter.
+and follows the widget while you drag it: videos and animated wallpapers show in the glass. Off, the glass uses a still
+picture of the wallpaper and the icons, taken again when the wallpaper changes (animated-wallpaper apps such as Wallpaper
+Engine included), and is lighter; the widgets then also show in screenshots.
 
 ## Network access
 Nothing is sent anywhere unless a widget that needs it is on. No API keys, no accounts, no telemetry; TLS certificate checks
@@ -1865,7 +1866,7 @@ static Settings GetSettings() {
 }
 
 // ---------------------------------------------------------------------------
-// Shared data (filled by the data thread, read by the UI thread)
+// Shared data (filled by the data and network threads, read by the UI thread)
 // ---------------------------------------------------------------------------
 
 struct WeatherData {
@@ -3680,7 +3681,7 @@ struct HaEntity {
 static std::vector<HaEntity> g_ha;
 static std::vector<HaEntity> g_haAll;  // everything useful in the Home Assistant, for the favorites picker
 static std::wstring g_haError;
-static std::deque<std::pair<std::wstring, std::wstring>> g_haCommands;  // (domain/service, entity) for the data thread
+static std::deque<std::pair<std::wstring, std::wstring>> g_haCommands;  // (domain/service, entity) for the network thread
 
 static std::string HttpRequest(PCWSTR method, const std::wstring& url, const std::wstring& headers, const std::string& body,
                                DWORD* statusOut) {
@@ -6962,7 +6963,7 @@ static void DrawHome(Widget* wd) {
     }
 }
 
-// A tap: the tile changes at once, the command goes to Home Assistant on the data thread
+// A tap: the tile changes at once, the command goes to Home Assistant on the network thread
 static void HaTap(const std::wstring& id) {
     {
         std::lock_guard<std::mutex> lock(g_dataMutex);
@@ -9922,7 +9923,7 @@ static void RunMenu(int id, const std::wstring& key) {
 
 static LRESULT WidgetProcInner(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 
-// Nothing thrown in a widget may reach Explorer (an exception crossing Windows' code would take the taskbar down)
+// Nothing thrown in a widget may cross Windows' code (an exception there would end the whole process)
 static void WallpaperChanged();
 
 static LRESULT CALLBACK WidgetProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
