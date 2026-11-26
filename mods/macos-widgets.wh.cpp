@@ -1128,7 +1128,6 @@ static const TrRow kTr[] = {
     {{L"Ligue seu calendário em Ajustes > Calendário", L"Connect your calendar in Settings > Calendar", L"Conecta tu calendario en Ajustes > Calendario", L"Connectez votre calendrier dans Réglages > Calendrier", L"Verbinde deinen Kalender unter Einstellungen > Kalender", L"Collega il tuo calendario in Impostazioni > Calendario", L"请在设置 > 日历中连接你的日历"}},
     {{L"Nenhum evento", L"No events", L"Ningún evento", L"Aucun événement", L"Keine Termine", L"Nessun evento", L"没有日程"}},
     {{L"Título", L"Title", L"Título", L"Titre", L"Titel", L"Titolo", L"标题"}},
-    {{L"Clique em + para adicionar um lembrete", L"Click + to add a reminder", L"Haz clic en + para añadir un recordatorio", L"Cliquez sur + pour ajouter un rappel", L"Klicke auf +, um eine Erinnerung hinzuzufügen", L"Fai clic su + per aggiungere un promemoria", L"点击 + 添加提醒事项"}},
     {{L"Nenhuma nota ainda", L"No notes yet", L"Aún no hay notas", L"Aucune note pour l'instant", L"Noch keine Notizen", L"Ancora nessuna nota", L"还没有备忘录"}},
     {{L"Clique em + e escreva aqui mesmo. Elas ficam em Documentos\\MacOS Widgets\\Notes", L"Click + and write right here. They're kept in Documents\\MacOS Widgets\\Notes", L"Haz clic en + y escribe aquí mismo. Se guardan en Documentos\\MacOS Widgets\\Notes", L"Cliquez sur + et écrivez ici même. Elles sont gardées dans Documents\\MacOS Widgets\\Notes", L"Klicke auf + und schreib direkt hier. Sie liegen in Dokumente\\MacOS Widgets\\Notes", L"Fai clic su + e scrivi qui. Vengono salvate in Documenti\\MacOS Widgets\\Notes", L"点击 + 直接在这里书写。它们保存在 文档\\MacOS Widgets\\Notes"}},
     {{L"Sem mais texto", L"No more text", L"Sin más texto", L"Pas d'autre texte", L"Kein weiterer Text", L"Nessun altro testo", L"无更多文本"}},
@@ -3385,13 +3384,18 @@ static bool IsWebUrl(const std::wstring& u) {
     return _wcsnicmp(u.c_str(), L"http://", 7) == 0 || _wcsnicmp(u.c_str(), L"https://", 8) == 0;
 }
 
+// True when every site answered (even with no recent stories): only a real failure is tried again in a minute
 static bool FetchNews() {
     std::vector<std::vector<NewsItem>> perFeed;
+    bool allAnswered = true;
     for (const auto& url : SplitList(GetSettings().newsFeeds, L",; \n")) {
         if (perFeed.size() >= 5 || !g_running) break;
         std::wstring feedUrl;
         std::wstring xml = FeedXml(url, &feedUrl);
-        if (xml.empty()) continue;
+        if (xml.empty()) {
+            allAnswered = false;
+            continue;
+        }
         std::vector<NewsItem> items;
         bool atom = xml.find(L"<entry") != std::wstring::npos && xml.find(L"<item") == std::wstring::npos;
         PCWSTR itemTag = atom ? L"<entry" : L"<item";
@@ -3470,7 +3474,7 @@ static bool FetchNews() {
     if (!out.empty() || none) g_news = out;
     g_newsError = out.empty() && !none ? L"Nenhuma notícia nesse endereço. Ele precisa ser um feed RSS (ex.: g1.globo.com/rss/g1/brasil/)" : L"";
     if (missing) g_coversWanted = true;
-    return !out.empty();
+    return allAnswered;
 }
 
 // ---------------------------------------------------------------------------
@@ -6357,7 +6361,6 @@ static void DrawReminders(Widget* wd) {
         list.insert(list.begin(), fresh);
     }
     float y = 46, rowH = wd->size == 0 ? 36 : 32;
-    if (list.empty()) TextWrap(L"Clique em + para adicionar um lembrete", 16, 52, W - 32, H - 60, 12, DWRITE_FONT_WEIGHT_NORMAL, Ink(0.55f));
     for (size_t i = 0; i < list.size() && y + rowH <= H - 6; i++, y += rowH) {
         const ReminderLine& r = list[i];
         float cy = y + rowH / 2;
