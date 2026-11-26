@@ -6,7 +6,7 @@
 // @author          khorkovenko
 // @github          https://github.com/khorkovenko
 // @include         windhawk.exe
-// @compilerOptions -ldwmapi -lshcore -lgdi32 -lgdiplus -lshell32
+// @compilerOptions -ldwmapi -lshcore -lgdi32 -lgdiplus -lshell32 -ladvapi32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -134,6 +134,7 @@ may not pass the keyboard to this mod, and the default Alt+Tab appears instead.
 #include <stdlib.h>
 #include <shellscalingapi.h>
 #include <gdiplus.h>
+#include <sddl.h>
 
 #ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
 #define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
@@ -239,12 +240,9 @@ void RunMessageLoop(FrameClock& clock, Callback onFrame) {
     for (;;) {
         DWORD r = MsgWaitForMultipleObjectsEx(clock.timer ? 1 : 0, &clock.timer, INFINITE,
                                               QS_ALLINPUT, MWMO_INPUTAVAILABLE);
-        if (clock.timer && r == WAIT_OBJECT_0) {
-            if (clock.active) {
-                clock.Arm();
-                onFrame();
-            }
-            continue;
+        if (clock.timer && r == WAIT_OBJECT_0 && clock.active) {
+            clock.Arm();
+            onFrame();
         }
         MSG msg;
         while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
@@ -282,7 +280,8 @@ bool g_dockChanged;
 HFONT g_font;
 RECT g_work;
 POINT g_start;
-UINT_PTR g_track, g_timer;
+UINT_PTR g_timer;
+bool g_tracking;
 FrameClock g_frames;
 int g_ticks, g_dpi = 96, g_hl = -1, g_hz = -1, g_layout, g_zone, g_done, g_nused;
 int g_count, g_hover = -1;
@@ -596,7 +595,7 @@ void HideAt(HWND hwnd, bool& shown) {
     shown = false;
 }
 
-void CALLBACK TrackProc(HWND, UINT, UINT_PTR, DWORD) {
+void TrackFrame() {
     POINT pt;
     GetCursorPos(&pt);
     HMONITOR mon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
@@ -698,15 +697,15 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
         g_start = pt;
         g_hl = g_hz = -1;
         InvalidateRect(g_bar, nullptr, FALSE);
-        g_track = 1;
+        g_tracking = true;
         g_frames.Start(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST));
         return;
     }
 
-    if (!g_track || hwnd != g_hwnd)
+    if (!g_tracking || hwnd != g_hwnd)
         return;
     g_frames.Stop();
-    g_track = 0;
+    g_tracking = false;
     HideAt(g_bar, g_barShown);
     HideAt(g_preview, g_previewShown);
 
@@ -764,12 +763,13 @@ DWORD WINAPI ThreadProc(LPVOID) {
         SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
                         nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
     g_frames.Create();
-    RunMessageLoop(g_frames, [] { TrackProc(nullptr, 0, 0, 0); });
+    RunMessageLoop(g_frames, TrackFrame);
 
     g_frames.Destroy();
     if (g_timer)
         KillTimer(nullptr, g_timer);
-    g_track = g_timer = 0;
+    g_timer = 0;
+    g_tracking = false;
     g_barShown = g_previewShown = false;
     UnhookWinEvent(moveHook);
     UnhookWinEvent(fgHook);
@@ -786,24 +786,56 @@ DWORD WINAPI ThreadProc(LPVOID) {
     return 0;
 }
 
+void UserValueName(PCWSTR name, WCHAR* out, int len) {
+    static WCHAR sid[100];
+    if (!sid[0]) {
+        HANDLE token;
+        BYTE buf[256];
+        DWORD size;
+        LPWSTR str = nullptr;
+        lstrcpynW(sid, L"default", 100);
+        if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+            if (GetTokenInformation(token, TokenUser, buf, sizeof(buf), &size) &&
+                ConvertSidToStringSidW(((TOKEN_USER*)buf)->User.Sid, &str)) {
+                lstrcpynW(sid, str, 100);
+                LocalFree(str);
+            }
+            CloseHandle(token);
+        }
+    }
+    _snwprintf_s(out, len, _TRUNCATE, L"%s_%s", name, sid);
+}
+
+int GetUserInt(PCWSTR name, int def) {
+    WCHAR full[160];
+    UserValueName(name, full, 160);
+    return Wh_GetIntValue(full, def);
+}
+
+void SetUserInt(PCWSTR name, int value) {
+    WCHAR full[160];
+    UserValueName(name, full, 160);
+    Wh_SetIntValue(full, value);
+}
+
 void RestoreDocking(BOOL value) {
     BOOL current = TRUE;
     SystemParametersInfo(SPI_GETDOCKMOVING, 0, &current, 0);
     if (!current)
         SystemParametersInfo(SPI_SETDOCKMOVING, 0, (PVOID)(INT_PTR)value, 0);
-    Wh_SetIntValue(L"dockingOff", 0);
+    SetUserInt(L"dockingOff", 0);
 }
 
 void RecoverDocking() {
-    if (Wh_GetIntValue(L"dockingOff", 0))
-        RestoreDocking(Wh_GetIntValue(L"savedDocking", TRUE));
+    if (GetUserInt(L"dockingOff", 0))
+        RestoreDocking(GetUserInt(L"savedDocking", TRUE));
 }
 
 void SetDocking(bool off) {
     if (off && !g_dockChanged) {
         SystemParametersInfo(SPI_GETDOCKMOVING, 0, &g_oldDock, 0);
-        Wh_SetIntValue(L"savedDocking", g_oldDock ? 1 : 0);
-        Wh_SetIntValue(L"dockingOff", 1);
+        SetUserInt(L"savedDocking", g_oldDock ? 1 : 0);
+        SetUserInt(L"dockingOff", 1);
         SystemParametersInfo(SPI_SETDOCKMOVING, 0, (PVOID)FALSE, 0);
         g_dockChanged = true;
     } else if (!off && g_dockChanged) {
