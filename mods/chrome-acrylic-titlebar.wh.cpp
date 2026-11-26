@@ -35,7 +35,10 @@ Incognito windows get a darker tint, so you can still tell them apart:
 ## Getting started
 
 To find the parts of Chrome it changes, the mod needs Chrome's debug symbols.
-Windhawk downloads them from Google the first time, which takes a while.
+The first time, Windhawk downloads them from Google's symbol server,
+`chromium-browser-symsrv.commondatastorage.googleapis.com`, which takes a
+while. The request tells the server which Chrome version is installed. You can
+turn this off with the **Download symbols from Google** setting.
 
 1. Enable the mod and start Chrome. Chrome opens normally, without the
    effect, while the symbols download in the background (about 1.1 GB).
@@ -45,8 +48,15 @@ Windhawk downloads them from Google the first time, which takes a while.
 
 Later starts apply the effect right away. After each Chrome update, the
 symbols for the new version are downloaded once more, so repeat these steps.
-Downloaded symbols are kept in `C:\ProgramData\Windhawk\Engine\Symbols`; you
-can delete folders for old Chrome versions to free disk space.
+
+The symbols take about 6 GB on disk for each Chrome version and are kept in
+Windhawk's Symbols folder (`C:\ProgramData\Windhawk\Engine\Symbols` for a
+regular install). Symbols for old Chrome versions aren't removed
+automatically; delete their folders to free disk space.
+
+While the symbols for your Chrome version aren't downloaded yet, Chrome may
+take up to 4 extra seconds to start. If you turn the mod off or update it
+during that first download, Windhawk waits until the download finishes.
 
 ## Settings
 
@@ -121,6 +131,8 @@ Restart Chrome to apply.
 - When a Chrome window isn't focused, Windows shows the backdrop as a plain
   color. It returns when you click the window.
 - The tint follows the Windows light or dark mode.
+- If you use a Chrome theme with a background image, the image isn't shown
+  behind the tab strip; the Windows effect is shown there instead.
 - If something looks wrong, disable the mod and restart Chrome to get the
   original look back.
 
@@ -385,9 +397,8 @@ void LoadSettings() {
 // ---------------------------------------------------------------------------
 // Browser window identification
 //
-// Only browser windows (BrowserDesktopWindowTreeHostWin) ask the hooked
-// ShouldWindowContentsBeTransparent while they are created, right after their
-// HWND was created on the same thread. That HWND gets a property, and only
+// Only browser windows paint through BrowserFrameViewWin::OnPaint. The first
+// time a frame paints, its HWND (views::HWNDForView) gets a property, and only
 // marked windows get the backdrop and caption-button changes. Dialogs, task
 // manager and other Chrome windows keep their native frame untouched.
 
@@ -395,27 +406,11 @@ constexpr wchar_t kBrowserFrameProperty[] = L"Windhawk.ChromeAcrylicTitlebar.Fra
 // Set on incognito browser windows when their frame paints, so views painted
 // later (the toolbar) can repaint the tint after clearing their background.
 constexpr wchar_t kIncognitoProperty[] = L"Windhawk.ChromeAcrylicTitlebar.Incognito";
-constexpr ULONGLONG kCandidateMaxAgeMs = 2000;
-thread_local HWND t_candidate = nullptr;
-thread_local ULONGLONG t_candidateTick = 0;
-
 LONG_PTR RealStyle(HWND window);
-void ApplyNativeCaption(HWND window);
+void QueueNativeCaption(HWND window);
 
 bool IsBrowserFrameWindow(HWND window) {
     return window && GetPropW(window, kBrowserFrameProperty) != nullptr;
-}
-
-bool IsFrameCandidate(HWND window, DWORD style) {
-    constexpr DWORD kRequired =
-        WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
-    if ((style & kRequired) != kRequired || (style & WS_CHILD) ||
-        GetAncestor(window, GA_ROOT) != window || GetWindow(window, GW_OWNER)) {
-        return false;
-    }
-    wchar_t name[32]{};
-    return GetClassNameW(window, name, ARRAYSIZE(name)) &&
-           !wcscmp(name, L"Chrome_WidgetWin_1");
 }
 
 void MarkBrowserFrame(HWND window) {
@@ -426,7 +421,9 @@ void MarkBrowserFrame(HWND window) {
     const UINT backdrop = g_backdrop.load();
     g_origDwmSetWindowAttribute(window, kBackdropTypeAttribute, &backdrop,
                                 sizeof(backdrop));
-    ApplyNativeCaption(window);
+    // Changing the style sends window messages, so don't do it while Chrome is
+    // painting.
+    QueueNativeCaption(window);
 }
 
 // ---------------------------------------------------------------------------
@@ -435,14 +432,6 @@ void MarkBrowserFrame(HWND window) {
 bool Transparent_Hook(const void* host) {
     if (!g_active.load(std::memory_order_acquire)) {
         return g_origTransparent(host);
-    }
-    const HWND candidate = t_candidate;
-    if (candidate) {
-        t_candidate = nullptr;
-        if (GetTickCount64() - t_candidateTick < kCandidateMaxAgeMs &&
-            IsWindow(candidate)) {
-            MarkBrowserFrame(candidate);
-        }
     }
     return true;
 }
@@ -468,6 +457,9 @@ void FrameOnPaint_Hook(void* view, void* canvas) {
     }
     const bool incognito = IsIncognitoFrame(view);
     if (const HWND window = g_hwndForView ? g_hwndForView(view) : nullptr) {
+        if (!IsBrowserFrameWindow(window)) {
+            MarkBrowserFrame(window);
+        }
         if (incognito) {
             SetPropW(window, kIncognitoProperty, reinterpret_cast<HANDLE>(1));
         } else if (GetPropW(window, kIncognitoProperty)) {
@@ -714,7 +706,6 @@ std::atomic<bool> g_captionFixActive{false};
 std::atomic<bool> g_captionStopping{false};
 std::atomic<bool> g_captionPropertyUsed{false};
 bool g_captionHooksInstalled = false;
-decltype(&CreateWindowExW) g_origCreateWindowExW = nullptr;
 decltype(&GetWindowLongPtrW) g_origGetWindowLongPtrW = nullptr;
 decltype(&SetWindowLongPtrW) g_origSetWindowLongPtrW = nullptr;
 decltype(&GetWindowLongW) g_origGetWindowLongW = nullptr;
@@ -834,29 +825,32 @@ void ApplyNativeCaption(HWND window) {
     }
 }
 
-HWND WINAPI CreateWindowExW_Hook(DWORD exStyle,
-                                 LPCWSTR className,
-                                 LPCWSTR windowName,
-                                 DWORD style,
-                                 int x,
-                                 int y,
-                                 int width,
-                                 int height,
-                                 HWND parent,
-                                 HMENU menu,
-                                 HINSTANCE instance,
-                                 LPVOID param) {
-    const HWND window = g_origCreateWindowExW(exStyle, className, windowName, style, x,
-                                              y, width, height, parent, menu, instance,
-                                              param);
-    const DWORD error = GetLastError();
-    if (window && g_active.load(std::memory_order_acquire) &&
-        IsFrameCandidate(window, style)) {
-        t_candidate = window;
-        t_candidateTick = GetTickCount64();
+// Applies the caption fix on a thread-pool thread. SetWindowLong from another
+// thread reaches Chrome's UI thread as a sent message, which it handles back in
+// its message loop instead of in the middle of painting. Each pending callback
+// holds a reference to this module, so the mod can unload while one is queued.
+void CALLBACK NativeCaptionCallback(PTP_CALLBACK_INSTANCE instance, void* context) {
+    ApplyNativeCaption(static_cast<HWND>(context));
+    HMODULE self = nullptr;
+    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           reinterpret_cast<LPCWSTR>(&NativeCaptionCallback), &self)) {
+        FreeLibraryWhenCallbackReturns(instance, self);
     }
-    SetLastError(error);
-    return window;
+}
+
+void QueueNativeCaption(HWND window) {
+    if (!g_captionFixActive.load(std::memory_order_acquire)) {
+        return;
+    }
+    HMODULE self = nullptr;
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                            reinterpret_cast<LPCWSTR>(&NativeCaptionCallback), &self)) {
+        return;
+    }
+    if (!TrySubmitThreadpoolCallback(NativeCaptionCallback, window, nullptr)) {
+        FreeLibrary(self);
+    }
 }
 
 BOOL CALLBACK SyncCaptionWindow(HWND window, LPARAM) {
@@ -974,9 +968,10 @@ bool InstallChromeHooks() {
             &g_origFrameOnPaint)) {
         return false;
     }
+    // Also used by the frame's incognito tint, independently of the toolbar hook.
+    g_drawColor = reinterpret_cast<DrawColor_t>(address[kDrawColor]);
     if (address[kOnPaintBackground] && address[kGetClassName] && address[kDrawColor]) {
         g_getClassName = reinterpret_cast<GetClassName_t>(address[kGetClassName]);
-        g_drawColor = reinterpret_cast<DrawColor_t>(address[kDrawColor]);
         g_toolbarAvailable.store(WindhawkUtils::SetFunctionHook(
             reinterpret_cast<Paint_t>(address[kOnPaintBackground]),
             OnPaintBackground_Hook, &g_origOnPaintBackground));
@@ -995,6 +990,14 @@ bool InstallChromeHooks() {
             Wh_Log(L"Glass tab strip hook unavailable");
         }
     }
+    // Incognito detection doesn't depend on the color hooks below.
+    g_hwndForView = reinterpret_cast<HwndForView_t>(address[kHwndForView]);
+    if (address[kGetBrowserView] && address[kGetProfile] && address[kIsIncognitoProfile]) {
+        g_getBrowserView = reinterpret_cast<GetPointer_t>(address[kGetBrowserView]);
+        g_getProfile = reinterpret_cast<GetPointer_t>(address[kGetProfile]);
+        g_isIncognitoProfile =
+            reinterpret_cast<IsIncognitoProfile_t>(address[kIsIncognitoProfile]);
+    }
     if (address[kGetColor] && address[kChromeColorIdName]) {
         if (ResolveColorIds(g_lookup.module, address[kChromeColorIdName]) &&
             WindhawkUtils::SetFunctionHook(reinterpret_cast<GetColor_t>(address[kGetColor]),
@@ -1005,14 +1008,6 @@ bool InstallChromeHooks() {
                     reinterpret_cast<GetTabPath_t>(address[kGetTabPath]), GetTabPath_Hook,
                     &g_origGetTabPath)) {
                 Wh_Log(L"Active tab shape hook unavailable");
-            }
-            if (address[kGetBrowserView] && address[kGetProfile] &&
-                address[kIsIncognitoProfile]) {
-                g_getBrowserView = reinterpret_cast<GetPointer_t>(address[kGetBrowserView]);
-                g_getProfile = reinterpret_cast<GetPointer_t>(address[kGetProfile]);
-                g_isIncognitoProfile =
-                    reinterpret_cast<IsIncognitoProfile_t>(address[kIsIncognitoProfile]);
-                g_hwndForView = reinterpret_cast<HwndForView_t>(address[kHwndForView]);
             }
             if (address[kPaintTab] && address[kDrawRoundRect] &&
                 (!WindhawkUtils::SetFunctionHook(
@@ -1133,8 +1128,25 @@ bool IsBrowserProcess() {
 
 }  // namespace
 
+// DWMWA_SYSTEMBACKDROP_TYPE exists from Windows 11 22H2 (build 22621). Without
+// it the tab strip would be left transparent with no backdrop behind it.
+static bool IsSystemBackdropSupported() {
+    using RtlGetVersion_t = LONG(WINAPI*)(OSVERSIONINFOW*);
+    const HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    const auto rtlGetVersion =
+        ntdll ? reinterpret_cast<RtlGetVersion_t>(GetProcAddress(ntdll, "RtlGetVersion"))
+              : nullptr;
+    OSVERSIONINFOW version{};
+    version.dwOSVersionInfoSize = sizeof(version);
+    return rtlGetVersion && rtlGetVersion(&version) == 0 && version.dwBuildNumber >= 22621;
+}
+
 BOOL Wh_ModInit() {
     if (!IsBrowserProcess()) {
+        return FALSE;
+    }
+    if (!IsSystemBackdropSupported()) {
+        Wh_Log(L"Windows 11 22H2 or later is required");
         return FALSE;
     }
     g_isBrowserProcess = true;
@@ -1147,8 +1159,6 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
     g_captionHooksInstalled =
-        WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
-                                       &g_origCreateWindowExW) &&
         WindhawkUtils::SetFunctionHook(GetWindowLongPtrW, GetWindowLongPtrW_Hook,
                                        &g_origGetWindowLongPtrW) &&
         WindhawkUtils::SetFunctionHook(SetWindowLongPtrW, SetWindowLongPtrW_Hook,
