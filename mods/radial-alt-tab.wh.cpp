@@ -17,8 +17,11 @@ Replaces the Alt+Tab switcher with a full-screen view split into two halves:
 
 - **Top half:** a large live preview of the selected window, with its number
   and full title, so two windows of the same app are easy to tell apart.
-- **Bottom half:** a wheel with the icon and number of each open window. A
-  pointer in the center shows where the mouse joystick points.
+- **Bottom half:** a wheel with the icon and number of each open window, and its
+  title outside the wheel. Each window keeps its place on the wheel; only the
+  numbers change, following the Alt+Tab order. A thumbstick in the center moves
+  with the mouse and springs back to the center when the mouse stops, and a
+  pointer marks the selected window.
 
 ## Usage
 - Hold **Alt** and press **Tab**. If you release Alt quickly, you switch to the
@@ -85,9 +88,13 @@ int g_count, g_sel, g_dpi = 96;
 HWND g_list[MAXWIN];
 HICON g_icons[MAXWIN];
 HTHUMBNAIL g_thumb;
+HWND g_order[MAXWIN];
+int g_orderCount, g_slot[MAXWIN], g_slotOf[MAXWIN];
+DWORD g_lastJoy;
+bool g_dirty;
 RECT g_mon, g_preview;
 POINT g_center, g_savedPos;
-float g_ro, g_ri, g_wx, g_wy, g_jx, g_jy, g_lastAngle;
+float g_ro, g_ri, g_wx, g_wy, g_jx, g_jy;
 HDC g_mem;
 HBITMAP g_bmp;
 SIZE g_bmpSize;
@@ -171,6 +178,33 @@ void UpdatePreview() {
     DwmUpdateThumbnailProperties(g_thumb, &tp);
 }
 
+void BuildSlots() {
+    HWND next[MAXWIN];
+    int n = 0;
+    for (int k = 0; k < g_orderCount; k++)
+        for (int i = 0; i < g_count; i++)
+            if (g_list[i] == g_order[k]) {
+                next[n++] = g_order[k];
+                break;
+            }
+    for (int i = 0; i < g_count; i++) {
+        bool known = false;
+        for (int k = 0; k < n; k++)
+            known |= next[k] == g_list[i];
+        if (!known)
+            next[n++] = g_list[i];
+    }
+    for (int k = 0; k < n; k++) {
+        g_order[k] = next[k];
+        for (int i = 0; i < g_count; i++)
+            if (g_list[i] == next[k]) {
+                g_slot[k] = i;
+                g_slotOf[i] = k;
+            }
+    }
+    g_orderCount = n;
+}
+
 void Select(int sel) {
     if (sel == g_sel)
         return;
@@ -190,12 +224,12 @@ void Open() {
     g_mon = mi.rcMonitor;
     int w = g_mon.right - g_mon.left, h = g_mon.bottom - g_mon.top;
     g_center = {g_mon.left + w / 2, g_mon.top + h / 2};
-    g_ro = fminf(w, h / 2.f) * 0.36f;
+    g_ro = fminf(w, h / 2.f) * 0.34f;
     g_ri = g_ro * 0.42f;
     g_wx = w / 2.f;
     g_wy = h * 0.75f;
     g_jx = g_jy = 0;
-    g_lastAngle = 1000;
+    g_dirty = false;
 
     SetWindowPos(g_wnd, HWND_TOPMOST, g_mon.left, g_mon.top, w, h, SWP_NOACTIVATE);
     g_open = true;
@@ -204,6 +238,7 @@ void Open() {
     UpdateWindow(g_wnd);
     SetCursorPos(g_center.x, g_center.y);
     SetCursor(nullptr);
+    SetTimer(g_wnd, 2, 15, nullptr);
     PostThreadMessage(g_hookThreadId, WM_APP_MOUSEHOOK, 1, 0);
 }
 
@@ -211,6 +246,7 @@ void Close() {
     if (!g_open)
         return;
     g_open = false;
+    KillTimer(g_wnd, 2);
     PostThreadMessage(g_hookThreadId, WM_APP_MOUSEHOOK, 0, 0);
     if (g_thumb)
         DwmUnregisterThumbnail(g_thumb);
@@ -219,9 +255,26 @@ void Close() {
     SetCursorPos(g_savedPos.x, g_savedPos.y);
 }
 
+void AddRoundRect(Gdiplus::GraphicsPath& p, Gdiplus::RectF r, float rad) {
+    float d = rad * 2;
+    p.AddArc(r.X, r.Y, d, d, 180, 90);
+    p.AddArc(r.X + r.Width - d, r.Y, d, d, 270, 90);
+    p.AddArc(r.X + r.Width - d, r.Y + r.Height - d, d, d, 0, 90);
+    p.AddArc(r.X, r.Y + r.Height - d, d, d, 90, 90);
+    p.CloseFigure();
+}
+
+float IconSize() {
+    float rm = (g_ri + g_ro) / 2, band = g_ro - g_ri;
+    float chord = g_count > 1 ? 2 * rm * sinf(PI / g_count) : 2 * rm;
+    float s = fminf(chord * 0.38f, band * 0.4f);
+    return fmaxf(Sc(20), fminf(s, Sc(40)));
+}
+
 void Paint(HDC dc, int w, int h) {
     using namespace Gdiplus;
-    float span = 360.f / (g_count ? g_count : 1), rm = (g_ri + g_ro) / 2, rh = g_ri - Sc(14);
+    float span = 360.f / (g_count ? g_count : 1), rm = (g_ri + g_ro) / 2, rh = g_ri - Sc(16);
+    float isz = IconSize(), headerIconX = 0, headerIconY = 0, hsz = Sc(28);
     {
         Graphics g(dc);
         g.SetSmoothingMode(SmoothingModeAntiAlias);
@@ -234,7 +287,7 @@ void Paint(HDC dc, int w, int h) {
         if (!g_count)
             return;
 
-        SolidBrush white(Color(255, 255, 255, 255)), dim(Color(255, 190, 190, 190));
+        SolidBrush white(Color(255, 255, 255, 255)), dim(Color(255, 185, 185, 185));
         Color accent(255, 0, 150, 255);
         StringFormat center;
         center.SetAlignment(StringAlignmentCenter);
@@ -246,81 +299,114 @@ void Paint(HDC dc, int w, int h) {
         GetWindowText(g_list[g_sel], title, 300);
         swprintf_s(text, L"%d  \u00B7  %s", g_sel + 1, title);
         Font titleFont(L"Segoe UI Semibold", Sc(20), FontStyleRegular, UnitPixel);
-        g.DrawString(text, -1, &titleFont, RectF(Sc(40), Sc(40), w - Sc(80), Sc(40)), &center,
-                     &white);
-        Pen frame(accent, Sc(3));
-        g.DrawRectangle(&frame, g_preview.left - Sc(4), g_preview.top - Sc(4),
-                        g_preview.right - g_preview.left + Sc(8),
-                        g_preview.bottom - g_preview.top + Sc(8));
+        RectF titleRect(Sc(80), Sc(40), w - Sc(160), Sc(40)), measured;
+        g.MeasureString(text, -1, &titleFont, titleRect, &center, &measured);
+        headerIconX = measured.X - hsz - Sc(10);
+        headerIconY = titleRect.Y + (titleRect.Height - hsz) / 2;
+        g.DrawString(text, -1, &titleFont, titleRect, &center, &white);
 
-        RectF outer(g_wx - g_ro, g_wy - g_ro, 2 * g_ro, 2 * g_ro);
-        RectF inner(g_wx - g_ri, g_wy - g_ri, 2 * g_ri, 2 * g_ri);
-        float gap = Sc(3), go = gap / g_ro * 180 / PI, gi = gap / g_ri * 180 / PI;
-        SolidBrush slice(Color(255, 38, 38, 38)), selFill(Color(255, 74, 74, 74));
-        SolidBrush hub(Color(255, 28, 28, 28));
-        Pen border(Color(255, 60, 60, 60), Sc(1)), selPen(Color(255, 255, 255, 255), Sc(2));
-        Font numFont(L"Segoe UI", Sc(12), FontStyleRegular, UnitPixel);
+        SolidBrush frame(accent);
+        GraphicsPath framePath;
+        AddRoundRect(framePath,
+                     RectF(g_preview.left - Sc(4), g_preview.top - Sc(4),
+                           g_preview.right - g_preview.left + Sc(8),
+                           g_preview.bottom - g_preview.top + Sc(8)),
+                     Sc(10));
+        g.FillPath(&frame, &framePath);
 
-        for (int i = 0; i < g_count; i++) {
+        SolidBrush slice(Color(255, 40, 40, 40)), selFill(Color(255, 0, 95, 184));
+        float cr = Sc(8), gap = Sc(4), ro = g_ro - cr, ri = g_ri + cr;
+        float go = (gap / 2 + cr) / ro * 180 / PI, gi = (gap / 2 + cr) / ri * 180 / PI;
+        int fs = g_count <= 6 ? 14 : g_count <= 10 ? 12 : 11;
+        Font labelFont(L"Segoe UI", Sc(fs), FontStyleRegular, UnitPixel);
+        Font labelBold(L"Segoe UI Semibold", Sc(fs), FontStyleRegular, UnitPixel);
+        Font numFont(L"Segoe UI", Sc(11), FontStyleRegular, UnitPixel);
+        StringFormat wrap;
+        wrap.SetAlignment(StringAlignmentCenter);
+        wrap.SetLineAlignment(StringAlignmentCenter);
+        wrap.SetTrimming(StringTrimmingEllipsisWord);
+        float lr = g_ro + Sc(10), lh = Sc(fs) * 2.7f;
+        float lw = fmaxf(Sc(70), fminf(2 * PI * lr / g_count * 0.92f, Sc(200)));
+
+        for (int k = 0; k < g_count; k++) {
+            int i = g_slot[k];
+            SolidBrush& fill = i == g_sel ? selFill : slice;
             GraphicsPath p;
-            float a0 = -90 + i * span - span / 2;
+            float a0 = -90 + k * span - span / 2;
             if (g_count == 1) {
-                p.AddEllipse(outer);
-                p.AddEllipse(inner);
+                p.AddEllipse(RectF(g_wx - g_ro, g_wy - g_ro, 2 * g_ro, 2 * g_ro));
+                p.AddEllipse(RectF(g_wx - g_ri, g_wy - g_ri, 2 * g_ri, 2 * g_ri));
+                g.FillPath(&fill, &p);
             } else {
-                p.AddArc(outer, a0 + go, span - 2 * go);
-                p.AddArc(inner, a0 + span - gi, -(span - 2 * gi));
+                p.AddArc(RectF(g_wx - ro, g_wy - ro, 2 * ro, 2 * ro), a0 + go, span - 2 * go);
+                p.AddArc(RectF(g_wx - ri, g_wy - ri, 2 * ri, 2 * ri), a0 + span - gi,
+                         -(span - 2 * gi));
                 p.CloseFigure();
+                Pen round(&fill, 2 * cr);
+                round.SetLineJoin(LineJoinRound);
+                g.FillPath(&fill, &p);
+                g.DrawPath(&round, &p);
             }
-            g.FillPath(i == g_sel ? &selFill : &slice, &p);
-            g.DrawPath(i == g_sel ? &selPen : &border, &p);
 
-            float a = (a0 + span / 2) * PI / 180;
+            float a = (-90 + k * span) * PI / 180, c = cosf(a), sn = sinf(a);
             WCHAR num[8];
             swprintf_s(num, L"%d", i + 1);
             g.DrawString(num, -1, &numFont,
-                         RectF(g_wx + rm * cosf(a) - Sc(20), g_wy + rm * sinf(a) + Sc(14), Sc(40),
-                               Sc(16)),
+                         RectF(g_wx + rm * c - Sc(20), g_wy + rm * sn + isz / 2, Sc(40), Sc(16)),
                          &center, i == g_sel ? &white : &dim);
+
+            WCHAR label[300];
+            GetWindowText(g_list[i], label, 300);
+            float lx = g_wx + lr * c + c * lw / 2, ly = g_wy + lr * sn + sn * lh / 2;
+            g.DrawString(label, -1, i == g_sel ? &labelBold : &labelFont,
+                         RectF(lx - lw / 2, ly - lh / 2, lw, lh), &wrap,
+                         i == g_sel ? &white : &dim);
         }
 
-        g.FillEllipse(&hub, g_wx - rh, g_wy - rh, 2 * rh, 2 * rh);
-        g.DrawEllipse(&border, g_wx - rh, g_wy - rh, 2 * rh, 2 * rh);
-        Pen arc(accent, Sc(5));
-        arc.SetStartCap(LineCapRound);
-        arc.SetEndCap(LineCapRound);
-        float ra = rh - Sc(5);
-        g.DrawArc(&arc, g_wx - ra, g_wy - ra, 2 * ra, 2 * ra, -90 + g_sel * span - span / 2 + 4,
-                  span - 8 > 1 ? span - 8 : 1);
+        int ks = g_slotOf[g_sel];
+        float ta = (-90 + ks * span) * PI / 180, tc = cosf(ta), ts = sinf(ta);
+        float tip = g_ri - Sc(3), base = rh + Sc(3), half = Sc(7);
+        PointF tri[3] = {
+            PointF(g_wx + tip * tc, g_wy + tip * ts),
+            PointF(g_wx + base * tc - half * ts, g_wy + base * ts + half * tc),
+            PointF(g_wx + base * tc + half * ts, g_wy + base * ts - half * tc),
+        };
+        SolidBrush pointer(accent);
+        g.FillPolygon(&pointer, tri, 3);
 
-        if (g_jx * g_jx + g_jy * g_jy >= Sc(20) * Sc(20)) {
-            float a = atan2f(g_jy, g_jx), c = cosf(a), s = sinf(a);
-            float tip = g_ri - Sc(1), base = rh - Sc(14), half = Sc(11);
-            PointF pts[3] = {
-                PointF(g_wx + tip * c, g_wy + tip * s),
-                PointF(g_wx + base * c - half * s, g_wy + base * s + half * c),
-                PointF(g_wx + base * c + half * s, g_wy + base * s - half * c),
-            };
-            SolidBrush pointer(accent);
-            Pen outline(Color(255, 255, 255, 255), Sc(1.5f));
-            g.FillPolygon(&pointer, pts, 3);
-            g.DrawPolygon(&outline, pts, 3);
+        SolidBrush rim(Color(255, 72, 72, 72)), disc(Color(255, 122, 122, 122));
+        SolidBrush well(Color(255, 98, 98, 98)), knob(Color(255, 16, 58, 250));
+        float rd = rh * 0.9f, rw = rh * 0.62f, kr = rh * 0.26f;
+        g.FillEllipse(&rim, g_wx - rh, g_wy - rh, 2 * rh, 2 * rh);
+        g.FillEllipse(&disc, g_wx - rd, g_wy - rd, 2 * rd, 2 * rd);
+        g.FillEllipse(&well, g_wx - rw, g_wy - rw, 2 * rw, 2 * rw);
+
+        float R = Sc(80), travel = rh - kr * 0.55f;
+        float kx = g_wx + g_jx / R * travel, ky = g_wy + g_jy / R * travel;
+        Pen shaft(Color(110, 210, 210, 210), Sc(3));
+        shaft.SetStartCap(LineCapRound);
+        shaft.SetEndCap(LineCapRound);
+        g.DrawLine(&shaft, g_wx, g_wy, kx, ky);
+        if (g_jx * g_jx + g_jy * g_jy >= R * R * 0.9f) {
+            SolidBrush halo(Color(70, 255, 255, 255));
+            float hr = kr * 1.6f;
+            g.FillEllipse(&halo, kx - hr, ky - hr, 2 * hr, 2 * hr);
         }
+        g.FillEllipse(&knob, kx - kr, ky - kr, 2 * kr, 2 * kr);
     }
 
     if (!g_count)
         return;
-    int isz = (int)Sc(32);
-    for (int i = 0; i < g_count; i++) {
-        float a = (-90 + i * span) * PI / 180;
+    for (int k = 0; k < g_count; k++) {
+        int i = g_slot[k];
+        float a = (-90 + k * span) * PI / 180;
         if (g_icons[i])
-            DrawIconEx(dc, (int)(g_wx + rm * cosf(a)) - isz / 2,
-                       (int)(g_wy + rm * sinf(a)) - isz / 2 - (int)Sc(4), g_icons[i], isz, isz, 0,
-                       nullptr, DI_NORMAL);
+            DrawIconEx(dc, (int)(g_wx + rm * cosf(a) - isz / 2),
+                       (int)(g_wy + rm * sinf(a) - isz / 2 - Sc(6)), g_icons[i], (int)isz,
+                       (int)isz, 0, nullptr, DI_NORMAL);
     }
-    int hsz = (int)Sc(44);
     if (g_icons[g_sel])
-        DrawIconEx(dc, (int)g_wx - hsz / 2, (int)g_wy - hsz / 2, g_icons[g_sel], hsz, hsz, 0,
+        DrawIconEx(dc, (int)headerIconX, (int)headerIconY, g_icons[g_sel], (int)hsz, (int)hsz, 0,
                    nullptr, DI_NORMAL);
 }
 
@@ -444,6 +530,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 g_icons[0] = icon;
                 break;
             }
+            BuildSlots();
             g_sel = g_count < 2 ? 0 : wp ? g_count - 1 : 1;
             if (settings.delay > 0)
                 SetTimer(hwnd, 1, settings.delay, nullptr);
@@ -451,6 +538,20 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 Open();
             return 0;
         case WM_TIMER:
+            if (wp == 2) {
+                if (GetTickCount() - g_lastJoy > 90 && (g_jx || g_jy)) {
+                    g_jx *= 0.72f;
+                    g_jy *= 0.72f;
+                    if (g_jx * g_jx + g_jy * g_jy < 1)
+                        g_jx = g_jy = 0;
+                    g_dirty = true;
+                }
+                if (g_dirty) {
+                    g_dirty = false;
+                    InvalidateRect(hwnd, nullptr, FALSE);
+                }
+                return 0;
+            }
             KillTimer(hwnd, 1);
             if (g_session && AltReleased()) {
                 g_session = false;
@@ -476,6 +577,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             }
             g_jx += (int)(INT_PTR)wp;
             g_jy += (int)(INT_PTR)lp;
+            g_lastJoy = GetTickCount();
+            g_dirty = true;
             float len = sqrtf(g_jx * g_jx + g_jy * g_jy), r = Sc(80);
             if (len > r) {
                 g_jx *= r / len;
@@ -484,11 +587,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             if (len < Sc(20))
                 return 0;
             float deg = atan2f(g_jy, g_jx) * 180 / PI;
-            Select(((int)lroundf((deg + 90) / (360.f / g_count)) % g_count + g_count) % g_count);
-            if (fabsf(deg - g_lastAngle) > 2) {
-                g_lastAngle = deg;
-                InvalidateRect(hwnd, nullptr, FALSE);
-            }
+            int k = ((int)lroundf((deg + 90) / (360.f / g_count)) % g_count + g_count) % g_count;
+            Select(g_slot[k]);
             return 0;
         }
         case WM_APP_END:
