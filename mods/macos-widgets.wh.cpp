@@ -7370,10 +7370,29 @@ static void FreeDesktopPicture() {
     g_deskTick = 0;
 }
 
+// Animated-wallpaper apps (Wallpaper Engine, Lively...) draw in a window of their own behind the icons, which the
+// desktop's own picture doesn't contain (it keeps showing Windows' wallpaper). That window lives in a "WorkerW":
+// before Windows 11 24H2 a top-level one right after the one holding the icons; since 24H2 a child of Progman
+static HWND WallpaperAppWindow() {
+    HWND host = nullptr;
+    if (HWND progman = GetShellWindow()) host = FindWindowExW(progman, nullptr, L"WorkerW", nullptr);
+    if (!host) {
+        for (HWND w = nullptr; (w = FindWindowExW(nullptr, w, L"WorkerW", nullptr)) != nullptr;)
+            if (FindWindowExW(w, nullptr, L"SHELLDLL_DefView", nullptr)) {
+                host = FindWindowExW(nullptr, w, L"WorkerW", nullptr);
+                break;
+            }
+    }
+    if (!host || !IsWindowVisible(host)) return nullptr;
+    HWND app = GetWindow(host, GW_CHILD);
+    return app && IsWindowVisible(app) ? app : nullptr;
+}
+
 static HDC DesktopPicture() {
     if (g_deskDC && GetTickCount64() - g_deskTick < 3000) return g_deskDC;
     FreeDesktopPicture();
-    HWND shell = GetShellWindow();
+    HWND app = WallpaperAppWindow();
+    HWND shell = app ? app : GetShellWindow();
     if (!shell) return nullptr;
     GetWindowRect(shell, &g_deskRc);
     int w = g_deskRc.right - g_deskRc.left, h = g_deskRc.bottom - g_deskRc.top;
@@ -7390,7 +7409,29 @@ static HDC DesktopPicture() {
         return nullptr;
     }
     g_deskOld = SelectObject(g_deskDC, g_deskBmp);
-    PrintWindow(shell, g_deskDC, PW_RENDERFULLCONTENT);
+    if (!PrintWindow(shell, g_deskDC, PW_RENDERFULLCONTENT) && app) {
+        // The app's window couldn't be drawn: Windows' desktop, as before
+        FreeDesktopPicture();
+        g_deskTick = 0;
+        HWND desk = GetShellWindow();
+        if (!desk) return nullptr;
+        GetWindowRect(desk, &g_deskRc);
+        w = g_deskRc.right - g_deskRc.left;
+        h = g_deskRc.bottom - g_deskRc.top;
+        HDC screen2 = GetDC(nullptr);
+        g_deskDC = CreateCompatibleDC(screen2);
+        g_deskBmp = CreateCompatibleBitmap(screen2, w, h);
+        ReleaseDC(nullptr, screen2);
+        if (!g_deskDC || !g_deskBmp) {
+            if (g_deskBmp) DeleteObject(g_deskBmp);
+            if (g_deskDC) DeleteDC(g_deskDC);
+            g_deskDC = nullptr;
+            g_deskBmp = nullptr;
+            return nullptr;
+        }
+        g_deskOld = SelectObject(g_deskDC, g_deskBmp);
+        PrintWindow(desk, g_deskDC, PW_RENDERFULLCONTENT);
+    }
     g_deskTick = GetTickCount64();
     return g_deskDC;
 }
@@ -11030,6 +11071,18 @@ static void WallpaperTick() {
         std::wstring sig = WallpaperSignature();
         if (!last.empty() && sig != last) WallpaperChanged();
         last = sig;
+    }
+    // An animated-wallpaper app changes the picture without telling anyone: without the live glass, two widgets a
+    // second are taken again in turn (an unchanged picture costs nothing more: ApplyCapture skips it)
+    if (!g_ui.liveGlass && !g_drag.wd && tick % 2 == 0 && WallpaperAppWindow()) {
+        std::vector<Widget*> due;
+        for (Widget* wd : g_widgets)
+            if (wd->rt && wd->kind != W_GHOST && wd->kind != W_GRID) due.push_back(wd);
+        std::sort(due.begin(), due.end(), [](Widget* a, Widget* b) { return a->capTick < b->capTick; });
+        for (size_t i = 0; i < due.size() && i < 4; i++) {
+            Capture(due[i]);
+            Render(due[i]);
+        }
     }
 }
 
