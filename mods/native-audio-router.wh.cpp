@@ -3,11 +3,11 @@
 // @name Native Audio Router
 // @description Choose a Windows output device from each Quick Settings mixer row
 // @description:zh-CN 在任务栏原生音量合成器中选择逐应用输出设备
-// @version 0.0.6
+// @version 0.0.7
 // @author KKKKeybird
 // @github https://github.com/KKKKeybird
 // @homepage https://github.com/KKKKeybird/native-audio-router
-// @architecture amd64
+// @architecture x86-64
 // @include ShellHost.exe
 // @compilerOptions -lruntimeobject -loleaut32 -lole32
 // @license MIT
@@ -19,23 +19,41 @@
 
 Adds an output-device menu to application volume rows in Windows 11 Quick
 Settings. Use a row's arrow to select a device or follow the system default.
-The menu uses the Windows per-application output setting. Apps that retain
-their original audio stream may require restarting playback.
+Each pick is the same per-application output setting as Settings > System >
+Sound > Volume mixer: Windows saves it for the current user, and it keeps
+working after the mod is disabled or removed.
+
+The mod does not route audio and keeps no copy of the selection. It only adds
+a shortcut to the Windows setting, so there is nothing to restore on unload.
+To change a choice, use the same arrow or the Volume mixer page; choose
+"Default" there to follow the system default again. Apps that retain their
+original audio stream may need playback restarted.
 
 ![Output device menu in Windows 11 Quick Settings](https://raw.githubusercontent.com/KKKKeybird/native-audio-router/main/docs/images/taskbar-output-menu.png)
 
-Open Quick Settings once before enabling the mod, then reopen the Sound output
-page. This preview was loaded on Windows 11 x64 build 26300.9974 with Windhawk
-1.7.3. Runtime support depends on the shell symbols and row model.
+Tested on Windows 11 x64 build 26300.9974 with Windhawk 1.7.3. Windhawk also
+builds this mod for ARM64, but that build has not been run or verified. Not
+tested together with Refined Quick Settings and Sound, which changes the same
+volume rows.
 
 ## 中文
 
 在任务栏快捷设置的「声音输出」页中，为应用音量行加入设备菜单。通过行尾
-箭头选择设备或跟随系统默认。部分应用需要重新开始播放，才能切换现有音频流。
-启用前先打开一次快捷设置，启用后重新进入「声音输出」页。
+箭头选择设备或跟随系统默认。每次选择写入的就是 Windows 自身的逐应用输出
+设置（与「设置 > 系统 > 声音 > 音量合成器」相同），由 Windows 按当前用户
+保存，模块停用或移除后仍然有效。
+
+模块不接管音频，也不另存一份选择状态，只是为 Windows 设置提供一个等价的
+快捷入口，因此卸载时没有需要还原的内容。要修改选择，用同一个箭头，或到
+「设置 > 系统 > 声音 > 音量合成器」操作；在那里选择「默认」即可重新跟随
+系统默认。部分应用需要重新开始播放，才能切换现有音频流。
+
+已在 Windows 11 x64 构建 26300.9974 与 Windhawk 1.7.3 上测试。Windhawk 也会
+为 ARM64 原生构建本模块，但尚未在 ARM64 上运行或验证。未与 Refined Quick
+Settings and Sound 联合测试，该模块会修改同一批音量行。
 
 See the [project repository](https://github.com/KKKKeybird/native-audio-router)
-for compatibility, test status, and source.
+for source and test status.
 */
 // ==/WindhawkModReadme==
 
@@ -43,6 +61,7 @@ for compatibility, test status, and source.
 #include <unknwn.h>
 #include <mmdeviceapi.h>
 #include <windhawk_utils.h>
+
 #undef GetCurrentTime
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
@@ -75,12 +94,16 @@ namespace Core = winrt::Windows::UI::Core;
 HRESULT (WINAPI* originalTemplate)(void*);
 HRESULT (WINAPI* originalFocus)(void*, void*);
 void (WINAPI* originalLoaded)(void*, void*, void*);
+decltype(&LoadLibraryExW) originalLoadLibraryExW;
 std::atomic_bool stopping{};
+std::atomic_bool watchReady{};
+std::atomic_bool hookAttempted{};
+std::mutex hookInstallLock;
 std::mutex dispatcherLock;
-Core::CoreDispatcher dispatcher{nullptr};
+[[clang::no_destroy]] Core::CoreDispatcher dispatcher{nullptr};
 std::atomic_uint64_t endpointGeneration{1};
-winrt::com_ptr<IMMDeviceEnumerator> endpointEnumerator;
-winrt::com_ptr<IMMNotificationClient> endpointNotifications;
+[[clang::no_destroy]] winrt::com_ptr<IMMDeviceEnumerator> endpointEnumerator;
+[[clang::no_destroy]] winrt::com_ptr<IMMNotificationClient> endpointNotifications;
 bool endpointWatchAttempted{};
 
 struct EndpointNotifications : winrt::implements<EndpointNotifications, IMMNotificationClient> {
@@ -121,7 +144,7 @@ struct Row {
 
 struct Mixer {
     winrt::weak_ref<X::FrameworkElement> element;
-    winrt::event_token layout{};
+    std::vector<std::pair<winrt::weak_ref<C::ListViewBase>, winrt::event_token>> containerEvents;
 };
 
 struct Selection {
@@ -135,16 +158,15 @@ struct CachedOutputs {
     Selection selection;
 };
 
-struct Change {
+struct Pending {
     winrt::weak_ref<F::IInspectable> model;
-    winrt::hstring original;
     winrt::hstring applied;
     ULONGLONG verifyUntil{};
 };
 
-std::vector<Row> rows;
+[[clang::no_destroy]] std::vector<Row> rows;
 std::vector<Mixer> mixers;
-std::vector<Change> changes;
+std::vector<Pending> pendingSelections;
 std::vector<CachedOutputs> outputCache;
 
 void StartEndpointWatch() {
@@ -222,20 +244,24 @@ bool UniqueName(const Selection& state, const winrt::hstring& name) {
     return std::ranges::count(state.names, name) == 1;
 }
 
-auto FindChange(const F::IInspectable& model) {
-    return std::ranges::find_if(changes, [&model](const auto& entry) {
+auto FindPending(const F::IInspectable& model) {
+    const auto now = GetTickCount64();
+    std::erase_if(pendingSelections, [now](const auto& entry) {
+        return !entry.model.get() || (entry.verifyUntil && now >= entry.verifyUntil);
+    });
+    return std::ranges::find_if(pendingSelections, [&model](const auto& entry) {
         return entry.model.get() == model;
     });
 }
 
 void UpdateMenuIndex(const F::IInspectable& model, Selection& selection,
                      std::optional<uint32_t> reported) {
-    const auto change = FindChange(model);
-    if (change != changes.end() && GetTickCount64() < change->verifyUntil) {
-        const auto requested = std::ranges::find(selection.names, change->applied);
-        if (requested != selection.names.end() && UniqueName(selection, change->applied)) {
+    const auto pending = FindPending(model);
+    if (pending != pendingSelections.end() && GetTickCount64() < pending->verifyUntil) {
+        const auto requested = std::ranges::find(selection.names, pending->applied);
+        if (requested != selection.names.end() && UniqueName(selection, pending->applied)) {
             const auto index = static_cast<uint32_t>(requested - selection.names.begin());
-            if (reported && *reported == index) change->verifyUntil = 0;
+            if (reported && *reported == index) pending->verifyUntil = 0;
             selection.index = static_cast<int32_t>(index);
             return;
         }
@@ -243,9 +269,9 @@ void UpdateMenuIndex(const F::IInspectable& model, Selection& selection,
     if (reported && *reported < selection.names.size()) selection.index = static_cast<int32_t>(*reported);
 }
 
-void Select(const F::IInspectable& model, const Selection& shown, int32_t index, uint64_t generation) {
+void Select(const F::IInspectable& model, const Selection& shown, int32_t index) {
     const auto current = ReadSelection(model);
-    if (!current || generation != endpointGeneration.load()) return;
+    if (!current) return;
     if (current->names != shown.names) {
         std::erase_if(outputCache, [&model](const auto& entry) { return entry.model.get() == model; });
         return;
@@ -254,26 +280,34 @@ void Select(const F::IInspectable& model, const Selection& shown, int32_t index,
         !UniqueName(*current, current->names[current->index])) {
         return;
     }
-    auto change = FindChange(model);
+    auto pending = FindPending(model);
     const auto now = GetTickCount64();
     const auto& reported = current->names[current->index];
     const auto& requested = current->names[index];
-    const bool awaiting = change != changes.end() && now < change->verifyUntil;
-    if (awaiting ? change->applied == requested : current->index == index) return;
-    const bool newChange = change == changes.end();
-    if (newChange) changes.reserve(changes.size() + 1);
+    const bool awaiting = pending != pendingSelections.end() && now < pending->verifyUntil;
+    if (awaiting ? pending->applied == requested : current->index == index) return;
     const auto property = Property(model, L"SelectedOutput");
-    const auto value = winrt::box_value(index);
-    if (!property || generation != endpointGeneration.load()) return;
-    property.SetValue(model, value);
-    const auto verifyUntil = GetTickCount64() + 1500;
-    if (newChange) {
-        changes.push_back({winrt::make_weak(model), reported, requested, verifyUntil});
+    if (!property) return;
+    winrt::hstring previous;
+    const bool added = pending == pendingSelections.end();
+    if (added) {
+        pendingSelections.push_back({winrt::make_weak(model), requested, 0});
+        pending = pendingSelections.end() - 1;
     } else {
-        if (!awaiting && change->applied != reported) change->original = reported;
-        change->applied = requested;
-        change->verifyUntil = verifyUntil;
+        previous = pending->applied;
+        pending->applied = requested;
     }
+    try {
+        property.SetValue(model, winrt::box_value(static_cast<uint32_t>(index)));
+    } catch (...) {
+        if (added) {
+            pendingSelections.pop_back();
+        } else {
+            pending->applied = previous;
+        }
+        throw;
+    }
+    pending->verifyUntil = GetTickCount64() + 1500;
     Wh_Log(L"Requested native output index %d", index);
 }
 
@@ -284,7 +318,7 @@ void ClearMenu(Row& row) {
 }
 
 void ShowMenu(Row& row, const C::Slider& slider, const F::IInspectable& model,
-              const Selection& shown, uint64_t generation) {
+              const Selection& shown) {
     ClearMenu(row);
     const auto& menu = row.menu;
     for (int32_t i = 0; i < static_cast<int32_t>(shown.names.size()); ++i) {
@@ -293,13 +327,13 @@ void ShowMenu(Row& row, const C::Slider& slider, const F::IInspectable& model,
         item.IsChecked(i == shown.index);
         item.IsEnabled(UniqueName(shown, shown.names[i]));
         const auto token = item.Click([weakSlider = winrt::make_weak(slider), weakModel = winrt::make_weak(model),
-                                       snapshot = shown, generation, i](auto&&, auto&&) {
-            if (stopping || generation != endpointGeneration.load()) return;
+                                       snapshot = shown, i](auto&&, auto&&) {
+            if (stopping) return;
             try {
                 const auto currentSlider = weakSlider.get();
                 const auto currentModel = currentSlider ? Model(currentSlider) : nullptr;
                 if (currentModel && currentModel == weakModel.get()) {
-                    Select(currentModel, snapshot, i, generation);
+                    Select(currentModel, snapshot, i);
                 }
             } catch (...) {
                 Wh_Log(L"Native output selection failed (0x%08X)", static_cast<unsigned>(winrt::to_hresult().value));
@@ -365,7 +399,7 @@ void UpdateMenuRequest(Row& row) {
     }
     if (opening) {
         UpdateMenuIndex(model, *selection, static_cast<uint32_t>(selection->index));
-        ShowMenu(row, slider, model, *selection, generation);
+        ShowMenu(row, slider, model, *selection);
     }
 }
 
@@ -376,10 +410,10 @@ void Remove(const Collection& collection, const Item& item) {
 }
 
 void RemoveRow(Row& row) {
-    row.refresh.Stop();
     row.refresh.Tick(row.tick);
     row.button.Click(row.click);
     try {
+        row.refresh.Stop();
         ClearMenu(row);
         row.menu.Hide();
     } catch (...) {
@@ -402,7 +436,6 @@ void AddRow(const C::Slider& slider) {
     }
     const auto model = Model(slider);
     if (!model) return;
-
     C::Button button;
     C::ColumnDefinition column;
     C::MenuFlyout menu;
@@ -444,14 +477,14 @@ void AddRow(const C::Slider& slider) {
                 return entry.generation == generation && entry.model.get() == model;
             });
             if (cached != outputCache.end()) {
-                const auto change = FindChange(model);
-                const bool awaiting = change != changes.end() && GetTickCount64() < change->verifyUntil;
+                const auto pending = FindPending(model);
+                const bool awaiting = pending != pendingSelections.end() && GetTickCount64() < pending->verifyUntil;
                 const auto selected = awaiting ? std::nullopt : ReadSelectedIndex(model);
                 if ((awaiting || (selected && *selected < cached->selection.names.size())) &&
                     generation == endpointGeneration.load()) {
                     UpdateMenuIndex(model, cached->selection, selected);
                     Wh_Log(L"Reused cached output list");
-                    ShowMenu(*row, slider, model, cached->selection, generation);
+                    ShowMenu(*row, slider, model, cached->selection);
                     return;
                 }
             }
@@ -524,6 +557,27 @@ void Scan(const X::FrameworkElement& mixer) {
     for (size_t budget = 1024; budget && !pending.empty(); --budget) {
         auto node = std::move(pending.back());
         pending.pop_back();
+        if (const auto list = node.try_as<C::ListViewBase>(); list) {
+            const auto watchedMixer = std::ranges::find_if(mixers, [&mixer](const auto& entry) {
+                return entry.element.get() == mixer;
+            });
+            if (watchedMixer != mixers.end() &&
+                std::ranges::none_of(watchedMixer->containerEvents, [&list](const auto& entry) {
+                    return entry.first.get() == list;
+                })) {
+                const auto weakMixer = winrt::make_weak(mixer);
+                const auto token = list.ContainerContentChanging([weakMixer](auto&&, auto&&) {
+                    if (stopping) return;
+                    try {
+                        if (const auto current = weakMixer.get(); current && current.IsLoaded()) Scan(current);
+                    } catch (...) {
+                        Wh_Log(L"Mixer container scan failed (0x%08X)",
+                               static_cast<unsigned>(winrt::to_hresult().value));
+                    }
+                });
+                watchedMixer->containerEvents.emplace_back(winrt::make_weak(list), token);
+            }
+        }
         if (const auto slider = node.try_as<C::Slider>(); slider && slider.Name() == L"AppVolumeLevel") {
             AddRow(slider);
         }
@@ -547,20 +601,17 @@ void Discover(void* object) noexcept {
             if (!dispatcher || !dispatcher.HasThreadAccess()) return;
         }
         StartEndpointWatch();
-        std::erase_if(mixers, [](const auto& entry) { return !entry.element.get(); });
+        std::erase_if(mixers, [](auto& entry) {
+            if (entry.element.get()) return false;
+            for (const auto& [weakList, token] : entry.containerEvents) {
+                if (const auto list = weakList.get()) list.ContainerContentChanging(token);
+            }
+            return true;
+        });
         if (std::ranges::none_of(mixers, [&mixer](const auto& entry) {
                 return entry.element.get() == mixer;
             })) {
-            const auto weak = winrt::make_weak(mixer);
-            const auto event = mixer.LayoutUpdated([weak](auto&&, auto&&) {
-                if (stopping) return;
-                try {
-                    if (const auto current = weak.get(); current && current.IsLoaded()) Scan(current);
-                } catch (...) {
-                    Wh_Log(L"Mixer layout scan failed (0x%08X)", static_cast<unsigned>(winrt::to_hresult().value));
-                }
-            });
-            mixers.push_back({weak, event});
+            mixers.push_back({winrt::make_weak(mixer), {}});
         }
         Scan(mixer);
     } catch (...) {
@@ -590,7 +641,7 @@ void WINAPI OnLoaded(void* object, void* sender, void* args) {
     if (retained) Discover(retained.get());
 }
 
-void Restore() {
+void Teardown() {
     if (endpointEnumerator) {
         const auto result = endpointEnumerator->UnregisterEndpointNotificationCallback(endpointNotifications.get());
         if (FAILED(result)) {
@@ -599,45 +650,35 @@ void Restore() {
         endpointEnumerator = nullptr;
         endpointNotifications = nullptr;
     }
-    outputCache.clear();
-    for (const auto& mixer : mixers) {
-        if (const auto element = mixer.element.get()) element.LayoutUpdated(mixer.layout);
+    std::vector<CachedOutputs>().swap(outputCache);
+    for (auto& mixer : mixers) {
+        for (const auto& [weakList, token] : mixer.containerEvents) {
+            if (const auto list = weakList.get()) list.ContainerContentChanging(token);
+        }
+        std::vector<std::pair<winrt::weak_ref<C::ListViewBase>, winrt::event_token>>().swap(
+            mixer.containerEvents);
     }
-    mixers.clear();
+    std::vector<Mixer>().swap(mixers);
     for (auto& row : rows) {
         try {
             RemoveRow(row);
         } catch (...) {
-            Wh_Log(L"Could not restore a mixer row (0x%08X)",
+            Wh_Log(L"Could not detach a mixer row (0x%08X)",
                    static_cast<unsigned>(winrt::to_hresult().value));
         }
     }
-    rows.clear();
-    for (const auto& change : changes) {
-        try {
-            const auto model = change.model.get();
-            const auto state = ReadSelection(model);
-            if (!state || state->names[state->index] != change.applied ||
-                !UniqueName(*state, change.original)) continue;
-            const auto index = std::ranges::find(state->names, change.original) - state->names.begin();
-            Property(model, L"SelectedOutput").SetValue(model, winrt::box_value(static_cast<int32_t>(index)));
-        } catch (...) {
-            Wh_Log(L"Output restoration failed (0x%08X)", static_cast<unsigned>(winrt::to_hresult().value));
-        }
-    }
-    changes.clear();
+    std::vector<Row>().swap(rows);
+    std::vector<Pending>().swap(pendingSelections);
+    std::lock_guard lock(dispatcherLock);
+    dispatcher = nullptr;
 }
 
-}  // namespace
-
-BOOL Wh_ModInit() {
-    const auto module = GetModuleHandleW(L"ControlCenter.dll");
-    if (!module) return FALSE;
+bool HookControlCenter(HMODULE module) {
     const WindhawkUtils::SYMBOL_HOOK controlCenterDllHooks[]{
         {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::ControlCenter::implementation::VolumeMixerList,struct winrt::Windows::UI::Xaml::IFrameworkElementOverrides>::OnApplyTemplate(void))"},
-         &originalTemplate, OnTemplate},
+         &originalTemplate, OnTemplate, true},
         {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::ControlCenter::implementation::VolumeMixerList,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnGotFocus(void *))"},
-         &originalFocus, OnFocus},
+         &originalFocus, OnFocus, true},
         {{LR"(public: void __cdecl winrt::ControlCenter::implementation::VolumeMixerList::OnVolumeMixerListLoaded(struct winrt::Windows::Foundation::IInspectable,struct winrt::Windows::UI::Xaml::RoutedEventArgs))"},
          &originalLoaded, OnLoaded},
     };
@@ -647,8 +688,56 @@ BOOL Wh_ModInit() {
     return resolved;
 }
 
+void TryLateHook() noexcept {
+    if (!watchReady || stopping || hookAttempted) return;
+    const auto module = GetModuleHandleW(L"ControlCenter.dll");
+    if (!module || hookAttempted.exchange(true)) return;
+    try {
+        std::lock_guard lock(hookInstallLock);
+        if (stopping) return;
+        if (HookControlCenter(module) && !Wh_ApplyHookOperations()) {
+            Wh_Log(L"Could not apply late ControlCenter hooks");
+        }
+    } catch (...) {
+        Wh_Log(L"Late ControlCenter initialization failed (0x%08X)",
+               static_cast<unsigned>(winrt::to_hresult().value));
+    }
+}
+
+HMODULE WINAPI OnLoadLibraryExW(LPCWSTR fileName, HANDLE file, DWORD flags) {
+    const auto result = originalLoadLibraryExW(fileName, file, flags);
+    if (result) {
+        const auto error = GetLastError();
+        TryLateHook();
+        SetLastError(error);
+    }
+    return result;
+}
+
+}  // namespace
+
+BOOL Wh_ModInit() {
+    if (const auto module = GetModuleHandleW(L"ControlCenter.dll")) {
+        hookAttempted = true;
+        return HookControlCenter(module);
+    }
+    const auto kernelBase = GetModuleHandleW(L"kernelbase.dll");
+    if (!kernelBase) return FALSE;
+    const auto load = reinterpret_cast<decltype(originalLoadLibraryExW)>(
+        GetProcAddress(kernelBase, "LoadLibraryExW"));
+    return load && WindhawkUtils::SetFunctionHook(load, OnLoadLibraryExW, &originalLoadLibraryExW);
+}
+
+void Wh_ModAfterInit() {
+    watchReady = true;
+    TryLateHook();
+}
+
 void Wh_ModBeforeUninit() {
     stopping = true;
+    {
+        std::lock_guard lock(hookInstallLock);
+    }
     Core::CoreDispatcher ui{nullptr};
     {
         std::lock_guard lock(dispatcherLock);
@@ -657,9 +746,9 @@ void Wh_ModBeforeUninit() {
     if (!ui) return;
     try {
         if (ui.HasThreadAccess()) {
-            Restore();
+            Teardown();
         } else {
-            ui.RunAsync(Core::CoreDispatcherPriority::High, [] { Restore(); }).get();
+            ui.RunAsync(Core::CoreDispatcherPriority::High, [] { Teardown(); }).get();
         }
     } catch (...) {
         Wh_Log(L"Mixer teardown failed (0x%08X)", static_cast<unsigned>(winrt::to_hresult().value));
