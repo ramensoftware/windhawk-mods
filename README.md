@@ -1,19 +1,21 @@
 # Native Audio Router for Windows 11
 
-目标是在 Windows 11 快捷设置的原生应用音量混合器中，为每行增加一个输出设备选择入口。应用直接使用 Windows 逐应用路由播放主输出，其他选中端点接收该应用的 WASAPI 镜像。
-
-当前提供任务栏单设备路由预览 `0.0.5`，在原生应用音量行末尾增加输出设备菜单，使用 Windows 行模型中的 `PossibleOutputs` 和 `SelectedOutput`。多设备镜像仍在独立探针阶段。
+Native Audio Router 为 Windows 11 快捷设置的原生应用音量行加入设备菜单。当前预览 `0.0.5` 支持选择一个输出端点或跟随系统默认，使用 Windows 自身的逐应用输出设置。多设备镜像仍在独立探针阶段。
 
 ## Windhawk 预览
 
-在 Windhawk 本地模块编辑器中编译 [发布格式源码](dist/native-audio-router.wh.cpp)。先打开一次任务栏快捷设置以加载 `ControlCenter.dll`，启用后重新进入声音输出页。若该页在启用前已经打开，将焦点移到任意应用音量行。
+从 [GitHub Releases](https://github.com/KKKKeybird/native-audio-router/releases) 下载 `native-audio-router.wh.cpp`，在 Windhawk 的本地模块编辑器中粘贴并编译。先打开一次任务栏快捷设置以加载 `ControlCenter.dll`，启用后重新进入声音输出页。若该页在启用前已经打开，将焦点移到任意应用音量行。部分应用需要重新开始播放才能迁移现有音频流。
+
+也可使用仓库中的 [单文件模块源码](dist/native-audio-router.wh.cpp)。
+
+## 从源码构建
 
 ```powershell
 ./scripts/build.ps1
 ./scripts/build.ps1 -WindhawkRoot $windhawkDirectory
 ```
 
-第二条命令使用已有 Windhawk 安装的 Clang 另行生成本地 DLL。预览仅在布局结构与符号匹配时添加菜单。恢复目前依赖还可访问的行模型，应用退出或者 Shell 重启后的恢复仍待实现。
+第二条命令使用已有 Windhawk 安装的 Clang 生成本地 DLL。预览仅在布局结构与符号匹配时添加菜单。当前运行验证限 Windows 11 x64 构建 `26300.9974`。恢复目前依赖还可访问的行模型，应用退出或者 Shell 重启后的恢复仍待实现。
 
 | 文档 | 内容 |
 | --- | --- |

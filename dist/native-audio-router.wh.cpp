@@ -4,11 +4,38 @@
 // @description Choose a Windows output device from each Quick Settings mixer row
 // @description:zh-CN 在任务栏原生音量合成器中选择逐应用输出设备
 // @version 0.0.5
+// @author KKKKeybird
+// @github https://github.com/KKKKeybird
+// @homepage https://github.com/KKKKeybird/native-audio-router
 // @architecture x86-64
 // @include ShellHost.exe
 // @compilerOptions -lruntimeobject -loleaut32 -lole32
 // @license MIT
 // ==/WindhawkMod==
+
+// ==WindhawkModReadme==
+/*
+# Native Audio Router
+
+Adds an output-device menu to application volume rows in Windows 11 Quick
+Settings. Use a row's arrow to select a device or follow the system default.
+The menu uses the Windows per-application output setting. Apps that retain
+their original audio stream may require restarting playback.
+
+Open Quick Settings once before enabling the mod, then reopen the Sound output
+page. This preview was loaded on Windows 11 x64 build 26300.9974 with Windhawk
+1.7.3. Runtime support depends on the shell symbols and row model.
+
+## 中文
+
+在任务栏快捷设置的「声音输出」页中，为应用音量行加入设备菜单。通过行尾
+箭头选择设备或跟随系统默认。部分应用需要重新开始播放，才能切换现有音频流。
+启用前先打开一次快捷设置，启用后重新进入「声音输出」页。
+
+See the [project repository](https://github.com/KKKKeybird/native-audio-router)
+for compatibility, test status, and source.
+*/
+// ==/WindhawkModReadme==
 
 #include <windows.h>
 #include <unknwn.h>
