@@ -50,6 +50,8 @@ The mod sends HTTPS requests to two Open-Meteo hosts:
 
 Like any web server, Open-Meteo can see your IP address. No API key or account is required.
 No weather requests are made while the city is empty, **Show weather** is off, or `weather` is omitted from the element order.
+
+The forecast API request is sent at startup, whenever a weather-related setting changes, and then every N minutes.
 */
 // ==/WindhawkModReadme==
 
