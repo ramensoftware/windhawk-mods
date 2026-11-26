@@ -56,6 +56,8 @@ Themes are collections of styles that can be selected from the **Theme** dropdow
 | [Midnight Neon](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/Midnight%20Neon) | [![Midnight Neon](https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/main/Themes/Midnight%20Neon/screenshot.png)](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/Midnight%20Neon) |
 | [Neon Blue](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/Neon%20Blue) | [![Neon Blue](https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/HEAD/Themes/Neon%20Blue/screenshot.png)](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/Neon%20Blue) |
 
+The Theme dropdown also includes **Neon Blue (Island)**, an island-style variant of Neon Blue.
+
 More themes, stylings, etc can be found and contributed from:
 **[Windhawk TopBar Styling Guide](https://github.com/wasixgamer/windhawk-topbar-styling-guide)**
 
@@ -106,7 +108,7 @@ Pages:
   Wallpaper picker, Pinned System Tray icons, and Live Notification Popups
   (with Do Not Disturb and per-app mute).
 - **Start menu replacement:** custom Start with an account panel, power menu,
-  search box, a six-column grid with Pinned above All apps (Win32 shortcuts + UWP apps),
+  search box, a six-column grid with Pinned, Recent apps (toggleable in Settings), and All apps (Win32 shortcuts + UWP apps),
   folder shortcuts you can pick and a Lock button.
   Optional: make it the default for the Win key and taskbar Start.
 - **Search replacement:** Spotlight-style search for apps, files,
@@ -154,7 +156,7 @@ settings to change them back. Merely searching does not write these Windows pref
   `geocoding-api.open-meteo.com`, and forecasts send the selected latitude/longitude to
   `api.open-meteo.com`. No account, API key, or personal data is sent.
 - **SpeedTest (`speed.cloudflare.com`):** The SpeedTest flyout connects to `https://speed.cloudflare.com`
-  over HTTPS (WinHTTP with system proxy) **only when you click Start Test**—nothing is sent at startup
+  over HTTPS (WinHTTP with system proxy) **only when you click Start Test** - nothing is sent at startup
   or on a timer, and closing the flyout cancels any active test. It requests `/cdn-cgi/trace` (reading
   only the server `colo`/`loc`; client IP is ignored), measures ping/jitter with `/cdn-cgi/trace?ping=...`,
   downloads test payloads from `/__down?bytes=8000000`, and uploads random bytes to `/__up` (capped at up
@@ -176,12 +178,14 @@ class name (`Button`), `ClassName#Name`, or a parent chain (`StackPanel > TextBl
 Every element can also be filtered with `[N]` for the Nth child of its parent,
 `[Prop=Value]` for a local property value, and `@CommonStates` for elements that
 expose a VisualStateGroup. Style values can use `$name` constants,
-`Prop@VisualState=Value` for state-specific values, and `Prop=>VarName` /
-`{{VarName}}` for captures and substitutions.
+`Prop@VisualState=Value` for state-specific values, `Resource:Key=Value` for
+resource overrides, `IconColor=<color>` (and `IconTintColor`/`IconTintOpacity`
+on `TaskButton`), `Prop=>VarName` / `{{VarName}}` for captures and
+substitutions, and `//` for comments.
 
 ### WindhawkBlur
 
-Styles can apply a Windhawk blur brush with XAML: `<WindhawkBlur String="value" />`.
+Styles can apply a Windhawk blur brush with XAML: `<WindhawkBlur BlurAmount="18" ... />`.
 Usable on any brush-typed property (`Background`, `Fill`, `BorderBrush`, ...).
 
 Usage Examples:
@@ -201,6 +205,7 @@ Run **[UWPSpy](https://github.com/m417z/UWPSpy/releases/)** on the TopBar's
 
 | Name | What it is |
 |------|------------|
+| `Border#PART_BackgroundBorder` | Outer shell border around the bar, flyouts, and context menus |
 | `TopBarScaler` / `BarRoot` | Outer `Viewbox` scaler and root `Grid` containing the blur/bleed layers, bar, and menu anchors |
 | `TopBarRoot` | Main `Grid` spanning the bar and holding the panel strips |
 | `GlobalBlurLayer` | The user Blur / Saturation / Tint layer behind the bar |
@@ -209,7 +214,7 @@ Run **[UWPSpy](https://github.com/m417z/UWPSpy/releases/)** on the TopBar's
 | `StartMenuAnchorGrid` / `SearchAnchorGrid` | Anchor grids inside `BarRoot` for the Start menu and Search flyouts |
 | `LeftPanel` / `CenterPanel` / `ControlCenterPanel` / `ClockPanel` | Horizontal `StackPanel` strips holding left, center, right/control-center, and clock items |
 | `StartButton` / `StartIcon` | Start button (`StartIcon` is named when the Windows logo icon is active) |
-| `SearchButton` / `SearchIcon` | Search button (opens TopBar Search by default) |
+| `SearchButton` / `SearchIcon` | Search button (`SearchIcon` works as a simple-name shortcut; the inner icon is unnamed in UWPSpy) |
 | `VirtualDesktopButton` / `VirtualDesktopIcon` / `VirtualDesktopBadgeText` | Virtual Desktop switcher button, its icon, and desktop number badge |
 | `AppTitleButton` / `AppTitleText` | Foreground application-name button and its label |
 | `TaskListPanel` / `TaskButton` / `TaskButtonContent` | Task strip, each task button, and its inner content `Grid` |
@@ -221,13 +226,13 @@ Run **[UWPSpy](https://github.com/m417z/UWPSpy/releases/)** on the TopBar's
 | `MediaButton` / `MediaTransportPanel` | Media Player button and its inline transport strip |
 | `MediaPrevButton` / `MediaPauseButton` / `MediaResumeButton` / `MediaNextButton` | Media transport buttons (`MediaTransportButton` is the generic fallback) |
 | `NetworkButton` / `NetworkGrid` / `NetworkUploadRow` / `NetworkDownloadRow` | Live upload / download monitor button and its rows (`NetworkUploadButton` / `NetworkDownloadButton` when split) |
-| `SpeedTestButton` | SpeedTest button (`SpeedHigh2` gauge flyout) |
-| `OptimizerButton` | System Optimizer button (`Diagnostic` / Task Manager flyout with RAM / CPU / Disk tabs) |
+| `SpeedTestButton` | SpeedTest button (gauge flyout) |
+| `OptimizerButton` | System Optimizer button (RAM / CPU / Disk cleanup & Task Manager flyout) |
 | `SettingsButton` | Settings gear button |
 | `PinnedTrayPanel` / `PinnedTrayIconButton` | Container for pinned system tray icons and each pinned tray icon button |
 | `TrayIconButton` | System tray overflow button |
-| `DisplayButton` / `WifiButton` / `SoundButton` / `BluetoothButton` / `BatteryButton` | Quick control buttons (`BluetoothButtonContentGrid` inside `BluetoothButton`) |
-| `RecycleBinButton` / `RecycleBinIcon` | Recycle Bin button and its glyph |
+| `DisplayButton` / `WifiButton` / `SoundButton` / `BluetoothButton` / `BatteryButton` | Quick control buttons (`BluetoothButtonContentGrid` and `BtBatteryLowIcon` inside `BluetoothButton`) |
+| `RecycleBinButton` | Recycle Bin button |
 | `WallpaperButton` | Wallpaper picker button |
 | `ControlCenterButton` | Button to open Control Center |
 | `NotificationsButton` / `NotificationsBadgeDot` | Windows notifications button and its unread indicator dot |
