@@ -8,7 +8,7 @@
 // @github          https://github.com/wasixgamer
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -O0 -g0 -fno-rtti -fno-addrsig -lwtsapi32 -lgdi32 -lole32 -loleaut32 -lruntimeobject -lshell32 -ldwmapi -ladvapi32 -luser32 -lshcore -lcomctl32 -lpdh -lpsapi -ldxgi -lwinhttp -ld2d1 -lshlwapi -luxtheme
+// @compilerOptions -lwtsapi32 -lgdi32 -lole32 -loleaut32 -lruntimeobject -lshell32 -ldwmapi -ladvapi32 -luser32 -lshcore -lcomctl32 -lpdh -lpsapi -ldxgi -lwinhttp -ld2d1 -lshlwapi -luxtheme
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -30,11 +30,9 @@ Spotlight-style search and more. It runs in its own `explorer.exe` tool process,
 
 ## Flyout Previews
 
-| Start Menu | Search |
-| :---: | :---: |
-| ![Start Menu](https://i.imgur.com/OtQM0GJ.png) | ![Search](https://i.imgur.com/qRylylZ.png) |
-| **Weather** | **Wallpaper Picker** |
-| ![Weather](https://i.imgur.com/qQUGeqp.png) | ![Wallpaper Picker](https://i.imgur.com/e3Yz9x2.png) |
+| Start Menu | Search | Weather | Wallpaper Picker |
+| :---: | :---: | :---: | :---: |
+| ![Start Menu](https://i.imgur.com/0YUUdIB.png) | ![Search](https://i.imgur.com/qRylylZ.png) | ![Weather](https://i.imgur.com/qQUGeqp.png) | ![Wallpaper Picker](https://i.imgur.com/e3Yz9x2.png) |
 
 | Control Center | Display | Sound | Notifications |
 | :---: | :---: | :---: | :---: |
@@ -132,11 +130,15 @@ keyboard access-key underlines, full-window dragging, mouse ClickLock, Night lig
 speaker/microphone mute, pointer precision/trails/shadow, primary-button swapping,
 inactive-window scrolling, Sticky Keys, Toggle Keys, Energy saver (on systems with a battery) and the active power plan. Only controls available on the current system are shown.
 
-Control Center also changes real system settings, including light/dark mode,
-Night light, Energy saver and power plan, as well as display brightness, audio volume/mute and
-output device, and Wi-Fi/Bluetooth controls. Changes made with these controls
-**persist after the mod is disabled, removed or exits unexpectedly**. They are
-user choices and are not automatically reverted; use the controls or Windows
+Control Center and related flyouts also change real system settings, including light/dark mode,
+Night light, Energy saver and power plan, display brightness, audio volume/mute and
+output device, Wi-Fi/Bluetooth controls, plus:
+- **Desktop wallpaper (`WallpaperButton`):** Clicking a wallpaper thumbnail sets the Windows desktop wallpaper (`SPI_SETDESKWALLPAPER` with `SPIF_UPDATEINIFILE | SPIF_SENDWININICHANGE`).
+- **Audio device enable/disable (`SoundButton`):** Enabling or disabling an audio endpoint uses `IPolicyConfig::SetEndpointVisibility`, which changes device visibility system-wide.
+- **Bluetooth profile services (`BluetoothButton`):** Connecting or disconnecting a Bluetooth device toggles its profile services via `BluetoothSetServiceState` (connecting enables all installed services for that device).
+
+Changes made with these controls **persist after the mod is disabled, removed or exits unexpectedly**.
+They are user choices and are not automatically reverted; use the controls or Windows
 settings to change them back. Merely searching does not write these Windows preferences.
 
 - **System Optimizer (`OptimizerButton`):**
@@ -2952,6 +2954,7 @@ struct {
     int notificationPopupMaxCount = 2;
     bool topBarNotificationDnd = false;
     bool showPinnedSection = true;
+    bool showRecentAppsSection = true;
     bool startFolderExplorer = true, startFolderDocuments = true, startFolderDownloads = true, startFolderSettings = true;
     bool startFolderPictures = false, startFolderMusic = false, startFolderVideos = false, startFolderNetwork = false;
     std::wstring startSearchAlignment = L"center";
@@ -4800,7 +4803,7 @@ std::wstring GetStringSettingCopy(PCWSTR name) {
 static const std::map<std::wstring, int>& IntDefaults() {
     static const std::map<std::wstring, int> kDefaults = {
         { L"barHeight", 40 },
-        { L"showPinnedSection", 1 }, { L"startFolderExplorer", 1 }, { L"startFolderDocuments", 1 },
+        { L"showPinnedSection", 1 }, { L"showRecentAppsSection", 1 }, { L"startFolderExplorer", 1 }, { L"startFolderDocuments", 1 },
         { L"startFolderDownloads", 1 }, { L"startFolderSettings", 1 },
         { L"topBarCornerRadius", 8 },
         { L"topBarButtonsCornerRadius", 6 },
@@ -7173,15 +7176,10 @@ void TrimTopBarWorkingSet(bool force = false) {
     static std::atomic<ULONGLONG> s_lastTrim{0};
     ULONGLONG now = GetTickCount64();
     ULONGLONG prev = s_lastTrim.load(std::memory_order_relaxed);
-    if (!force && prev != 0 && now - prev < 10000) return;
+    if (!force && prev != 0 && now - prev < 5000) return;
     s_lastTrim.store(now, std::memory_order_relaxed);
+    // Coalesce freed heap blocks without emptying the active working set (avoids hard page faults/stutter).
     HeapCompact(GetProcessHeap(), 0);
-    // Trim cold/unused pages (closed Settings, Start, Search, startup init, WMI/COM DLLs)
-    // while active TopBar pages stay resident in RAM.
-    SetProcessWorkingSetSizeEx(GetCurrentProcess(),
-                               static_cast<SIZE_T>(-1),
-                               static_cast<SIZE_T>(-1),
-                               0);
 }
 
 void ApplyAllControlStyles() {
@@ -36631,6 +36629,12 @@ static std::atomic<ULONGLONG> g_startActivationHandledTick{0};
 static std::atomic<ULONGLONG> g_lastTaskbarPointerDownTick{0};
 static std::atomic<bool> g_startMenuOpenAtTaskbarClick{false};
 [[clang::no_destroy]] wuxc::StackPanel g_searchResultsPanel{nullptr};
+[[clang::no_destroy]] static wuxc::ScrollViewer g_searchResultsScroller{nullptr};
+static std::set<std::wstring> ReadStartMenuFavorites();
+static void SaveStartMenuFavorites(const std::set<std::wstring>& favorites);
+static std::vector<std::wstring> ReadStartMenuRecentApps();
+static void RecordStartMenuRecentApp(const std::wstring& lnkPath);
+static std::function<void(bool)> g_startMenuSyncAndReset;
 [[clang::no_destroy]] DispatcherTimer g_searchDebounceTimer{nullptr};
 [[clang::no_destroy]] DispatcherTimer g_searchQueryTimer{nullptr};
 std::atomic<bool> g_searchFileWorkerRunning{false};
@@ -36868,6 +36872,7 @@ static void ToggleSearchFromTopBarButton() {
 }
 
 static bool NativeStartMenuIsVisible();
+void ShowBarForAutoHide();
 void ShowStartMenuFlyout(bool debounce);
 
 static void TriggerNativeWindowsStartMenu() {
@@ -37628,6 +37633,7 @@ void BuildSearchFlyoutContent() {
     ApplyWinUI3ScrollViewerStyle(scroller);
     wuxc::Grid::SetRow(scroller, 1);
 
+    g_searchResultsScroller = scroller;
     g_searchResultsPanel = wuxc::StackPanel();
     g_searchResultsPanel.Spacing(2);
     scroller.Content(g_searchResultsPanel);
@@ -38452,6 +38458,9 @@ void RebuildSearchResultsPanel() {
 
         auto captured = r;
         row.Click([captured](auto&&, auto&&) {
+            if (captured.kind == search::Result::Kind::App && !captured.lnkPath.empty()) {
+                RecordStartMenuRecentApp(captured.lnkPath);
+            }
             search::Launch(captured);
             if (g_searchFlyout) {
                 try { g_searchFlyout.Hide(); } catch (...) {}
@@ -38472,11 +38481,31 @@ void RebuildSearchResultsPanel() {
                              captured.target.find(L'\\') == std::wstring::npos;
 
                 menu.Items().Append(MakeMenuItem(L"Open", [captured] {
+                    if (captured.kind == search::Result::Kind::App && !captured.lnkPath.empty()) {
+                        RecordStartMenuRecentApp(captured.lnkPath);
+                    }
                     search::Launch(captured);
                     if (g_searchFlyout) {
                         try { g_searchFlyout.Hide(); } catch (...) {}
                     }
                 }, L"\uE8E5"));
+
+                if (captured.kind == search::Result::Kind::App && !captured.lnkPath.empty()) {
+                    auto curFavs = ReadStartMenuFavorites();
+                    bool pinned = curFavs.count(captured.lnkPath) != 0;
+                    menu.Items().Append(MakeMenuItem(
+                        pinned ? L"Unpin from Start" : L"Pin to Start",
+                        [path = captured.lnkPath] {
+                            auto favs = ReadStartMenuFavorites();
+                            if (!favs.erase(path)) favs.insert(path);
+                            SaveStartMenuFavorites(favs);
+                            if (g_startMenuSyncAndReset) {
+                                RunOnUiThread([] {
+                                    if (g_startMenuSyncAndReset) g_startMenuSyncAndReset(false);
+                                });
+                            }
+                        }, pinned ? L"\uE77A" : L"\uE718"));
+                }
 
                 if (captured.kind == search::Result::Kind::App ||
                     captured.kind == search::Result::Kind::ControlPanel) {
@@ -38759,6 +38788,9 @@ void EnsureSearchFlyoutCreated() {
                         }
                     }
                 } catch (...) {}
+                if (g_searchResultsScroller) {
+                    try { g_searchResultsScroller.ChangeView(nullptr, 0.0, nullptr, true); } catch (...) {}
+                }
                 RebuildSearchResultsPanel();
                 ScheduleStartSearchIconIdleFlush();
                 TrimTopBarWorkingSet(false);
@@ -38948,6 +38980,11 @@ void ScheduleForceShowXamlPopup() {
 
 void ShowSearchFlyout() {
     try {
+        if (g_topBarAutoHidden.load()) {
+            g_anyChildFlyoutOpen.store(true);
+            g_flyoutOpeningGraceUntil.store(GetTickCount64() + 1500);
+            try { ShowBarForAutoHide(); } catch (...) {}
+        }
         EnsureSearchFlyoutCreated();
         if (!g_searchFlyout) return;
 
@@ -39857,6 +39894,268 @@ static void SaveStartMenuFavorites(const std::set<std::wstring>& favorites) {
     Wh_SetStringValue(L"startMenuFavorites", text.c_str());
 }
 
+static std::vector<std::wstring> ReadStartMenuRecentApps() {
+    std::vector<wchar_t> buffer(32768, 0);
+    size_t length = Wh_GetStringValue(L"startMenuRecentApps", buffer.data(), buffer.size());
+    std::vector<std::wstring> result;
+    if (!length || length >= buffer.size()) return result;
+    std::wstring text(buffer.data(), length);
+    for (size_t pos = 0; pos < text.size();) {
+        size_t end = text.find_first_of(L"|\r\n", pos);
+        auto path = TrimWs(text.substr(pos, end == std::wstring::npos ? end : end - pos));
+        if (!path.empty() && std::find(result.begin(), result.end(), path) == result.end()) {
+            result.push_back(std::move(path));
+            if (result.size() >= 6) break;
+        }
+        if (end == std::wstring::npos) break;
+        pos = end + 1;
+    }
+    return result;
+}
+
+static void SaveStartMenuRecentApps(const std::vector<std::wstring>& recent) {
+    std::wstring text;
+    for (const auto& path : recent) {
+        if (path.empty()) continue;
+        size_t addLen = (text.empty() ? 0 : 1) + path.size();
+        if (text.size() + addLen >= 32760) break;
+        if (!text.empty()) text += L'|';
+        text += path;
+    }
+    Wh_SetStringValue(L"startMenuRecentApps", text.c_str());
+}
+
+static void RecordStartMenuRecentApp(const std::wstring& lnkPath) {
+    if (lnkPath.empty()) return;
+    auto recent = ReadStartMenuRecentApps();
+    recent.erase(std::remove(recent.begin(), recent.end(), lnkPath), recent.end());
+    recent.insert(recent.begin(), lnkPath);
+    if (recent.size() > 6) recent.resize(6);
+    SaveStartMenuRecentApps(recent);
+    if (g_startMenuSyncAndReset) {
+        RunOnUiThread([] {
+            if (g_startMenuSyncAndReset) g_startMenuSyncAndReset(false);
+        });
+    }
+}
+
+struct StartRecentItem {
+    bool isApp = false;
+    std::wstring title;
+    std::wstring subtitle;
+    std::wstring path;
+    std::wstring args;
+    std::wstring lnkPath;
+    uint64_t timestamp = 0;
+};
+
+static std::wstring FormatRecentRelativeTime(uint64_t ft100ns) {
+    if (ft100ns == 0) return L"Recently used";
+    FILETIME nowFt{};
+    GetSystemTimeAsFileTime(&nowFt);
+    ULARGE_INTEGER uNow{}, uItem{};
+    uNow.LowPart = nowFt.dwLowDateTime;
+    uNow.HighPart = nowFt.dwHighDateTime;
+    uItem.QuadPart = ft100ns;
+    if (uNow.QuadPart <= uItem.QuadPart) return L"Just now";
+    uint64_t diffSec = (uNow.QuadPart - uItem.QuadPart) / 10000000ULL;
+    if (diffSec < 60) return L"Just now";
+    if (diffSec < 3600) return std::to_wstring(diffSec / 60) + L"m ago";
+    if (diffSec < 86400) return std::to_wstring(diffSec / 3600) + L"h ago";
+    if (diffSec < 172800) return L"Yesterday";
+    FILETIME itemFt{ uItem.LowPart, uItem.HighPart };
+    FILETIME localFt{};
+    SYSTEMTIME st{};
+    if (FileTimeToLocalFileTime(&itemFt, &localFt) && FileTimeToSystemTime(&localFt, &st)) {
+        static const wchar_t* kMon[12] = {
+            L"Jan", L"Feb", L"Mar", L"Apr", L"May", L"Jun",
+            L"Jul", L"Aug", L"Sep", L"Oct", L"Nov", L"Dec"
+        };
+        if (st.wMonth >= 1 && st.wMonth <= 12) {
+            return std::wstring(kMon[st.wMonth - 1]) + L" " + std::to_wstring(st.wDay);
+        }
+    }
+    return L"Recently opened";
+}
+
+static std::wstring Rot13Decode(const std::wstring& s) {
+    std::wstring out = s;
+    for (wchar_t& ch : out) {
+        if (ch >= L'a' && ch <= L'z') ch = static_cast<wchar_t>(L'a' + (ch - L'a' + 13) % 26);
+        else if (ch >= L'A' && ch <= L'Z') ch = static_cast<wchar_t>(L'A' + (ch - L'A' + 13) % 26);
+    }
+    return out;
+}
+
+static std::vector<StartRecentItem> ReadWindowsStartRecentItems(
+    const std::shared_ptr<const std::vector<startmenu::AppEntry>>& apps) {
+    std::vector<StartRecentItem> recentApps;
+    std::vector<StartRecentItem> recentFiles;
+    std::set<std::wstring> seenAppKeys;
+
+    FILETIME nowFt{};
+    GetSystemTimeAsFileTime(&nowFt);
+    ULARGE_INTEGER uNow{};
+    uNow.LowPart = nowFt.dwLowDateTime;
+    uNow.HighPart = nowFt.dwHighDateTime;
+
+    // Build lookup tables for installed Start Menu apps
+    std::map<std::wstring, const startmenu::AppEntry*> byLnkLow;
+    std::map<std::wstring, const startmenu::AppEntry*> byExeBase;
+    std::map<std::wstring, const startmenu::AppEntry*> byAumidLow;
+    if (apps) {
+        for (const auto& a : *apps) {
+            if (!a.lnkPath.empty()) {
+                std::wstring lp = ToLowerCopy(a.lnkPath);
+                byLnkLow[lp] = &a;
+                size_t sl = lp.find_last_of(L"\\/");
+                if (sl != std::wstring::npos) byLnkLow[lp.substr(sl + 1)] = &a;
+            }
+            if (!a.target.empty()) {
+                std::wstring tg = ToLowerCopy(a.target);
+                if (tg.rfind(L"shell:appsfolder\\", 0) == 0) {
+                    byAumidLow[tg.substr(17)] = &a;
+                } else {
+                    size_t sl = tg.find_last_of(L"\\/");
+                    std::wstring base = (sl == std::wstring::npos) ? tg : tg.substr(sl + 1);
+                    if (!base.empty() && base != L"explorer.exe" && base != L"cmd.exe") {
+                        byExeBase[base] = &a;
+                    }
+                }
+            }
+        }
+    }
+
+    auto addAppEntry = [&](const startmenu::AppEntry* a, uint64_t ts) {
+        if (!a || a->name.empty()) return;
+        std::wstring key = ToLowerCopy(a->lnkPath.empty() ? a->name : a->lnkPath);
+        if (!seenAppKeys.insert(key).second) return;
+        StartRecentItem item;
+        item.isApp = true;
+        item.title = a->name;
+        item.subtitle = ts > 0 ? FormatRecentRelativeTime(ts) : L"Recently used";
+        item.path = a->target;
+        item.args = a->args;
+        item.lnkPath = a->lnkPath;
+        item.timestamp = ts;
+        recentApps.push_back(std::move(item));
+    };
+
+    // 1. TopBar-recorded recent apps (newest first)
+    auto localRec = ReadStartMenuRecentApps();
+    for (size_t i = 0; i < localRec.size(); ++i) {
+        auto it = byLnkLow.find(ToLowerCopy(localRec[i]));
+        if (it != byLnkLow.end()) {
+            uint64_t syntheticTs = (uNow.QuadPart > i * 10000000ULL) ? (uNow.QuadPart - i * 10000000ULL) : uNow.QuadPart;
+            addAppEntry(it->second, syntheticTs);
+        }
+    }
+
+    // 2. Windows UserAssist (tracks apps launched anywhere in Windows Start/Explorer)
+    static const PCWSTR kUaKeys[2] = {
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\UserAssist\\{CEBFF5CD-ACE2-4F4F-9178-9926F41749EA}\\Count",
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\UserAssist\\{F4E57C4B-2036-45F0-A9AB-443BCFE33D9F}\\Count"
+    };
+    struct UaCandidate { const startmenu::AppEntry* app; uint64_t ts; };
+    std::vector<UaCandidate> uaHits;
+    for (PCWSTR subKey : kUaKeys) {
+        HKEY hk = nullptr;
+        if (RegOpenKeyExW(HKEY_CURRENT_USER, subKey, 0, KEY_READ, &hk) != ERROR_SUCCESS) continue;
+        DWORD idx = 0;
+        wchar_t valName[512]{};
+        BYTE data[128]{};
+        while (true) {
+            DWORD nameLen = ARRAYSIZE(valName);
+            DWORD dataLen = sizeof(data);
+            DWORD type = 0;
+            LONG rc = RegEnumValueW(hk, idx++, valName, &nameLen, nullptr, &type, data, &dataLen);
+            if (rc == ERROR_NO_MORE_ITEMS) break;
+            if (rc != ERROR_SUCCESS || type != REG_BINARY || dataLen < 68) continue;
+            uint64_t ts = 0;
+            memcpy(&ts, data + 60, sizeof(uint64_t));
+            if (ts == 0) continue;
+            std::wstring decoded = ToLowerCopy(Rot13Decode(std::wstring(valName, nameLen)));
+            const startmenu::AppEntry* matched = nullptr;
+            if (auto it = byLnkLow.find(decoded); it != byLnkLow.end()) matched = it->second;
+            if (!matched) {
+                size_t sl = decoded.find_last_of(L"\\/");
+                std::wstring tail = (sl == std::wstring::npos) ? decoded : decoded.substr(sl + 1);
+                if (auto it = byLnkLow.find(tail); it != byLnkLow.end()) matched = it->second;
+                else if (auto it2 = byExeBase.find(tail); it2 != byExeBase.end()) matched = it2->second;
+                else if (auto it3 = byAumidLow.find(decoded); it3 != byAumidLow.end()) matched = it3->second;
+            }
+            if (matched) uaHits.push_back({ matched, ts });
+        }
+        RegCloseKey(hk);
+    }
+    std::sort(uaHits.begin(), uaHits.end(), [](const UaCandidate& a, const UaCandidate& b) {
+        return a.ts > b.ts;
+    });
+    for (const auto& h : uaHits) {
+        addAppEntry(h.app, h.ts);
+        if (recentApps.size() >= 6) break;
+    }
+
+    // 3. Windows Recent Files (%APPDATA%\Microsoft\Windows\Recent\*.lnk)
+    PWSTR recentDir = nullptr;
+    static const GUID kFolderIdRecent = { 0xAE50C081, 0xEBD2, 0x438A, { 0x86, 0x55, 0x8A, 0x09, 0x2E, 0x34, 0x98, 0x7A } };
+    if (SUCCEEDED(SHGetKnownFolderPath(kFolderIdRecent, 0, nullptr, &recentDir)) && recentDir) {
+        std::wstring dir(recentDir);
+        CoTaskMemFree(recentDir);
+        WIN32_FIND_DATAW fd{};
+        HANDLE hFind = FindFirstFileW((dir + L"\\*.lnk").c_str(), &fd);
+        if (hFind != INVALID_HANDLE_VALUE) {
+            do {
+                if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+                std::wstring fname(fd.cFileName);
+                std::wstring low = ToLowerCopy(fname);
+                if (low == L"desktop.ini" || low.empty()) continue;
+                std::wstring title = fname;
+                if (title.size() > 4 && ToLowerCopy(title.substr(title.size() - 4)) == L".lnk") {
+                    title.resize(title.size() - 4);
+                }
+                if (title.empty()) continue;
+                ULARGE_INTEGER ft{};
+                ft.LowPart = fd.ftLastWriteTime.dwLowDateTime;
+                ft.HighPart = fd.ftLastWriteTime.dwHighDateTime;
+                StartRecentItem item;
+                item.isApp = false;
+                item.title = title;
+                item.subtitle = FormatRecentRelativeTime(ft.QuadPart);
+                item.path = dir + L"\\" + fname;
+                item.lnkPath = item.path;
+                item.timestamp = ft.QuadPart;
+                recentFiles.push_back(std::move(item));
+            } while (FindNextFileW(hFind, &fd));
+            FindClose(hFind);
+        }
+    }
+    std::sort(recentFiles.begin(), recentFiles.end(), [](const StartRecentItem& a, const StartRecentItem& b) {
+        return a.timestamp > b.timestamp;
+    });
+    if (recentFiles.size() > 6) recentFiles.resize(6);
+
+    // Balance up to 6 items (up to 3 recent apps + up to 3 recent files, filling remainder from whichever has more)
+    std::vector<StartRecentItem> combined;
+    std::set<std::wstring> seenTitles;
+    auto tryAdd = [&](const StartRecentItem& it) {
+        std::wstring k = ToLowerCopy(it.title);
+        if (!seenTitles.insert(k).second) return false;
+        combined.push_back(it);
+        return true;
+    };
+    size_t ai = 0, fi = 0;
+    while (combined.size() < 6 && (ai < recentApps.size() || fi < recentFiles.size())) {
+        if (ai < recentApps.size()) tryAdd(recentApps[ai++]);
+        if (combined.size() >= 6) break;
+        if (fi < recentFiles.size()) tryAdd(recentFiles[fi++]);
+    }
+    std::sort(combined.begin(), combined.end(), [](const StartRecentItem& a, const StartRecentItem& b) {
+        return a.timestamp > b.timestamp;
+    });
+    return combined;
+}
+
 static RECT GetStartSearchWorkArea();
 static double GetStartMenuScaleFactor() {
     RECT monitor = GetStartSearchWorkArea();
@@ -40417,8 +40716,29 @@ void BuildStartMenuFlyoutContent() {
     pinnedSection.Children().Append(heading);pinnedSection.Children().Append(pinnedView);
     pinnedSection.Children().Append(pinnedEmpty);
     pinnedSection.Visibility(g_settings.showPinnedSection?Visibility::Visible:Visibility::Collapsed);
+
+    auto recentHeading = MakeText(nullptr, L"Recent", winuiStart ? 15.0 : 18.0, true);
+    recentHeading.Margin(winuiStart ? Thickness{6, 8, 0, 8} : Thickness{8, 10, 0, 8});
+    wuxc::Grid recentGrid;
+    recentGrid.Name(L"StartMenuRecentApps");
+    recentGrid.Width(660);
+    recentGrid.ColumnSpacing(8);
+    recentGrid.RowSpacing(6);
+    {
+        wuxc::ColumnDefinition rc0; rc0.Width(GridLength{1, GridUnitType::Star});
+        wuxc::ColumnDefinition rc1; rc1.Width(GridLength{1, GridUnitType::Star});
+        recentGrid.ColumnDefinitions().Append(rc0);
+        recentGrid.ColumnDefinitions().Append(rc1);
+    }
+    wuxc::StackPanel recentSection;
+    recentSection.Children().Append(recentHeading);
+    recentSection.Children().Append(recentGrid);
+    recentSection.Visibility(Visibility::Collapsed);
+
     wuxc::StackPanel sections;sections.Width(660);
-    sections.Children().Append(pinnedSection);sections.Children().Append(section);
+    sections.Children().Append(pinnedSection);
+    sections.Children().Append(recentSection);
+    sections.Children().Append(section);
     appsView.Header(sections);
     appsArea.Children().Append(appsView);
     auto empty = MakeText(nullptr, L"Loading your applications\u2026", 14);
@@ -40430,7 +40750,9 @@ void BuildStartMenuFlyoutContent() {
     struct Model {
         std::shared_ptr<const std::vector<startmenu::AppEntry>> apps;
         std::set<std::wstring> favorites;
+        std::vector<StartRecentItem> recentItems;
         bool showPinned = g_settings.showPinnedSection;
+        bool showRecent = g_settings.showRecentAppsSection;
     };
     auto model = std::make_shared<Model>();
     model->favorites = ReadStartMenuFavorites();
@@ -40438,26 +40760,249 @@ void BuildStartMenuFlyoutContent() {
     icons->dispatcher = layout.Dispatcher();
     double dpi = GetBarDpiScale();
     UINT iconSize = static_cast<UINT>(std::lround(32.0 * std::max(1.0, dpi * GetStartMenuScaleFactor())));
-    struct UiLabels { wuxc::TextBlock count; wuxc::TextBlock empty; wuxc::TextBlock pinnedEmpty; };
-    auto labels = std::make_shared<UiLabels>(UiLabels{count, empty, pinnedEmpty});
+    struct UiLabels {
+        wuxc::TextBlock count;
+        wuxc::TextBlock empty;
+        wuxc::TextBlock pinnedEmpty;
+        wuxc::StackPanel pinnedSection;
+        wuxc::StackPanel recentSection;
+    };
+    auto labels = std::make_shared<UiLabels>(UiLabels{count, empty, pinnedEmpty, pinnedSection, recentSection});
+    auto tileMenuStyleForRecent = MakeMenuPresenterStyle();
+    auto renderRecentGrid = [recentRef=winrt::make_weak(recentGrid), labelRef=std::weak_ptr<UiLabels>(labels),
+                             model, iconSize, tileMenuStyleForRecent]() {
+        auto grid = recentRef.get();
+        auto lbls = labelRef.lock();
+        if (!grid || !lbls) return;
+        grid.Children().Clear();
+        grid.RowDefinitions().Clear();
+        if (!model->showRecent || model->recentItems.empty()) {
+            lbls->recentSection.Visibility(Visibility::Collapsed);
+            return;
+        }
+        const bool winuiTile = IsWinUI3StyleMode();
+        const size_t n = std::min<size_t>(model->recentItems.size(), 6);
+        const size_t rows = (n + 1) / 2;
+        for (size_t r = 0; r < rows; ++r) {
+            wuxc::RowDefinition rd;
+            rd.Height(GridLength{0, GridUnitType::Auto});
+            grid.RowDefinitions().Append(rd);
+        }
+        for (size_t i = 0; i < n; ++i) {
+            const auto item = model->recentItems[i];
+            auto btn = MakeGhostButton(L"StartRecentItemButton", winuiTile ? 6.0 : 8.0);
+            btn.HorizontalAlignment(HorizontalAlignment::Stretch);
+            btn.HorizontalContentAlignment(HorizontalAlignment::Stretch);
+            btn.Padding(Thickness{10, 8, 10, 8});
+            btn.Background(MakeBrush(winuiTile ? 0x07 : 0x0B, 255, 255, 255));
+            btn.BorderBrush(MakeBrush(winuiTile ? 0x10 : 0x22, 255, 255, 255));
+            btn.BorderThickness(Thickness{1, 1, 1, 1});
+            try { btn.BackgroundSizing(wuxc::BackgroundSizing::InnerBorderEdge); } catch (...) {}
+            btn.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackground")), MakeBrush(winuiTile ? 0x07 : 0x0B, 255, 255, 255));
+            btn.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackgroundPointerOver")), MakeBrush(0x16, 255, 255, 255));
+            btn.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackgroundPressed")), MakeBrush(0x0E, 255, 255, 255));
+
+            wuxc::Grid rowG;
+            rowG.ColumnSpacing(10);
+            wuxc::ColumnDefinition c0; c0.Width(GridLength{0, GridUnitType::Auto});
+            wuxc::ColumnDefinition c1; c1.Width(GridLength{1, GridUnitType::Star});
+            rowG.ColumnDefinitions().Append(c0);
+            rowG.ColumnDefinitions().Append(c1);
+
+            wuxc::Grid iconSlot;
+            iconSlot.Width(28);
+            iconSlot.Height(28);
+            iconSlot.VerticalAlignment(VerticalAlignment::Center);
+            iconSlot.Children().Append(iconpacks::MakeInlineGlyph(
+                item.isApp ? L"\uE71D" : L"\uE8A5", 20.0, IconColorBrush()));
+            wuxc::Grid::SetColumn(iconSlot, 0);
+            rowG.Children().Append(iconSlot);
+
+            // Load real Shell icon safely (HICON on background thread -> BitmapImage on UI thread)
+            std::wstring iconPath = !item.lnkPath.empty() ? item.lnkPath : item.path;
+            if (!iconPath.empty()) {
+                auto weakSlot = winrt::make_weak(iconSlot);
+                bool isShellVirtual = (iconPath.rfind(L"shell:", 0) == 0);
+                if (isShellVirtual) {
+                    try {
+                        if (auto bmp = GetShellItemIconBitmap(iconPath, iconSize)) {
+                            wuxc::Image img;
+                            img.Source(bmp);
+                            img.Width(28);
+                            img.Height(28);
+                            img.Stretch(wuxm::Stretch::Uniform);
+                            iconSlot.Children().Clear();
+                            iconSlot.Children().Append(img);
+                        }
+                    } catch (...) {}
+                } else {
+                    RunInBackground([iconPath, iconSize, weakSlot] {
+                        SHFILEINFOW sfi{};
+                        HICON hIcon = nullptr;
+                        if (SHGetFileInfoW(iconPath.c_str(), 0, &sfi, sizeof(sfi),
+                                           SHGFI_ICON | SHGFI_LARGEICON) && sfi.hIcon) {
+                            hIcon = sfi.hIcon;
+                        }
+                        if (!hIcon) return;
+                        RunOnUiThread([weakSlot, hIcon, iconSize] {
+                            wuxm::Imaging::BitmapImage bmp{ nullptr };
+                            try { bmp = HIconToBitmapImage(hIcon, iconSize); } catch (...) {}
+                            DestroyIcon(hIcon);
+                            if (!bmp) return;
+                            if (auto slot = weakSlot.get()) {
+                                try {
+                                    wuxc::Image img;
+                                    img.Source(bmp);
+                                    img.Width(28);
+                                    img.Height(28);
+                                    img.Stretch(wuxm::Stretch::Uniform);
+                                    slot.Children().Clear();
+                                    slot.Children().Append(img);
+                                } catch (...) {}
+                            }
+                        });
+                    });
+                }
+            }
+
+            wuxc::StackPanel txt;
+            txt.VerticalAlignment(VerticalAlignment::Center);
+            txt.Spacing(1);
+            auto t1 = MakeText(nullptr, item.title, 12.5, true);
+            t1.TextTrimming(TextTrimming::CharacterEllipsis);
+            auto t2 = MakeText(nullptr, item.subtitle, 11.0, false);
+            t2.Foreground(FontColorBrushDimmed());
+            t2.TextTrimming(TextTrimming::CharacterEllipsis);
+            txt.Children().Append(t1);
+            txt.Children().Append(t2);
+            wuxc::Grid::SetColumn(txt, 1);
+            rowG.Children().Append(txt);
+
+            btn.Content(rowG);
+            btn.Click([item](auto&&, auto&&) {
+                if (item.isApp && !item.lnkPath.empty()) RecordStartMenuRecentApp(item.lnkPath);
+                if (g_startMenuFlyout) g_startMenuFlyout.Hide();
+                RunInBackground([item] {
+                    ShellExecuteW(nullptr, L"open", item.path.c_str(),
+                                  item.args.empty() ? nullptr : item.args.c_str(),
+                                  nullptr, SW_SHOWNORMAL);
+                });
+            });
+            btn.RightTapped([item, tileMenuStyleForRecent](wf::IInspectable const& sender,
+                                                           Input::RightTappedRoutedEventArgs const& rtArgs) {
+                rtArgs.Handled(true);
+                wuxc::MenuFlyout menu;
+                menu.Items().Append(MakeMenuItem(L"Open", [item] {
+                    if (item.isApp && !item.lnkPath.empty()) RecordStartMenuRecentApp(item.lnkPath);
+                    if (g_startMenuFlyout) g_startMenuFlyout.Hide();
+                    RunInBackground([item] {
+                        ShellExecuteW(nullptr, L"open", item.path.c_str(),
+                                      item.args.empty() ? nullptr : item.args.c_str(),
+                                      nullptr, SW_SHOWNORMAL);
+                    });
+                }, L"\uE8E5"));
+                if (item.isApp && !item.lnkPath.empty()) {
+                    auto favs = ReadStartMenuFavorites();
+                    bool pinned = favs.count(item.lnkPath) != 0;
+                    menu.Items().Append(MakeMenuItem(pinned ? L"Unpin from Start" : L"Pin to Start",
+                        [lp = item.lnkPath] {
+                            auto f = ReadStartMenuFavorites();
+                            if (!f.erase(lp)) f.insert(lp);
+                            SaveStartMenuFavorites(f);
+                            if (g_startMenuSyncAndReset) {
+                                RunOnUiThread([] { if (g_startMenuSyncAndReset) g_startMenuSyncAndReset(false); });
+                            }
+                        }, pinned ? L"\uE77A" : L"\uE718"));
+                    menu.Items().Append(MakeMenuItem(L"Run as administrator", [item] {
+                        LaunchTargetElevated(item.path, item.args);
+                    }, L"\uE7EF"));
+                } else if (!item.lnkPath.empty()) {
+                    menu.Items().Append(MakeMenuItem(L"Open file location", [lp = item.lnkPath] {
+                        RevealShortcutInExplorer(lp);
+                    }, L"\uE838"));
+                }
+                StyleMenuFlyout(menu, tileMenuStyleForRecent);
+                g_startTileMenu = menu;
+                try {
+                    if (auto fe = sender.try_as<FrameworkElement>()) {
+                        wuxc::Primitives::FlyoutShowOptions opts;
+                        opts.Position(rtArgs.GetPosition(fe));
+                        menu.ShowAt(fe, opts);
+                    }
+                } catch (...) {}
+            });
+
+            wuxc::Grid::SetRow(btn, static_cast<int32_t>(i / 2));
+            wuxc::Grid::SetColumn(btn, static_cast<int32_t>(i % 2));
+            grid.Children().Append(btn);
+        }
+        lbls->recentSection.Visibility(Visibility::Visible);
+    };
+
     auto refresh = [viewRef=winrt::make_weak(appsView), pinnedRef=winrt::make_weak(pinnedView),
-                    labelRef=std::weak_ptr<UiLabels>(labels), model] {
+                    labelRef=std::weak_ptr<UiLabels>(labels), model, renderRecentGrid] {
         auto view=viewRef.get();auto pinned=pinnedRef.get();
         if(!view||!pinned)return;
         std::vector<wf::IInspectable> allItems,pinnedItems;
         if(model->apps)for(size_t i=0;i<model->apps->size();++i){
-            auto item=winrt::box_value(static_cast<uint32_t>(i));allItems.push_back(item);
+            auto idx = static_cast<uint32_t>(i);
+            auto item=winrt::box_value(idx);allItems.push_back(item);
             if(model->showPinned&&model->favorites.count((*model->apps)[i].lnkPath))pinnedItems.push_back(item);
         }
         size_t size=allItems.size(),pinCount=pinnedItems.size();
         pinned.Height(std::ceil(pinCount/6.0)*96.0);
         pinned.ItemsSource(winrt::single_threaded_observable_vector<wf::IInspectable>(std::move(pinnedItems)));
         view.ItemsSource(winrt::single_threaded_observable_vector<wf::IInspectable>(std::move(allItems)));
+        renderRecentGrid();
         auto labels=labelRef.lock();if(!labels)return;
+        labels->pinnedSection.Visibility(model->showPinned ? Visibility::Visible : Visibility::Collapsed);
         labels->count.Text(model->apps?winrt::hstring(std::to_wstring(size)+(size==1?L" app":L" apps")):L"Loading apps\u2026");
         labels->empty.Visibility(size?Visibility::Collapsed:Visibility::Visible);
         labels->empty.Text(model->apps?L"No applications found.":L"Loading your applications\u2026");
         labels->pinnedEmpty.Visibility(pinCount?Visibility::Collapsed:Visibility::Visible);
+    };
+
+    auto reloadRecentAsync = [model, renderRecentGrid]() {
+        if (!model->showRecent) {
+            model->recentItems.clear();
+            renderRecentGrid();
+            return;
+        }
+        auto appsSnap = model->apps;
+        RunInBackground([appsSnap, model, renderRecentGrid] {
+            auto items = ReadWindowsStartRecentItems(appsSnap);
+            RunOnUiThread([model, items = std::move(items), renderRecentGrid]() mutable {
+                model->recentItems = std::move(items);
+                renderRecentGrid();
+            });
+        });
+    };
+
+    g_startMenuSyncAndReset = [viewRef=winrt::make_weak(appsView), model, refresh, reloadRecentAsync](bool resetScroll) {
+        model->favorites = ReadStartMenuFavorites();
+        model->showPinned = g_settings.showPinnedSection;
+        model->showRecent = g_settings.showRecentAppsSection;
+        refresh();
+        reloadRecentAsync();
+        if (resetScroll) {
+            if (auto view = viewRef.get()) {
+                std::function<wuxc::ScrollViewer(DependencyObject const&)> findSv =
+                    [&](DependencyObject const& node) -> wuxc::ScrollViewer {
+                        if (!node) return nullptr;
+                        if (auto sv = node.try_as<wuxc::ScrollViewer>()) return sv;
+                        int n = wuxm::VisualTreeHelper::GetChildrenCount(node);
+                        for (int i = 0; i < n; ++i) {
+                            if (auto found = findSv(wuxm::VisualTreeHelper::GetChild(node, i))) return found;
+                        }
+                        return nullptr;
+                    };
+                try {
+                    if (auto sv = findSv(view)) {
+                        sv.ChangeView(nullptr, 0.0, nullptr, true);
+                    }
+                } catch (...) {}
+            }
+        }
     };
     refresh();
 
@@ -40556,6 +41101,7 @@ void BuildStartMenuFlyoutContent() {
         auto index = winrt::unbox_value<uint32_t>(e.ClickedItem());
         if (index < model->apps->size()) {
             auto app = (*model->apps)[index];
+            if (!app.lnkPath.empty()) RecordStartMenuRecentApp(app.lnkPath);
             if (g_startMenuFlyout) g_startMenuFlyout.Hide();
             RunInBackground([app] { ShellExecuteW(nullptr, L"open", app.target.c_str(),
                 app.args.empty() ? nullptr : app.args.c_str(), nullptr, SW_SHOWNORMAL); });
@@ -40564,11 +41110,11 @@ void BuildStartMenuFlyoutContent() {
     appsView.ItemClick(launchApp);
     pinnedView.ItemClick(launchApp);
     auto dispatcher = layout.Dispatcher();
-    RunInBackground([dispatcher, model, refresh] {
+    RunInBackground([dispatcher, model, refresh, reloadRecentAsync] {
         auto apps = std::make_shared<const std::vector<startmenu::AppEntry>>(startmenu::GetCachedApps());
         try {
             dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Normal,
-                [model, apps, refresh] {
+                [model, apps, refresh, reloadRecentAsync] {
                     model->apps = apps;
                     if (!Wh_GetIntValue(L"startMenuPinsInitialized", 0)) {
                         {
@@ -40587,6 +41133,7 @@ void BuildStartMenuFlyoutContent() {
                         Wh_SetIntValue(L"startMenuPinsInitialized", 1);
                     }
                     refresh();
+                    reloadRecentAsync();
                 });
         } catch (...) {}
     });
@@ -40805,10 +41352,19 @@ static void EnsureStartMenuFlyoutCreated() {
                 }
             }
         } catch (...) {}
+        if (g_startMenuSyncAndReset) {
+            try { g_startMenuSyncAndReset(true); } catch (...) {}
+        }
         StylePopupImmediately(sender.template as<wuxc::Primitives::FlyoutBase>());
     });
     InstallLightDismissGuard(g_startMenuFlyout);
     g_startMenuFlyout.Closed([](auto&& sender, auto&&) {
+        if (g_startAccountFlyout) {
+            try { g_startAccountFlyout.Hide(); } catch (...) {}
+        }
+        if (g_startMenuSyncAndReset) {
+            try { g_startMenuSyncAndReset(true); } catch (...) {}
+        }
         ForgetImmediateFlyoutStyleRoot(sender.template as<wuxc::Primitives::FlyoutBase>());
         UnregisterOpenPopup(sender.template as<wuxc::Primitives::FlyoutBase>());
         g_startMenuKeyboardActive = false;
@@ -40871,6 +41427,11 @@ void ShowStartMenuFlyout(bool debounce = true) {
         if (g_startMenuFlyout && g_startMenuFlyout.IsOpen()) {
             g_startMenuFlyout.Hide();
             return;
+        }
+        if (g_topBarAutoHidden.load()) {
+            g_anyChildFlyoutOpen.store(true);
+            g_flyoutOpeningGraceUntil.store(GetTickCount64() + 1500);
+            try { ShowBarForAutoHide(); } catch (...) {}
         }
         EnsureStartMenuFlyoutCreated();
 
@@ -46016,6 +46577,8 @@ void BuildStartSearchPage(wuxc::StackPanel& p) {
     p.Children().Append(MakeHeading(L"Start Menu Stylings"));
     AddBoolRow(p, L"Show Pinned section", L"showPinnedSection",
                L"Show pinned apps above All apps in the same scrolling list.");
+    AddBoolRow(p, L"Show Recent apps section", L"showRecentAppsSection",
+               L"Show recently launched apps below Pinned and above All apps.");
 
     auto foldersCard = MakeCard();
     wuxc::StackPanel folderStack;
@@ -46280,7 +46843,7 @@ static std::wstring BuildSettingsJson() {
     addInt(L"defaultSearch");
     addStr(L"startButtonAction");
     addStr(L"searchButtonAction");
-    addInt(L"showPinnedSection"); addStr(L"startSearchAlignment");
+    addInt(L"showPinnedSection"); addInt(L"showRecentAppsSection"); addStr(L"startSearchAlignment");
     for (PCWSTR key : {L"startFolderExplorer",L"startFolderDocuments",L"startFolderDownloads",L"startFolderSettings",L"startFolderPictures",L"startFolderMusic",L"startFolderVideos",L"startFolderNetwork"}) addInt(key);
     addInt(L"showRecycleBinButton");
     addInt(L"showTrayIconButton");
@@ -46543,7 +47106,7 @@ static void ApplySettingsPairs(
         L"mediaButtonShowControls", L"mediaButtonShowVisualizer",
         L"defaultStartMenu", L"defaultSearch",
         L"startButtonAction", L"searchButtonAction",
-        L"showPinnedSection", L"searchQuickControls", L"startSearchAlignment", L"startFolderExplorer", L"startFolderDocuments", L"startFolderDownloads", L"startFolderSettings",
+        L"showPinnedSection", L"showRecentAppsSection", L"searchQuickControls", L"startSearchAlignment", L"startFolderExplorer", L"startFolderDocuments", L"startFolderDownloads", L"startFolderSettings",
         L"startFolderPictures", L"startFolderMusic", L"startFolderVideos", L"startFolderNetwork",
         L"showClock", L"timeFormat", L"showDate", L"dateFormat",
         L"weatherLocationName", L"weatherLatitude", L"weatherLongitude",
@@ -46601,7 +47164,7 @@ static void ApplySettingsPairs(
         { L"mediaButtonShowName",       {   0,   1 } },
         { L"mediaButtonShowControls",   {   0,   1 } },
         { L"mediaButtonShowVisualizer", {   0,   1 } },
-        { L"showPinnedSection", {0,1} },
+        { L"showPinnedSection", {0,1} }, { L"showRecentAppsSection", {0,1} },
         { L"searchQuickControls", {0,1} },
         { L"startFolderExplorer", {0,1} }, { L"startFolderDocuments", {0,1} }, { L"startFolderDownloads", {0,1} }, { L"startFolderSettings", {0,1} },
         { L"startFolderPictures", {0,1} }, { L"startFolderMusic", {0,1} }, { L"startFolderVideos", {0,1} }, { L"startFolderNetwork", {0,1} },
@@ -48068,7 +48631,7 @@ wuxc::Grid BuildWindowContent() {
                 L"showTrayIconButton", L"showNotificationsButton",
                 L"defaultStartMenu", L"defaultSearch",
                 L"startButtonAction", L"searchButtonAction",
-        L"showPinnedSection", L"searchQuickControls", L"startSearchAlignment", L"startFolderExplorer", L"startFolderDocuments", L"startFolderDownloads", L"startFolderSettings",
+        L"showPinnedSection", L"showRecentAppsSection", L"searchQuickControls", L"startSearchAlignment", L"startFolderExplorer", L"startFolderDocuments", L"startFolderDownloads", L"startFolderSettings",
         L"startFolderPictures", L"startFolderMusic", L"startFolderVideos", L"startFolderNetwork",
                 L"showCpuUsage", L"showRamUsage", L"showGpuUsage", L"showDiskUsage",
                 L"labelCpu", L"labelRam", L"labelGpu", L"labelDisk",
@@ -48472,7 +49035,12 @@ LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             s_contentPanel = nullptr;
             s_hwnd = nullptr;
             g_settingsWindowHwnd = nullptr;
-            TrimTopBarWorkingSet(true);
+            HeapCompact(GetProcessHeap(), 0);
+            // One-shot working-set trim only after the heavy Settings XAML window closes.
+            SetProcessWorkingSetSizeEx(GetCurrentProcess(),
+                                       static_cast<SIZE_T>(-1),
+                                       static_cast<SIZE_T>(-1),
+                                       0);
             return 0;
     }
     return DefWindowProc(h, m, w, l);
@@ -48545,28 +49113,12 @@ static void BringSettingsWindowToFront(HWND hwnd) {
         ShowWindow(hwnd, SW_SHOW);
     }
 
-    HWND fg = GetForegroundWindow();
-    DWORD curTid = GetCurrentThreadId();
-    DWORD fgTid = fg ? GetWindowThreadProcessId(fg, nullptr) : 0;
-    bool attached = false;
-    if (fgTid && fgTid != curTid) {
-        attached = AttachThreadInput(fgTid, curTid, TRUE) != FALSE;
-    }
-
-    AllowSetForegroundWindow(ASFW_ANY);
-    // Z-order bounce guarantees the window rises above normal windows even when
-    // triggered from a WS_EX_NOACTIVATE topbar button or closing context menu.
-    SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                 SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
-    SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
-                 SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+    // Allows SetForegroundWindow to steal focus cleanly without AttachThreadInput.
+    INPUT input{};
+    SendInput(1, &input, sizeof(INPUT));
     BringWindowToTop(hwnd);
     SetForegroundWindow(hwnd);
     SetActiveWindow(hwnd);
-
-    if (attached) {
-        AttachThreadInput(fgTid, curTid, FALSE);
-    }
 }
 
 void CreateWindowOnCurrentThread() {
@@ -53381,122 +53933,69 @@ static void ActivateNotificationAction(const std::wstring& appId,
         struct CoNotifGuard { HRESULT hr; ~CoNotifGuard() { if (SUCCEEDED(hr)) CoUninitialize(); } } coNotifGuard{hrCoNotif};
         bool handled = false;
         const bool isReply = !inputText.empty();
+        const bool isBackground = (_wcsicmp(activationType.c_str(), L"background") == 0);
+        const bool wantForeground = (!isReply && !isBackground);
+        const HWND prevFg = GetForegroundWindow();
 
-        if (!isReply && _wcsicmp(activationType.c_str(), L"protocol") == 0) {
-            if (!args.empty()) {
-                ShellExecuteW(nullptr, L"open", args.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-                handled = true;
-            }
-        }
-
-        if (!handled && !appId.empty()) {
-            CLSID activatorClsid{};
-            if (QueryAppCustomActivatorClsid(appId, &activatorClsid)) {
-                winrt::com_ptr<TopBarINotificationActivationCallback> cb;
-                static const IID kIidNotifCb =
-                    {0x53E31837, 0x6600, 0x4A81, {0x93, 0x95, 0x75, 0xCF, 0xFE, 0x74, 0x6F, 0x94}};
-                HRESULT hr = CoCreateInstance(activatorClsid, nullptr,
-                                              CLSCTX_LOCAL_SERVER | CLSCTX_INPROC_SERVER,
-                                              kIidNotifCb, cb.put_void());
-                if (SUCCEEDED(hr) && cb) {
-                    const std::wstring keyStr = inputId.empty() ? L"textBox" : inputId;
-                    NotificationUserInputData kv{
-                        keyStr.c_str(),
-                        inputText.c_str()
-                    };
-                    hr = cb->Activate(appId.c_str(), args.c_str(),
-                                      isReply ? &kv : nullptr,
-                                      isReply ? 1u : 0u);
-                    if (SUCCEEDED(hr)) {
-                        handled = true;
-                    }
-                }
-            }
-        }
-
-        // Fallback for UWP / packaged apps when no COM CustomActivator is registered:
-        // invoke via IApplicationActivationManager (even for replies, passing action args
-        // and user input as query/launch arguments so the app processes or opens the thread).
-        if (!handled && !appId.empty() &&
-            (isReply || _wcsicmp(activationType.c_str(), L"background") != 0)) {
-            static constexpr CLSID kClsidAppActivationMgr =
-                {0x45BA127D, 0x10A8, 0x46EA, {0x8A, 0xB7, 0x56, 0xEA, 0x90, 0x78, 0x94, 0x3C}};
-            static constexpr IID kIidAppActivationMgr =
-                {0x2E941141, 0x7F97, 0x4756, {0xBA, 0x1D, 0x9D, 0xEC, 0xDE, 0x89, 0x4A, 0x3D}};
-            winrt::com_ptr<IApplicationActivationManager> aam;
-            AllowSetForegroundWindow(ASFW_ANY);
-            if (SUCCEEDED(CoCreateInstance(kClsidAppActivationMgr, nullptr,
-                                           CLSCTX_LOCAL_SERVER, kIidAppActivationMgr,
-                                           aam.put_void())) && aam) {
-                DWORD pid = 0;
-                std::wstring launchStr = args;
-                if (isReply && !inputText.empty()) {
-                    if (!launchStr.empty()) launchStr += L" ";
-                    launchStr += inputText;
-                }
-                if (SUCCEEDED(aam->ActivateApplication(
-                        appId.c_str(),
-                        launchStr.empty() ? nullptr : launchStr.c_str(),
-                        AO_NONE, &pid))) {
-                    handled = true;
-                    // Ensure the activated process window actually comes to the foreground
-                    if (pid != 0) {
-                        struct PidMatch { DWORD pid; HWND found; };
-                        PidMatch pm{ pid, nullptr };
-                        EnumWindows([](HWND h, LPARAM lp) -> BOOL {
-                            auto* m = reinterpret_cast<PidMatch*>(lp);
-                            if (!IsWindowVisible(h) && !IsIconic(h)) return TRUE;
-                            DWORD wp = 0;
-                            GetWindowThreadProcessId(h, &wp);
-                            if (wp == m->pid && GetWindow(h, GW_OWNER) == nullptr) {
-                                m->found = h;
-                                return FALSE;
-                            }
-                            return TRUE;
-                        }, reinterpret_cast<LPARAM>(&pm));
-                        if (pm.found) {
-                            if (IsIconic(pm.found)) ShowWindow(pm.found, SW_RESTORE);
-                            SwitchToThisWindow(pm.found, TRUE);
-                            SetForegroundWindow(pm.found);
-                        }
-                    }
-                }
-            }
-        }
-
-        // Tier 4: Focus an already-running top-level window matching appId or FriendlyAppName
-        if (!handled && !isReply && !appId.empty() &&
-            _wcsicmp(activationType.c_str(), L"background") != 0) {
+        auto grantForeground = []() {
+            INPUT input{};
+            SendInput(1, &input, sizeof(INPUT));
+        };
+        auto bringHwndToFront = [&](HWND h) {
+            if (!h || !IsWindow(h)) return;
+            grantForeground();
+            if (IsIconic(h)) ShowWindow(h, SW_RESTORE);
+            else ShowWindow(h, SW_SHOW);
+            BringWindowToTop(h);
+            SetForegroundWindow(h);
+        };
+        auto findMatchingAppWindow = [&](DWORD preferredPid) -> HWND {
             std::wstring appLow = ToLowerCopy(appId);
             std::wstring friendlyLow = ToLowerCopy(FriendlyAppName(appId));
-            // Strip common prefixes/suffixes for fuzzy exe/title matching
-            std::wstring token = friendlyLow;
-            if (token.empty()) token = appLow;
             struct WinSearch {
+                DWORD preferredPid = 0;
                 std::wstring appLow;
                 std::wstring friendlyLow;
-                HWND found = nullptr;
+                HWND foundByPid = nullptr;
+                HWND foundByMatch = nullptr;
             };
-            WinSearch ws{ appLow, friendlyLow, nullptr };
+            WinSearch ws{ preferredPid, appLow, friendlyLow, nullptr, nullptr };
             EnumWindows([](HWND h, LPARAM lp) -> BOOL {
                 auto* s = reinterpret_cast<WinSearch*>(lp);
                 if (!IsWindowVisible(h) && !IsIconic(h)) return TRUE;
                 if (GetWindow(h, GW_OWNER) != nullptr) return TRUE;
+                DWORD wp = 0;
+                GetWindowThreadProcessId(h, &wp);
+                DWORD realPid = GetRealAppPid(h);
+                if (s->preferredPid != 0 && (wp == s->preferredPid || realPid == s->preferredPid)) {
+                    s->foundByPid = h;
+                    return FALSE;
+                }
                 wchar_t title[256]{};
                 GetWindowTextW(h, title, ARRAYSIZE(title));
                 if (!title[0]) return TRUE;
                 std::wstring tLow = ToLowerCopy(title);
-                std::wstring exePath;
-                std::wstring exeBase;
-                if (ProcessImagePathForWindow(h, &exePath) && !exePath.empty()) {
-                    size_t sl = exePath.find_last_of(L"\\\\/");
-                    exeBase = ToLowerCopy(sl == std::wstring::npos ? exePath : exePath.substr(sl + 1));
-                    if (exeBase.size() > 4 && exeBase.substr(exeBase.size() - 4) == L".exe") {
-                        exeBase.resize(exeBase.size() - 4);
+                auto extractExeBase = [](DWORD pid) -> std::wstring {
+                    if (!pid) return L"";
+                    HANDLE hp = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+                    if (!hp) return L"";
+                    wchar_t pbuf[MAX_PATH]{};
+                    DWORD sz = ARRAYSIZE(pbuf);
+                    std::wstring res;
+                    if (QueryFullProcessImageNameW(hp, 0, pbuf, &sz) && sz > 0) {
+                        std::wstring full(pbuf, sz);
+                        size_t sl = full.find_last_of(L"\\/");
+                        res = ToLowerCopy(sl == std::wstring::npos ? full : full.substr(sl + 1));
+                        if (res.size() > 4 && res.substr(res.size() - 4) == L".exe") {
+                            res.resize(res.size() - 4);
+                        }
                     }
-                }
+                    CloseHandle(hp);
+                    return res;
+                };
+                std::wstring exeBase = extractExeBase(realPid ? realPid : wp);
                 bool match = false;
-                if (!exeBase.empty() && exeBase.size() >= 3) {
+                if (!exeBase.empty() && exeBase.size() >= 3 && exeBase != L"applicationframehost") {
                     if (s->appLow.find(exeBase) != std::wstring::npos ||
                         (!s->friendlyLow.empty() && s->friendlyLow.find(exeBase) != std::wstring::npos)) {
                         match = true;
@@ -53507,29 +54006,96 @@ static void ActivateNotificationAction(const std::wstring& appId,
                         match = true;
                     }
                 }
-                if (match) {
-                    s->found = h;
-                    return FALSE;
+                if (match && !s->foundByMatch) {
+                    s->foundByMatch = h;
                 }
                 return TRUE;
             }, reinterpret_cast<LPARAM>(&ws));
-            if (ws.found) {
-                AllowSetForegroundWindow(ASFW_ANY);
-                if (IsIconic(ws.found)) ShowWindow(ws.found, SW_RESTORE);
-                SwitchToThisWindow(ws.found, TRUE);
-                SetForegroundWindow(ws.found);
-                handled = true;
+            return ws.foundByPid ? ws.foundByPid : ws.foundByMatch;
+        };
+
+        if (wantForeground) {
+            grantForeground();
+        }
+
+        // Tier 1: Protocol activation (explicit protocol activationType or URI launch args)
+        if (!isReply && !args.empty() &&
+            (_wcsicmp(activationType.c_str(), L"protocol") == 0 ||
+             args.rfind(L"http://", 0) == 0 || args.rfind(L"https://", 0) == 0 ||
+             args.rfind(L"ms-settings:", 0) == 0)) {
+            ShellExecuteW(nullptr, L"open", args.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            handled = true;
+        }
+
+        // Tier 2: COM INotificationActivationCallback (Win32 & packaged MSIX ToastActivatorCLSID)
+        if (!handled && !appId.empty()) {
+            CLSID activatorClsid{};
+            if (QueryAppCustomActivatorClsid(appId, &activatorClsid)) {
+                static const IID kIidNotifCb =
+                    {0x53E31837, 0x6600, 0x4A81, {0x93, 0x95, 0x75, 0xCF, 0xFE, 0x74, 0x6F, 0x94}};
+                for (int attempt = 0; attempt < 2 && !handled; ++attempt) {
+                    if (attempt > 0) Sleep(150);
+                    winrt::com_ptr<TopBarINotificationActivationCallback> cb;
+                    HRESULT hr = CoCreateInstance(activatorClsid, nullptr,
+                                                  CLSCTX_LOCAL_SERVER | CLSCTX_INPROC_SERVER,
+                                                  kIidNotifCb, cb.put_void());
+                    if (SUCCEEDED(hr) && cb) {
+                        const std::wstring keyStr = inputId.empty() ? L"textBox" : inputId;
+                        NotificationUserInputData kv{
+                            keyStr.c_str(),
+                            inputText.c_str()
+                        };
+                        hr = cb->Activate(appId.c_str(), args.c_str(),
+                                          isReply ? &kv : nullptr,
+                                          isReply ? 1u : 0u);
+                        if (SUCCEEDED(hr)) {
+                            handled = true;
+                        }
+                    }
+                }
             }
         }
 
-        // Tier 5: Final fallback via shell:AppsFolder\<appId>
-        if (!handled && !isReply && !appId.empty() &&
-            _wcsicmp(activationType.c_str(), L"background") != 0) {
-            AllowSetForegroundWindow(ASFW_ANY);
-            std::wstring shellTarget = L"shell:AppsFolder\\" + appId;
-            ShellExecuteW(nullptr, L"open", shellTarget.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        // Tier 3: IApplicationActivationManager for UWP / packaged apps
+        DWORD activatedPid = 0;
+        if (!handled && !appId.empty() && (isReply || !isBackground)) {
+            static constexpr CLSID kClsidAppActivationMgr =
+                {0x45BA127D, 0x10A8, 0x46EA, {0x8A, 0xB7, 0x56, 0xEA, 0x90, 0x78, 0x94, 0x3C}};
+            static constexpr IID kIidAppActivationMgr =
+                {0x2E941141, 0x7F97, 0x4756, {0xBA, 0x1D, 0x9D, 0xEC, 0xDE, 0x89, 0x4A, 0x3D}};
+            winrt::com_ptr<IApplicationActivationManager> aam;
+            if (SUCCEEDED(CoCreateInstance(kClsidAppActivationMgr, nullptr,
+                                           CLSCTX_LOCAL_SERVER, kIidAppActivationMgr,
+                                           aam.put_void())) && aam) {
+                std::wstring launchStr = args;
+                if (isReply && !inputText.empty()) {
+                    if (!launchStr.empty()) launchStr += L" ";
+                    launchStr += inputText;
+                }
+                if (SUCCEEDED(aam->ActivateApplication(
+                        appId.c_str(),
+                        launchStr.empty() ? nullptr : launchStr.c_str(),
+                        AO_NONE, &activatedPid))) {
+                    handled = true;
+                }
+            }
         }
 
+        // Tier 4: Always ensure the app window actually comes to the foreground on click
+        if (wantForeground && !appId.empty()) {
+            if (handled) Sleep(120);
+            HWND curFg = GetForegroundWindow();
+            HWND targetWnd = findMatchingAppWindow(activatedPid);
+            if (targetWnd && curFg != targetWnd) {
+                bringHwndToFront(targetWnd);
+                handled = true;
+            } else if (!handled && curFg == prevFg) {
+                // Tier 5: Final fallback via shell:AppsFolder\<appId>
+                grantForeground();
+                std::wstring shellTarget = L"shell:AppsFolder\\" + appId;
+                ShellExecuteW(nullptr, L"open", shellTarget.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            }
+        }
     });
 }
 
@@ -54828,6 +55394,9 @@ static ActiveToastCard BuildToastCard(const windows_notifications::Item& item) {
                     g_popupLastActivityTick = GetTickCount64();
                     ActivateChildFlyoutInput(replyBox, true);
                 })), true);
+        replyBox.GotFocus([](auto&&, auto&&) {
+            g_popupLastActivityTick = GetTickCount64();
+        });
         replyBox.TextChanged([](auto&&, auto&&) {
             g_popupLastActivityTick = GetTickCount64();
         });
@@ -54868,6 +55437,11 @@ static ActiveToastCard BuildToastCard(const windows_notifications::Item& item) {
             RemoveToastCardById(captured.id, true);
         };
         AttachTopBarPressAnimation(sendBtn, 0.88f);
+        sendBtn.AddHandler(UIElement::PointerPressedEvent(),
+            winrt::box_value(Input::PointerEventHandler(
+                [](auto&&, auto&&) {
+                    g_popupLastActivityTick = GetTickCount64();
+                })), true);
         sendBtn.Click([doReply](auto&&, auto&&) { doReply(); });
         replyBox.AddHandler(UIElement::KeyDownEvent(),
             winrt::box_value(Input::KeyEventHandler(
@@ -56542,6 +57116,9 @@ FrameworkElement BuildTopBarContent() {
                 } catch (...) {}
             });
         }, L"\uE895"));
+        menu.Items().Append(MakeMenuItem(L"Task Manager", [] {
+            RunShellCommand(L"taskmgr.exe");
+        }, L"\uE9D9"));
         menu.Items().Append(MakeMenuItem(L"Restart Explorer", [] {
             RestartExplorerShell();
         }, L"\uE72C"));
@@ -60907,14 +61484,6 @@ void PinTopBarFlyoutHwnd() {
                             }
                             cur = wuxm::VisualTreeHelper::GetParent(cur);
                         }
-                    }
-                }
-                static std::atomic<ULONGLONG> s_lastIdleMemTrim{0};
-                ULONGLONG nowMemT = GetTickCount64();
-                if (nowMemT - s_lastIdleMemTrim.load(std::memory_order_relaxed) >= 60000ULL) {
-                    s_lastIdleMemTrim.store(nowMemT, std::memory_order_relaxed);
-                    if (!g_anyChildFlyoutOpen.load() && !g_settingsWindowHwnd) {
-                        TrimTopBarWorkingSet(false);
                     }
                 }
                 static std::atomic<ULONGLONG> s_lastSizeLog{0};
@@ -66351,6 +66920,7 @@ void LoadSettings() {
     g_settings.notificationPopupMaxCount = std::clamp(ReadIntSetting(L"notificationPopupMaxCount", 2), 1, 4);
     g_settings.topBarNotificationDnd = ReadIntSetting(L"topBarNotificationDnd", 0) != 0;
     g_settings.showPinnedSection = ReadIntSetting(L"showPinnedSection", 1) != 0;
+    g_settings.showRecentAppsSection = ReadIntSetting(L"showRecentAppsSection", 1) != 0;
     g_settings.startFolderExplorer = ReadIntSetting(L"startFolderExplorer", 1) != 0;
     g_settings.startFolderDocuments = ReadIntSetting(L"startFolderDocuments", 1) != 0;
     g_settings.startFolderDownloads = ReadIntSetting(L"startFolderDownloads", 1) != 0;
