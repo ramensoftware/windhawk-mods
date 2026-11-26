@@ -17,14 +17,6 @@
 
 Matches the Windows 11 taskbar background color in real time—**standalone**, with no `Windows 11 Taskbar Styler` dependency.
 
-![Taskbar Edge Color Match Preview](https://github.com/nitinp94/taskbar-edge-color-match/blob/main/Screenshot%202026-11-26%20161229.png)
-
-![Taskbar Edge Color Match Preview](https://github.com/nitinp94/taskbar-edge-color-match/blob/main/Screenshot%202026-11-26%20161257.png)
-
-![Taskbar Edge Color Match Preview](https://github.com/nitinp94/taskbar-edge-color-match/blob/main/Screenshot%202026-11-26%20161402.png)
-
-![Taskbar Edge Color Match Preview](https://github.com/nitinp94/taskbar-edge-color-match/blob/main/Screenshot%202026-11-26%20161512.png)
-
 ## Features
 - **Works Out of the Box**: Starts matching the taskbar color right after installation.
 - **Maximized App Majority Priority**: Prioritizes maximized windows on the monitor (ignoring minimized windows) and samples the majority color from the maximized app even when a floating/unmaximized window is on top.
