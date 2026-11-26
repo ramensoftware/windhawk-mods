@@ -9,7 +9,7 @@
 // @description:pt-BR Mostra barras configuráveis das cotas de assinaturas de agentes de IA e LLMs da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de tarefas do Windows 11
 // @description:ru-RU Показывает настраиваемые полосы квот подписок на ИИ-агентов и LLM от Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач Windows 11
 // @description:zh-CN 在 Windows 11 任务栏上以可配置的条形显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 智能体/LLM 订阅配额
-// @version         2.27.2
+// @version         2.27.3
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -26514,9 +26514,16 @@ static TaskbarEdge DockedEdge(VisualState const& state) {
     return TaskbarEdge::Unknown;
 }
 
+// The taskbar's frame under a XAML root's content: the content itself on builds whose frame also
+// hosts the tray (an item of its repeater), else a named descendant.
+static FrameworkElement FindTaskbarFrame(FrameworkElement const& root) {
+    if (root && winrt::get_class_name(root) == L"Taskbar.TaskbarFrame") return root;
+    return FindChildByName(root, L"TaskbarFrame", 4);
+}
+
 static StartArea FindStartArea(FrameworkElement const& root) {
     StartArea area;
-    FrameworkElement frame = FindChildByName(root, L"TaskbarFrame", 4);
+    FrameworkElement frame = FindTaskbarFrame(root);
     FrameworkElement rootGrid = frame ? FindChildByName(frame, L"RootGrid", 1) : nullptr;
     area.rootGrid = rootGrid ? rootGrid.try_as<Grid>() : nullptr;
     if (!area.rootGrid) return area;
@@ -26969,7 +26976,7 @@ static bool InjectQuotaGrid(HWND hWnd) {
         // The edge Windows docks the taskbar at, from the native position setting's DockingStates
         // (absent on builds without it). Left and right lay the bars out down the taskbar, at its
         // width.
-        FrameworkElement taskbarFrame = FindChildByName(root, L"TaskbarFrame", 4);
+        FrameworkElement taskbarFrame = FindTaskbarFrame(root);
         VisualStateGroup dockingStates{nullptr};
         if (FrameworkElement rootGrid = taskbarFrame ? FindChildByName(taskbarFrame, L"RootGrid", 1) : nullptr) {
             for (auto const& group : VisualStateManager::GetVisualStateGroups(rootGrid)) {
