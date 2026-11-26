@@ -14,7 +14,6 @@
 A lightweight **Direct2D** weather and atmosphere overlay for the Windows desktop. It brings live weather precipitation, volumetric-style drifting clouds, a UV-reactive sun and lunar-phase moon, atmospheric layers, air quality, pollen, flood-level water, and a draggable temperature button with an interactive control & forecast table without cluttering icons or windows.
 
 ### Preview
-![Desktop Weather & Particles Overlay preview]()
 
 ### Features
 - **Performance Quality Scaling:** `[System] Performance mode` (`low`, `medium`, `high`) scales particle counts, cloud layers, sun rays, moon detail, lightning branches, wave smoothness, rain splashes on `high`, and HUD detail.
