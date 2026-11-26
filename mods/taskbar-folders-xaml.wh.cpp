@@ -19,7 +19,7 @@
 // @include         ShellHost.exe
 // @include         ShellAppRuntime.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -loleacc -lruntimeobject -lshell32 -lshlwapi -luuid -lgdi32 -lcomctl32 -lcomdlg32 -ldwmapi -lmsimg32 -ladvapi32
+// @compilerOptions -lole32 -loleaut32 -loleacc -lruntimeobject -lshell32 -lshlwapi -luuid -lgdi32 -lcomctl32 -ldwmapi -lmsimg32 -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -38,7 +38,9 @@ In Windhawk settings, choose a folder design and place folders on either side of
 
 ![A folder to the left of Start with a thin divider between them](https://raw.githubusercontent.com/mamt104/windhawk-mods/94fc1a4a8a3459191976ffa62a93263b4537df9c/taskbar-folders-start.png)
 
-Folders appear on the main taskbar. Each Windows account has its own layout and copies of imported shortcuts. To pin a folder among your apps, choose **Pin to taskbar** in its menu and confirm in File Explorer. If you disable the mod, Windows keeps that pin. You can remove it with **Unpin from taskbar**.
+On the main taskbar, a folder can take the place of one of its apps or sit beside Start. Each Windows account keeps its own folders and shortcut copies.
+
+To choose a fixed spot among ordinary pinned apps, select **Pin to taskbar** in the folder menu and confirm in File Explorer. You can drag this pin anywhere among your pinned apps, even when every app in the folder is closed. If you disable the mod, the pin opens an empty folder in Explorer. If the pin is still there after uninstalling, its target will be missing. Before uninstalling, right-click the pin and choose **Unpin from taskbar**.
 
 Developed together by mamt104 and ChatGPT (Codex). mamt104 designed the interactions, tested on Windows and reported the bugs that guided the fixes.
 
@@ -48,7 +50,9 @@ Riunisci le app che usi insieme sotto una sola icona. Fai clic destro su uno spa
 
 Trascina le app per riordinarle. Per spostarne più di una, tieni premuta la prima e fai clic sulle altre. Trascina un’app sul desktop per crearvi un collegamento. Nelle impostazioni puoi scegliere lo stile e mettere le cartelle a sinistra o a destra di Start. Le app aperte mantengono il proprio pulsante sulla barra e hanno un puntino nella cartella.
 
-Le cartelle compaiono sulla barra principale. Ogni account Windows conserva il proprio ordine e una copia dei collegamenti importati. Per fissare una cartella tra le app, scegli **Integra nella barra** e conferma in Esplora file. Se disattivi la mod, puoi rimuovere l’icona fissata dal menu di Windows.
+Sulla barra principale, una cartella può prendere il posto di una delle sue app o stare accanto a Start. Ogni account Windows conserva le proprie cartelle e copie dei collegamenti.
+
+Per scegliere una posizione fissa tra le app aggiunte alla barra, scegli **Integra nella barra** dal menu della cartella e conferma in Esplora file. Puoi trascinare l’icona tra le altre app fissate anche quando tutte le app della cartella sono chiuse. Se disattivi la mod, l’icona apre una cartella vuota in Esplora file. Se l’icona resta fissata dopo la disinstallazione, perde la sua destinazione. Prima di disinstallarla, fai clic destro sull’icona e scegli **Rimuovi dalla barra delle applicazioni**.
 
 Progetto sviluppato insieme da mamt104 e ChatGPT (Codex). mamt104 ha progettato le interazioni, provato la mod su Windows e segnalato i bug che hanno guidato le correzioni.
 
@@ -58,7 +62,9 @@ Reúne las aplicaciones que usas juntas en un solo icono. Haz clic derecho en un
 
 Arrastra las aplicaciones para ordenarlas. Para mover varias, mantén pulsada la primera y haz clic en las demás. Arrastra una al escritorio para crear un acceso directo. En los ajustes puedes elegir el diseño y colocar las carpetas a la izquierda o a la derecha de Inicio. Las aplicaciones abiertas mantienen su botón en la barra y muestran un punto en la carpeta.
 
-Las carpetas aparecen en la barra principal. Cada cuenta de Windows guarda su propia distribución y copias de los accesos directos importados. Para anclar una carpeta entre las aplicaciones, elige **Anclar a la barra de tareas** y confirma en el Explorador. Si desactivas el mod, puedes desanclar el icono desde el menú de Windows.
+En la barra de tareas principal, una carpeta puede ocupar el lugar de una de sus aplicaciones o situarse junto a Inicio. Cada cuenta de Windows conserva sus propias carpetas y copias de los accesos directos.
+
+Para elegir una posición fija entre las aplicaciones ancladas, selecciona **Anclar a la barra de tareas** en el menú de la carpeta y confirma en el Explorador. Puedes arrastrar el icono entre las demás aplicaciones ancladas aunque todas las de la carpeta estén cerradas. Si desactivas el mod, el icono abre una carpeta vacía en el Explorador. Si el icono sigue anclado después de desinstalar el mod, perderá su destino. Antes de desinstalarlo, haz clic derecho en el icono y elige **Desanclar de la barra de tareas**.
 
 Proyecto desarrollado por mamt104 y ChatGPT (Codex). mamt104 diseñó las interacciones, probó la mod en Windows y comunicó los fallos que guiaron las correcciones.
 
@@ -68,7 +74,9 @@ Regroupez les applications que vous utilisez ensemble sous une seule icône. Fai
 
 Faites glisser les applications pour les réorganiser. Pour en déplacer plusieurs, maintenez le bouton enfoncé sur la première, puis cliquez sur les autres. Glissez une application sur le bureau pour y placer un raccourci. Les paramètres permettent de choisir l’apparence des dossiers et de les placer de part et d’autre de Démarrer. Une application ouverte conserve son bouton dans la barre et porte un point dans le dossier.
 
-Les dossiers apparaissent sur la barre principale. Chaque compte Windows conserve sa propre disposition et une copie des raccourcis importés. Pour épingler un dossier parmi les applications, choisissez **Épingler à la barre des tâches** et confirmez dans l’Explorateur. Si vous désactivez le mod, vous pouvez détacher l’icône depuis le menu Windows.
+Dans la barre des tâches principale, un dossier peut prendre la place de l’une de ses applications ou se placer à côté de Démarrer. Chaque compte Windows conserve ses propres dossiers et copies des raccourcis.
+
+Pour choisir une place fixe parmi les applications épinglées, sélectionnez **Épingler à la barre des tâches** dans le menu du dossier et confirmez dans l’Explorateur. Vous pouvez déplacer cette icône parmi les applications épinglées même si toutes celles du dossier sont fermées. Si vous désactivez le mod, l’icône ouvre un dossier vide dans l’Explorateur. Si l’icône reste épinglée après la désinstallation, sa cible aura disparu. Avant de le désinstaller, faites un clic droit sur l’icône et choisissez **Désépingler de la barre des tâches**.
 
 Projet développé par mamt104 et ChatGPT (Codex). mamt104 a conçu les interactions, testé le mod sous Windows et signalé les bugs qui ont guidé les corrections.
 
@@ -78,7 +86,9 @@ Fassen Sie häufig gemeinsam genutzte Apps unter einem Symbol zusammen. Klicken 
 
 Ziehen Sie Apps, um sie zu sortieren. Um mehrere zu verschieben, halten Sie die erste kurz gedrückt und klicken Sie dann auf die weiteren Apps. Ziehen Sie eine App auf den Desktop, um dort eine Verknüpfung anzulegen. In den Einstellungen wählen Sie das Design und die Position links oder rechts von Start. Geöffnete Apps behalten ihre Schaltfläche in der Taskleiste und sind im Ordner mit einem Punkt markiert.
 
-Die Ordner erscheinen in der Haupttaskleiste. Jedes Windows-Konto speichert seine eigene Anordnung und Kopien der importierten Verknüpfungen. Um einen Ordner zwischen den Apps anzuheften, wählen Sie **An Taskleiste anheften** und bestätigen Sie im Explorer. Wenn Sie die Mod deaktivieren, können Sie das angeheftete Symbol über das Windows-Menü entfernen.
+Auf der Haupttaskleiste kann ein Ordner den Platz einer seiner Apps einnehmen oder neben Start stehen. Jedes Windows-Konto behält seine eigenen Ordner und Kopien der Verknüpfungen.
+
+Für einen festen Platz unter den angehefteten Apps wählen Sie im Ordnermenü **An Taskleiste anheften** und bestätigen dies im Explorer. Das Symbol lässt sich zwischen den angehefteten Apps verschieben, auch wenn alle Apps des Ordners geschlossen sind. Wenn Sie die Mod deaktivieren, öffnet das Symbol einen leeren Ordner im Explorer. Bleibt das Symbol nach der Deinstallation angeheftet, fehlt sein Ziel. Klicken Sie vor der Deinstallation mit der rechten Maustaste auf das Symbol und wählen Sie **Von Taskleiste lösen**.
 
 Gemeinsam entwickelt von mamt104 und ChatGPT (Codex). mamt104 hat die Bedienung entworfen, die Mod unter Windows getestet und Fehler gemeldet, die anschließend behoben wurden.
 */
@@ -195,7 +205,6 @@ Gemeinsam entwickelt von mamt104 und ChatGPT (Codex). mamt104 hat die Bedienung 
 
 #include <appmodel.h>
 #include <commctrl.h>
-#include <commdlg.h>
 #include <dwmapi.h>
 #include <exdisp.h>
 #include <ole2.h>
@@ -208,7 +217,6 @@ Gemeinsam entwickelt von mamt104 und ChatGPT (Codex). mamt104 hat die Bedienung 
 #include <shobjidl.h>
 #include <windhawk_utils.h>
 #include <windowsx.h>
-#include <wrl/client.h>
 #include <array>
 #include <chrono>
 #include <cmath>
@@ -1132,8 +1140,12 @@ static void cleanUnusedPins();
 static void loadUserFolders(const fs::path& directory, const fs::path& legacy) {
     config = directory / L"folders.json";
     fs::create_directories(directory);
-    bool migrate = !fs::exists(config) && fs::exists(legacy);
-    auto source = migrate ? legacy : config;
+    auto backup = config;
+    backup += L".bak";
+    const bool missing = !fs::exists(config);
+    const bool recover = missing && fs::is_regular_file(backup);
+    const bool migrate = missing && !recover && fs::is_regular_file(legacy);
+    auto source = recover ? backup : migrate ? legacy : config;
     if (fs::exists(source)) {
         failedReadPath = source;
         groups = decode(bytes(source));
@@ -1162,7 +1174,7 @@ static void loadUserFolders(const fs::path& directory, const fs::path& legacy) {
             }
     }
     copies.capture(upgraded);
-    if (migrate || !copies.created.empty()) {
+    if (recover || migrate || !copies.created.empty()) {
         persist(upgraded);
         copies.committed = true;
         groups = std::move(upgraded);
@@ -1448,14 +1460,16 @@ struct View {
     std::vector<DropJob> drops;
     std::vector<std::function<void()>> tileOff, menuOff;
     unsigned painted = ~0u;
-    X::Thickness baseMargin{};
+    X::Thickness baseMargin{}, appliedMargin{};
+    F::IInspectable localMargin{nullptr};
+    X::Data::BindingBase marginBinding{nullptr};
     bool marginSet = false;
     double reserved = 0;
     TaskbarDrag drag;
     std::deque<TaskbarDrop> releasedButtons;
     std::map<wstring, wstring, IgnoreCase> groupByApp;
 };
-[[clang::no_destroy]] static View ui;
+[[clang::no_destroy]] static std::optional<View> ui;
 static HWND controller = nullptr;
 static std::atomic<HWND> published = nullptr;
 static DWORD uiThread = 0;
@@ -1484,15 +1498,23 @@ static constexpr UINT kTaskbarDrop = WM_APP + 322,
 static bool queueDrop(DropJob job) {
     if (stopping || !controller || !lookup(groups, job.folder))
         return false;
-    ui.drops.push_back(std::move(job));
+    ui->drops.push_back(std::move(job));
     if (SetTimer(controller, kDropTimer, 45, nullptr))
         return true;
-    ui.drops.pop_back();
+    ui->drops.pop_back();
     return false;
 }
 static void requestLayout() {
-    if (!stopping && controller && !ui.layoutPending)
-        ui.layoutPending = SetTimer(controller, kLayoutTimer, 65, nullptr) != 0;
+    if (!stopping && controller && !ui->layoutPending)
+        ui->layoutPending = SetTimer(controller, kLayoutTimer, 65, nullptr) != 0;
+}
+template <typename Callback>
+static void duringCleanup(Callback&& action) noexcept {
+    try {
+        action();
+    } catch (...) {
+        Wh_Log(L"Taskbar cleanup: %08X", winrt::to_hresult());
+    }
 }
 static void off(std::vector<std::function<void()>>& v) {
     for (auto& f : v)
@@ -1506,10 +1528,10 @@ static HWND tray() {
     return FindWindowW(L"Shell_TrayWnd", nullptr);
 }
 static bool isPrimaryRoot(FrameworkElement const& element) {
-    if (!ui.root || ui.rootDetached || !element || ui.primary != tray() ||
-        ui.monitor != MonitorFromWindow(ui.primary, MONITOR_DEFAULTTONULL))
+    if (!ui->root || ui->rootDetached || !element || ui->primary != tray() ||
+        ui->monitor != MonitorFromWindow(ui->primary, MONITOR_DEFAULTTONULL))
         return false;
-    auto root = ui.root.XamlRoot();
+    auto root = ui->root.XamlRoot();
     return root && element.XamlRoot() == root;
 }
 
@@ -1816,20 +1838,30 @@ static HICON shortcutIcon(const fs::path& path, int size = 0) {
                                 IID_PPV_ARGS(link.put()))) ||
         FAILED(link.as<IPersistFile>()->Load(path.c_str(), STGM_READ)))
         return nullptr;
-    wchar_t file[32768]{}, expanded[32768]{};
+    constexpr int pathCapacity = 32768;
+    auto file = std::make_unique_for_overwrite<wchar_t[]>(pathCapacity);
+    file[0] = L'\0';
     int index = 0;
-    if (SUCCEEDED(link->GetIconLocation(file, ARRAYSIZE(file), &index)) &&
-        *file) {
-        DWORD length =
-            ExpandEnvironmentStringsW(file, expanded, ARRAYSIZE(expanded));
-        if (length && length <= ARRAYSIZE(expanded))
-            if (auto h = resourceIcon(expanded, index, size))
-                return h;
+    if (SUCCEEDED(link->GetIconLocation(file.get(), pathCapacity, &index)) &&
+        file[0]) {
+        if (!wcschr(file.get(), L'%')) {
+            if (auto icon = resourceIcon(file.get(), index, size))
+                return icon;
+        } else {
+            DWORD length = ExpandEnvironmentStringsW(file.get(), nullptr, 0);
+            if (length && length <= pathCapacity) {
+                auto expanded = std::make_unique_for_overwrite<wchar_t[]>(length);
+                DWORD written = ExpandEnvironmentStringsW(file.get(), expanded.get(), length);
+                if (written && written <= length)
+                    if (auto icon = resourceIcon(expanded.get(), index, size))
+                        return icon;
+            }
+        }
     }
-    if (SUCCEEDED(
-            link->GetPath(file, ARRAYSIZE(file), nullptr, SLGP_RAWPATH)) &&
-        equal(fs::path(file).extension().wstring(), L".exe"))
-        return resourceIcon(file, 0, size);
+    file[0] = L'\0';
+    if (SUCCEEDED(link->GetPath(file.get(), pathCapacity, nullptr, SLGP_RAWPATH)) &&
+        file[0] && equal(fs::path(file.get()).extension().wstring(), L".exe"))
+        return resourceIcon(file.get(), 0, size);
     return nullptr;
 }
 // The pinned shortcut directory is unchanged for the duration of a typical
@@ -2060,9 +2092,9 @@ struct Preview {
     std::vector<Pixels> icons;
     M::Imaging::WriteableBitmap image{nullptr};
 };
-[[clang::no_destroy]] static std::map<wstring, Preview> previews;
+[[clang::no_destroy]] static std::optional<std::map<wstring, Preview>> previews;
 static const Preview& previewFor(const AppFolder& folder) {
-    auto& cached = previews[folder.id];
+    auto& cached = (*previews)[folder.id];
     const size_t count = std::min<size_t>(4, folder.apps.size());
     if (cached.image && cached.targets.size() == count &&
         std::equal(cached.targets.begin(), cached.targets.end(),
@@ -2416,7 +2448,7 @@ static std::optional<App> fromPath(wstring path) {
 // interactive.
 enum : UINT { kFilesDone = WM_APP + 540, kCatalogDone };
 static constexpr wchar_t kFilesClass[] = L"TaskbarFolders.Files.052";
-[[clang::no_destroy]] static std::thread fileThread, catalogThread;
+[[clang::no_destroy]] static std::optional<std::thread> fileThread, catalogThread;
 static std::atomic<HWND> fileWindow{};
 static std::atomic<bool> filesReady = false, catalogReady = false;
 static std::vector<wstring> selectedPaths;
@@ -2828,7 +2860,7 @@ static HRESULT filesStatus = S_OK;
 static bool browse(const wstring& dest, HWND notify, RECT anchor) {
     if (stopping || !notify)
         return false;
-    if (fileThread.joinable()) {
+    if (fileThread.has_value()) {
         if (HWND h = fileWindow.load())
             SetForegroundWindow(h);
         return false;
@@ -2839,7 +2871,7 @@ static bool browse(const wstring& dest, HWND notify, RECT anchor) {
     wstring title = uiText(UiString::FromFile);
     if (f)
         title += L" — " + f->name;
-    fileThread = std::thread([notify, anchor, title] {
+    fileThread.emplace([notify, anchor, title] {
         FilesWindow state;
         auto hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
         HRESULT status = S_OK;
@@ -2906,9 +2938,10 @@ static std::vector<App> readAppCatalog() {
     return result;
 }
 static bool collectCatalog() {
-    if (!catalogThread.joinable() || !catalogReady.load())
+    if (!catalogThread.has_value() || !catalogReady.load())
         return false;
-    catalogThread.join();
+    catalogThread->join();
+    catalogThread.reset();
     ++catalogGeneration;
     installedApps = std::move(incomingApps);
     catalogFailed = incomingFailed;
@@ -2918,11 +2951,11 @@ static bool collectCatalog() {
 }
 static void wantCatalog(HWND notify) {
     collectCatalog();
-    if (stopping || !notify || catalogThread.joinable() ||
+    if (stopping || !notify || catalogThread.has_value() ||
         (catalogTime &&
          GetTickCount64() - catalogTime < (catalogFailed ? 10000 : 120000)))
         return;
-    catalogThread = std::thread([notify] {
+    catalogThread.emplace([notify] {
         auto init = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
         std::vector<App> apps;
         try {
@@ -3023,10 +3056,14 @@ static void stopWorkers() {
     stopRunningWorker();
     if (HWND w = fileWindow.load())
         PostMessageW(w, WM_CLOSE, 0, 0);
-    if (fileThread.joinable())
-        fileThread.join();
-    if (catalogThread.joinable())
-        catalogThread.join();
+    if (fileThread) {
+        fileThread->join();
+        fileThread.reset();
+    }
+    if (catalogThread) {
+        catalogThread->join();
+        catalogThread.reset();
+    }
 }
 
 static void beginAdding(const wstring&);
@@ -3390,7 +3427,8 @@ struct FolderPanel : FolderPalette {
     AppSearch search;
     int cellWidth = 0, cellHeight = 0, iconSize = 0, lineHeight = 0;
     bool browsing = false;
-    bool dropRegistered = false, dropHover = false, waitForDrag = false;
+    com_ptr<IDropTarget> registeredDropTarget;
+    bool dropHover = false, waitForDrag = false;
     int pressed = -1, dropTarget = -1, contextItem = -1;
     POINT start{};
     bool dragging = false, choosing = false, autoScroll = false,
@@ -3446,7 +3484,7 @@ struct FolderPanel : FolderPalette {
     HGDIOBJ stockBitmap{};
     int bufferWidth = 0, bufferHeight = 0;
 };
-[[clang::no_destroy]] static FolderPanel panel;
+[[clang::no_destroy]] static std::optional<FolderPanel> panel;
 static uint64_t nextPreviewToken = 0;
 static void refreshPanel();
 static void findInFolder();
@@ -3464,11 +3502,11 @@ static wstring dropFolderAt(POINT);
 static void beginRename();
 static void endRename(bool save, bool restoreFocus);
 static void closePanel() {
-    if (panel.window)
-        DestroyWindow(panel.window);
+    if (panel->window)
+        DestroyWindow(panel->window);
 }
 static int px(int dip) {
-    return MulDiv(dip, panel.dpi, 96);
+    return MulDiv(dip, panel->dpi, 96);
 }
 static bool isIn(RECT r, POINT p) {
     return PtInRect(&r, p) != FALSE;
@@ -3851,36 +3889,36 @@ static void revealDesktopShortcuts(const FileDestination& target,
                                      SVSI_POSITIONITEM | SVSI_NOSTATECHANGE);
 }
 static void dragExportHint(FileSurface surface, POINT screen = {}) {
-    if (!panel.tips)
+    if (!panel->tips)
         return;
     auto next = static_cast<int>(surface);
-    if (!next && !panel.exportHint)
+    if (!next && !panel->exportHint)
         return;
     TOOLINFOW tool{sizeof(tool)};
-    tool.hwnd = panel.window;
+    tool.hwnd = panel->window;
     tool.uId = kApps;
     tool.uFlags = TTF_TRACK | TTF_ABSOLUTE | TTF_TRANSPARENT;
-    if (panel.exportHint != next) {
-        if (panel.exportHint)
-            SendMessageW(panel.tips, TTM_TRACKACTIVATE, FALSE, (LPARAM)&tool);
+    if (panel->exportHint != next) {
+        if (panel->exportHint)
+            SendMessageW(panel->tips, TTM_TRACKACTIVATE, FALSE, (LPARAM)&tool);
         if (next) {
             tool.lpszText = const_cast<PWSTR>(uiText(
                 surface == FileSurface::Desktop ? UiString::DropDesktop
                                                 : UiString::DropDirectory));
-            if (!panel.exportHint)
-                SendMessageW(panel.tips, TTM_ADDTOOLW, 0, (LPARAM)&tool);
+            if (!panel->exportHint)
+                SendMessageW(panel->tips, TTM_ADDTOOLW, 0, (LPARAM)&tool);
             else
-                SendMessageW(panel.tips, TTM_UPDATETIPTEXTW, 0, (LPARAM)&tool);
+                SendMessageW(panel->tips, TTM_UPDATETIPTEXTW, 0, (LPARAM)&tool);
         } else
-            SendMessageW(panel.tips, TTM_DELTOOLW, 0, (LPARAM)&tool);
+            SendMessageW(panel->tips, TTM_DELTOOLW, 0, (LPARAM)&tool);
     }
     if (next) {
-        SendMessageW(panel.tips, TTM_TRACKPOSITION, 0,
+        SendMessageW(panel->tips, TTM_TRACKPOSITION, 0,
                      MAKELPARAM(screen.x + px(18), screen.y + px(26)));
-        if (next != panel.exportHint)
-            SendMessageW(panel.tips, TTM_TRACKACTIVATE, TRUE, (LPARAM)&tool);
+        if (next != panel->exportHint)
+            SendMessageW(panel->tips, TTM_TRACKACTIVATE, TRUE, (LPARAM)&tool);
     }
-    panel.exportHint = next;
+    panel->exportHint = next;
 }
 static void updateExportHint(POINT screen) {
     auto hit = WindowFromPoint(screen);
@@ -3931,67 +3969,67 @@ struct AppRects {
     RECT cell{}, icon{}, label{};
 };
 static int firstItem() {
-    return panel.page * panel.capacity;
+    return panel->page * panel->capacity;
 }
 static int pageCount() {
-    int pages = ((int)panel.apps.size() + panel.capacity - 1) / panel.capacity;
+    int pages = ((int)panel->apps.size() + panel->capacity - 1) / panel->capacity;
     return std::max(1, pages);
 }
 static int pageItems() {
-    return std::clamp((int)panel.apps.size() - firstItem(), 0, panel.capacity);
+    return std::clamp((int)panel->apps.size() - firstItem(), 0, panel->capacity);
 }
 static bool onPage(int n) {
     return n >= firstItem() && n < firstItem() + pageItems();
 }
 static int selectedApp() {
-    int local = ListView_GetNextItem(panel.list, -1, LVNI_FOCUSED);
+    int local = ListView_GetNextItem(panel->list, -1, LVNI_FOCUSED);
     return local < 0 ? -1 : firstItem() + local;
 }
 static bool appRects(int index, AppRects& out) {
-    if (!onPage(index) || !panel.cellWidth)
+    if (!onPage(index) || !panel->cellWidth)
         return false;
     int local = index - firstItem(),
-        x = (local % panel.columns) * panel.cellWidth,
-        y = (local / panel.columns) * panel.cellHeight;
-    int cx = x + panel.cellWidth / 2;
-    out.cell = {x, y, x + panel.cellWidth, y + panel.cellHeight};
-    out.icon = {cx - panel.iconSize / 2, y + px(5),
-                cx + (panel.iconSize + 1) / 2, y + px(5) + panel.iconSize};
+        x = (local % panel->columns) * panel->cellWidth,
+        y = (local / panel->columns) * panel->cellHeight;
+    int cx = x + panel->cellWidth / 2;
+    out.cell = {x, y, x + panel->cellWidth, y + panel->cellHeight};
+    out.icon = {cx - panel->iconSize / 2, y + px(5),
+                cx + (panel->iconSize + 1) / 2, y + px(5) + panel->iconSize};
     int top = out.icon.bottom + px(5);
-    out.label = {x + px(3), top, x + panel.cellWidth - px(3),
-                 top + 2 * panel.lineHeight};
+    out.label = {x + px(3), top, x + panel->cellWidth - px(3),
+                 top + 2 * panel->lineHeight};
     return true;
 }
 static int hitApp(POINT p) {
     RECT bounds{};
-    GetClientRect(panel.list, &bounds);
-    if (!isIn(bounds, p) || !panel.cellWidth || !panel.cellHeight)
+    GetClientRect(panel->list, &bounds);
+    if (!isIn(bounds, p) || !panel->cellWidth || !panel->cellHeight)
         return -1;
-    int col = p.x / panel.cellWidth,
-        idx = firstItem() + (p.y / panel.cellHeight) * panel.columns + col;
-    return col < panel.columns && onPage(idx) ? idx : -1;
+    int col = p.x / panel->cellWidth,
+        idx = firstItem() + (p.y / panel->cellHeight) * panel->columns + col;
+    return col < panel->columns && onPage(idx) ? idx : -1;
 }
 static int reorderSlot(POINT p) {
     int next = hitApp(p);
-    if (next < 0 && panel.dragging && panel.page == pageCount() - 1 &&
+    if (next < 0 && panel->dragging && panel->page == pageCount() - 1 &&
         pageItems()) {
         RECT area{};
-        GetClientRect(panel.list, &area);
-        if (isIn(area, p) && panel.cellWidth && panel.cellHeight &&
-            p.x / panel.cellWidth < panel.columns &&
-            (p.y / panel.cellHeight) * panel.columns + p.x / panel.cellWidth >=
+        GetClientRect(panel->list, &area);
+        if (isIn(area, p) && panel->cellWidth && panel->cellHeight &&
+            p.x / panel->cellWidth < panel->columns &&
+            (p.y / panel->cellHeight) * panel->columns + p.x / panel->cellWidth >=
                 pageItems())
-            next = int(panel.apps.size()) - 1;
+            next = int(panel->apps.size()) - 1;
     }
     AppRects previous;
-    if (next >= 0 && next != panel.dropTarget &&
-        appRects(panel.dropTarget, previous)) {
+    if (next >= 0 && next != panel->dropTarget &&
+        appRects(panel->dropTarget, previous)) {
         // Crossing a boundary deliberately changes slots. A few pixels of hand
         // jitter don't swap them back.
-        InflateRect(&previous.cell, std::min(px(5), panel.cellWidth / 8),
-                    std::min(px(5), panel.cellHeight / 8));
+        InflateRect(&previous.cell, std::min(px(5), panel->cellWidth / 8),
+                    std::min(px(5), panel->cellHeight / 8));
         if (isIn(previous.cell, p))
-            return panel.dropTarget;
+            return panel->dropTarget;
     }
     return next;
 }
@@ -4064,34 +4102,34 @@ static MonitorTiming monitorTiming(HMONITOR display) {
 }
 static void syncPanelTiming(bool starting) {
     auto coarse = GetTickCount64();
-    bool expired = !panel.timingReadAt || coarse - panel.timingReadAt >= 2000;
+    bool expired = !panel->timingReadAt || coarse - panel->timingReadAt >= 2000;
     if (!starting && !expired)
         return;
-    auto display = MonitorFromWindow(panel.window, MONITOR_DEFAULTTONEAREST);
-    if (expired || display != panel.frameMonitor) {
+    auto display = MonitorFromWindow(panel->window, MONITOR_DEFAULTTONEAREST);
+    if (expired || display != panel->frameMonitor) {
         auto timing = monitorTiming(display);
-        bool sameCadence = display == panel.frameMonitor &&
-                           std::abs(panel.frameInterval - timing.interval) <
+        bool sameCadence = display == panel->frameMonitor &&
+                           std::abs(panel->frameInterval - timing.interval) <
                                timing.interval * .0001;
-        if (panel.fallbackTimer && panel.frameInterval != timing.interval)
-            SetTimer(panel.window, kFrameTimer,
+        if (panel->fallbackTimer && panel->frameInterval != timing.interval)
+            SetTimer(panel->window, kFrameTimer,
                      std::max(1u, (UINT)std::lround(timing.interval)), nullptr);
-        panel.frameInterval = timing.interval;
-        panel.displayPhase = timing.phase;
-        panel.frameMonitor = display;
-        panel.timingReadAt = coarse;
+        panel->frameInterval = timing.interval;
+        panel->displayPhase = timing.phase;
+        panel->frameMonitor = display;
+        panel->timingReadAt = coarse;
         if (!starting && sameCadence)
             return;
     }
-    double now = panel.frameDue = motionTime();
-    if (panel.displayPhase) {
+    double now = panel->frameDue = motionTime();
+    if (panel->displayPhase) {
         // Reserve a fraction of one refresh for painting, including on
         // high-refresh displays.
-        double lead = std::min(1.5, panel.frameInterval * .10);
-        panel.frameDue -=
-            std::fmod(now - panel.displayPhase + lead, panel.frameInterval);
-        if (panel.frameDue > now)
-            panel.frameDue -= panel.frameInterval;
+        double lead = std::min(1.5, panel->frameInterval * .10);
+        panel->frameDue -=
+            std::fmod(now - panel->displayPhase + lead, panel->frameInterval);
+        if (panel->frameDue > now)
+            panel->frameDue -= panel->frameInterval;
     }
 }
 static void CALLBACK postPanelFrame(PTP_CALLBACK_INSTANCE,
@@ -4102,74 +4140,74 @@ static void CALLBACK postPanelFrame(PTP_CALLBACK_INSTANCE,
 }
 static bool schedulePanelFrame() {
     syncPanelTiming(false);
-    if (panel.fallbackTimer)
+    if (panel->fallbackTimer)
         return true;
-    if (!panel.frameTimer) {
-        panel.frameTimer = CreateWaitableTimerExW(
+    if (!panel->frameTimer) {
+        panel->frameTimer = CreateWaitableTimerExW(
             nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
             SYNCHRONIZE | TIMER_MODIFY_STATE);
-        if (!panel.frameTimer)
-            panel.frameTimer = CreateWaitableTimerW(nullptr, FALSE, nullptr);
-        if (panel.frameTimer)
-            panel.frameWait =
-                CreateThreadpoolWait(postPanelFrame, panel.window, nullptr);
+        if (!panel->frameTimer)
+            panel->frameTimer = CreateWaitableTimerW(nullptr, FALSE, nullptr);
+        if (panel->frameTimer)
+            panel->frameWait =
+                CreateThreadpoolWait(postPanelFrame, panel->window, nullptr);
     }
-    if (panel.frameWait) {
+    if (panel->frameWait) {
         double now = motionTime();
-        panel.frameDue += panel.frameInterval;
-        if (panel.frameDue <= now)
-            panel.frameDue +=
-                (std::floor((now - panel.frameDue) / panel.frameInterval) + 1) *
-                panel.frameInterval;
+        panel->frameDue += panel->frameInterval;
+        if (panel->frameDue <= now)
+            panel->frameDue +=
+                (std::floor((now - panel->frameDue) / panel->frameInterval) + 1) *
+                panel->frameInterval;
         LARGE_INTEGER relative{};
         relative.QuadPart =
-            -std::max(1LL, std::llround((panel.frameDue - now) * 10000));
-        SetThreadpoolWait(panel.frameWait, panel.frameTimer, nullptr);
-        if (SetWaitableTimer(panel.frameTimer, &relative, 0, nullptr, nullptr,
+            -std::max(1LL, std::llround((panel->frameDue - now) * 10000));
+        SetThreadpoolWait(panel->frameWait, panel->frameTimer, nullptr);
+        if (SetWaitableTimer(panel->frameTimer, &relative, 0, nullptr, nullptr,
                              FALSE))
             return true;
-        SetThreadpoolWait(panel.frameWait, nullptr, nullptr);
+        SetThreadpoolWait(panel->frameWait, nullptr, nullptr);
     }
-    panel.fallbackTimer =
-        SetTimer(panel.window, kFrameTimer,
-                 (UINT)std::lround(panel.frameInterval), nullptr) != 0;
-    return panel.fallbackTimer;
+    panel->fallbackTimer =
+        SetTimer(panel->window, kFrameTimer,
+                 (UINT)std::lround(panel->frameInterval), nullptr) != 0;
+    return panel->fallbackTimer;
 }
 static void stopPanelFrames() {
-    if (panel.fallbackTimer) {
-        KillTimer(panel.window, kFrameTimer);
-        panel.fallbackTimer = false;
+    if (panel->fallbackTimer) {
+        KillTimer(panel->window, kFrameTimer);
+        panel->fallbackTimer = false;
     }
-    if (panel.frameWait) {
-        SetThreadpoolWait(panel.frameWait, nullptr, nullptr);
-        CancelWaitableTimer(panel.frameTimer);
-        WaitForThreadpoolWaitCallbacks(panel.frameWait, TRUE);
+    if (panel->frameWait) {
+        SetThreadpoolWait(panel->frameWait, nullptr, nullptr);
+        CancelWaitableTimer(panel->frameTimer);
+        WaitForThreadpoolWaitCallbacks(panel->frameWait, TRUE);
         MSG old{};
-        while (PeekMessageW(&old, panel.window, kPanelFrame, kPanelFrame,
+        while (PeekMessageW(&old, panel->window, kPanelFrame, kPanelFrame,
                             PM_REMOVE)) {
         }
     }
-    panel.frame = false;
+    panel->frame = false;
 }
 static void wakeMotion() {
-    if (!panel.motion || panel.frame || !panel.window)
+    if (!panel->motion || panel->frame || !panel->window)
         return;
     syncPanelTiming(true);
-    panel.frameSample = motionTime();
-    panel.frame = schedulePanelFrame();
+    panel->frameSample = motionTime();
+    panel->frame = schedulePanelFrame();
 }
 template <class Motion>
 static void target(Motion& e,
                    double v,
                    unsigned ms,
                    double now = motionTime()) {
-    if (!panel.motion)
+    if (!panel->motion)
         e.set(v);
     else {
         e.to(v, ms, now);
         if (e.active(now)) {
             wakeMotion();
-            if (!panel.frame)
+            if (!panel->frame)
                 e.set(v);
         }
     }
@@ -4362,13 +4400,13 @@ static FolderPalette paletteFor(FolderStyle style,
     return p;
 }
 static void applyPanelStyle(FolderStyle choice, bool force = false) {
-    if (!panel.window)
+    if (!panel->window)
         return;
     auto settings = appearanceSettings.load();
-    panel.requestedStyle = choice;
+    panel->requestedStyle = choice;
     auto style = choice == FolderStyle::Inherit ? settings.preset : choice;
-    if (!force && panel.appearanceReady && panel.shownStyle == style &&
-        panel.appliedSettings == settings)
+    if (!force && panel->appearanceReady && panel->shownStyle == style &&
+        panel->appliedSettings == settings)
         return;
     HIGHCONTRASTW hc{sizeof(hc)};
     SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(hc), &hc, 0);
@@ -4376,7 +4414,7 @@ static void applyPanelStyle(FolderStyle choice, bool force = false) {
     COLORREF selection = !highContrast && settings.accent == CLR_INVALID
                              ? windowsAccent()
                              : settings.accent;
-    auto next = paletteFor(style, panel.systemDark, settings.accent,
+    auto next = paletteFor(style, panel->systemDark, settings.accent,
                            highContrast, selection);
     HBRUSH background = CreateSolidBrush(next.surface),
            search = CreateSolidBrush(next.field);
@@ -4387,38 +4425,38 @@ static void applyPanelStyle(FolderStyle choice, bool force = false) {
             DeleteObject(search);
         return;
     }
-    auto oldBackground = std::exchange(panel.background, background);
-    auto oldSearch = std::exchange(panel.searchBrush, search);
-    static_cast<FolderPalette&>(panel) = next;
-    panel.shownStyle = style;
-    panel.appearanceReady = true;
-    panel.appliedSettings = settings;
+    auto oldBackground = std::exchange(panel->background, background);
+    auto oldSearch = std::exchange(panel->searchBrush, search);
+    static_cast<FolderPalette&>(*panel) = next;
+    panel->shownStyle = style;
+    panel->appearanceReady = true;
+    panel->appliedSettings = settings;
     if (oldBackground)
         DeleteObject(oldBackground);
     if (oldSearch)
         DeleteObject(oldSearch);
     BOOL dark = next.dark;
-    DwmSetWindowAttribute(panel.window, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark,
+    DwmSetWindowAttribute(panel->window, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark,
                           sizeof(dark));
     DWORD corners = style == FolderStyle::Oled || style == FolderStyle::Paper
                         ? DWMWCP_ROUNDSMALL
                         : DWMWCP_ROUND;
-    DwmSetWindowAttribute(panel.window, DWMWA_WINDOW_CORNER_PREFERENCE,
+    DwmSetWindowAttribute(panel->window, DWMWA_WINDOW_CORNER_PREFERENCE,
                           &corners, sizeof(corners));
     COLORREF border =
         next.finish == TileFinish::Plain ? DWMWA_COLOR_DEFAULT : next.rim;
-    DwmSetWindowAttribute(panel.window, DWMWA_BORDER_COLOR, &border,
+    DwmSetWindowAttribute(panel->window, DWMWA_BORDER_COLOR, &border,
                           sizeof(border));
-    if (panel.list) {
-        ListView_SetBkColor(panel.list, next.surface);
-        ListView_SetTextColor(panel.list, next.foreground);
+    if (panel->list) {
+        ListView_SetBkColor(panel->list, next.surface);
+        ListView_SetTextColor(panel->list, next.foreground);
         releasePreviousPage();
-        RedrawWindow(panel.window, nullptr, nullptr,
+        RedrawWindow(panel->window, nullptr, nullptr,
                      RDW_INVALIDATE | RDW_ALLCHILDREN);
     }
 }
 static void restorePanelStyle(bool force = false) {
-    if (auto f = lookup(groups, panel.folder))
+    if (auto f = lookup(groups, panel->folder))
         applyPanelStyle(f->style, force);
 }
 static void fillColor(HDC dc, const RECT& r, COLORREF color) {
@@ -4427,14 +4465,14 @@ static void fillColor(HDC dc, const RECT& r, COLORREF color) {
     SetDCBrushColor(dc, old);
 }
 static void paintBackdrop(HDC dc, HWND child, const RECT& bounds) {
-    FillRect(dc, &bounds, panel.background);
-    if (panel.finish == TileFinish::Plain || !panel.window)
+    FillRect(dc, &bounds, panel->background);
+    if (panel->finish == TileFinish::Plain || !panel->window)
         return;
     POINT start{};
-    if (child != panel.window)
-        MapWindowPoints(panel.window, child, &start, 1);
+    if (child != panel->window)
+        MapWindowPoints(panel->window, child, &start, 1);
     RECT client{};
-    GetClientRect(panel.window, &client);
+    GetClientRect(panel->window, &client);
     RECT header{start.x, start.y, start.x + client.right, start.y + px(41)},
         clip{};
     if (!IntersectRect(&clip, &header, &bounds))
@@ -4449,18 +4487,18 @@ static void paintBackdrop(HDC dc, HWND child, const RECT& bounds) {
                          (COLOR16)(GetBValue(c) * 257),
                          0};
     };
-    if (panel.headerLeft == panel.headerRight)
-        fillColor(dc, header, panel.headerLeft);
+    if (panel->headerLeft == panel->headerRight)
+        fillColor(dc, header, panel->headerLeft);
     else {
         TRIVERTEX stops[] = {
-            vertex(header.left, header.top, panel.headerLeft),
-            vertex(header.right, header.bottom, panel.headerRight)};
+            vertex(header.left, header.top, panel->headerLeft),
+            vertex(header.right, header.bottom, panel->headerRight)};
         GRADIENT_RECT pair{0, 1};
         GradientFill(dc, stops, 2, &pair, 1, GRADIENT_FILL_RECT_H);
     }
     RECT seam{header.left + px(12), header.bottom - px(1),
               header.right - px(12), header.bottom};
-    fillColor(dc, seam, panel.tileEdge);
+    fillColor(dc, seam, panel->tileEdge);
     RestoreDC(dc, saved);
 }
 static void outlineTile(HDC dc,
@@ -4507,9 +4545,9 @@ static HBITMAP menuSwatch(const FolderPalette& p, int size) {
     return bmp;
 }
 static void previewMenuChoice(HMENU selected, UINT id, UINT flags) {
-    if (!panel.designMenu || flags == 0xffff)
+    if (!panel->designMenu || flags == 0xffff)
         return;
-    if (selected == panel.designMenu && !(flags & MF_POPUP)) {
+    if (selected == panel->designMenu && !(flags & MF_POPUP)) {
         if (auto style = styleCommand(id)) {
             applyPanelStyle(*style);
             return;
@@ -4518,16 +4556,16 @@ static void previewMenuChoice(HMENU selected, UINT id, UINT flags) {
     restorePanelStyle();
 }
 static void choosePanelStyle(const wstring& dest, FolderStyle selected) {
-    const HWND window = panel.window;
+    const HWND window = panel->window;
     const auto previous = revision;
     if (!edit([&](Model& model) {
             if (auto f = lookup(model, dest))
                 f->style = selected;
         }))
         return;
-    if (window && panel.window == window && panel.folder == dest &&
-        panel.rendered == previous)
-        panel.rendered = revision;
+    if (window && panel->window == window && panel->folder == dest &&
+        panel->rendered == previous)
+        panel->rendered = revision;
 }
 struct RunIdentity {
     wstring key, id, exe;
@@ -4733,10 +4771,10 @@ struct WindowScanner {
     uint64_t ready = 0;
     WindowMatches result;
 };
-[[clang::no_destroy]] static WindowScanner windowScanner;
+[[clang::no_destroy]] static std::optional<WindowScanner> windowScanner;
 static uint64_t windowSequence = 0;
 static void runningWorker() {
-    auto& worker = windowScanner;
+    auto& worker = *windowScanner;
     auto init = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     std::shared_ptr<const std::vector<App>> cached;
     std::vector<RunIdentity> keys;
@@ -4791,7 +4829,9 @@ static void runningWorker() {
         CoUninitialize();
 }
 static void stopRunningWorker() {
-    auto& worker = windowScanner;
+    if (!windowScanner)
+        return;
+    auto& worker = *windowScanner;
     {
         std::lock_guard guard(worker.lock);
         worker.stopping = true;
@@ -4802,46 +4842,47 @@ static void stopRunningWorker() {
     worker.changed.notify_one();
     if (worker.thread.joinable())
         worker.thread.join();
+    windowScanner.reset();
 }
 static void requestWindowScan(bool forClick) {
-    if (!panel.window || panel.closing || panel.choosing || stopping)
+    if (!panel->window || panel->closing || panel->choosing || stopping)
         return;
-    if (!forClick && (panel.dragging || panel.pressed >= 0 || panel.transfer ||
-                      panel.incoming.token)) {
-        panel.runningDirty = true;
+    if (!forClick && (panel->dragging || panel->pressed >= 0 || panel->transfer ||
+                      panel->incoming.token)) {
+        panel->runningDirty = true;
         return;
     }
-    auto f = lookup(groups, panel.folder);
+    auto f = lookup(groups, panel->folder);
     if (!f)
         return;
-    if (panel.windowFolder != f->id || panel.windowRevision != revision ||
-        !panel.windowMembers) {
-        panel.windowMembers = std::make_shared<const std::vector<App>>(f->apps);
-        panel.windowFolder = f->id;
-        panel.windowRevision = revision;
+    if (panel->windowFolder != f->id || panel->windowRevision != revision ||
+        !panel->windowMembers) {
+        panel->windowMembers = std::make_shared<const std::vector<App>>(f->apps);
+        panel->windowFolder = f->id;
+        panel->windowRevision = revision;
     }
-    auto& worker = windowScanner;
+    auto& worker = windowScanner ? *windowScanner : windowScanner.emplace();
     {
         std::lock_guard guard(worker.lock);
         if (worker.stopping)
             return;
         if (!worker.thread.joinable())
             worker.thread = std::thread(runningWorker);
-        panel.windowRequest = ++windowSequence;
-        panel.runningDirty = false;
-        worker.next.emplace(WindowScanJob{panel.window, panel.windowRequest,
-                                          panel.windowMembers});
+        panel->windowRequest = ++windowSequence;
+        panel->runningDirty = false;
+        worker.next.emplace(WindowScanJob{panel->window, panel->windowRequest,
+                                          panel->windowMembers});
     }
     worker.changed.notify_one();
 }
 static void scheduleWindowScan() {
-    if (!panel.window || panel.closing || panel.choosing)
+    if (!panel->window || panel->closing || panel->choosing)
         return;
-    panel.runningDirty = true;
-    if (!panel.windowTimer && panel.pressed < 0 && !panel.transfer &&
-        !panel.incoming.token)
-        panel.windowTimer =
-            SetTimer(panel.window, kRunningTimer, 90, nullptr) != 0;
+    panel->runningDirty = true;
+    if (!panel->windowTimer && panel->pressed < 0 && !panel->transfer &&
+        !panel->incoming.token)
+        panel->windowTimer =
+            SetTimer(panel->window, kRunningTimer, 90, nullptr) != 0;
 }
 static void CALLBACK runningWindowEvent(HWINEVENTHOOK hook,
                                         DWORD event,
@@ -4850,12 +4891,12 @@ static void CALLBACK runningWindowEvent(HWINEVENTHOOK hook,
                                         LONG child,
                                         DWORD,
                                         DWORD) {
-    if (hook != panel.windowHook || !window || window == panel.window ||
+    if (hook != panel->windowHook || !window || window == panel->window ||
         object != OBJID_WINDOW || child != CHILDID_SELF)
         return;
     if (event == EVENT_OBJECT_DESTROY) {
         bool tracked = std::any_of(
-            panel.openWindows.begin(), panel.openWindows.end(),
+            panel->openWindows.begin(), panel->openWindows.end(),
             [&](const auto& entry) {
                 return std::any_of(
                     entry.second.begin(), entry.second.end(),
@@ -4911,11 +4952,11 @@ static void launchMenuMember(const MenuAction& command) {
         return;
     }
     const auto* folder = lookup(groups, command.folder);
-    auto members = panel.windowMembers && panel.windowFolder == folder->id &&
-                           panel.windowRevision == revision
-                       ? panel.windowMembers
+    auto members = panel->windowMembers && panel->windowFolder == folder->id &&
+                           panel->windowRevision == revision
+                       ? panel->windowMembers
                        : std::make_shared<const std::vector<App>>(folder->apps);
-    auto& worker = windowScanner;
+    auto& worker = windowScanner ? *windowScanner : windowScanner.emplace();
     {
         std::lock_guard guard(worker.lock);
         if (worker.stopping)
@@ -4927,10 +4968,12 @@ static void launchMenuMember(const MenuAction& command) {
     worker.changed.notify_one();
 }
 static void acceptMenuLaunches() {
-    decltype(windowScanner.readyClicks) ready;
+    if (!windowScanner)
+        return;
+    decltype(windowScanner->readyClicks) ready;
     {
-        std::lock_guard guard(windowScanner.lock);
-        ready.swap(windowScanner.readyClicks);
+        std::lock_guard guard(windowScanner->lock);
+        ready.swap(windowScanner->readyClicks);
     }
     for (auto& [command, windows] : ready)
         if (const auto* app = menuMember(command)) {
@@ -4939,18 +4982,18 @@ static void acceptMenuLaunches() {
         }
 }
 static void acceptWindowScan(uint64_t serial) {
-    if (!serial || serial != panel.windowRequest || panel.closing)
+    if (!windowScanner || !serial || serial != panel->windowRequest || panel->closing)
         return;
     WindowMatches next;
     {
-        std::lock_guard guard(windowScanner.lock);
-        if (serial != windowScanner.ready)
+        std::lock_guard guard(windowScanner->lock);
+        if (serial != windowScanner->ready)
             return;
-        next.swap(windowScanner.result);
-        windowScanner.ready = 0;
+        next.swap(windowScanner->result);
+        windowScanner->ready = 0;
     }
-    if (panel.windowFolder != panel.folder ||
-        panel.windowRevision != revision) {
+    if (panel->windowFolder != panel->folder ||
+        panel->windowRevision != revision) {
         scheduleWindowScan();
         return;
     }
@@ -4965,19 +5008,19 @@ static void acceptWindowScan(uint64_t serial) {
         else
             ++it;
     }
-    if (panel.openWindows != next) {
-        panel.openWindows = std::move(next);
-        if (!panel.dragging && !panel.transfer)
-            InvalidateRect(panel.list, nullptr, FALSE);
+    if (panel->openWindows != next) {
+        panel->openWindows = std::move(next);
+        if (!panel->dragging && !panel->transfer)
+            InvalidateRect(panel->list, nullptr, FALSE);
     }
-    if (panel.pendingClick) {
-        auto app = std::move(*panel.pendingClick);
-        panel.pendingClick.reset();
-        if (panel.clickSerial == panel.viewSerial && !panel.choosing &&
-            !panel.dragging && !panel.transfer && panel.pressed < 0 &&
-            !panel.incoming.token) {
-            auto it = panel.openWindows.find(app.target);
-            openFromFolder(app, it == panel.openWindows.end()
+    if (panel->pendingClick) {
+        auto app = std::move(*panel->pendingClick);
+        panel->pendingClick.reset();
+        if (panel->clickSerial == panel->viewSerial && !panel->choosing &&
+            !panel->dragging && !panel->transfer && panel->pressed < 0 &&
+            !panel->incoming.token) {
+            auto it = panel->openWindows.find(app.target);
+            openFromFolder(app, it == panel->openWindows.end()
                                     ? std::vector<AppWindow>{}
                                     : it->second);
         }
@@ -4985,9 +5028,9 @@ static void acceptWindowScan(uint64_t serial) {
 }
 static void manage(wstring dest) {
     auto folder = lookup(groups, dest);
-    if (!folder || panel.folder != dest || !panel.window)
+    if (!folder || panel->folder != dest || !panel->window)
         return;
-    const HWND window = panel.window;
+    const HWND window = panel->window;
     const auto active = folder->style;
     const auto actions = folderActions(dest, !pinnedFolder(dest));
     struct Swatches {
@@ -5008,9 +5051,9 @@ static void manage(wstring dest) {
             styles.sep();
         UINT command = firstStyleCommand + static_cast<UINT>(i);
         styles.item(command, styleLabels[i].names[language]);
-        if (i && !panel.highContrast) {
+        if (i && !panel->highContrast) {
             auto palette = paletteFor(static_cast<FolderStyle>(i),
-                                      panel.systemDark, settings.accent, false);
+                                      panel->systemDark, settings.accent, false);
             if (auto bmp = menuSwatch(palette, std::clamp(px(16), 12, 48))) {
                 swatches.images[i] = bmp;
                 MENUITEMINFOW item{sizeof(item)};
@@ -5045,16 +5088,16 @@ static void manage(wstring dest) {
     if (canUndoMove())
         menu.item(undoCommand,
                   wstring(uiText(UiString::UndoMove)) + L"\tCtrl+Z");
-    panel.designMenu = linked ? submenu : nullptr;
+    panel->designMenu = linked ? submenu : nullptr;
     TPMPARAMS placement{sizeof(placement)};
     GetWindowRect(window, &placement.rcExclude);
     auto cmd = menu.show(window, &placement);
-    if (panel.window != window || panel.folder != dest)
+    if (panel->window != window || panel->folder != dest)
         return;
-    panel.designMenu = nullptr;
+    panel->designMenu = nullptr;
     if (auto selected = styleCommand(cmd))
         choosePanelStyle(dest, *selected);
-    if (panel.window != window || panel.folder != dest)
+    if (panel->window != window || panel->folder != dest)
         return;
     restorePanelStyle();
     if (cmd == findCommand)
@@ -5068,59 +5111,59 @@ static void manage(wstring dest) {
 static void redrawTile(int n) {
     AppRects r;
     if (appRects(n, r))
-        InvalidateRect(panel.list, &r.cell, FALSE);
+        InvalidateRect(panel->list, &r.cell, FALSE);
 }
 static void highlight(int n) {
-    if (panel.hot == n)
+    if (panel->hot == n)
         return;
-    if (onPage(panel.hot))
-        target(panel.tiles[panel.hot - firstItem()].hover, 0, 125);
-    redrawTile(panel.hot);
-    panel.hot = n;
+    if (onPage(panel->hot))
+        target(panel->tiles[panel->hot - firstItem()].hover, 0, 125);
+    redrawTile(panel->hot);
+    panel->hot = n;
     if (onPage(n))
-        target(panel.tiles[n - firstItem()].hover, 1, 105);
+        target(panel->tiles[n - firstItem()].hover, 1, 105);
     redrawTile(n);
 }
 static void clearPanelSelection() {
-    if (panel.selection.empty())
+    if (panel->selection.empty())
         return;
-    panel.selection.clear();
-    InvalidateRect(panel.list, nullptr, FALSE);
+    panel->selection.clear();
+    InvalidateRect(panel->list, nullptr, FALSE);
 }
 static void toggleSelection(int n) {
-    const auto& key = panel.apps[n].target;
-    if (!panel.selection.erase(key))
-        panel.selection.insert(key);
+    const auto& key = panel->apps[n].target;
+    if (!panel->selection.erase(key))
+        panel->selection.insert(key);
     redrawTile(n);
 }
 static void cancelSelectionHold() {
-    if (panel.holdDue && panel.list)
-        KillTimer(panel.list, kSelectHoldTimer);
-    panel.holdDue = 0;
+    if (panel->holdDue && panel->list)
+        KillTimer(panel->list, kSelectHoldTimer);
+    panel->holdDue = 0;
 }
 static void acceptSelectionHold() {
-    if (!panel.holdDue || GetTickCount64() < panel.holdDue)
+    if (!panel->holdDue || GetTickCount64() < panel->holdDue)
         return;
     cancelSelectionHold();
-    if (!onPage(panel.pressed) || panel.dragging ||
-        GetCapture() != panel.list || (GetKeyState(VK_CONTROL) & 0x8000))
+    if (!onPage(panel->pressed) || panel->dragging ||
+        GetCapture() != panel->list || (GetKeyState(VK_CONTROL) & 0x8000))
         return;
-    panel.pendingClick.reset();
-    panel.selectedOnHold = true;
-    toggleSelection(panel.pressed);
+    panel->pendingClick.reset();
+    panel->selectedOnHold = true;
+    toggleSelection(panel->pressed);
 }
 static void collectDragApps(int pressed) {
-    panel.dragIndices.clear();
-    panel.dragApps.clear();
-    if (!panel.selection.contains(panel.apps[pressed].target)) {
-        panel.dragIndices.push_back(pressed);
-        panel.dragApps.push_back(panel.apps[pressed]);
+    panel->dragIndices.clear();
+    panel->dragApps.clear();
+    if (!panel->selection.contains(panel->apps[pressed].target)) {
+        panel->dragIndices.push_back(pressed);
+        panel->dragApps.push_back(panel->apps[pressed]);
         return;
     }
-    for (int i = 0; i < (int)panel.apps.size(); ++i)
-        if (panel.selection.contains(panel.apps[i].target)) {
-            panel.dragIndices.push_back(i);
-            panel.dragApps.push_back(panel.apps[i]);
+    for (int i = 0; i < (int)panel->apps.size(); ++i)
+        if (panel->selection.contains(panel->apps[i].target)) {
+            panel->dragIndices.push_back(i);
+            panel->dragApps.push_back(panel->apps[i]);
         }
 }
 static int groupInsertion(const std::vector<int>& selected, int from, int to) {
@@ -5132,126 +5175,126 @@ static int groupInsertion(const std::vector<int>& selected, int from, int to) {
 static void arrangeDrag(int dest) {
     auto now = motionTime();
     const int insertion =
-        panel.dragIndices.size() > 1 && dest >= 0
-            ? groupInsertion(panel.dragIndices, panel.pressed, dest)
+        panel->dragIndices.size() > 1 && dest >= 0
+            ? groupInsertion(panel->dragIndices, panel->pressed, dest)
             : 0;
-    for (int local = 0; local < (int)panel.tiles.size(); ++local) {
+    for (int local = 0; local < (int)panel->tiles.size(); ++local) {
         int n = firstItem() + local, slot = n;
-        if (panel.dragging && panel.dragIndices.size() > 1) {
-            if (dest >= 0 && dest != panel.pressed) {
-                const auto& indices = panel.dragIndices;
+        if (panel->dragging && panel->dragIndices.size() > 1) {
+            if (dest >= 0 && dest != panel->pressed) {
+                const auto& indices = panel->dragIndices;
                 auto at = std::lower_bound(indices.begin(), indices.end(), n);
                 if (at == indices.end() || *at != n) {
                     int rank = n - int(at - indices.begin());
                     slot = rank + (rank >= insertion ? int(indices.size()) : 0);
                 }
             }
-        } else if (panel.dragging && !panel.choosing && dest >= 0 &&
-                   n != panel.pressed) {
-            if (n > panel.pressed && n <= dest)
+        } else if (panel->dragging && !panel->choosing && dest >= 0 &&
+                   n != panel->pressed) {
+            if (n > panel->pressed && n <= dest)
                 slot = n - 1;
-            if (n < panel.pressed && n >= dest)
+            if (n < panel->pressed && n >= dest)
                 slot = n + 1;
         }
         int dx = 0, dy = 0;
         if (onPage(slot)) {
             int t = slot - firstItem();
-            dx = ((t % panel.columns) - (local % panel.columns)) *
-                 panel.cellWidth;
-            dy = ((t / panel.columns) - (local / panel.columns)) *
-                 panel.cellHeight;
+            dx = ((t % panel->columns) - (local % panel->columns)) *
+                 panel->cellWidth;
+            dy = ((t / panel->columns) - (local / panel->columns)) *
+                 panel->cellHeight;
         } else if (slot != n)
-            dy = slot < firstItem() ? -panel.cellHeight : panel.cellHeight;
-        target(panel.tiles[local].dx, dx, Slide::settleMs, now);
-        target(panel.tiles[local].dy, dy, Slide::settleMs, now);
+            dy = slot < firstItem() ? -panel->cellHeight : panel->cellHeight;
+        target(panel->tiles[local].dx, dx, Slide::settleMs, now);
+        target(panel->tiles[local].dy, dy, Slide::settleMs, now);
     }
-    if (!panel.motion || !panel.frame)
-        InvalidateRect(panel.list, nullptr, FALSE);
+    if (!panel->motion || !panel->frame)
+        InvalidateRect(panel->list, nullptr, FALSE);
 }
 static void panelPosition(double now) {
-    RECT r = panel.rest;
+    RECT r = panel->rest;
     if (r.right <= r.left)
         return;
-    int sign = panel.rest.bottom <= panel.anchor.top ? 1 : -1;
-    double reveal = panel.reveal.value(now);
+    int sign = panel->rest.bottom <= panel->anchor.top ? 1 : -1;
+    double reveal = panel->reveal.value(now);
     int shift = int(std::lround(sign * px(7) * (1 - reveal)));
     // Keep the surface outside the taskbar even during the first frame.
-    SetWindowPos(panel.window, nullptr, r.left, r.top + shift, r.right - r.left,
+    SetWindowPos(panel->window, nullptr, r.left, r.top + shift, r.right - r.left,
                  r.bottom - r.top, SWP_NOZORDER | SWP_NOACTIVATE);
-    if (panel.layered)
+    if (panel->layered)
         SetLayeredWindowAttributes(
-            panel.window, 0,
+            panel->window, 0,
             (BYTE)std::lround(255 * std::clamp(reveal, 0.0, 1.0)), LWA_ALPHA);
 }
 static void layered(bool enabled) {
-    if (panel.layered == enabled)
+    if (panel->layered == enabled)
         return;
-    auto style = GetWindowLongPtrW(panel.window, GWL_EXSTYLE);
+    auto style = GetWindowLongPtrW(panel->window, GWL_EXSTYLE);
     SetWindowLongPtrW(
-        panel.window, GWL_EXSTYLE,
+        panel->window, GWL_EXSTYLE,
         enabled ? (style | WS_EX_LAYERED) : (style & ~WS_EX_LAYERED));
-    panel.layered = enabled;
+    panel->layered = enabled;
 }
 static void revealPanel() {
-    panel.closing = false;
-    if (!panel.motion) {
-        panel.reveal.set(1);
+    panel->closing = false;
+    if (!panel->motion) {
+        panel->reveal.set(1);
         panelPosition(motionTime());
         return;
     }
     layered(true);
-    target(panel.reveal, 1, 165);
+    target(panel->reveal, 1, 165);
     panelPosition(motionTime());
-    if (!panel.frame)
+    if (!panel->frame)
         layered(false);
 }
 static void dismissPanel() {
-    if (!panel.window || panel.closing)
+    if (!panel->window || panel->closing)
         return;
-    if (!panel.motion || panel.browsing ||
-        panel.reveal.value(motionTime()) < .028) {
+    if (!panel->motion || panel->browsing ||
+        panel->reveal.value(motionTime()) < .028) {
         closePanel();
         return;
     }
-    panel.closing = true;
+    panel->closing = true;
     layered(true);
-    target(panel.reveal, 0, 110);
-    if (!panel.frame)
+    target(panel->reveal, 0, 110);
+    if (!panel->frame)
         closePanel();
 }
 static void gridEntrance(int dir) {
-    panel.arrival.set(panel.motion ? 1 : 0);
-    panel.slide = dir;
-    target(panel.arrival, 0, 175);
+    panel->arrival.set(panel->motion ? 1 : 0);
+    panel->slide = dir;
+    target(panel->arrival, 0, 175);
 }
 static void releasePreviousPage() {
-    if (!panel.previousPage)
+    if (!panel->previousPage)
         return;
-    SelectObject(panel.previousPage, panel.previousStock);
-    DeleteObject(panel.previousBitmap);
-    DeleteDC(panel.previousPage);
-    panel.previousPage = nullptr;
-    panel.previousBitmap = nullptr;
-    panel.previousStock = nullptr;
+    SelectObject(panel->previousPage, panel->previousStock);
+    DeleteObject(panel->previousBitmap);
+    DeleteDC(panel->previousPage);
+    panel->previousPage = nullptr;
+    panel->previousBitmap = nullptr;
+    panel->previousStock = nullptr;
 }
 static void tickPanel() {
-    auto now = panel.frameSample = motionTime();
-    bool active = panel.reveal.active(now);
-    if (panel.layered) {
+    auto now = panel->frameSample = motionTime();
+    bool active = panel->reveal.active(now);
+    if (panel->layered) {
         panelPosition(now);
         if (!active) {
-            if (panel.closing) {
+            if (panel->closing) {
                 closePanel();
                 return;
             }
             layered(false);
         }
     }
-    bool full = panel.arrival.damage(now, active);
-    if (!panel.arrival.active(now))
+    bool full = panel->arrival.damage(now, active);
+    if (!panel->arrival.active(now))
         releasePreviousPage();
-    for (size_t i = 0; i < panel.tiles.size(); ++i) {
-        auto& t = panel.tiles[i];
+    for (size_t i = 0; i < panel->tiles.size(); ++i) {
+        auto& t = panel->tiles[i];
         bool dx = t.dx.damage(now, active), dy = t.dy.damage(now, active);
         bool hover = t.hover.damage(now, active),
              press = t.press.damage(now, active);
@@ -5267,14 +5310,14 @@ static void tickPanel() {
             bool moved = !EqualRect(&old, &r.cell);
             if (!full && (moved || hover || press)) {
                 if (moved)
-                    InvalidateRect(panel.list, &old, FALSE);
-                InvalidateRect(panel.list, &r.cell, FALSE);
+                    InvalidateRect(panel->list, &old, FALSE);
+                InvalidateRect(panel->list, &r.cell, FALSE);
             }
         }
     }
-    if (full && panel.list)
-        InvalidateRect(panel.list, nullptr, FALSE);
-    for (auto& pair : panel.controls) {
+    if (full && panel->list)
+        InvalidateRect(panel->list, nullptr, FALSE);
+    for (auto& pair : panel->controls) {
         if (pair.second.active(now) || pair.second.duration) {
             InvalidateRect(pair.first, nullptr, FALSE);
             if (!pair.second.active(now))
@@ -5290,10 +5333,10 @@ static int appImage(int);
 static void changePage(int, bool = false);
 static void startDragImage(POINT screen);
 static void moveDragImage(POINT screen) {
-    if (!panel.dragImage)
+    if (!panel->dragImage)
         return;
-    auto& icon = *panel.dragImage;
-    POINT next{screen.x - panel.dragGrip.x, screen.y - panel.dragGrip.y};
+    auto& icon = *panel->dragImage;
+    POINT next{screen.x - panel->dragGrip.x, screen.y - panel->dragGrip.y};
     if (next.x == icon.position.x && next.y == icon.position.y)
         return;
     SetWindowPos(icon.window, nullptr, next.x, next.y, 0, 0,
@@ -5311,45 +5354,45 @@ static void moveDragImage(POINT screen) {
 static void finishDrag(bool returnToSlot = false) {
     dragExportHint(FileSurface::None);
     cancelSelectionHold();
-    panel.selectedOnHold = false;
-    const int previous = panel.pressed;
+    panel->selectedOnHold = false;
+    const int previous = panel->pressed;
     AppRects original{};
-    const bool returning = returnToSlot && panel.motion && panel.dragImage &&
+    const bool returning = returnToSlot && panel->motion && panel->dragImage &&
                            appRects(previous, original);
-    POINT imageOrigin = returning ? panel.dragImage->position : POINT{};
+    POINT imageOrigin = returning ? panel->dragImage->position : POINT{};
     if (returning)
-        ScreenToClient(panel.list, &imageOrigin);
-    if (!panel.hoverFolder.empty() && panel.list)
-        KillTimer(panel.list, kPeerTimer);
-    panel.hoverFolder.clear();
-    if (panel.list && panel.autoScroll)
-        KillTimer(panel.list, kDragPageTimer);
-    panel.autoScroll = false;
-    panel.edgeDir = 0;
-    panel.contextItem = -1;
-    panel.dragImage.reset();
-    if (onPage(panel.pressed) &&
-        panel.pressed - firstItem() < (int)panel.tiles.size())
-        target(panel.tiles[panel.pressed - firstItem()].press, 0, 105);
-    bool moved = panel.dragging;
-    if (moved && panel.dragIndices.size() > 1)
-        InvalidateRect(panel.list, nullptr, FALSE);
-    panel.dragIndices.clear();
-    panel.dragApps.clear();
-    panel.toggleOnRelease = false;
-    panel.pressed = -1;
-    panel.dragging = false;
-    panel.dropTarget = -1;
+        ScreenToClient(panel->list, &imageOrigin);
+    if (!panel->hoverFolder.empty() && panel->list)
+        KillTimer(panel->list, kPeerTimer);
+    panel->hoverFolder.clear();
+    if (panel->list && panel->autoScroll)
+        KillTimer(panel->list, kDragPageTimer);
+    panel->autoScroll = false;
+    panel->edgeDir = 0;
+    panel->contextItem = -1;
+    panel->dragImage.reset();
+    if (onPage(panel->pressed) &&
+        panel->pressed - firstItem() < (int)panel->tiles.size())
+        target(panel->tiles[panel->pressed - firstItem()].press, 0, 105);
+    bool moved = panel->dragging;
+    if (moved && panel->dragIndices.size() > 1)
+        InvalidateRect(panel->list, nullptr, FALSE);
+    panel->dragIndices.clear();
+    panel->dragApps.clear();
+    panel->toggleOnRelease = false;
+    panel->pressed = -1;
+    panel->dragging = false;
+    panel->dropTarget = -1;
     if (moved)
         arrangeDrag(-1);
     if (returning) {
-        auto& tile = panel.tiles[previous - firstItem()];
+        auto& tile = panel->tiles[previous - firstItem()];
         auto now = motionTime();
         tile.dx.from(imageOrigin.x - original.icon.left, 0, 0, now);
         tile.dy.from(imageOrigin.y - original.icon.top, 0, 0, now);
         if (tile.dx.duration || tile.dy.duration) {
             wakeMotion();
-            if (!panel.frame) {
+            if (!panel->frame) {
                 tile.dx.set(0);
                 tile.dy.set(0);
             }
@@ -5357,64 +5400,64 @@ static void finishDrag(bool returnToSlot = false) {
         tile.lastOffset = {(LONG)std::lround(tile.dx.value(now)),
                            (LONG)std::lround(tile.dy.value(now))};
         OffsetRect(&original.cell, tile.lastOffset.x, tile.lastOffset.y);
-        InvalidateRect(panel.list, &original.cell, FALSE);
+        InvalidateRect(panel->list, &original.cell, FALSE);
     }
-    if (panel.list)
+    if (panel->list)
         redrawTile(previous);
-    if (!panel.transfer && panel.list && GetCapture() == panel.list)
+    if (!panel->transfer && panel->list && GetCapture() == panel->list)
         ReleaseCapture();
-    if (panel.runningDirty && previous >= 0)
+    if (panel->runningDirty && previous >= 0)
         scheduleWindowScan();
 }
 static int edgeDirection(POINT pt) {
     RECT r{};
-    GetClientRect(panel.list, &r);
+    GetClientRect(panel->list, &r);
     if (!isIn(r, pt))
         return 0;
-    if (panel.page > 0 && pt.x < px(14))
+    if (panel->page > 0 && pt.x < px(14))
         return -1;
-    if (panel.page + 1 < pageCount() && pt.x >= r.right - px(14))
+    if (panel->page + 1 < pageCount() && pt.x >= r.right - px(14))
         return 1;
     return 0;
 }
 static void updateDragEdge(POINT p) {
     int edge = edgeDirection(p);
-    if (edge == panel.edgeDir)
+    if (edge == panel->edgeDir)
         return;
-    if (panel.autoScroll)
-        KillTimer(panel.list, kDragPageTimer);
-    panel.edgeDir = edge;
-    panel.autoScroll =
-        edge && SetTimer(panel.list, kDragPageTimer, 420, nullptr) != 0;
+    if (panel->autoScroll)
+        KillTimer(panel->list, kDragPageTimer);
+    panel->edgeDir = edge;
+    panel->autoScroll =
+        edge && SetTimer(panel->list, kDragPageTimer, 420, nullptr) != 0;
 }
 static void dragAt(POINT p) {
-    if (panel.pressed < 0 || panel.choosing)
+    if (panel->pressed < 0 || panel->choosing)
         return;
     POINT screen = p;
-    ClientToScreen(panel.list, &screen);
-    if (!panel.dragging && pastDragThreshold(panel.start, p, panel.dpi)) {
+    ClientToScreen(panel->list, &screen);
+    if (!panel->dragging && pastDragThreshold(panel->start, p, panel->dpi)) {
         cancelSelectionHold();
-        if (panel.toggleOnRelease &&
-            !panel.selection.contains(panel.apps[panel.pressed].target))
-            toggleSelection(panel.pressed);
-        collectDragApps(panel.pressed);
-        panel.dragging = true;
-        panel.dropTarget = panel.pressed;
-        if (panel.dragIndices.size() > 1)
-            InvalidateRect(panel.list, nullptr, FALSE);
+        if (panel->toggleOnRelease &&
+            !panel->selection.contains(panel->apps[panel->pressed].target))
+            toggleSelection(panel->pressed);
+        collectDragApps(panel->pressed);
+        panel->dragging = true;
+        panel->dropTarget = panel->pressed;
+        if (panel->dragIndices.size() > 1)
+            InvalidateRect(panel->list, nullptr, FALSE);
         startDragImage(screen);
-        redrawTile(panel.pressed);
+        redrawTile(panel->pressed);
     }
-    if (!panel.dragging)
+    if (!panel->dragging)
         return;
-    panel.dragPoint = p;
+    panel->dragPoint = p;
     updateDragEdge(p);
     int dest = reorderSlot(p);
-    if (dest != panel.dropTarget) {
-        panel.dropTarget = dest;
+    if (dest != panel->dropTarget) {
+        panel->dropTarget = dest;
         arrangeDrag(dest);
     }
-    if (dest < 0 && !isIn(panel.bar, screen))
+    if (dest < 0 && !isIn(panel->bar, screen))
         updateExportHint(screen);
     else
         dragExportHint(FileSurface::None);
@@ -5422,17 +5465,17 @@ static void dragAt(POINT p) {
     trackPeer(screen);
 }
 static void advanceDragPage(POINT screen) {
-    KillTimer(panel.list, kDragPageTimer);
-    panel.autoScroll = false;
-    int direction = std::exchange(panel.edgeDir, 0);
-    if (!direction || (!panel.dragging && !panel.incoming.token))
+    KillTimer(panel->list, kDragPageTimer);
+    panel->autoScroll = false;
+    int direction = std::exchange(panel->edgeDir, 0);
+    if (!direction || (!panel->dragging && !panel->incoming.token))
         return;
     POINT pt = screen;
-    ScreenToClient(panel.list, &pt);
+    ScreenToClient(panel->list, &pt);
     if (edgeDirection(pt) != direction)
         return;
-    changePage(panel.page + direction, true);
-    if (panel.incoming.token)
+    changePage(panel->page + direction, true);
+    if (panel->incoming.token)
         positionIncoming(screen);
     else
         dragAt(pt);
@@ -5446,19 +5489,19 @@ struct TilePose {
 using TilePoses = std::vector<TilePose>;
 static TilePoses visiblePoses() {
     TilePoses poses;
-    if (!panel.motion || !panel.list)
+    if (!panel->motion || !panel->list)
         return poses;
     auto now = motionTime();
     POINT origin{};
-    ClientToScreen(panel.list, &origin);
-    poses.reserve(panel.tiles.size());
-    for (int i = 0; i < (int)panel.tiles.size(); ++i) {
+    ClientToScreen(panel->list, &origin);
+    poses.reserve(panel->tiles.size());
+    for (int i = 0; i < (int)panel->tiles.size(); ++i) {
         int n = firstItem() + i;
         AppRects r;
         if (!appRects(n, r))
             continue;
-        auto& t = panel.tiles[i];
-        poses.push_back({panel.apps[n].target,
+        auto& t = panel->tiles[i];
+        poses.push_back({panel->apps[n].target,
                          origin.x + r.cell.left + t.dx.value(now),
                          origin.y + r.cell.top + t.dy.value(now),
                          t.dx.velocity(now), t.dy.velocity(now)});
@@ -5469,19 +5512,19 @@ static void settleTiles(const TilePoses& poses) {
     if (poses.empty())
         return;
     POINT origin{};
-    ClientToScreen(panel.list, &origin);
+    ClientToScreen(panel->list, &origin);
     auto now = motionTime();
-    for (int i = 0; i < (int)panel.tiles.size(); ++i) {
+    for (int i = 0; i < (int)panel->tiles.size(); ++i) {
         int n = firstItem() + i;
         AppRects r;
         if (!appRects(n, r))
             continue;
         auto p = std::find_if(poses.begin(), poses.end(), [&](const auto& v) {
-            return v.key == panel.apps[n].target;
+            return v.key == panel->apps[n].target;
         });
         if (p == poses.end())
             continue;
-        auto& t = panel.tiles[i];
+        auto& t = panel->tiles[i];
         double x = p->x - origin.x - r.cell.left,
                y = p->y - origin.y - r.cell.top;
         t.dx.from(x, p->vx, 0, now);
@@ -5489,7 +5532,7 @@ static void settleTiles(const TilePoses& poses) {
         t.lastOffset = {(LONG)std::lround(x), (LONG)std::lround(y)};
         if (t.dx.duration || t.dy.duration) {
             wakeMotion();
-            if (!panel.frame) {
+            if (!panel->frame) {
                 t.dx.set(0);
                 t.dy.set(0);
                 t.lastOffset = {};
@@ -5504,16 +5547,16 @@ static void updatePageRange(int first, int last) {
         end = std::min(firstItem() + pageItems(), last + 1);
     for (int n = begin; n < end; ++n) {
         auto local = n - firstItem();
-        ListView_SetItemText(panel.list, local, 0,
-                             const_cast<PWSTR>(panel.apps[n].name.c_str()));
-        panel.tiles[local] = {};
+        ListView_SetItemText(panel->list, local, 0,
+                             const_cast<PWSTR>(panel->apps[n].name.c_str()));
+        panel->tiles[local] = {};
         redrawTile(n);
     }
 }
 static void populatePage();
 static void moveApp(int from, int to) {
-    if (panel.rendered != revision || !validIndex(from, panel.apps.size()) ||
-        !validIndex(to, panel.apps.size())) {
+    if (panel->rendered != revision || !validIndex(from, panel->apps.size()) ||
+        !validIndex(to, panel->apps.size())) {
         finishDrag();
         return;
     }
@@ -5521,40 +5564,40 @@ static void moveApp(int from, int to) {
         finishDrag(true);
         return;
     }
-    if (panel.dragApps.empty())
+    if (panel->dragApps.empty())
         collectDragApps(from);
-    if (panel.dragApps.size() > 1 || panel.filtering) {
+    if (panel->dragApps.size() > 1 || panel->filtering) {
         auto poses = visiblePoses();
-        const int slot = groupInsertion(panel.dragIndices, from, to);
+        const int slot = groupInsertion(panel->dragIndices, from, to);
         std::vector<App> order;
-        order.reserve(panel.apps.size());
-        for (int n = 0; n < (int)panel.apps.size(); ++n)
-            if (!std::binary_search(panel.dragIndices.begin(),
-                                    panel.dragIndices.end(), n))
-                order.push_back(panel.apps[n]);
-        order.insert(order.begin() + slot, panel.dragApps.begin(),
-                     panel.dragApps.end());
-        if (order == panel.apps) {
+        order.reserve(panel->apps.size());
+        for (int n = 0; n < (int)panel->apps.size(); ++n)
+            if (!std::binary_search(panel->dragIndices.begin(),
+                                    panel->dragIndices.end(), n))
+                order.push_back(panel->apps[n]);
+        order.insert(order.begin() + slot, panel->dragApps.begin(),
+                     panel->dragApps.end());
+        if (order == panel->apps) {
             finishDrag(true);
             return;
         }
-        const auto id = panel.folder;
-        const auto lead = panel.apps[from].target;
-        if (panel.dragImage && panel.motion && onPage(to)) {
+        const auto id = panel->folder;
+        const auto lead = panel->apps[from].target;
+        if (panel->dragImage && panel->motion && onPage(to)) {
             AppRects rect;
             appRects(to, rect);
             std::erase_if(
                 poses, [&](const TilePose& pose) { return pose.key == lead; });
             poses.push_back({lead,
-                             double(panel.dragImage->position.x -
+                             double(panel->dragImage->position.x -
                                     (rect.icon.left - rect.cell.left)),
-                             double(panel.dragImage->position.y -
+                             double(panel->dragImage->position.y -
                                     (rect.icon.top - rect.cell.top)),
                              0, 0});
         }
         std::set<wstring, IgnoreCase> visible;
-        if (panel.filtering)
-            for (const auto& item : panel.apps)
+        if (panel->filtering)
+            for (const auto& item : panel->apps)
                 visible.insert(item.target);
         finishDrag();
         if (!editMove([&](Model& m) {
@@ -5568,61 +5611,61 @@ static void moveApp(int from, int to) {
                             a = *next++;
                 }
             }) ||
-            !panel.window)
+            !panel->window)
             return;
-        panel.apps = std::move(order);
-        panel.rendered = revision;
-        ++panel.viewSerial;
+        panel->apps = std::move(order);
+        panel->rendered = revision;
+        ++panel->viewSerial;
         int leadIndex =
-            int(std::find_if(panel.apps.begin(), panel.apps.end(),
+            int(std::find_if(panel->apps.begin(), panel->apps.end(),
                              [&](const App& a) { return a.target == lead; }) -
-                panel.apps.begin());
+                panel->apps.begin());
         if (!onPage(leadIndex)) {
-            panel.page = leadIndex / panel.capacity;
+            panel->page = leadIndex / panel->capacity;
             populatePage();
         } else
             updatePageRange(firstItem(), firstItem() + pageItems() - 1);
         settleTiles(poses);
-        ListView_SetItemState(panel.list, leadIndex - firstItem(),
+        ListView_SetItemState(panel->list, leadIndex - firstItem(),
                               LVIS_SELECTED | LVIS_FOCUSED,
                               LVIS_SELECTED | LVIS_FOCUSED);
         return;
     }
-    auto a = panel.apps[from], b = panel.apps[to];
-    wstring id = panel.folder;
+    auto a = panel->apps[from], b = panel->apps[to];
+    wstring id = panel->folder;
     auto poses = visiblePoses();
-    if (panel.dragImage && panel.motion && onPage(to)) {
-        POINT pointer = panel.dragPoint;
-        ClientToScreen(panel.list, &pointer);
+    if (panel->dragImage && panel->motion && onPage(to)) {
+        POINT pointer = panel->dragPoint;
+        ClientToScreen(panel->list, &pointer);
         std::erase_if(poses, [&](const auto& v) { return v.key == a.target; });
         AppRects dest;
         appRects(to, dest);
         poses.push_back({a.target,
-                         double(pointer.x - panel.dragGrip.x -
+                         double(pointer.x - panel->dragGrip.x -
                                 (dest.icon.left - dest.cell.left)),
-                         double(pointer.y - panel.dragGrip.y -
+                         double(pointer.y - panel->dragGrip.y -
                                 (dest.icon.top - dest.cell.top)),
                          0, 0});
     }
     finishDrag();
-    if (!editMove([&](Model& m) { reorder(m, id, a, b); }) || !panel.window)
+    if (!editMove([&](Model& m) { reorder(m, id, a, b); }) || !panel->window)
         return;
-    auto& apps = panel.apps;
+    auto& apps = panel->apps;
     if (from < to)
         std::rotate(apps.begin() + from, apps.begin() + from + 1,
                     apps.begin() + to + 1);
     else
         std::rotate(apps.begin() + to, apps.begin() + from,
                     apps.begin() + from + 1);
-    panel.rendered = revision;
-    ++panel.viewSerial;
-    if (panel.page != to / panel.capacity) {
-        panel.page = to / panel.capacity;
+    panel->rendered = revision;
+    ++panel->viewSerial;
+    if (panel->page != to / panel->capacity) {
+        panel->page = to / panel->capacity;
         populatePage();
     } else
         updatePageRange(std::min(from, to), std::max(from, to));
     settleTiles(poses);
-    ListView_SetItemState(panel.list, to - firstItem(),
+    ListView_SetItemState(panel->list, to - firstItem(),
                           LVIS_SELECTED | LVIS_FOCUSED,
                           LVIS_SELECTED | LVIS_FOCUSED);
 }
@@ -5639,16 +5682,16 @@ panelChild(HWND h, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR sub, DWORD_PTR) {
         if ((msg == WM_MOUSEWHEEL || msg == WM_MOUSEHWHEEL) &&
             pageWheel(msg, wp))
             return 0;
-        if (panel.closing && ((msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST) ||
+        if (panel->closing && ((msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST) ||
                               msg == WM_KEYDOWN))
             return 0;
-        if (msg == WM_KEYDOWN && panel.choosing && wp == 'F' &&
+        if (msg == WM_KEYDOWN && panel->choosing && wp == 'F' &&
             (GetKeyState(VK_CONTROL) & 0x8000)) {
-            SetFocus(panel.filter);
-            SendMessageW(panel.filter, EM_SETSEL, 0, -1);
+            SetFocus(panel->filter);
+            SendMessageW(panel->filter, EM_SETSEL, 0, -1);
             return 0;
         }
-        if (h == panel.nameEdit) {
+        if (h == panel->nameEdit) {
             if (msg == WM_KEYDOWN && (wp == VK_RETURN || wp == VK_ESCAPE)) {
                 endRename(wp == VK_RETURN, true);
                 return 0;
@@ -5662,49 +5705,49 @@ panelChild(HWND h, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR sub, DWORD_PTR) {
             }
             return DefSubclassProc(h, msg, wp, lp);
         }
-        if (!panel.choosing && !panel.renaming && !panel.transfer &&
-            panel.pressed < 0 && !panel.incoming.token) {
+        if (!panel->choosing && !panel->renaming && !panel->transfer &&
+            panel->pressed < 0 && !panel->incoming.token) {
             if (msg == WM_KEYDOWN && wp == 'F' &&
                 (GetKeyState(VK_CONTROL) & 0x8000)) {
                 findInFolder();
                 return 0;
             }
-            if (h != panel.filter && msg == WM_KEYDOWN && wp == 'Z' &&
+            if (h != panel->filter && msg == WM_KEYDOWN && wp == 'Z' &&
                 (GetKeyState(VK_CONTROL) & 0x8000)) {
                 if (undoMove())
                     refreshPanel();
                 return 0;
             }
-            if (h == panel.list && msg == WM_CHAR && wp == VK_SPACE)
+            if (h == panel->list && msg == WM_CHAR && wp == VK_SPACE)
                 return 0;
-            if (h == panel.list && msg == WM_KEYDOWN && wp == VK_SPACE) {
+            if (h == panel->list && msg == WM_KEYDOWN && wp == VK_SPACE) {
                 int i = selectedApp();
-                if (!(lp & (1L << 30)) && validIndex(i, panel.apps.size()))
+                if (!(lp & (1L << 30)) && validIndex(i, panel->apps.size()))
                     toggleSelection(i);
                 return 0;
             }
             if (msg == WM_KEYDOWN && wp == VK_ESCAPE &&
-                !panel.selection.empty()) {
+                !panel->selection.empty()) {
                 clearPanelSelection();
                 return 0;
             }
-            if (h == panel.list && msg == WM_CHAR && wp >= 32 && wp != 127 &&
+            if (h == panel->list && msg == WM_CHAR && wp >= 32 && wp != 127 &&
                 !(GetKeyState(VK_CONTROL) & 0x8000)) {
                 findInFolder();
-                if (panel.filtering)
-                    SendMessageW(panel.filter, WM_CHAR, wp, lp);
+                if (panel->filtering)
+                    SendMessageW(panel->filter, WM_CHAR, wp, lp);
                 return 0;
             }
-            if (panel.filtering && msg == WM_KEYDOWN && wp == VK_ESCAPE) {
+            if (panel->filtering && msg == WM_KEYDOWN && wp == VK_ESCAPE) {
                 endFolderSearch();
                 return 0;
             }
         }
-        if (msg == WM_KEYDOWN && wp == VK_F2 && !panel.choosing) {
+        if (msg == WM_KEYDOWN && wp == VK_F2 && !panel->choosing) {
             beginRename();
             return 0;
         }
-        if (msg == WM_KEYDOWN && h == panel.filter) {
+        if (msg == WM_KEYDOWN && h == panel->filter) {
             if (wp == VK_RETURN && !pageItems())
                 return 0;
             if (wp == VK_ESCAPE && GetWindowTextLengthW(h)) {
@@ -5713,11 +5756,11 @@ panelChild(HWND h, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR sub, DWORD_PTR) {
             }
             if ((wp == VK_DOWN || wp == VK_RETURN) && pageItems()) {
                 if (wp == VK_RETURN)
-                    PostMessageW(panel.window, kOpenApp, firstItem(),
-                                 panel.viewSerial);
+                    PostMessageW(panel->window, kOpenApp, firstItem(),
+                                 panel->viewSerial);
                 else {
-                    SetFocus(panel.list);
-                    ListView_SetItemState(panel.list, 0,
+                    SetFocus(panel->list);
+                    ListView_SetItemState(panel->list, 0,
                                           LVIS_SELECTED | LVIS_FOCUSED,
                                           LVIS_SELECTED | LVIS_FOCUSED);
                 }
@@ -5725,47 +5768,47 @@ panelChild(HWND h, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR sub, DWORD_PTR) {
             }
         }
         if (msg == WM_KEYDOWN && wp == VK_ESCAPE) {
-            if (panel.transfer) {
+            if (panel->transfer) {
                 endPeer({});
                 return 0;
             }
-            if (panel.pressed >= 0)
+            if (panel->pressed >= 0)
                 finishDrag(true);
-            else if (!panel.selection.empty())
+            else if (!panel->selection.empty())
                 clearPanelSelection();
             else
-                PostMessageW(panel.window, kClosePanel, 0, 0);
+                PostMessageW(panel->window, kClosePanel, 0, 0);
             return 0;
         }
         if (msg == WM_KEYDOWN && wp == VK_TAB) {
             if (HWND next = GetNextDlgTabItem(
-                    panel.window, h, (GetKeyState(VK_SHIFT) & 0x8000) != 0))
+                    panel->window, h, (GetKeyState(VK_SHIFT) & 0x8000) != 0))
                 SetFocus(next);
             return 0;
         }
         if (msg == WM_KEYDOWN && (wp == VK_PRIOR || wp == VK_NEXT)) {
-            changePage(panel.page + (wp == VK_PRIOR ? -1 : 1));
+            changePage(panel->page + (wp == VK_PRIOR ? -1 : 1));
             return 0;
         }
-        if (h == panel.filter)
+        if (h == panel->filter)
             return DefSubclassProc(h, msg, wp, lp);
-        if (h != panel.list) {
-            if (msg == WM_MOUSEMOVE && panel.hover != h) {
-                panel.hover = h;
+        if (h != panel->list) {
+            if (msg == WM_MOUSEMOVE && panel->hover != h) {
+                panel->hover = h;
                 TRACKMOUSEEVENT track{sizeof(track), TME_LEAVE, h, 0};
                 TrackMouseEvent(&track);
-                target(panel.controls[h], 1, 100);
+                target(panel->controls[h], 1, 100);
                 InvalidateRect(h, nullptr, FALSE);
             } else if (msg == WM_MOUSELEAVE) {
-                if (panel.hover == h)
-                    panel.hover = nullptr;
-                target(panel.controls[h], 0, 125);
+                if (panel->hover == h)
+                    panel->hover = nullptr;
+                target(panel->controls[h], 0, 125);
                 InvalidateRect(h, nullptr, FALSE);
             }
             return DefSubclassProc(h, msg, wp, lp);
         }
         POINT p{GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
-        if (panel.transfer) {
+        if (panel->transfer) {
             if (msg == WM_CAPTURECHANGED || msg == WM_CANCELMODE) {
                 endPeer({});
                 return 0;
@@ -5782,7 +5825,7 @@ panelChild(HWND h, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR sub, DWORD_PTR) {
                     moveDragImage(screen);
                     positionIncoming(screen);
                     trackPeer(screen);
-                    if (!isIn(panel.bar, screen))
+                    if (!isIn(panel->bar, screen))
                         updateExportHint(screen);
                     else
                         dragExportHint(FileSurface::None);
@@ -5796,11 +5839,11 @@ panelChild(HWND h, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR sub, DWORD_PTR) {
         }
         if (msg == WM_TIMER && wp == kPeerTimer) {
             KillTimer(h, kPeerTimer);
-            auto dest = panel.hoverFolder;
+            auto dest = panel->hoverFolder;
             POINT screen{};
             GetCursorPos(&screen);
             if (!dest.empty() && GetCapture() == h && primaryMouseDown() &&
-                isIn(panel.bar, screen) && dropFolderAt(screen) == dest)
+                isIn(panel->bar, screen) && dropFolderAt(screen) == dest)
                 enterPeer(dest, screen);
             return 0;
         }
@@ -5819,8 +5862,8 @@ panelChild(HWND h, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR sub, DWORD_PTR) {
             return 0;
         }
         if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONDBLCLK) {
-            panel.pendingClick.reset();
-            if (panel.incoming.token)
+            panel->pendingClick.reset();
+            if (panel->incoming.token)
                 return 0;
             finishDrag();
             if (wp & MK_CONTROL)
@@ -5830,32 +5873,32 @@ panelChild(HWND h, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR sub, DWORD_PTR) {
                 clearPanelSelection();
                 return 0;
             }
-            panel.toggleOnRelease = !panel.choosing && !panel.selection.empty();
-            panel.pressed = n;
-            panel.start = p;
+            panel->toggleOnRelease = !panel->choosing && !panel->selection.empty();
+            panel->pressed = n;
+            panel->start = p;
             highlight(n);
-            target(panel.tiles[n - firstItem()].press, 1, 75);
+            target(panel->tiles[n - firstItem()].press, 1, 75);
             SetFocus(h);
             ListView_SetItemState(h, n - firstItem(),
                                   LVIS_SELECTED | LVIS_FOCUSED,
                                   LVIS_SELECTED | LVIS_FOCUSED);
             SetCapture(h);
-            if (!panel.choosing && !panel.toggleOnRelease &&
+            if (!panel->choosing && !panel->toggleOnRelease &&
                 GetCapture() == h) {
                 const UINT delay =
                     std::clamp<UINT>(GetDoubleClickTime(), 350, 650);
                 if (SetTimer(h, kSelectHoldTimer, delay, nullptr))
-                    panel.holdDue = GetTickCount64() + delay;
+                    panel->holdDue = GetTickCount64() + delay;
             }
             return 0;
         }
         if (msg == WM_MOUSEMOVE) {
-            if (panel.pressed >= 0 && (!(wp & MK_LBUTTON) || GetCapture() != h))
+            if (panel->pressed >= 0 && (!(wp & MK_LBUTTON) || GetCapture() != h))
                 finishDrag(true);
-            if (panel.pressed >= 0)
+            if (panel->pressed >= 0)
                 dragAt(p);
             else {
-                if (panel.hot < 0) {
+                if (panel->hot < 0) {
                     TRACKMOUSEEVENT track{sizeof(track), TME_LEAVE, h, 0};
                     TrackMouseEvent(&track);
                 }
@@ -5864,22 +5907,22 @@ panelChild(HWND h, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR sub, DWORD_PTR) {
             return 0;
         }
         if (msg == WM_LBUTTONUP) {
-            if (panel.pressed < 0 || GetCapture() != h) {
+            if (panel->pressed < 0 || GetCapture() != h) {
                 finishDrag(true);
                 return 0;
             }
-            if (panel.dragging) {
+            if (panel->dragging) {
                 POINT screen = p;
                 ClientToScreen(h, &screen);
                 moveDragImage(screen);
             }
-            int from = panel.pressed,
-                to = panel.dragging ? reorderSlot(p) : hitApp(p);
+            int from = panel->pressed,
+                to = panel->dragging ? reorderSlot(p) : hitApp(p);
             bool moved =
-                panel.dragging || pastDragThreshold(panel.start, p, panel.dpi);
-            if (moved && !panel.choosing) {
-                panel.dragPoint = p;
-                if (validIndex(to, panel.apps.size()))
+                panel->dragging || pastDragThreshold(panel->start, p, panel->dpi);
+            if (moved && !panel->choosing) {
+                panel->dragPoint = p;
+                if (validIndex(to, panel->apps.size()))
                     moveApp(from, to);
                 else if (ClientToScreen(h, &p))
                     moveAppOutside(from, p);
@@ -5888,8 +5931,8 @@ panelChild(HWND h, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR sub, DWORD_PTR) {
             } else {
                 if (!moved && !(wp & MK_CONTROL))
                     acceptSelectionHold();
-                const bool held = panel.selectedOnHold,
-                           toggle = panel.toggleOnRelease;
+                const bool held = panel->selectedOnHold,
+                           toggle = panel->toggleOnRelease;
                 finishDrag();
                 if (held || (wp & MK_CONTROL) ||
                     (GetKeyState(VK_CONTROL) & 0x8000))
@@ -5899,30 +5942,30 @@ panelChild(HWND h, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR sub, DWORD_PTR) {
                     return 0;
                 }
                 if (!moved && from == to)
-                    PostMessageW(panel.window, kOpenApp, from,
-                                 panel.viewSerial);
+                    PostMessageW(panel->window, kOpenApp, from,
+                                 panel->viewSerial);
             }
             return 0;
         }
         if (msg == WM_RBUTTONDOWN || msg == WM_RBUTTONDBLCLK) {
             finishDrag();
-            ++panel.viewSerial;
-            if (!panel.choosing && (panel.contextItem = hitApp(p)) >= 0)
+            ++panel->viewSerial;
+            if (!panel->choosing && (panel->contextItem = hitApp(p)) >= 0)
                 SetCapture(h);
             return 0;
         }
         if (msg == WM_RBUTTONUP) {
-            int item = std::exchange(panel.contextItem, -1);
-            if (GetCapture() != h || panel.pressed >= 0)
+            int item = std::exchange(panel->contextItem, -1);
+            if (GetCapture() != h || panel->pressed >= 0)
                 return 0;
             ReleaseCapture();
             if (item >= 0 && item == hitApp(p) && ClientToScreen(h, &p))
-                SendMessageW(panel.window, WM_CONTEXTMENU, (WPARAM)h,
+                SendMessageW(panel->window, WM_CONTEXTMENU, (WPARAM)h,
                              MAKELPARAM(p.x, p.y));
             return 0;
         }
         if (msg == WM_CAPTURECHANGED || msg == WM_CANCELMODE) {
-            if (panel.pressed >= 0 || panel.contextItem >= 0)
+            if (panel->pressed >= 0 || panel->contextItem >= 0)
                 finishDrag(true);
         }
         if (msg == WM_TIMER && wp == kDragPageTimer) {
@@ -5934,7 +5977,7 @@ panelChild(HWND h, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR sub, DWORD_PTR) {
         if (msg == WM_KEYDOWN && wp == VK_RETURN) {
             int i = selectedApp();
             if (i >= 0)
-                PostMessageW(panel.window, kOpenApp, i, panel.viewSerial);
+                PostMessageW(panel->window, kOpenApp, i, panel->viewSerial);
             return 0;
         }
         if (msg == WM_KEYDOWN && pageItems() &&
@@ -5942,19 +5985,19 @@ panelChild(HWND h, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR sub, DWORD_PTR) {
              wp == VK_LEFT || wp == VK_RIGHT)) {
             int i = selectedApp(), step = wp == VK_LEFT    ? -1
                                           : wp == VK_RIGHT ? 1
-                                          : wp == VK_UP    ? -panel.columns
-                                                           : panel.columns;
+                                          : wp == VK_UP    ? -panel->columns
+                                                           : panel->columns;
             int dest =
                 wp == VK_HOME  ? 0
-                : wp == VK_END ? (int)panel.apps.size() - 1
+                : wp == VK_END ? (int)panel->apps.size() - 1
                 : i < 0 ? firstItem()
-                        : std::clamp(i + step, 0, (int)panel.apps.size() - 1);
-            if (!panel.choosing && (GetKeyState(VK_CONTROL) & 0x8000) &&
+                        : std::clamp(i + step, 0, (int)panel->apps.size() - 1);
+            if (!panel->choosing && (GetKeyState(VK_CONTROL) & 0x8000) &&
                 (wp == VK_LEFT || wp == VK_RIGHT)) {
                 moveApp(i, dest);
                 return 0;
             }
-            changePage(dest / panel.capacity);
+            changePage(dest / panel->capacity);
             ListView_SetItemState(h, dest - firstItem(),
                                   LVIS_SELECTED | LVIS_FOCUSED,
                                   LVIS_SELECTED | LVIS_FOCUSED);
@@ -5982,9 +6025,9 @@ static HICON shellIcon(const App& a) {
 static HICON panelIcon(const App& app) {
     // Request the device-pixel size once. Keep the original alpha icon for the
     // small hover zoom.
-    int size = std::clamp(panel.iconSize + px(2), 16, 160);
+    int size = std::clamp(panel->iconSize + px(2), 16, 160);
     if (app.target.find(L'!') == wstring::npos) {
-        if (auto h = desktopIcon(app, size, &panel.pinnedIcons))
+        if (auto h = desktopIcon(app, size, &panel->pinnedIcons))
             return h;
     }
     auto item = shellItem(launchTarget(app));
@@ -6012,73 +6055,73 @@ static HICON panelIcon(const App& app) {
     return result ? result : shellIcon(app);
 }
 static int appImage(int index) {
-    if (!panel.icons || !validIndex(index, panel.apps.size()))
+    if (!panel->icons || !validIndex(index, panel->apps.size()))
         return -1;
-    const auto& app = panel.apps[index];
-    auto found = panel.imageSlots.find(app.target);
-    if (found != panel.imageSlots.end()) {
-        auto& entry = panel.glyphs[found->second];
-        entry.use = ++panel.iconClock;
+    const auto& app = panel->apps[index];
+    auto found = panel->imageSlots.find(app.target);
+    if (found != panel->imageSlots.end()) {
+        auto& entry = panel->glyphs[found->second];
+        entry.use = ++panel->iconClock;
         return found->second;
     }
-    if (panel.failedIcons.contains(app.target))
+    if (panel->failedIcons.contains(app.target))
         return -1;
     HICON icon = panelIcon(app);
     if (!icon) {
-        if (panel.failedIcons.size() >= kIconCacheLimit)
-            panel.failedIcons.clear();
-        panel.failedIcons.insert(app.target);
+        if (panel->failedIcons.size() >= kIconCacheLimit)
+            panel->failedIcons.clear();
+        panel->failedIcons.insert(app.target);
         return -1;
     }
-    bool full = panel.glyphs.size() >= kIconCacheLimit;
+    bool full = panel->glyphs.size() >= kIconCacheLimit;
     int victim = -1;
     if (full) {
         auto oldest = std::min_element(
-            panel.glyphs.begin(), panel.glyphs.end(),
+            panel->glyphs.begin(), panel->glyphs.end(),
             [](const auto& a, const auto& b) { return a.use < b.use; });
-        victim = (int)(oldest - panel.glyphs.begin());
+        victim = (int)(oldest - panel->glyphs.begin());
     }
-    int slot = ImageList_ReplaceIcon(panel.icons, victim, icon);
+    int slot = ImageList_ReplaceIcon(panel->icons, victim, icon);
     if (slot < 0) {
         DestroyIcon(icon);
         return -1;
     }
-    if ((size_t)slot >= panel.glyphs.size())
-        panel.glyphs.resize(slot + 1);
-    auto& entry = panel.glyphs[slot];
+    if ((size_t)slot >= panel->glyphs.size())
+        panel->glyphs.resize(slot + 1);
+    auto& entry = panel->glyphs[slot];
     if (entry.handle) {
-        panel.imageSlots.erase(entry.target);
+        panel->imageSlots.erase(entry.target);
         DestroyIcon(entry.handle);
     }
-    entry = {icon, app.target, ++panel.iconClock};
-    panel.imageSlots.emplace(entry.target, slot);
+    entry = {icon, app.target, ++panel->iconClock};
+    panel->imageSlots.emplace(entry.target, slot);
     return slot;
 }
 static void drawGrid(HDC dc) {
     RECT client{};
-    GetClientRect(panel.list, &client);
-    FillRect(dc, &client, panel.background);
-    auto now = panel.frame ? panel.frameSample : motionTime();
-    double enter = panel.arrival.value(now);
+    GetClientRect(panel->list, &client);
+    FillRect(dc, &client, panel->background);
+    auto now = panel->frame ? panel->frameSample : motionTime();
+    double enter = panel->arrival.value(now);
     bool keyboard =
-        GetFocus() == panel.list &&
-        !(SendMessageW(panel.list, WM_QUERYUISTATE, 0, 0) & UISF_HIDEFOCUS);
+        GetFocus() == panel->list &&
+        !(SendMessageW(panel->list, WM_QUERYUISTATE, 0, 0) & UISF_HIDEFOCUS);
     int focused = keyboard ? selectedApp() : -1;
     RECT clip{};
     int clipType = GetClipBox(dc, &clip);
     int saved = SaveDC(dc);
     SetBkMode(dc, TRANSPARENT);
-    SelectObject(dc, panel.normalFont);
-    for (int i = 0; i < (int)panel.tiles.size(); ++i) {
+    SelectObject(dc, panel->normalFont);
+    for (int i = 0; i < (int)panel->tiles.size(); ++i) {
         int index = firstItem() + i;
         AppRects r;
         if (!appRects(index, r))
             continue;
-        auto& t = panel.tiles[i];
+        auto& t = panel->tiles[i];
         int dx =
-            int(std::lround(t.dx.value(now) + enter * panel.slide * px(15)));
+            int(std::lround(t.dx.value(now) + enter * panel->slide * px(15)));
         int dy = int(
-            std::lround(t.dy.value(now) + (panel.slide ? 0 : enter * px(6))));
+            std::lround(t.dy.value(now) + (panel->slide ? 0 : enter * px(6))));
         OffsetRect(&r.cell, dx, dy);
         OffsetRect(&r.label, dx, dy);
         OffsetRect(&r.icon, dx, dy);
@@ -6090,91 +6133,91 @@ static void drawGrid(HDC dc) {
         RECT face = r.cell;
         InflateRect(&face, -px(2), -px(2));
         double hot = t.hover.value(now), press = t.press.value(now);
-        bool lifting = panel.dragImage &&
-                       (index == panel.pressed ||
-                        (panel.dragIndices.size() > 1 &&
-                         std::binary_search(panel.dragIndices.begin(),
-                                            panel.dragIndices.end(), index)));
+        bool lifting = panel->dragImage &&
+                       (index == panel->pressed ||
+                        (panel->dragIndices.size() > 1 &&
+                         std::binary_search(panel->dragIndices.begin(),
+                                            panel->dragIndices.end(), index)));
         if (lifting)
             continue;
         bool incoming =
-            panel.incoming.token && index >= panel.incoming.slot &&
-            index - panel.incoming.slot < (int)panel.incoming.apps.size();
-        bool selected = !panel.choosing &&
-                        panel.selection.contains(panel.apps[index].target);
+            panel->incoming.token && index >= panel->incoming.slot &&
+            index - panel->incoming.slot < (int)panel->incoming.apps.size();
+        bool selected = !panel->choosing &&
+                        panel->selection.contains(panel->apps[index].target);
         bool focusedTile = keyboard && focused == index;
         double shade = std::max({hot * .78, press, focusedTile ? .38 : 0.});
-        bool highlighted = panel.highContrast &&
+        bool highlighted = panel->highContrast &&
                            (incoming || selected || focusedTile || press > .4);
         if (highlighted) {
             rounded(dc, face, GetSysColor(COLOR_HIGHLIGHT), px(4));
-        } else if (panel.finish != TileFinish::Plain) {
+        } else if (panel->finish != TileFinish::Plain) {
             auto base =
-                selected ? panel.selectionFace
-                         : (incoming ? blendColor(panel.tile, panel.accent, .22)
-                                     : panel.tile);
+                selected ? panel->selectionFace
+                         : (incoming ? blendColor(panel->tile, panel->accent, .22)
+                                     : panel->tile);
             auto fill = blendColor(
-                base, selected ? panel.selectionHot : panel.buttonFace, shade);
-            auto edge = selected ? panel.selectionMark
+                base, selected ? panel->selectionHot : panel->buttonFace, shade);
+            auto edge = selected ? panel->selectionMark
                                  : (incoming || focusedTile
-                                        ? panel.accent
-                                        : blendColor(panel.tileEdge,
-                                                     panel.accent, hot * .38));
-            outlineTile(dc, face, edge, fill, px(panel.radius));
-            if (panel.finish == TileFinish::Prism) {
+                                        ? panel->accent
+                                        : blendColor(panel->tileEdge,
+                                                     panel->accent, hot * .38));
+            outlineTile(dc, face, edge, fill, px(panel->radius));
+            if (panel->finish == TileFinish::Prism) {
                 RECT sheen{face.left + px(10), face.top + px(1),
                            face.right - px(10), face.top + px(2)};
-                fillColor(dc, sheen, blendColor(fill, panel.foreground, .20));
+                fillColor(dc, sheen, blendColor(fill, panel->foreground, .20));
             }
         } else {
             if (selected)
                 rounded(
                     dc, face,
-                    blendColor(panel.selectionFace, panel.selectionHot, shade),
+                    blendColor(panel->selectionFace, panel->selectionHot, shade),
                     px(8));
             else if (shade > .005)
                 rounded(dc, face,
-                        blendColor(panel.surface, panel.buttonFace, shade),
+                        blendColor(panel->surface, panel->buttonFace, shade),
                         px(8));
             else if (incoming)
-                rounded(dc, face, blendColor(panel.surface, panel.accent, .22),
+                rounded(dc, face, blendColor(panel->surface, panel->accent, .22),
                         px(8));
         }
         if (selected) {
             RECT mark{face.left + px(4), face.top + px(5), face.left + px(7),
                       face.bottom - px(5)};
-            rounded(dc, mark, panel.selectionMark, px(2));
+            rounded(dc, mark, panel->selectionMark, px(2));
         }
         if (focusedTile) {
             RECT ring = face;
             InflateRect(&ring, -px(2), -px(2));
             DrawFocusRect(dc, &ring);
         }
-        int size = std::max(1, (int)std::lround(panel.iconSize *
+        int size = std::max(1, (int)std::lround(panel->iconSize *
                                                 (1 + .055 * hot - .125 * press -
                                                  .045 * enter)));
         int image = appImage(index);
-        if (image >= 0 && image < (int)panel.glyphs.size() &&
-            panel.glyphs[image].handle)
+        if (image >= 0 && image < (int)panel->glyphs.size() &&
+            panel->glyphs[image].handle)
             DrawIconEx(dc, (r.icon.left + r.icon.right - size) / 2,
                        (r.icon.top + r.icon.bottom - size) / 2,
-                       panel.glyphs[image].handle, size, size, 0, nullptr,
+                       panel->glyphs[image].handle, size, size, 0, nullptr,
                        DI_NORMAL);
-        if (!panel.choosing && !panel.openWindows.empty() &&
-            panel.openWindows.contains(panel.apps[index].target)) {
+        if (!panel->choosing && !panel->openWindows.empty() &&
+            panel->openWindows.contains(panel->apps[index].target)) {
             int x = (r.icon.left + r.icon.right) / 2, half = std::max(2, px(4));
             RECT dot{x - half, r.icon.bottom + px(1), x + half,
                      r.icon.bottom + px(4)};
             rounded(dc, dot,
-                    panel.highContrast
+                    panel->highContrast
                         ? GetSysColor(highlighted ? COLOR_HIGHLIGHTTEXT
                                                   : COLOR_WINDOWTEXT)
-                        : panel.accent,
+                        : panel->accent,
                     px(2));
         }
         SetTextColor(dc, highlighted ? GetSysColor(COLOR_HIGHLIGHTTEXT)
-                                     : panel.foreground);
-        const auto& label = panel.apps[index].name;
+                                     : panel->foreground);
+        const auto& label = panel->apps[index].name;
         int length = (int)label.size();
         if (length > 4 && !_wcsicmp(label.c_str() + length - 4, L".exe"))
             length -= 4;
@@ -6183,12 +6226,12 @@ static void drawGrid(HDC dc) {
                       DT_NOPREFIX);
     }
     RestoreDC(dc, saved);
-    if (panel.previousPage && enter > 0.001 && panel.slide) {
-        int x = int(std::lround(-panel.slide * px(18) * (1 - enter)));
+    if (panel->previousPage && enter > 0.001 && panel->slide) {
+        int x = int(std::lround(-panel->slide * px(18) * (1 - enter)));
         BLENDFUNCTION alpha{AC_SRC_OVER, 0, (BYTE)std::lround(255 * enter), 0};
-        AlphaBlend(dc, x, 0, panel.previousWidth, panel.previousHeight,
-                   panel.previousPage, 0, 0, panel.previousWidth,
-                   panel.previousHeight, alpha);
+        AlphaBlend(dc, x, 0, panel->previousWidth, panel->previousHeight,
+                   panel->previousPage, 0, 0, panel->previousWidth,
+                   panel->previousHeight, alpha);
     }
 }
 static HBITMAP iconBitmap32(HDC dc, HICON icon, int side, DWORD*& pixelsOut) {
@@ -6257,9 +6300,9 @@ static void stampDragCount(DragIcon& icon, size_t count) {
     int left = icon.side - width, top = icon.side - height;
     double radius = height * .5;
     auto color =
-        panel.highContrast ? GetSysColor(COLOR_HIGHLIGHT) : panel.accent;
+        panel->highContrast ? GetSysColor(COLOR_HIGHLIGHT) : panel->accent;
     auto ink =
-        panel.highContrast ? GetSysColor(COLOR_HIGHLIGHTTEXT)
+        panel->highContrast ? GetSysColor(COLOR_HIGHLIGHTTEXT)
         : contrast(color, RGB(0, 0, 0)) > contrast(color, RGB(255, 255, 255))
             ? RGB(0, 0, 0)
             : RGB(255, 255, 255);
@@ -6307,21 +6350,21 @@ static std::unique_ptr<DragIcon> makeDragIcon(int app, POINT position) {
     std::unique_ptr<DragIcon> icon(new (std::nothrow) DragIcon);
     if (!icon)
         return {};
-    icon->side = panel.iconSize;
+    icon->side = panel->iconSize;
     icon->dc = CreateCompatibleDC(nullptr);
     if (!icon->dc)
         return {};
-    icon->bitmap = iconBitmap32(icon->dc, panel.glyphs[image].handle,
+    icon->bitmap = iconBitmap32(icon->dc, panel->glyphs[image].handle,
                                 icon->side, icon->pixels);
     if (!icon->bitmap)
         return {};
     icon->stock = SelectObject(icon->dc, icon->bitmap);
-    stampDragCount(*icon, panel.dragApps.size());
+    stampDragCount(*icon, panel->dragApps.size());
     icon->window = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW |
             WS_EX_NOACTIVATE | WS_EX_TOPMOST,
         L"STATIC", L"", WS_POPUP | WS_DISABLED, 0, 0, icon->side, icon->side,
-        panel.window, nullptr, moduleInstance(), nullptr);
+        panel->window, nullptr, moduleInstance(), nullptr);
     if (!icon->window || !presentIcon(*icon, position, DragIcon::dragOpacity))
         return {};
     icon->samplePosition = position;
@@ -6331,16 +6374,16 @@ static std::unique_ptr<DragIcon> makeDragIcon(int app, POINT position) {
 }
 static void startDragImage(POINT screen) {
     AppRects r;
-    if (!appRects(panel.pressed, r))
+    if (!appRects(panel->pressed, r))
         return;
-    const auto& tile = panel.tiles[panel.pressed - firstItem()];
-    const auto now = panel.frame ? panel.frameSample : motionTime();
-    panel.dragGrip = {
-        panel.start.x - r.icon.left - (LONG)std::lround(tile.dx.value(now)),
-        panel.start.y - r.icon.top - (LONG)std::lround(tile.dy.value(now))};
-    panel.dragImage = makeDragIcon(
-        panel.pressed,
-        {screen.x - panel.dragGrip.x, screen.y - panel.dragGrip.y});
+    const auto& tile = panel->tiles[panel->pressed - firstItem()];
+    const auto now = panel->frame ? panel->frameSample : motionTime();
+    panel->dragGrip = {
+        panel->start.x - r.icon.left - (LONG)std::lround(tile.dx.value(now)),
+        panel->start.y - r.icon.top - (LONG)std::lround(tile.dy.value(now))};
+    panel->dragImage = makeDragIcon(
+        panel->pressed,
+        {screen.x - panel->dragGrip.x, screen.y - panel->dragGrip.y});
 }
 // Interpolate premultiplied BGRA channels in pairs, including alpha at soft
 // edges.
@@ -6498,7 +6541,7 @@ struct ExitClock {
     std::atomic<unsigned> fallbackMicros{16667};
     bool windowTimer{}, mixedDisplays{};
 };
-[[clang::no_destroy]] static ExitClock exitClock;
+[[clang::no_destroy]] static std::optional<ExitClock> exitClock;
 static void CALLBACK waitForExitFrames(PTP_CALLBACK_INSTANCE,
                                        void* context,
                                        PTP_WORK) {
@@ -6545,7 +6588,7 @@ static void CALLBACK waitForExitFrames(PTP_CALLBACK_INSTANCE,
     }
 }
 static void stopExitFrames() {
-    auto& clock = exitClock;
+    auto& clock = *exitClock;
     if (clock.cancel)
         SetEvent(clock.cancel);
     if (clock.work) {
@@ -6581,7 +6624,7 @@ static void stopExitFrames() {
     clock.effects.clear();
 }
 static bool scheduleExitFrames() {
-    auto& clock = exitClock;
+    auto& clock = *exitClock;
     double interval = clock.effects.front().frameInterval;
     for (const auto& effect : clock.effects)
         interval = std::min(interval, effect.frameInterval);
@@ -6611,7 +6654,7 @@ static bool scheduleExitFrames() {
     return clock.windowTimer;
 }
 static void tickExits() {
-    auto& clock = exitClock;
+    auto& clock = *exitClock;
     if (!clock.window)
         return;
     clock.posted = false;
@@ -6635,12 +6678,12 @@ static void tickExits() {
         stopExitFrames();
 }
 static void startExit(std::unique_ptr<DragIcon> icon, POINT release) {
-    if (!panel.motion || !controller || !icon)
+    if (!panel->motion || !controller || !icon)
         return;
     ExitEffect effect;
     effect.origin = icon->position;
     effect.sourceSide = icon->side;
-    effect.accent = blendColor(panel.accent, RGB(255, 255, 255), .52);
+    effect.accent = blendColor(panel->accent, RGB(255, 255, 255), .52);
     const HMONITOR monitor =
         MonitorFromPoint(release, MONITOR_DEFAULTTONEAREST);
     effect.frameInterval = monitorTiming(monitor).interval;
@@ -6678,22 +6721,22 @@ static void startExit(std::unique_ptr<DragIcon> icon, POINT release) {
         return;
     effect.since = motionTime();
     effect.nextFrame = effect.since;
-    exitClock.effects.push_back(std::move(effect));
+    exitClock->effects.push_back(std::move(effect));
     if (!scheduleExitFrames())
         stopExitFrames();
 }
 static void capturePreviousPage() {
-    if (!panel.motion || !IsWindowVisible(panel.list)) {
+    if (!panel->motion || !IsWindowVisible(panel->list)) {
         releasePreviousPage();
         return;
     }
     RECT r{};
-    GetClientRect(panel.list, &r);
+    GetClientRect(panel->list, &r);
     if (r.right <= 0 || r.bottom <= 0)
         return;
-    HDC screen = GetDC(panel.list), dc = CreateCompatibleDC(screen);
+    HDC screen = GetDC(panel->list), dc = CreateCompatibleDC(screen);
     HBITMAP bmp = CreateCompatibleBitmap(screen, r.right, r.bottom);
-    ReleaseDC(panel.list, screen);
+    ReleaseDC(panel->list, screen);
     if (!dc || !bmp) {
         if (dc)
             DeleteDC(dc);
@@ -6705,55 +6748,55 @@ static void capturePreviousPage() {
     auto stock = SelectObject(dc, bmp);
     drawGrid(dc);
     releasePreviousPage();
-    panel.previousPage = dc;
-    panel.previousBitmap = bmp;
-    panel.previousStock = stock;
-    panel.previousWidth = r.right;
-    panel.previousHeight = r.bottom;
+    panel->previousPage = dc;
+    panel->previousBitmap = bmp;
+    panel->previousStock = stock;
+    panel->previousWidth = r.right;
+    panel->previousHeight = r.bottom;
 }
 static void paintGrid(HWND h) {
     // BeginPaint validates the update region. Capture it before taking the
     // paint DC.
-    if (!panel.paintRegion)
-        panel.paintRegion = CreateRectRgn(0, 0, 0, 0);
+    if (!panel->paintRegion)
+        panel->paintRegion = CreateRectRgn(0, 0, 0, 0);
     int regionType =
-        panel.paintRegion ? GetUpdateRgn(h, panel.paintRegion, FALSE) : ERROR;
+        panel->paintRegion ? GetUpdateRgn(h, panel->paintRegion, FALSE) : ERROR;
     PAINTSTRUCT ps{};
     HDC screen = BeginPaint(h, &ps);
     RECT r{};
     GetClientRect(h, &r);
     if (r.right > 0 && r.bottom > 0) {
-        if (!panel.buffer)
-            panel.buffer = CreateCompatibleDC(screen);
-        if (panel.buffer && (!panel.bitmap || panel.bufferWidth != r.right ||
-                             panel.bufferHeight != r.bottom)) {
+        if (!panel->buffer)
+            panel->buffer = CreateCompatibleDC(screen);
+        if (panel->buffer && (!panel->bitmap || panel->bufferWidth != r.right ||
+                             panel->bufferHeight != r.bottom)) {
             if (auto bmp = CreateCompatibleBitmap(screen, r.right, r.bottom)) {
-                auto old = SelectObject(panel.buffer, bmp);
-                if (panel.bitmap)
+                auto old = SelectObject(panel->buffer, bmp);
+                if (panel->bitmap)
                     DeleteObject(old);
                 else
-                    panel.stockBitmap = old;
-                panel.bitmap = bmp;
-                panel.bufferWidth = r.right;
-                panel.bufferHeight = r.bottom;
+                    panel->stockBitmap = old;
+                panel->bitmap = bmp;
+                panel->bufferWidth = r.right;
+                panel->bufferHeight = r.bottom;
             }
         }
-        if (panel.bitmap && panel.bufferWidth == r.right &&
-            panel.bufferHeight == r.bottom) {
-            int saved = SaveDC(panel.buffer);
+        if (panel->bitmap && panel->bufferWidth == r.right &&
+            panel->bufferHeight == r.bottom) {
+            int saved = SaveDC(panel->buffer);
             if (saved) {
                 if (regionType != COMPLEXREGION ||
-                    SelectClipRgn(panel.buffer, panel.paintRegion) == ERROR)
-                    IntersectClipRect(panel.buffer, ps.rcPaint.left,
+                    SelectClipRgn(panel->buffer, panel->paintRegion) == ERROR)
+                    IntersectClipRect(panel->buffer, ps.rcPaint.left,
                                       ps.rcPaint.top, ps.rcPaint.right,
                                       ps.rcPaint.bottom);
             }
-            drawGrid(panel.buffer);
+            drawGrid(panel->buffer);
             if (saved)
-                RestoreDC(panel.buffer, saved);
+                RestoreDC(panel->buffer, saved);
             BitBlt(screen, ps.rcPaint.left, ps.rcPaint.top,
                    ps.rcPaint.right - ps.rcPaint.left,
-                   ps.rcPaint.bottom - ps.rcPaint.top, panel.buffer,
+                   ps.rcPaint.bottom - ps.rcPaint.top, panel->buffer,
                    ps.rcPaint.left, ps.rcPaint.top, SRCCOPY);
         } else
             drawGrid(screen);
@@ -6767,22 +6810,22 @@ static HWND part(PCWSTR cls,
                  bool visible = true) {
     return CreateWindowExW(
         0, cls, title, WS_CHILD | (visible ? WS_VISIBLE : 0) | style, 0, 0, 1,
-        1, panel.window, (HMENU)(INT_PTR)id, moduleInstance(), nullptr);
+        1, panel->window, (HMENU)(INT_PTR)id, moduleInstance(), nullptr);
 }
 static bool wirePanelChild(HWND h) {
     if (!h || !SetWindowSubclass(h, panelChild, 1, 0))
         return false;
-    SendMessageW(h, WM_SETFONT, (WPARAM)panel.normalFont, FALSE);
+    SendMessageW(h, WM_SETFONT, (WPARAM)panel->normalFont, FALSE);
     return true;
 }
 static void beginRename() {
-    if (panel.choosing || panel.renaming || panel.closing || panel.dragging ||
-        panel.incoming.token)
+    if (panel->choosing || panel->renaming || panel->closing || panel->dragging ||
+        panel->incoming.token)
         return;
-    auto f = lookup(groups, panel.folder);
+    auto f = lookup(groups, panel->folder);
     if (!f)
         return;
-    if (!panel.nameEdit) {
+    if (!panel->nameEdit) {
         HWND input =
             part(L"EDIT", L"", WS_TABSTOP | ES_AUTOHSCROLL, kNameEdit, false);
         if (!wirePanelChild(input)) {
@@ -6790,8 +6833,8 @@ static void beginRename() {
                 DestroyWindow(input);
             return;
         }
-        panel.nameEdit = input;
-        SendMessageW(input, WM_SETFONT, (WPARAM)panel.titleFont, FALSE);
+        panel->nameEdit = input;
+        SendMessageW(input, WM_SETFONT, (WPARAM)panel->titleFont, FALSE);
         SendMessageW(input, EM_SETLIMITTEXT, 80, 0);
         SendMessageW(input, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN,
                      MAKELPARAM(px(2), px(2)));
@@ -6799,22 +6842,22 @@ static void beginRename() {
                      (LPARAM)uiText(UiString::RenameTitle));
     }
     RECT r{};
-    GetWindowRect(panel.title, &r);
-    MapWindowPoints(nullptr, panel.window, (POINT*)&r, 2);
-    MoveWindow(panel.nameEdit, r.left, r.top + px(3), r.right - r.left,
+    GetWindowRect(panel->title, &r);
+    MapWindowPoints(nullptr, panel->window, (POINT*)&r, 2);
+    MoveWindow(panel->nameEdit, r.left, r.top + px(3), r.right - r.left,
                r.bottom - r.top - px(4), FALSE);
-    SetWindowTextW(panel.nameEdit, f->name.c_str());
-    panel.renaming = true;
-    ShowWindow(panel.title, SW_HIDE);
-    ShowWindow(panel.nameEdit, SW_SHOWNA);
-    SetFocus(panel.nameEdit);
-    SendMessageW(panel.nameEdit, EM_SETSEL, 0, -1);
+    SetWindowTextW(panel->nameEdit, f->name.c_str());
+    panel->renaming = true;
+    ShowWindow(panel->title, SW_HIDE);
+    ShowWindow(panel->nameEdit, SW_SHOWNA);
+    SetFocus(panel->nameEdit);
+    SendMessageW(panel->nameEdit, EM_SETSEL, 0, -1);
 }
 static void endRename(bool save, bool restoreFocus) {
-    if (!std::exchange(panel.renaming, false))
+    if (!std::exchange(panel->renaming, false))
         return;
-    auto id = panel.folder;
-    auto name = save ? folderName(windowText(panel.nameEdit)) : wstring{};
+    auto id = panel->folder;
+    auto name = save ? folderName(windowText(panel->nameEdit)) : wstring{};
     auto f = lookup(groups, id);
     if (f && !name.empty() && f->name != name) {
         unsigned previous = revision;
@@ -6822,99 +6865,99 @@ static void endRename(bool save, bool restoreFocus) {
                 if (auto dest = lookup(m, id))
                     dest->name = name;
             }) &&
-            panel.window) {
-            SetWindowTextW(panel.title, name.c_str());
-            SetWindowTextW(panel.window, name.c_str());
-            if (panel.rendered == previous)
-                panel.rendered = revision;
+            panel->window) {
+            SetWindowTextW(panel->title, name.c_str());
+            SetWindowTextW(panel->window, name.c_str());
+            if (panel->rendered == previous)
+                panel->rendered = revision;
         }
     }
-    if (!panel.window)
+    if (!panel->window)
         return;
-    ShowWindow(panel.title, SW_SHOWNA);
-    ShowWindow(panel.nameEdit, SW_HIDE);
+    ShowWindow(panel->title, SW_SHOWNA);
+    ShowWindow(panel->nameEdit, SW_HIDE);
     if (restoreFocus)
-        SetFocus(panel.apps.empty() ? panel.add : panel.list);
+        SetFocus(panel->apps.empty() ? panel->add : panel->list);
 }
 static bool ensureSearchControls() {
-    if (panel.filter)
+    if (panel->filter)
         return true;
-    panel.lens = part(L"BUTTON", uiText(UiString::SearchInstalled),
+    panel->lens = part(L"BUTTON", uiText(UiString::SearchInstalled),
                       WS_TABSTOP | BS_OWNERDRAW, kLens, false);
-    panel.filter =
+    panel->filter =
         part(L"EDIT", L"", WS_TABSTOP | ES_AUTOHSCROLL, kFilter, false);
-    if (!wirePanelChild(panel.lens) || !wirePanelChild(panel.filter)) {
-        if (panel.lens)
-            DestroyWindow(panel.lens);
-        if (panel.filter)
-            DestroyWindow(panel.filter);
-        panel.lens = panel.filter = nullptr;
+    if (!wirePanelChild(panel->lens) || !wirePanelChild(panel->filter)) {
+        if (panel->lens)
+            DestroyWindow(panel->lens);
+        if (panel->filter)
+            DestroyWindow(panel->filter);
+        panel->lens = panel->filter = nullptr;
         return false;
     }
-    SendMessageW(panel.filter, EM_LIMITTEXT, 160, 0);
-    SendMessageW(panel.filter, EM_SETCUEBANNER, TRUE,
+    SendMessageW(panel->filter, EM_LIMITTEXT, 160, 0);
+    SendMessageW(panel->filter, EM_SETCUEBANNER, TRUE,
                  (LPARAM)uiText(UiString::SearchHint));
-    SendMessageW(panel.filter, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN,
+    SendMessageW(panel->filter, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN,
                  MAKELPARAM(px(4), px(4)));
     return true;
 }
 static void findInFolder() {
-    if (panel.choosing || panel.closing || panel.renaming || panel.transfer ||
-        panel.pressed >= 0 || panel.incoming.token || !ensureSearchControls())
+    if (panel->choosing || panel->closing || panel->renaming || panel->transfer ||
+        panel->pressed >= 0 || panel->incoming.token || !ensureSearchControls())
         return;
-    if (!panel.filtering) {
-        panel.searchOrigin = panel.page;
+    if (!panel->filtering) {
+        panel->searchOrigin = panel->page;
         clearPanelSelection();
-        SetWindowTextW(panel.filter, L"");
-        panel.filtering = true;
-        panel.page = 0;
-        panel.wheel = 0;
-        SetWindowTextW(panel.lens, uiText(UiString::FindInFolder));
-        SendMessageW(panel.filter, EM_SETCUEBANNER, TRUE,
+        SetWindowTextW(panel->filter, L"");
+        panel->filtering = true;
+        panel->page = 0;
+        panel->wheel = 0;
+        SetWindowTextW(panel->lens, uiText(UiString::FindInFolder));
+        SendMessageW(panel->filter, EM_SETCUEBANNER, TRUE,
                      (LPARAM)uiText(UiString::FindInFolder));
         refreshPanel();
     }
-    SetFocus(panel.filter);
+    SetFocus(panel->filter);
 }
 static void endFolderSearch() {
-    if (!panel.filtering)
+    if (!panel->filtering)
         return;
-    panel.filtering = false;
+    panel->filtering = false;
     clearPanelSelection();
-    SetWindowTextW(panel.filter, L"");
-    panel.page = panel.searchOrigin;
-    panel.wheel = 0;
+    SetWindowTextW(panel->filter, L"");
+    panel->page = panel->searchOrigin;
+    panel->wheel = 0;
     refreshPanel();
-    if (panel.window)
-        SetFocus(panel.apps.empty() ? panel.add : panel.list);
+    if (panel->window)
+        SetFocus(panel->apps.empty() ? panel->add : panel->list);
 }
 static bool ensurePager() {
-    if (panel.pager)
+    if (panel->pager)
         return true;
-    panel.prev = part(L"BUTTON", uiText(UiString::PreviousPage),
+    panel->prev = part(L"BUTTON", uiText(UiString::PreviousPage),
                       WS_TABSTOP | BS_OWNERDRAW, kPrev, false);
-    panel.next = part(L"BUTTON", uiText(UiString::NextPage),
+    panel->next = part(L"BUTTON", uiText(UiString::NextPage),
                       WS_TABSTOP | BS_OWNERDRAW, kNext, false);
-    panel.pager = part(L"STATIC", L"", SS_OWNERDRAW, kPager, false);
-    if (panel.pager && wirePanelChild(panel.prev) && wirePanelChild(panel.next))
+    panel->pager = part(L"STATIC", L"", SS_OWNERDRAW, kPager, false);
+    if (panel->pager && wirePanelChild(panel->prev) && wirePanelChild(panel->next))
         return true;
-    for (HWND h : {panel.prev, panel.next, panel.pager})
+    for (HWND h : {panel->prev, panel->next, panel->pager})
         if (h)
             DestroyWindow(h);
-    panel.prev = panel.next = panel.pager = nullptr;
+    panel->prev = panel->next = panel->pager = nullptr;
     return false;
 }
 
 static void populatePage() {
-    HWND h = panel.list;
-    panel.hot = -1;
-    panel.tiles.assign(pageItems(), {});
+    HWND h = panel->list;
+    panel->hot = -1;
+    panel->tiles.assign(pageItems(), {});
     SendMessageW(h, WM_SETREDRAW, FALSE, 0);
     ListView_DeleteAllItems(h);
-    ListView_SetIconSpacing(h, panel.cellWidth, panel.cellHeight);
+    ListView_SetIconSpacing(h, panel->cellWidth, panel->cellHeight);
     for (int i = 0; i < pageItems(); ++i) {
         int n = firstItem() + i;
-        const auto& a = panel.apps[n];
+        const auto& a = panel->apps[n];
         LVITEMW item{};
         item.mask = LVIF_TEXT | LVIF_IMAGE;
         item.iItem = i;
@@ -6939,36 +6982,36 @@ static void populatePage() {
     SendMessageW(h, WM_SETREDRAW, TRUE, 0);
     ShowWindow(h, pageItems() ? SW_SHOWNA : SW_HIDE);
     int pages = pageCount();
-    if (panel.pager) {
-        for (HWND control : {panel.prev, panel.pager, panel.next})
+    if (panel->pager) {
+        for (HWND control : {panel->prev, panel->pager, panel->next})
             ShowWindow(control, pages > 1 ? SW_SHOWNA : SW_HIDE);
-        EnableWindow(panel.prev, panel.page > 0);
-        EnableWindow(panel.next, panel.page + 1 < pages);
+        EnableWindow(panel->prev, panel->page > 0);
+        EnableWindow(panel->next, panel->page + 1 < pages);
         wstring desc =
-            formatUi(UiString::PageOf, std::to_wstring(panel.page + 1),
+            formatUi(UiString::PageOf, std::to_wstring(panel->page + 1),
                      std::to_wstring(pages));
-        SetWindowTextW(panel.pager, desc.c_str());
-        InvalidateRect(panel.pager, nullptr, FALSE);
+        SetWindowTextW(panel->pager, desc.c_str());
+        InvalidateRect(panel->pager, nullptr, FALSE);
     }
     InvalidateRect(h, nullptr, FALSE);
 }
 static void changePage(int page, bool keepDrag) {
     page = std::clamp(page, 0, pageCount() - 1);
-    if (page == panel.page)
+    if (page == panel->page)
         return;
-    int old = panel.page;
-    int local = ListView_GetNextItem(panel.list, -1, LVNI_FOCUSED);
+    int old = panel->page;
+    int local = ListView_GetNextItem(panel->list, -1, LVNI_FOCUSED);
     if (!keepDrag)
         finishDrag();
     else
-        panel.dropTarget = -1;
+        panel->dropTarget = -1;
     capturePreviousPage();
-    panel.page = page;
-    ++panel.viewSerial;
+    panel->page = page;
+    ++panel->viewSerial;
     populatePage();
     gridEntrance(page > old ? 1 : -1);
     if (!keepDrag && local >= 0 && pageItems())
-        ListView_SetItemState(panel.list, std::min(local, pageItems() - 1),
+        ListView_SetItemState(panel->list, std::min(local, pageItems() - 1),
                               LVIS_SELECTED | LVIS_FOCUSED,
                               LVIS_SELECTED | LVIS_FOCUSED);
 }
@@ -6976,16 +7019,16 @@ static bool pageWheel(UINT msg, WPARAM wp) {
     if (pageCount() < 2)
         return false;
     int delta = GET_WHEEL_DELTA_WPARAM(wp);
-    panel.wheel += (msg == WM_MOUSEHWHEEL ? delta : -delta);
-    int turns = panel.wheel / WHEEL_DELTA;
+    panel->wheel += (msg == WM_MOUSEHWHEEL ? delta : -delta);
+    int turns = panel->wheel / WHEEL_DELTA;
     if (turns) {
-        panel.wheel %= WHEEL_DELTA;
-        int old = panel.page;
-        const bool incoming = panel.incoming.token != 0;
-        changePage(old + turns, panel.dragging || panel.transfer || incoming);
-        if (panel.page != old) {
-            if (panel.dragging)
-                dragAt(panel.dragPoint);
+        panel->wheel %= WHEEL_DELTA;
+        int old = panel->page;
+        const bool incoming = panel->incoming.token != 0;
+        changePage(old + turns, panel->dragging || panel->transfer || incoming);
+        if (panel->page != old) {
+            if (panel->dragging)
+                dragAt(panel->dragPoint);
             else if (incoming) {
                 POINT pointer{};
                 if (GetCursorPos(&pointer))
@@ -6996,220 +7039,220 @@ static bool pageWheel(UINT msg, WPARAM wp) {
     return true;
 }
 static void refreshPanel() {
-    panel.incoming.lastPage = -1;
-    auto f = lookup(groups, panel.folder);
+    panel->incoming.lastPage = -1;
+    auto f = lookup(groups, panel->folder);
     if (!f) {
         closePanel();
         return;
     }
-    if (panel.windowFolder != f->id)
-        panel.openWindows.clear();
-    if (!panel.choosing &&
-        (panel.windowFolder != f->id || panel.windowRevision != revision))
+    if (panel->windowFolder != f->id)
+        panel->openWindows.clear();
+    if (!panel->choosing &&
+        (panel->windowFolder != f->id || panel->windowRevision != revision))
         scheduleWindowScan();
-    if (!panel.designMenu)
+    if (!panel->designMenu)
         applyPanelStyle(f->style);
     finishDrag();
     releasePreviousPage();
-    ++panel.viewSerial;
-    const bool searchField = panel.choosing || panel.filtering;
-    wstring query = searchField ? windowText(panel.filter) : L"";
+    ++panel->viewSerial;
+    const bool searchField = panel->choosing || panel->filtering;
+    wstring query = searchField ? windowText(panel->filter) : L"";
     auto terms = searchTerms(query);
     bool searching = !terms.empty();
-    if (!panel.choosing) {
-        if (panel.filtering && searching) {
-            panel.apps.clear();
+    if (!panel->choosing) {
+        if (panel->filtering && searching) {
+            panel->apps.clear();
             for (const auto& app : f->apps)
                 if (matchName(app.name, terms))
-                    panel.apps.push_back(app);
+                    panel->apps.push_back(app);
         } else
-            panel.apps = f->apps;
-        if (panel.incoming.token) {
-            if (panel.rendered != revision)
-                panel.incoming = {};
+            panel->apps = f->apps;
+        if (panel->incoming.token) {
+            if (panel->rendered != revision)
+                panel->incoming = {};
             else {
-                auto& preview = panel.incoming;
+                auto& preview = panel->incoming;
                 preview.slot =
-                    std::clamp(preview.slot, 0, (int)panel.apps.size());
-                panel.apps.insert(panel.apps.begin() + preview.slot,
+                    std::clamp(preview.slot, 0, (int)panel->apps.size());
+                panel->apps.insert(panel->apps.begin() + preview.slot,
                                   preview.apps.begin(), preview.apps.end());
             }
         }
     } else {
-        if (panel.choicesRevision != revision) {
-            panel.search.generation.reset();
-            panel.pins = taskbarChoices(*f);
-            panel.choicesRevision = revision;
+        if (panel->choicesRevision != revision) {
+            panel->search.generation.reset();
+            panel->pins = taskbarChoices(*f);
+            panel->choicesRevision = revision;
         }
         if (!searching)
-            panel.apps = panel.pins;
+            panel->apps = panel->pins;
         else {
-            wantCatalog(controller ? controller : panel.window);
-            if (panel.search.generation != catalogGeneration)
-                panel.search.build(f->apps, panel.pins, installedApps,
+            wantCatalog(controller ? controller : panel->window);
+            if (panel->search.generation != catalogGeneration)
+                panel->search.build(f->apps, panel->pins, installedApps,
                                    catalogGeneration);
-            panel.search.filter(terms, panel.apps);
+            panel->search.filter(terms, panel->apps);
         }
     }
     MONITORINFO mi{sizeof(mi)};
-    GetMonitorInfoW(MonitorFromRect(&panel.anchor, MONITOR_DEFAULTTONEAREST),
+    GetMonitorInfoW(MonitorFromRect(&panel->anchor, MONITOR_DEFAULTTONEAREST),
                     &mi);
-    HDC dc = GetDC(panel.list);
-    auto before = SelectObject(dc, panel.normalFont);
+    HDC dc = GetDC(panel->list);
+    auto before = SelectObject(dc, panel->normalFont);
     TEXTMETRICW tm{};
     GetTextMetricsW(dc, &tm);
     SelectObject(dc, before);
-    ReleaseDC(panel.list, dc);
-    panel.lineHeight = std::max<int>(1, tm.tmHeight + tm.tmExternalLeading);
-    panel.iconSize = px(36);
-    panel.cellHeight =
-        px(5) + panel.iconSize + px(5) + 2 * panel.lineHeight + px(9);
+    ReleaseDC(panel->list, dc);
+    panel->lineHeight = std::max<int>(1, tm.tmHeight + tm.tmExternalLeading);
+    panel->iconSize = px(36);
+    panel->cellHeight =
+        px(5) + panel->iconSize + px(5) + 2 * panel->lineHeight + px(9);
     int monitorW = mi.rcWork.right - mi.rcWork.left, pad = px(12);
     int cellW = std::min(px(88), std::max(1, monitorW - 2 * pad));
     int available = std::clamp((monitorW - 2 * pad) / cellW, 1, 4),
-        count = (int)panel.apps.size();
+        count = (int)panel->apps.size();
     int cols = searchField ? available : std::clamp(count, 1, available);
     int rows = (count + cols - 1) / cols,
         gridTop = searchField ? px(88) : px(44);
     int room =
         (int)std::max(
-            mi.rcWork.bottom - std::max(panel.bar.bottom, panel.anchor.bottom),
-            std::min(panel.bar.top, panel.anchor.top) - mi.rcWork.top) -
+            mi.rcWork.bottom - std::max(panel->bar.bottom, panel->anchor.bottom),
+            std::min(panel->bar.top, panel->anchor.top) - mi.rcWork.top) -
         px(7);
     int capRows =
-        std::clamp((room - gridTop - px(12)) / panel.cellHeight, 1, 4);
+        std::clamp((room - gridTop - px(12)) / panel->cellHeight, 1, 4);
     if (rows > capRows)
         capRows =
-            std::clamp((room - gridTop - px(39)) / panel.cellHeight, 1, 4);
+            std::clamp((room - gridTop - px(39)) / panel->cellHeight, 1, 4);
     int shown =
-        panel.filtering
+        panel->filtering
             ? std::min(capRows,
                        std::max(1, ((int)f->apps.size() + cols - 1) / cols))
-        : panel.choosing
+        : panel->choosing
             ? std::min(
                   capRows,
                   std::max({2, rows,
-                            std::min(4, ((int)panel.pins.size() + cols - 1) /
+                            std::min(4, ((int)panel->pins.size() + cols - 1) /
                                             cols)}))
             : std::min(rows, capRows);
-    panel.cellWidth = cellW;
-    panel.columns = cols;
-    panel.capacity = std::max(1, cols * capRows);
-    panel.page = std::clamp(panel.page, 0, pageCount() - 1);
+    panel->cellWidth = cellW;
+    panel->columns = cols;
+    panel->capacity = std::max(1, cols * capRows);
+    panel->page = std::clamp(panel->page, 0, pageCount() - 1);
     int width = std::min(monitorW, std::max(px(190), 2 * pad + cols * cellW));
-    int wanted = gridTop + (shown ? shown * panel.cellHeight : px(41)) +
+    int wanted = gridTop + (shown ? shown * panel->cellHeight : px(41)) +
                  (pageCount() > 1 ? px(36) : px(10));
-    panel.rest =
-        placePanel(mi.rcWork, panel.bar, panel.anchor, width, wanted, px(8));
+    panel->rest =
+        placePanel(mi.rcWork, panel->bar, panel->anchor, width, wanted, px(8));
     panelPosition(motionTime());
     RECT client{};
-    GetClientRect(panel.window, &client);
+    GetClientRect(panel->window, &client);
     int w = client.right, h = client.bottom, side = px(28), gap = px(4);
     int last = w - pad - side, addX = last - side - gap;
-    MoveWindow(panel.title, pad + px(2), px(8), std::max(1, addX - pad - gap),
+    MoveWindow(panel->title, pad + px(2), px(8), std::max(1, addX - pad - gap),
                side, TRUE);
-    MoveWindow(panel.add, addX, px(8), side, side, TRUE);
-    MoveWindow(panel.more, last, px(8), side, side, TRUE);
-    panel.searchRect = {pad, px(44), w - pad, px(76)};
-    if (panel.filter) {
-        MoveWindow(panel.lens, pad + px(4), px(47), px(27), px(26), TRUE);
-        MoveWindow(panel.filter, pad + px(33),
-                   px(44) + (px(32) - panel.lineHeight) / 2,
-                   std::max(1, w - 2 * pad - px(42)), panel.lineHeight + 1,
+    MoveWindow(panel->add, addX, px(8), side, side, TRUE);
+    MoveWindow(panel->more, last, px(8), side, side, TRUE);
+    panel->searchRect = {pad, px(44), w - pad, px(76)};
+    if (panel->filter) {
+        MoveWindow(panel->lens, pad + px(4), px(47), px(27), px(26), TRUE);
+        MoveWindow(panel->filter, pad + px(33),
+                   px(44) + (px(32) - panel->lineHeight) / 2,
+                   std::max(1, w - 2 * pad - px(42)), panel->lineHeight + 1,
                    TRUE);
-        ShowWindow(panel.lens, searchField ? SW_SHOWNA : SW_HIDE);
-        ShowWindow(panel.filter, searchField ? SW_SHOWNA : SW_HIDE);
+        ShowWindow(panel->lens, searchField ? SW_SHOWNA : SW_HIDE);
+        ShowWindow(panel->filter, searchField ? SW_SHOWNA : SW_HIDE);
     }
     int gridHeight =
         std::max(1, h - gridTop - (pageCount() > 1 ? px(36) : px(10)));
-    MoveWindow(panel.empty, pad, gridTop, std::max(1, w - 2 * pad), gridHeight,
+    MoveWindow(panel->empty, pad, gridTop, std::max(1, w - 2 * pad), gridHeight,
                TRUE);
     int listWidth = std::max(1, std::min(w, cols * cellW));
-    MoveWindow(panel.list, (w - listWidth) / 2, gridTop, listWidth, gridHeight,
+    MoveWindow(panel->list, (w - listWidth) / 2, gridTop, listWidth, gridHeight,
                TRUE);
     if (pageCount() > 1 && ensurePager()) {
         int footerY = h - px(32), ind = px(76), btn = px(26);
-        MoveWindow(panel.prev, (w - ind) / 2 - btn, footerY, btn, btn, TRUE);
-        MoveWindow(panel.pager, (w - ind) / 2, footerY, ind, btn, TRUE);
-        MoveWindow(panel.next, (w + ind) / 2, footerY, btn, btn, TRUE);
+        MoveWindow(panel->prev, (w - ind) / 2 - btn, footerY, btn, btn, TRUE);
+        MoveWindow(panel->pager, (w - ind) / 2, footerY, ind, btn, TRUE);
+        MoveWindow(panel->next, (w + ind) / 2, footerY, btn, btn, TRUE);
     }
     auto heading =
-        panel.choosing ? formatUi(UiString::AddTo, f->name) : f->name;
-    SetWindowTextW(panel.window, heading.c_str());
-    SetWindowTextW(panel.title, heading.c_str());
-    SetWindowTextW(panel.more, panel.choosing ? uiText(UiString::Back)
+        panel->choosing ? formatUi(UiString::AddTo, f->name) : f->name;
+    SetWindowTextW(panel->window, heading.c_str());
+    SetWindowTextW(panel->title, heading.c_str());
+    SetWindowTextW(panel->more, panel->choosing ? uiText(UiString::Back)
                                               : uiText(UiString::Options));
-    SetWindowTextW(panel.add, panel.choosing ? uiText(UiString::FromFile)
+    SetWindowTextW(panel->add, panel->choosing ? uiText(UiString::FromFile)
                                              : uiText(UiString::AddApps));
-    PCWSTR emptyText = uiText(panel.filtering && searching ? UiString::NoResults
+    PCWSTR emptyText = uiText(panel->filtering && searching ? UiString::NoResults
                                                            : UiString::Empty);
-    if (panel.choosing)
+    if (panel->choosing)
         emptyText = !searching                 ? uiText(UiString::TypeOrBrowse)
-                    : catalogThread.joinable() ? uiText(UiString::Searching)
+                    : catalogThread.has_value() ? uiText(UiString::Searching)
                     : catalogFailed            ? uiText(UiString::NoCatalog)
                                                : uiText(UiString::NoResults);
-    SetWindowTextW(panel.empty, emptyText);
-    if (panel.tips)
-        for (HWND button : {panel.add, panel.more}) {
+    SetWindowTextW(panel->empty, emptyText);
+    if (panel->tips)
+        for (HWND button : {panel->add, panel->more}) {
             TOOLINFOW ti{sizeof(ti)};
             ti.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
-            ti.hwnd = panel.window;
+            ti.hwnd = panel->window;
             ti.uId = (UINT_PTR)button;
             ti.lpszText = const_cast<LPWSTR>(
-                button == panel.add
-                    ? (panel.choosing ? uiText(UiString::FromFile)
+                button == panel->add
+                    ? (panel->choosing ? uiText(UiString::FromFile)
                                       : uiText(UiString::AddApps))
-                    : (panel.choosing ? uiText(UiString::Back)
+                    : (panel->choosing ? uiText(UiString::Back)
                                       : uiText(UiString::Options)));
-            SendMessageW(panel.tips, TTM_UPDATETIPTEXTW, 0, (LPARAM)&ti);
+            SendMessageW(panel->tips, TTM_UPDATETIPTEXTW, 0, (LPARAM)&ti);
         }
 
-    if (!panel.icons) {
+    if (!panel->icons) {
         int size = px(36);
-        panel.icons =
+        panel->icons =
             ImageList_Create(size, size, ILC_COLOR32 | ILC_MASK, 4, 4);
-        ListView_SetImageList(panel.list, panel.icons, LVSIL_NORMAL);
+        ListView_SetImageList(panel->list, panel->icons, LVSIL_NORMAL);
     }
     populatePage();
-    ShowWindow(panel.empty, rows ? SW_HIDE : SW_SHOWNA);
-    panel.rendered = revision;
-    RedrawWindow(panel.window, nullptr, nullptr,
+    ShowWindow(panel->empty, rows ? SW_HIDE : SW_SHOWNA);
+    panel->rendered = revision;
+    RedrawWindow(panel->window, nullptr, nullptr,
                  RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_ERASE);
 }
 static void syncPanel() {
-    if (panel.window && panel.rendered != revision)
+    if (panel->window && panel->rendered != revision)
         refreshPanel();
 }
 static void dismissOutside(POINT p) {
-    if (!panel.window || panel.browsing || isIn(panel.anchor, p) ||
-        panel.pressed >= 0 || panel.transfer)
+    if (!panel->window || panel->browsing || isIn(panel->anchor, p) ||
+        panel->pressed >= 0 || panel->transfer)
         return;
     RECT bounds{};
-    GetWindowRect(panel.window, &bounds);
+    GetWindowRect(panel->window, &bounds);
     if (!isIn(bounds, p))
         dismissPanel();
 }
 static void drawCommand(const DRAWITEMSTRUCT& di) {
     RECT r = di.rcItem;
-    bool lens = di.hwndItem == panel.lens;
+    bool lens = di.hwndItem == panel->lens;
     if (lens)
-        FillRect(di.hDC, &r, panel.searchBrush);
+        FillRect(di.hDC, &r, panel->searchBrush);
     else
         paintBackdrop(di.hDC, di.hwndItem, r);
-    if (di.hwndItem == panel.title) {
+    if (di.hwndItem == panel->title) {
         int saved = SaveDC(di.hDC);
-        HFONT font = panel.shownStyle == FolderStyle::Paper &&
-                             !panel.highContrast && panel.paperFont
-                         ? panel.paperFont
-                         : panel.titleFont;
+        HFONT font = panel->shownStyle == FolderStyle::Paper &&
+                             !panel->highContrast && panel->paperFont
+                         ? panel->paperFont
+                         : panel->titleFont;
         SelectObject(di.hDC, font);
         SetBkMode(di.hDC, TRANSPARENT);
-        SetTextColor(di.hDC, panel.foreground);
-        if (panel.finish != TileFinish::Plain) {
-            int height = px(panel.shownStyle == FolderStyle::Oled ? 5 : 14),
+        SetTextColor(di.hDC, panel->foreground);
+        if (panel->finish != TileFinish::Plain) {
+            int height = px(panel->shownStyle == FolderStyle::Oled ? 5 : 14),
                 top = (r.bottom - height) / 2;
             RECT mark{r.left, top, r.left + px(3), top + height};
-            rounded(di.hDC, mark, panel.accent, px(2));
+            rounded(di.hDC, mark, panel->accent, px(2));
             r.left += px(9);
         }
         auto title = windowText(di.hwndItem);
@@ -7219,15 +7262,15 @@ static void drawCommand(const DRAWITEMSTRUCT& di) {
         RestoreDC(di.hDC, saved);
         return;
     }
-    if (di.hwndItem == panel.pager) {
+    if (di.hwndItem == panel->pager) {
         int pages = pageCount(), dots = std::min(7, pages),
-            first = std::clamp(panel.page - 3, 0, pages - dots);
+            first = std::clamp(panel->page - 3, 0, pages - dots);
         int x = (r.right - (dots - 1) * px(9) - px(14)) / 2, cy = r.bottom / 2;
         for (int i = 0; i < dots; i++) {
-            bool current = first + i == panel.page;
+            bool current = first + i == panel->page;
             int w = px(current ? 14 : 4), height = px(4);
             RECT dot{x, cy - height / 2, x + w, cy + (height + 1) / 2};
-            rounded(di.hDC, dot, current ? panel.accent : panel.rim, px(2));
+            rounded(di.hDC, dot, current ? panel->accent : panel->rim, px(2));
             x += w + px(5);
         }
         return;
@@ -7236,24 +7279,24 @@ static void drawCommand(const DRAWITEMSTRUCT& di) {
     bool focus =
         (di.itemState & ODS_FOCUS) && !(di.itemState & ODS_NOFOCUSRECT);
     int saved = SaveDC(di.hDC);
-    double hover = panel.controls[di.hwndItem].value(
-        panel.frame ? panel.frameSample : motionTime());
-    if ((panel.finish != TileFinish::Plain && !lens) || pressed || focus ||
+    double hover = panel->controls[di.hwndItem].value(
+        panel->frame ? panel->frameSample : motionTime());
+    if ((panel->finish != TileFinish::Plain && !lens) || pressed || focus ||
         hover > .005) {
-        auto base = (lens || panel.finish != TileFinish::Plain) ? panel.field
-                                                                : panel.surface;
-        COLORREF face = blendColor(base, pressed ? panel.rim : panel.buttonFace,
+        auto base = (lens || panel->finish != TileFinish::Plain) ? panel->field
+                                                                : panel->surface;
+        COLORREF face = blendColor(base, pressed ? panel->rim : panel->buttonFace,
                                    pressed ? 1 : hover);
         HBRUSH fill = CreateSolidBrush(face);
         HPEN pen =
             CreatePen(PS_SOLID, 1,
-                      focus                               ? panel.foreground
-                      : panel.finish != TileFinish::Plain ? panel.tileEdge
+                      focus                               ? panel->foreground
+                      : panel->finish != TileFinish::Plain ? panel->tileEdge
                                                           : face);
         auto before = SelectObject(di.hDC, fill),
              line = SelectObject(di.hDC, pen);
         int diameter =
-            px(panel.finish == TileFinish::Plain ? 10 : 2 * panel.radius);
+            px(panel->finish == TileFinish::Plain ? 10 : 2 * panel->radius);
         RoundRect(di.hDC, r.left + 1, r.top + 1, r.right - 1, r.bottom - 1,
                   diameter, diameter);
         SelectObject(di.hDC, before);
@@ -7263,26 +7306,26 @@ static void drawCommand(const DRAWITEMSTRUCT& di) {
     }
     int x = (r.left + r.right) / 2, y = (r.top + r.bottom) / 2,
         arm = px(pressed ? 4 : 5);
-    COLORREF ink = IsWindowEnabled(di.hwndItem) ? panel.foreground : panel.rim;
+    COLORREF ink = IsWindowEnabled(di.hwndItem) ? panel->foreground : panel->rim;
     HPEN pen = CreatePen(PS_SOLID, std::max(1, px(1)), ink);
-    HBRUSH fill = CreateSolidBrush(panel.foreground);
+    HBRUSH fill = CreateSolidBrush(panel->foreground);
     SelectObject(di.hDC, pen);
     SelectObject(di.hDC, fill);
     auto line = [&](int x1, int y1, int x2, int y2) {
         MoveToEx(di.hDC, x1, y1, nullptr);
         LineTo(di.hDC, x2, y2);
     };
-    if (di.hwndItem == panel.prev || di.hwndItem == panel.next) {
-        int dir = di.hwndItem == panel.next ? 1 : -1;
+    if (di.hwndItem == panel->prev || di.hwndItem == panel->next) {
+        int dir = di.hwndItem == panel->next ? 1 : -1;
         line(x - dir * arm / 2, y - arm, x + dir * arm / 2, y);
         line(x + dir * arm / 2, y, x - dir * arm / 2, y + arm);
-    } else if (di.hwndItem == panel.lens) {
+    } else if (di.hwndItem == panel->lens) {
         auto b = SelectObject(di.hDC, GetStockObject(NULL_BRUSH));
         Ellipse(di.hDC, x - arm, y - arm, x + arm / 2 + 1, y + arm / 2 + 1);
         SelectObject(di.hDC, b);
         line(x + arm / 2 - 1, y + arm / 2 - 1, x + arm + 2, y + arm + 2);
-    } else if (di.hwndItem == panel.add) {
-        if (panel.choosing) {
+    } else if (di.hwndItem == panel->add) {
+        if (panel->choosing) {
             POINT outline[] = {
                 {x - arm - 1, y - arm}, {x - 1, y - arm},
                 {x + 1, y - arm / 2},   {x + arm + 1, y - arm / 2},
@@ -7293,7 +7336,7 @@ static void drawCommand(const DRAWITEMSTRUCT& di) {
             line(x - arm, y, x + arm + 1, y);
             line(x, y - arm, x, y + arm + 1);
         }
-    } else if (panel.choosing) {
+    } else if (panel->choosing) {
         line(x + arm / 2, y - arm, x - arm / 2, y);
         line(x - arm / 2, y, x + arm / 2, y + arm);
     } else {
@@ -7309,41 +7352,42 @@ static void drawCommand(const DRAWITEMSTRUCT& di) {
 }
 
 static void beginAdding(const wstring& dest) {
-    if (panel.incoming.token)
+    if (panel->incoming.token)
         return;
-    if (!panel.window || panel.folder != dest || panel.closing)
+    if (!panel->window || panel->folder != dest || panel->closing)
         openMenuFolder(dest);
-    if (!panel.window || panel.folder != dest)
+    if (!panel->window || panel->folder != dest)
         return;
     if (!ensureSearchControls()) {
         note(uiText(UiString::SearchFailed));
         return;
     }
-    panel.filtering = false;
+    panel->filtering = false;
     clearPanelSelection();
-    panel.choosing = false;
-    SetWindowTextW(panel.filter, L"");
-    panel.choicesRevision = ~0u;
-    SetWindowTextW(panel.lens, uiText(UiString::SearchInstalled));
-    SendMessageW(panel.filter, EM_SETCUEBANNER, TRUE,
+    panel->choosing = false;
+    SetWindowTextW(panel->filter, L"");
+    panel->choicesRevision = ~0u;
+    SetWindowTextW(panel->lens, uiText(UiString::SearchInstalled));
+    SendMessageW(panel->filter, EM_SETCUEBANNER, TRUE,
                  (LPARAM)uiText(UiString::SearchHint));
-    panel.page = 0;
-    panel.wheel = 0;
-    panel.choosing = true;
+    panel->page = 0;
+    panel->wheel = 0;
+    panel->choosing = true;
     refreshPanel();
     gridEntrance(1);
-    SetFocus(panel.filter);
+    SetFocus(panel->filter);
 }
 static void workerFinished(UINT msg) {
     if (msg == kCatalogDone) {
-        if (collectCatalog() && panel.window && panel.choosing &&
-            GetWindowTextLengthW(panel.filter))
+        if (collectCatalog() && panel->window && panel->choosing &&
+            GetWindowTextLengthW(panel->filter))
             refreshPanel();
         return;
     }
-    if (!fileThread.joinable() || !filesReady.load())
+    if (!fileThread.has_value() || !filesReady.load())
         return;
-    fileThread.join();
+    fileThread->join();
+    fileThread.reset();
     filesReady = false;
     auto paths = std::move(selectedPaths);
     auto dest = std::exchange(fileDestination, wstring{});
@@ -7361,23 +7405,23 @@ static void workerFinished(UINT msg) {
         else
             note(uiText(UiString::NoUsableFile));
     }
-    if (!stopping && panel.window && panel.browsing && panel.folder == dest) {
-        panel.browsing = false;
+    if (!stopping && panel->window && panel->browsing && panel->folder == dest) {
+        panel->browsing = false;
         if (added) {
-            panel.choosing = false;
-            panel.page = 0;
+            panel->choosing = false;
+            panel->page = 0;
         }
         refreshPanel();
         gridEntrance(0);
-        ShowWindow(panel.window, SW_SHOW);
-        SetForegroundWindow(panel.window);
-        SetFocus(panel.choosing ? panel.filter : panel.list);
+        ShowWindow(panel->window, SW_SHOW);
+        SetForegroundWindow(panel->window);
+        SetFocus(panel->choosing ? panel->filter : panel->list);
     }
     if (FAILED(filesStatus) && !stopping)
         note(uiText(UiString::PickerFailed));
 }
 static void stopPanelActivationCheck(HWND window) {
-    panel.waitForDrag = false;
+    panel->waitForDrag = false;
     KillTimer(window, kPanelActivationTimer);
 }
 static bool primaryMouseDown() {
@@ -7385,8 +7429,8 @@ static bool primaryMouseDown() {
     return (GetAsyncKeyState(button) & 0x8000) != 0;
 }
 static void checkPanelActivation(HWND window, bool fromTimer) {
-    if (panel.window != window || panel.browsing || panel.closing ||
-        panel.transfer || panel.dragging)
+    if (panel->window != window || panel->browsing || panel->closing ||
+        panel->transfer || panel->dragging)
         return;
     HWND foreground = GetForegroundWindow();
     if (!foreground || foreground == window || IsChild(window, foreground) ||
@@ -7394,18 +7438,18 @@ static void checkPanelActivation(HWND window, bool fromTimer) {
         stopPanelActivationCheck(window);
         return;
     }
-    if (panel.dropRegistered && !panel.choosing &&
-        (panel.dropHover ||
-         ((!ui.drag.app.empty() || shellFileWindow(foreground, true)) &&
+    if (panel->registeredDropTarget && !panel->choosing &&
+        (panel->dropHover ||
+         ((!ui->drag.app.empty() || shellFileWindow(foreground, true)) &&
           primaryMouseDown()))) {
         if (fromTimer || SetTimer(window, kPanelActivationTimer, 35, nullptr)) {
-            panel.waitForDrag = true;
+            panel->waitForDrag = true;
             return;
         }
     }
-    if (panel.waitForDrag) {
+    if (panel->waitForDrag) {
         // Give OLE the next turn after button-up to finish the accepted drop.
-        panel.waitForDrag = false;
+        panel->waitForDrag = false;
         if (fromTimer)
             return;
     }
@@ -7414,22 +7458,22 @@ static void checkPanelActivation(HWND window, bool fromTimer) {
 }
 static std::optional<App> droppedShortcut(const wstring&);
 static void stopIncomingEdge() {
-    if (panel.autoScroll && panel.list)
-        KillTimer(panel.list, kDragPageTimer);
-    panel.autoScroll = false;
-    panel.edgeDir = 0;
+    if (panel->autoScroll && panel->list)
+        KillTimer(panel->list, kDragPageTimer);
+    panel->autoScroll = false;
+    panel->edgeDir = 0;
 }
 static void clearIncoming(uint64_t token, bool committed = false) {
-    if (!token || token != panel.incoming.token)
+    if (!token || token != panel->incoming.token)
         return;
     stopIncomingEdge();
-    int page = panel.incoming.originalPage;
-    auto f = lookup(groups, panel.folder);
-    if (committed && f && f->apps == panel.apps) {
-        int first = panel.incoming.slot,
-            last = first + (int)panel.incoming.apps.size();
-        panel.incoming = {};
-        panel.rendered = revision;
+    int page = panel->incoming.originalPage;
+    auto f = lookup(groups, panel->folder);
+    if (committed && f && f->apps == panel->apps) {
+        int first = panel->incoming.slot,
+            last = first + (int)panel->incoming.apps.size();
+        panel->incoming = {};
+        panel->rendered = revision;
         scheduleWindowScan();
         for (int n = std::max(first, firstItem());
              n < std::min(last, firstItem() + pageItems()); ++n)
@@ -7437,42 +7481,42 @@ static void clearIncoming(uint64_t token, bool committed = false) {
         return;
     }
     auto poses = visiblePoses();
-    panel.incoming = {};
-    if (panel.window) {
+    panel->incoming = {};
+    if (panel->window) {
         if (!committed)
-            panel.page = page;
+            panel->page = page;
         refreshPanel();
-        if (panel.window) {
+        if (panel->window) {
             settleTiles(poses);
-            if (panel.runningDirty)
+            if (panel->runningDirty)
                 scheduleWindowScan();
         }
     }
 }
 static int incomingSlot(POINT p, int count) {
     RECT grid{};
-    GetClientRect(panel.list, &grid);
-    if (isIn(grid, p) && panel.cellWidth > 0 && panel.cellHeight > 0) {
-        int column = std::min<int>(p.x / panel.cellWidth, panel.columns - 1);
+    GetClientRect(panel->list, &grid);
+    if (isIn(grid, p) && panel->cellWidth > 0 && panel->cellHeight > 0) {
+        int column = std::min<int>(p.x / panel->cellWidth, panel->columns - 1);
         return std::clamp(firstItem() +
-                              (int)(p.y / panel.cellHeight) * panel.columns +
+                              (int)(p.y / panel->cellHeight) * panel->columns +
                               column,
                           0, count);
     }
-    return panel.incoming.token ? panel.incoming.slot : count;
+    return panel->incoming.token ? panel->incoming.slot : count;
 }
 static uint64_t beginIncoming(const std::vector<App>& candidates,
                               POINT screen,
                               bool atEnd = false) {
-    if (!panel.window || !panel.list || panel.choosing || panel.closing ||
-        panel.browsing || panel.dragging)
+    if (!panel->window || !panel->list || panel->choosing || panel->closing ||
+        panel->browsing || panel->dragging)
         return 0;
-    if (panel.filtering)
+    if (panel->filtering)
         endFolderSearch();
-    if (panel.rendered != revision)
+    if (panel->rendered != revision)
         refreshPanel();
-    auto f = lookup(groups, panel.folder);
-    if (!f || !panel.window)
+    auto f = lookup(groups, panel->folder);
+    if (!f || !panel->window)
         return 0;
     std::vector<App> fresh;
     if (candidates.size() == 1) {
@@ -7491,55 +7535,55 @@ static uint64_t beginIncoming(const std::vector<App>& candidates,
                 fresh.push_back(app);
             }
     }
-    if (panel.incoming.token && !fresh.empty() &&
-        fresh == panel.incoming.apps) {
+    if (panel->incoming.token && !fresh.empty() &&
+        fresh == panel->incoming.apps) {
         // The shell button and the popup are separate drop targets for the same
         // gesture. Hand off the live layout and make any pending leave from the
         // old target harmless.
-        panel.incoming.token = ++nextPreviewToken;
+        panel->incoming.token = ++nextPreviewToken;
         if (!atEnd)
             positionIncoming(screen);
-        return panel.incoming.token;
+        return panel->incoming.token;
     }
-    clearIncoming(panel.incoming.token);
+    clearIncoming(panel->incoming.token);
     if (fresh.empty())
         return 0;
     auto poses = visiblePoses();
     int count = (int)f->apps.size();
-    if (panel.renaming)
+    if (panel->renaming)
         endRename(true, false);
     POINT local = screen;
-    ScreenToClient(panel.list, &local);
+    ScreenToClient(panel->list, &local);
     int slot = atEnd ? count : incomingSlot(local, count);
     auto token = ++nextPreviewToken;
-    panel.incoming = {token, std::move(fresh), slot, panel.page};
+    panel->incoming = {token, std::move(fresh), slot, panel->page};
     // Full pages keep their capacity when room for the incoming item is
     // reserved.
-    if (count >= panel.capacity)
-        panel.page = slot / panel.capacity;
+    if (count >= panel->capacity)
+        panel->page = slot / panel->capacity;
     refreshPanel();
-    if (panel.window)
+    if (panel->window)
         settleTiles(poses);
     return token;
 }
 static void positionIncoming(POINT screen) {
-    auto& preview = panel.incoming;
-    if (!preview.token || !panel.list)
+    auto& preview = panel->incoming;
+    if (!preview.token || !panel->list)
         return;
-    if (preview.lastPage == panel.page && preview.lastPoint.x == screen.x &&
+    if (preview.lastPage == panel->page && preview.lastPoint.x == screen.x &&
         preview.lastPoint.y == screen.y)
         return;
-    preview.lastPage = panel.page;
+    preview.lastPage = panel->page;
     preview.lastPoint = screen;
     POINT p = screen;
-    ScreenToClient(panel.list, &p);
+    ScreenToClient(panel->list, &p);
     updateDragEdge(p);
     int size = (int)preview.apps.size(), old = preview.slot;
-    int slot = incomingSlot(p, (int)panel.apps.size() - size);
+    int slot = incomingSlot(p, (int)panel->apps.size() - size);
     if (slot == old)
         return;
     auto poses = visiblePoses();
-    auto it = panel.apps.begin();
+    auto it = panel->apps.begin();
     if (slot < old)
         std::rotate(it + slot, it + old, it + old + size);
     else
@@ -7549,10 +7593,10 @@ static void positionIncoming(POINT screen) {
     settleTiles(poses);
 }
 static std::optional<App> incomingAnchor(uint64_t token) {
-    if (token && token == panel.incoming.token) {
-        int after = panel.incoming.slot + (int)panel.incoming.apps.size();
-        if (validIndex(after, panel.apps.size()))
-            return panel.apps[after];
+    if (token && token == panel->incoming.token) {
+        int after = panel->incoming.slot + (int)panel->incoming.apps.size();
+        if (validIndex(after, panel->apps.size()))
+            return panel->apps[after];
     }
     return {};
 }
@@ -7636,21 +7680,21 @@ static void appMenu(wstring dest, App app, const POINT* position = nullptr) {
     if (!folder)
         return;
     std::vector<App> batch;
-    if (panel.selection.contains(app.target)) {
+    if (panel->selection.contains(app.target)) {
         for (const auto& member : folder->apps)
-            if (panel.selection.contains(member.target))
+            if (panel->selection.contains(member.target))
                 batch.push_back(member);
     }
     if (batch.empty())
         batch.push_back(app);
-    HWND owner = panel.window;
+    HWND owner = panel->window;
     auto version = revision;
     Menu menu;
     menu.item(1, batch.size() == 1 ? wstring(uiText(UiString::RemoveApp))
                                    : formatUi(UiString::RemoveSelected,
                                               std::to_wstring(batch.size())));
-    if (menu.show(owner, nullptr, position) != 1 || owner != panel.window ||
-        panel.closing || panel.folder != dest || revision != version)
+    if (menu.show(owner, nullptr, position) != 1 || owner != panel->window ||
+        panel->closing || panel->folder != dest || revision != version)
         return;
     if (editMove([&](Model& model) {
             if (batch.size() == 1)
@@ -7675,8 +7719,8 @@ struct PanelDropTarget
 
     explicit PanelDropTarget(HWND host) : window(host) {}
     bool open() const {
-        return panel.window == window && !stopping && !panel.closing &&
-               !panel.browsing && !panel.choosing && !panel.transfer;
+        return !stopping && panel && panel->window == window && !panel->closing &&
+               !panel->browsing && !panel->choosing && !panel->transfer;
     }
     DWORD accept(DWORD offered) const {
         if (!open() || items.empty())
@@ -7756,9 +7800,9 @@ struct PanelDropTarget
             return E_POINTER;
         try {
             *effect = accept(*effect);
-            if (panel.window == window) {
-                panel.dropHover = *effect != DROPEFFECT_NONE;
-                if (panel.dropHover && token && token == panel.incoming.token)
+            if (!stopping && panel && panel->window == window) {
+                panel->dropHover = *effect != DROPEFFECT_NONE;
+                if (panel->dropHover && token && token == panel->incoming.token)
                     positionIncoming({point.x, point.y});
             }
         } catch (...) {
@@ -7770,8 +7814,8 @@ struct PanelDropTarget
     HRESULT STDMETHODCALLTYPE DragLeave() noexcept final {
         items.clear();
         auto previous = std::exchange(token, 0);
-        if (panel.window == window) {
-            panel.dropHover = false;
+        if (!stopping && panel && panel->window == window) {
+            panel->dropHover = false;
             try {
                 clearIncoming(previous);
             } catch (...) {
@@ -7789,9 +7833,9 @@ struct PanelDropTarget
         *effect = DROPEFFECT_NONE;
         try {
             if (operation != DROPEFFECT_NONE && data) {
-                if (token && token == panel.incoming.token)
+                if (token && token == panel->incoming.token)
                     positionIncoming({point.x, point.y});
-                DropJob job{panel.folder};
+                DropJob job{panel->folder};
                 job.before = incomingAnchor(token);
                 job.apps = std::move(items);
                 job.previewToken = token;
@@ -7816,7 +7860,7 @@ static void registerPanelDrop(HWND window) {
     if (FAILED(OleInitialize(nullptr)))
         return;
     if (SUCCEEDED(RegisterDragDrop(window, target.get())))
-        panel.dropRegistered = true;
+        panel->registeredDropTarget.copy_from(target.get());
     else
         OleUninitialize();
 }
@@ -7828,18 +7872,18 @@ static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
                 workerFinished(msg);
                 return 0;
             case kRunningReady:
-                if (w == panel.window)
+                if (w == panel->window)
                     acceptWindowScan(wp);
                 return 0;
             case kPanelFrame:
             case WM_TIMER:
                 if (msg == kPanelFrame || wp == kFrameTimer) {
-                    if (w != panel.window || !panel.frame ||
-                        panel.fallbackTimer != (msg == WM_TIMER))
+                    if (w != panel->window || !panel->frame ||
+                        panel->fallbackTimer != (msg == WM_TIMER))
                         return 0;
                     tickPanel();
-                    if (panel.window == w && panel.list)
-                        UpdateWindow(panel.list);
+                    if (panel->window == w && panel->list)
+                        UpdateWindow(panel->list);
                     return 0;
                 }
                 if (wp == kPanelActivationTimer) {
@@ -7848,7 +7892,7 @@ static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
                 }
                 if (wp == kRunningTimer) {
                     KillTimer(w, kRunningTimer);
-                    panel.windowTimer = false;
+                    panel->windowTimer = false;
                     requestWindowScan();
                     return 0;
                 }
@@ -7859,19 +7903,19 @@ static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
                     return 0;
                 break;
             case WM_DISPLAYCHANGE:
-                panel.timingReadAt = 0;
+                panel->timingReadAt = 0;
                 break;
             case WM_WINDOWPOSCHANGED:
-                if (w == panel.window && lp && panel.frameMonitor &&
+                if (w == panel->window && lp && panel->frameMonitor &&
                     !(reinterpret_cast<WINDOWPOS*>(lp)->flags & SWP_NOMOVE) &&
                     MonitorFromWindow(w, MONITOR_DEFAULTTONEAREST) !=
-                        panel.frameMonitor)
-                    panel.timingReadAt = 0;
+                        panel->frameMonitor)
+                    panel->timingReadAt = 0;
                 break;
             case WM_POWERBROADCAST:
                 if (wp == PBT_APMPOWERSTATUSCHANGE ||
                     wp == PBT_POWERSETTINGCHANGE)
-                    panel.timingReadAt = 0;
+                    panel->timingReadAt = 0;
                 break;
             case WM_MENUSELECT:
                 previewMenuChoice((HMENU)lp, LOWORD(wp), HIWORD(wp));
@@ -7880,63 +7924,63 @@ static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
             case WM_SYSCOLORCHANGE:
             case WM_DWMCOLORIZATIONCOLORCHANGED:
             case WM_SETTINGCHANGE:
-                if (panel.window == w) {
+                if (panel->window == w) {
                     try {
-                        if (ui.root)
-                            panel.systemDark =
-                                ui.root.ActualTheme() == X::ElementTheme::Dark;
+                        if (ui->root)
+                            panel->systemDark =
+                                ui->root.ActualTheme() == X::ElementTheme::Dark;
                     } catch (...) {
                     }
-                    if (panel.designMenu)
-                        applyPanelStyle(panel.requestedStyle, true);
+                    if (panel->designMenu)
+                        applyPanelStyle(panel->requestedStyle, true);
                     else
                         restorePanelStyle(true);
                 }
                 if (msg != WM_SETTINGCHANGE)
                     break;
-                panel.timingReadAt = 0;
-                if (panel.window == w) {
-                    panel.motion = allowMotion();
-                    if (!panel.motion)
+                panel->timingReadAt = 0;
+                if (panel->window == w) {
+                    panel->motion = allowMotion();
+                    if (!panel->motion)
                         stopExitFrames();
-                    if (!panel.motion && panel.frame) {
-                        if (panel.closing) {
+                    if (!panel->motion && panel->frame) {
+                        if (panel->closing) {
                             closePanel();
                             return 0;
                         }
-                        panel.reveal.set(1);
-                        panel.arrival.set(0);
-                        for (auto& t : panel.tiles)
+                        panel->reveal.set(1);
+                        panel->arrival.set(0);
+                        for (auto& t : panel->tiles)
                             for (Ease* e : std::array<Ease*, 4>{
                                      &t.dx, &t.dy, &t.hover, &t.press})
                                 e->set(e->end);
-                        for (auto& c : panel.controls)
+                        for (auto& c : panel->controls)
                             c.second.set(c.second.end);
-                        InvalidateRect(panel.list, nullptr, FALSE);
+                        InvalidateRect(panel->list, nullptr, FALSE);
                         tickPanel();
                     }
                 }
                 break;
             case WM_CTLCOLOREDIT: {
                 auto dc = (HDC)wp;
-                SetTextColor(dc, panel.foreground);
-                SetBkColor(dc, panel.field);
-                return (LRESULT)panel.searchBrush;
+                SetTextColor(dc, panel->foreground);
+                SetBkColor(dc, panel->field);
+                return (LRESULT)panel->searchBrush;
             }
             case WM_NOTIFY: {
                 auto head = (NMHDR*)lp;
-                if (panel.tips && head->hwndFrom == panel.tips &&
+                if (panel->tips && head->hwndFrom == panel->tips &&
                     head->code == TTN_GETDISPINFOW) {
                     auto& tip = *reinterpret_cast<NMTTDISPINFOW*>(lp);
                     auto button = reinterpret_cast<HWND>(head->idFrom);
-                    if (button == panel.add || button == panel.more) {
+                    if (button == panel->add || button == panel->more) {
                         GetWindowTextW(button, tip.szText,
                                        ARRAYSIZE(tip.szText));
                         tip.lpszText = tip.szText;
                     }
                     return 0;
                 }
-                if (head->hwndFrom != panel.list)
+                if (head->hwndFrom != panel->list)
                     break;
                 if (head->code == LVN_GETDISPINFOW) {
                     auto& info = *(NMLVDISPINFOW*)lp;
@@ -7953,15 +7997,15 @@ static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
                 PAINTSTRUCT ps{};
                 HDC dc = BeginPaint(w, &ps);
                 paintBackdrop(dc, w, ps.rcPaint);
-                if (panel.choosing || panel.filtering) {
-                    rounded(dc, panel.searchRect, panel.field, px(7));
-                    RECT line = panel.searchRect;
+                if (panel->choosing || panel->filtering) {
+                    rounded(dc, panel->searchRect, panel->field, px(7));
+                    RECT line = panel->searchRect;
                     line.left += px(7);
                     line.right -= px(7);
                     line.top = line.bottom - std::max(1, px(1));
-                    auto old = SetDCBrushColor(dc, GetFocus() == panel.filter
-                                                       ? panel.accent
-                                                       : panel.rim);
+                    auto old = SetDCBrushColor(dc, GetFocus() == panel->filter
+                                                       ? panel->accent
+                                                       : panel->rim);
                     FillRect(dc, &line, (HBRUSH)GetStockObject(DC_BRUSH));
                     SetDCBrushColor(dc, old);
                 }
@@ -7970,32 +8014,32 @@ static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
             }
             case WM_CTLCOLORSTATIC: {
                 auto dc = reinterpret_cast<HDC>(wp);
-                SetTextColor(dc, panel.foreground);
+                SetTextColor(dc, panel->foreground);
                 SetBkMode(dc, TRANSPARENT);
-                return (LRESULT)panel.background;
+                return (LRESULT)panel->background;
             }
             case WM_DRAWITEM:
                 drawCommand(*reinterpret_cast<DRAWITEMSTRUCT*>(lp));
                 return TRUE;
             case WM_ACTIVATE:
-                if (panel.window != w)
+                if (panel->window != w)
                     break;
                 if (LOWORD(wp) != WA_INACTIVE) {
                     stopPanelActivationCheck(w);
                     break;
                 }
-                if (!panel.browsing) {
+                if (!panel->browsing) {
                     POINT p{};
                     GetCursorPos(&p);
-                    if (!(isIn(panel.anchor, p) && primaryMouseDown()))
+                    if (!(isIn(panel->anchor, p) && primaryMouseDown()))
                         PostMessageW(w, kCheckActivation, 0, 0);
                 }
                 break;
             case kCheckActivation:
-                if (wp && panel.window == w && !panel.closing &&
+                if (wp && panel->window == w && !panel->closing &&
                     shellFileWindow(GetForegroundWindow(), true))
                     if (SetForegroundWindow(w))
-                        SetFocus(panel.apps.empty() ? panel.add : panel.list);
+                        SetFocus(panel->apps.empty() ? panel->add : panel->list);
                 checkPanelActivation(w, false);
                 return 0;
             case kClosePanel:
@@ -8011,38 +8055,38 @@ static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
             case kOpenApp:
                 if (GetKeyState(VK_CONTROL) & 0x8000)
                     return 0;
-                if (!panel.incoming.token && !panel.closing &&
-                    panel.rendered == revision &&
-                    static_cast<unsigned>(lp) == panel.viewSerial &&
-                    validIndex((int)wp, panel.apps.size())) {
-                    auto a = panel.apps[wp];
-                    if (panel.choosing) {
-                        auto id = panel.folder;
+                if (!panel->incoming.token && !panel->closing &&
+                    panel->rendered == revision &&
+                    static_cast<unsigned>(lp) == panel->viewSerial &&
+                    validIndex((int)wp, panel->apps.size())) {
+                    auto a = panel->apps[wp];
+                    if (panel->choosing) {
+                        auto id = panel->folder;
                         if (edit([&](Model& m) { transfer(m, id, a); }) &&
-                            panel.window) {
-                            panel.choosing = false;
-                            panel.page = 0;
+                            panel->window) {
+                            panel->choosing = false;
+                            panel->page = 0;
                             refreshPanel();
                             auto f = std::find_if(
-                                panel.apps.begin(), panel.apps.end(),
+                                panel->apps.begin(), panel->apps.end(),
                                 [&](auto& x) { return sameApp(a, x); });
-                            if (f != panel.apps.end())
-                                changePage(int(f - panel.apps.begin()) /
-                                           panel.capacity);
+                            if (f != panel->apps.end())
+                                changePage(int(f - panel->apps.begin()) /
+                                           panel->capacity);
                             gridEntrance(-1);
                         }
                         return 0;
                     }
                     if (preferOpenWindow) {
-                        panel.pendingClick = a;
-                        panel.clickSerial = panel.viewSerial;
+                        panel->pendingClick = a;
+                        panel->clickSerial = panel->viewSerial;
                         requestWindowScan(true);
                     } else
                         openFromFolder(a, {});
                 }
                 return 0;
             case WM_COMMAND:
-                if (panel.closing)
+                if (panel->closing)
                     return 0;
                 if (LOWORD(wp) == kTitle && HIWORD(wp) == STN_CLICKED) {
                     beginRename();
@@ -8054,128 +8098,131 @@ static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
                 }
                 if (HIWORD(wp) == BN_CLICKED &&
                     (LOWORD(wp) == kPrev || LOWORD(wp) == kNext)) {
-                    changePage(panel.page + (LOWORD(wp) == kNext ? 1 : -1));
+                    changePage(panel->page + (LOWORD(wp) == kNext ? 1 : -1));
                     return 0;
                 }
                 if (LOWORD(wp) == kFilter &&
                     (HIWORD(wp) == EN_SETFOCUS || HIWORD(wp) == EN_KILLFOCUS)) {
-                    InvalidateRect(w, &panel.searchRect, FALSE);
+                    InvalidateRect(w, &panel->searchRect, FALSE);
                     return 0;
                 }
                 if (LOWORD(wp) == kFilter && HIWORD(wp) == EN_CHANGE &&
-                    (panel.choosing || panel.filtering)) {
+                    (panel->choosing || panel->filtering)) {
                     clearPanelSelection();
-                    panel.page = 0;
-                    panel.wheel = 0;
+                    panel->page = 0;
+                    panel->wheel = 0;
                     refreshPanel();
                     return 0;
                 }
                 if (LOWORD(wp) == kLens && HIWORD(wp) == BN_CLICKED) {
-                    SetFocus(panel.filter);
+                    SetFocus(panel->filter);
                     return 0;
                 }
                 if (HIWORD(wp) == BN_CLICKED && LOWORD(wp) == kAdd) {
-                    if (panel.choosing) {
-                        if (browse(panel.folder, controller ? controller : w,
-                                   panel.anchor)) {
-                            panel.browsing = true;
+                    if (panel->choosing) {
+                        if (browse(panel->folder, controller ? controller : w,
+                                   panel->anchor)) {
+                            panel->browsing = true;
                             ShowWindow(w, SW_HIDE);
                         }
                     } else
-                        beginAdding(panel.folder);
+                        beginAdding(panel->folder);
                     return 0;
                 }
                 if (HIWORD(wp) == BN_CLICKED && LOWORD(wp) == kMore) {
-                    if (panel.choosing) {
-                        panel.choosing = false;
-                        panel.page = 0;
+                    if (panel->choosing) {
+                        panel->choosing = false;
+                        panel->page = 0;
                         refreshPanel();
                         gridEntrance(-1);
-                        SetFocus(panel.apps.empty() ? panel.add : panel.list);
+                        SetFocus(panel->apps.empty() ? panel->add : panel->list);
                     } else
-                        manage(panel.folder);
+                        manage(panel->folder);
                     return 0;
                 }
                 break;
             case WM_CONTEXTMENU:
-                if (!panel.choosing &&
-                    reinterpret_cast<HWND>(wp) == panel.list) {
+                if (!panel->choosing &&
+                    reinterpret_cast<HWND>(wp) == panel->list) {
                     POINT pt{GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
                     int i;
                     if (pt.x == -1 && pt.y == -1) {
                         i = selectedApp();
                         RECT icon{};
                         if (i < 0 ||
-                            !ListView_GetItemRect(panel.list, i - firstItem(),
+                            !ListView_GetItemRect(panel->list, i - firstItem(),
                                                   &icon, LVIR_ICON))
                             return 0;
                         pt = {(icon.left + icon.right) / 2, icon.bottom};
-                        ClientToScreen(panel.list, &pt);
+                        ClientToScreen(panel->list, &pt);
                     } else {
                         auto client = pt;
-                        ScreenToClient(panel.list, &client);
+                        ScreenToClient(panel->list, &client);
                         i = hitApp(client);
                     }
-                    if (validIndex(i, panel.apps.size()))
-                        appMenu(panel.folder, panel.apps[i], &pt);
+                    if (validIndex(i, panel->apps.size()))
+                        appMenu(panel->folder, panel->apps[i], &pt);
                     return 0;
                 }
                 break;
             case WM_DESTROY:
-                panel.closing = true;
-                panel.renaming = false;
-                panel.transfer.reset();
-                panel.incoming = {};
+                panel->closing = true;
+                panel->renaming = false;
+                panel->transfer.reset();
+                panel->incoming = {};
                 stopPanelActivationCheck(w);
                 KillTimer(w, kRunningTimer);
-                if (auto hook = std::exchange(panel.windowHook, nullptr))
+                if (auto hook = std::exchange(panel->windowHook, nullptr))
                     UnhookWinEvent(hook);
-                if (std::exchange(panel.dropRegistered, false)) {
+                if (panel->registeredDropTarget) {
                     RevokeDragDrop(w);
+                    if (stopping)
+                        CoDisconnectObject(panel->registeredDropTarget.get(), 0);
+                    panel->registeredDropTarget = nullptr;
                     OleUninitialize();
                 }
-                finishDrag();
+                duringCleanup([] { finishDrag(); });
                 stopPanelFrames();
-                if (panel.frameWait) {
-                    CloseThreadpoolWait(panel.frameWait);
-                    panel.frameWait = nullptr;
+                if (panel->frameWait) {
+                    CloseThreadpoolWait(panel->frameWait);
+                    panel->frameWait = nullptr;
                 }
-                if (panel.frameTimer) {
-                    CloseHandle(panel.frameTimer);
-                    panel.frameTimer = nullptr;
+                if (panel->frameTimer) {
+                    CloseHandle(panel->frameTimer);
+                    panel->frameTimer = nullptr;
                 }
                 releasePreviousPage();
-                for (const auto& icon : panel.glyphs)
+                for (const auto& icon : panel->glyphs)
                     if (icon.handle)
                         DestroyIcon(icon.handle);
-                if (panel.paintRegion)
-                    DeleteObject(panel.paintRegion);
-                if (panel.buffer) {
-                    if (panel.stockBitmap)
-                        SelectObject(panel.buffer, panel.stockBitmap);
-                    if (panel.bitmap)
-                        DeleteObject(panel.bitmap);
-                    DeleteDC(panel.buffer);
+                if (panel->paintRegion)
+                    DeleteObject(panel->paintRegion);
+                if (panel->buffer) {
+                    if (panel->stockBitmap)
+                        SelectObject(panel->buffer, panel->stockBitmap);
+                    if (panel->bitmap)
+                        DeleteObject(panel->bitmap);
+                    DeleteDC(panel->buffer);
                 }
-                if (panel.searchBrush)
-                    DeleteObject(panel.searchBrush);
-                if (panel.list && IsWindow(panel.list))
-                    ListView_SetImageList(panel.list, nullptr, LVSIL_NORMAL);
-                if (panel.icons) {
-                    ImageList_Destroy(panel.icons);
-                    panel.icons = nullptr;
+                if (panel->searchBrush)
+                    DeleteObject(panel->searchBrush);
+                if (panel->list && IsWindow(panel->list))
+                    ListView_SetImageList(panel->list, nullptr, LVSIL_NORMAL);
+                if (panel->icons) {
+                    ImageList_Destroy(panel->icons);
+                    panel->icons = nullptr;
                 }
                 return 0;
             case WM_NCDESTROY:
-                if (panel.paperFont)
-                    DeleteObject(panel.paperFont);
-                if (panel.background)
-                    DeleteObject(panel.background);
-                if (panel.normalFont)
-                    DeleteObject(panel.normalFont);
-                if (panel.titleFont)
-                    DeleteObject(panel.titleFont);
-                panel = FolderPanel{};
+                if (panel->paperFont)
+                    DeleteObject(panel->paperFont);
+                if (panel->background)
+                    DeleteObject(panel->background);
+                if (panel->normalFont)
+                    DeleteObject(panel->normalFont);
+                if (panel->titleFont)
+                    DeleteObject(panel->titleFont);
+                *panel = FolderPanel{};
                 break;
         }
     } catch (...) {
@@ -8191,9 +8238,9 @@ static void openPanel(const wstring& id,
                       bool forDrop = false) {
     if (stopping)
         return;
-    if (panel.window) {
-        if (panel.folder == id) {
-            if (panel.closing)
+    if (panel->window) {
+        if (panel->folder == id) {
+            if (panel->closing)
                 revealPanel();
             else if (!forDrop)
                 dismissPanel();
@@ -8213,87 +8260,87 @@ static void openPanel(const wstring& id,
     INITCOMMONCONTROLSEX init{sizeof(init), ICC_LISTVIEW_CLASSES};
     if (!InitCommonControlsEx(&init))
         return;
-    panel.window =
+    panel->window =
         CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST, kPanelClass, L"",
                         WS_POPUP | WS_CLIPCHILDREN, anchor.left, anchor.top, 1,
                         1, owner, nullptr, moduleInstance(), nullptr);
-    if (!panel.window)
+    if (!panel->window)
         return;
-    panel.anchor = anchor;
-    panel.bar = bar;
-    panel.folder = id;
-    panel.dpi = GetDpiForWindow(owner ? owner : panel.window);
-    if (!panel.dpi)
-        panel.dpi = 96;
-    panel.systemDark = dark;
+    panel->anchor = anchor;
+    panel->bar = bar;
+    panel->folder = id;
+    panel->dpi = GetDpiForWindow(owner ? owner : panel->window);
+    if (!panel->dpi)
+        panel->dpi = 96;
+    panel->systemDark = dark;
     restorePanelStyle();
-    if (!panel.appearanceReady) {
+    if (!panel->appearanceReady) {
         closePanel();
         return;
     }
-    panel.motion = allowMotion();
-    panel.reveal.set(1);
-    panel.normalFont =
+    panel->motion = allowMotion();
+    panel->reveal.set(1);
+    panel->normalFont =
         CreateFontW(-px(14), 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0,
                     CLEARTYPE_QUALITY, 0, L"Segoe UI");
-    panel.titleFont =
+    panel->titleFont =
         CreateFontW(-px(16), 0, 0, 0, FW_SEMIBOLD, 0, 0, 0, DEFAULT_CHARSET, 0,
                     0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
-    panel.paperFont =
+    panel->paperFont =
         CreateFontW(-px(17), 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0,
                     CLEARTYPE_QUALITY, 0, L"Georgia");
-    panel.title = part(L"STATIC", L"", SS_OWNERDRAW | SS_NOTIFY, kTitle);
-    panel.more = part(L"BUTTON", L"⋯", WS_TABSTOP | BS_OWNERDRAW, kMore);
-    panel.empty = part(L"STATIC", uiText(UiString::Empty),
+    panel->title = part(L"STATIC", L"", SS_OWNERDRAW | SS_NOTIFY, kTitle);
+    panel->more = part(L"BUTTON", L"⋯", WS_TABSTOP | BS_OWNERDRAW, kMore);
+    panel->empty = part(L"STATIC", uiText(UiString::Empty),
                        SS_CENTER | SS_CENTERIMAGE | SS_NOPREFIX, 0);
-    panel.list =
+    panel->list =
         part(WC_LISTVIEWW, uiText(UiString::Apps),
              WS_TABSTOP | LVS_ICON | LVS_NOSCROLL | LVS_NOLABELWRAP |
                  LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_SHAREIMAGELISTS,
              kApps);
-    panel.add = part(L"BUTTON", uiText(UiString::AddAppsMenu),
+    panel->add = part(L"BUTTON", uiText(UiString::AddAppsMenu),
                      WS_TABSTOP | BS_OWNERDRAW, kAdd);
-    if (!panel.list || !panel.title || !panel.add || !panel.more ||
-        !panel.empty) {
+    if (!panel->list || !panel->title || !panel->add || !panel->more ||
+        !panel->empty) {
         closePanel();
         return;
     }
-    panel.tips =
+    panel->tips =
         CreateWindowExW(WS_EX_TOPMOST, TOOLTIPS_CLASSW, nullptr,
                         WS_POPUP | TTS_ALWAYSTIP | TTS_NOPREFIX, 0, 0, 0, 0,
-                        panel.window, nullptr, moduleInstance(), nullptr);
-    if (panel.tips)
-        for (HWND button : {panel.add, panel.more}) {
+                        panel->window, nullptr, moduleInstance(), nullptr);
+    if (panel->tips)
+        for (HWND button : {panel->add, panel->more}) {
             TOOLINFOW ti{sizeof(ti)};
             ti.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
-            ti.hwnd = panel.window;
+            ti.hwnd = panel->window;
             ti.uId = (UINT_PTR)button;
             ti.lpszText = LPSTR_TEXTCALLBACKW;
-            SendMessageW(panel.tips, TTM_ADDTOOLW, 0, (LPARAM)&ti);
+            SendMessageW(panel->tips, TTM_ADDTOOLW, 0, (LPARAM)&ti);
         }
-    for (auto h : {panel.more, panel.add, panel.list})
+    for (auto h : {panel->more, panel->add, panel->list})
         if (!wirePanelChild(h)) {
             closePanel();
             return;
         }
-    SendMessageW(panel.empty, WM_SETFONT, (WPARAM)panel.normalFont, TRUE);
-    SendMessageW(panel.title, WM_SETFONT, (WPARAM)panel.titleFont, TRUE);
-    ListView_SetExtendedListViewStyle(panel.list, LVS_EX_DOUBLEBUFFER);
-    ListView_SetBkColor(panel.list, panel.surface);
-    ListView_SetTextBkColor(panel.list, CLR_NONE);
-    ListView_SetTextColor(panel.list, panel.foreground);
-    panel.windowHook =
+    SendMessageW(panel->empty, WM_SETFONT, (WPARAM)panel->normalFont, TRUE);
+    SendMessageW(panel->title, WM_SETFONT, (WPARAM)panel->titleFont, TRUE);
+    ListView_SetExtendedListViewStyle(panel->list, LVS_EX_DOUBLEBUFFER);
+    ListView_SetBkColor(panel->list, panel->surface);
+    ListView_SetTextBkColor(panel->list, CLR_NONE);
+    ListView_SetTextColor(panel->list, panel->foreground);
+    panel->windowHook =
         SetWinEventHook(EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE, nullptr,
                         runningWindowEvent, 0, 0, WINEVENT_OUTOFCONTEXT);
     refreshPanel();
-    registerPanelDrop(panel.window);
-    panel.reveal.set(panel.motion ? 0 : 1);
+    registerPanelDrop(panel->window);
+    panel->reveal.set(panel->motion ? 0 : 1);
     revealPanel();
     gridEntrance(0);
-    ShowWindow(panel.window, forDrop ? SW_SHOWNOACTIVATE : SW_SHOW);
+    ShowWindow(panel->window, forDrop ? SW_SHOWNOACTIVATE : SW_SHOW);
     if (!forDrop) {
-        SetForegroundWindow(panel.window);
-        SetFocus(panel.apps.empty() ? panel.add : panel.list);
+        SetForegroundWindow(panel->window);
+        SetFocus(panel->apps.empty() ? panel->add : panel->list);
     }
 }
 static bool anchorScreenRect(HWND owner,
@@ -8324,9 +8371,9 @@ static bool anchorScreenRect(HWND owner,
 static void displayFolder(const wstring& dest,
                           FrameworkElement const& anchor,
                           bool forDrop) {
-    if (!isPrimaryRoot(ui.frame) || (anchor && !isPrimaryRoot(anchor)))
+    if (!isPrimaryRoot(ui->frame) || (anchor && !isPrimaryRoot(anchor)))
         return;
-    HWND owner = ui.primary;
+    HWND owner = ui->primary;
     RECT bar{};
     if (!GetWindowRect(owner, &bar))
         return;
@@ -8349,25 +8396,25 @@ struct IconHover {
     bool leaving = false, opened = false, ready = false, native = false,
          fileTarget = false;
 };
-[[clang::no_destroy]] static IconHover iconHover;
+[[clang::no_destroy]] static std::optional<IconHover> iconHover;
 static void resetIconHover(bool committed = false) {
     if (controller)
         KillTimer(controller, kIconHoverTimer);
-    auto hover = std::exchange(iconHover, IconHover{});
+    auto hover = std::exchange(*iconHover, IconHover{});
     if (!committed)
         clearIncoming(hover.token);
-    if (!committed && hover.opened && panel.window &&
-        panel.folder == hover.folder && !panel.dropHover)
-        PostMessageW(panel.window, kCheckActivation, 0, 0);
+    if (!committed && hover.opened && panel->window &&
+        panel->folder == hover.folder && !panel->dropHover)
+        PostMessageW(panel->window, kCheckActivation, 0, 0);
 }
 static void leaveIcon(const wstring& folder) {
-    if (iconHover.folder != folder)
+    if (iconHover->folder != folder)
         return;
-    if (!iconHover.opened && !iconHover.token) {
+    if (!iconHover->opened && !iconHover->token) {
         resetIconHover();
         return;
     }
-    iconHover.leaving = true;
+    iconHover->leaving = true;
     // Bridge the small gap between the taskbar button and the popup's OLE
     // target.
     if (!SetTimer(controller, kIconHoverTimer, 140, nullptr))
@@ -8375,17 +8422,17 @@ static void leaveIcon(const wstring& folder) {
 }
 static void previewIconDrop() {
     KillTimer(controller, kIconHoverTimer);
-    if (iconHover.leaving) {
+    if (iconHover->leaving) {
         resetIconHover();
         return;
     }
-    if (iconHover.ready || iconHover.folder.empty() || !iconHover.anchor)
+    if (iconHover->ready || iconHover->folder.empty() || !iconHover->anchor)
         return;
-    if (!iconHover.native &&
-        (!iconHover.fileTarget || iconHover.apps.empty())) {
-        if (!iconHover.storage)
+    if (!iconHover->native &&
+        (!iconHover->fileTarget || iconHover->apps.empty())) {
+        if (!iconHover->storage)
             return;
-        auto status = iconHover.storage.Status();
+        auto status = iconHover->storage.Status();
         if (status == F::AsyncStatus::Started) {
             if (!SetTimer(controller, kIconHoverTimer, 55, nullptr))
                 resetIconHover();
@@ -8393,43 +8440,43 @@ static void previewIconDrop() {
         }
         if (status != F::AsyncStatus::Completed)
             return;
-        for (auto item : iconHover.storage.GetResults()) {
+        for (auto item : iconHover->storage.GetResults()) {
             if (item.IsOfType(W::Storage::StorageItemTypes::File))
                 if (auto app = droppedShortcut(wstring(item.Path())))
-                    iconHover.apps.push_back(std::move(*app));
+                    iconHover->apps.push_back(std::move(*app));
         }
-    } else if (iconHover.native &&
-               (ui.drag.app.empty() || !primaryMouseDown())) {
+    } else if (iconHover->native &&
+               (ui->drag.app.empty() || !primaryMouseDown())) {
         resetIconHover();
         return;
     }
-    iconHover.ready = true;
-    if (iconHover.apps.empty())
+    iconHover->ready = true;
+    if (iconHover->apps.empty())
         return;
-    iconHover.opened = !panel.window || panel.folder != iconHover.folder;
-    displayFolder(iconHover.folder, iconHover.anchor, true);
-    if (panel.window && panel.folder == iconHover.folder) {
+    iconHover->opened = !panel->window || panel->folder != iconHover->folder;
+    displayFolder(iconHover->folder, iconHover->anchor, true);
+    if (panel->window && panel->folder == iconHover->folder) {
         POINT screen{};
         GetCursorPos(&screen);
-        iconHover.token = beginIncoming(iconHover.apps, screen, true);
-        if (iconHover.native) {
-            ui.drag.previewFolder = iconHover.folder;
-            ui.drag.token = iconHover.token;
+        iconHover->token = beginIncoming(iconHover->apps, screen, true);
+        if (iconHover->native) {
+            ui->drag.previewFolder = iconHover->folder;
+            ui->drag.token = iconHover->token;
         }
     }
 }
 static void hoverShortcut(const wstring& folder,
                           FrameworkElement const& anchor,
                           const Data::DataPackageView& view) {
-    if (iconHover.folder != folder || iconHover.native) {
+    if (iconHover->folder != folder || iconHover->native) {
         resetIconHover();
-        iconHover.folder = folder;
-        iconHover.anchor = anchor;
-        iconHover.storage = view.GetStorageItemsAsync();
+        iconHover->folder = folder;
+        iconHover->anchor = anchor;
+        iconHover->storage = view.GetStorageItemsAsync();
         if (!SetTimer(controller, kIconHoverTimer, 330, nullptr))
             resetIconHover();
-    } else if (iconHover.leaving) {
-        iconHover.leaving = false;
+    } else if (iconHover->leaving) {
+        iconHover->leaving = false;
         KillTimer(controller, kIconHoverTimer);
     }
 }
@@ -8439,8 +8486,9 @@ static constexpr wchar_t kFileSurfaceClass[] = L"TaskbarFolders.FileDrop";
 struct FileDropWindow {
     HWND window;
     wstring folder;
+    com_ptr<IDropTarget> target;
 };
-[[clang::no_destroy]] static std::vector<FileDropWindow> fileWindows;
+[[clang::no_destroy]] static std::optional<std::vector<FileDropWindow>> fileWindows;
 [[clang::no_destroy]] static Data::DataPackageView filePackage{nullptr};
 static double fileLayoutAfter = 0, fileReleasedAt = 0;
 static bool fileDropFinished = false;
@@ -8453,14 +8501,17 @@ static void finishFileGesture() {
 static void resetFileWindows() {
     if (controller)
         KillTimer(controller, kFileSurfaceTimer);
-    auto old = std::exchange(fileWindows, {});
+    auto old = std::exchange(*fileWindows, {});
     filePackage = nullptr;
     fileDropFinished = false;
     fileReleasedAt = 0;
     fileDataIdentity = nullptr;
     std::vector<App>{}.swap(fileDataApps);
-    for (const auto& entry : old) {
+    for (auto& entry : old) {
         RevokeDragDrop(entry.window);
+        if (stopping)
+            CoDisconnectObject(entry.target.get(), 0);
+        entry.target = nullptr;
         DestroyWindow(entry.window);
         OleUninitialize();
     }
@@ -8482,8 +8533,8 @@ struct IconFileTarget
     IconFileTarget(const wstring& id, FrameworkElement const& tile)
         : folder(id), anchor(tile) {}
     bool current() const {
-        return entered && !stopping && iconHover.fileTarget &&
-               iconHover.folder == folder;
+        return entered && !stopping && iconHover && iconHover->fileTarget &&
+               iconHover->folder == folder;
     }
     HRESULT STDMETHODCALLTYPE DragEnter(IDataObject* data,
                                         DWORD,
@@ -8506,11 +8557,11 @@ struct IconFileTarget
             if (items.empty() && !storage)
                 return S_OK;
             resetIconHover();
-            iconHover.folder = folder;
-            iconHover.anchor = anchor;
-            iconHover.fileTarget = true;
-            iconHover.apps = std::move(items);
-            iconHover.storage = std::move(storage);
+            iconHover->folder = folder;
+            iconHover->anchor = anchor;
+            iconHover->fileTarget = true;
+            iconHover->apps = std::move(items);
+            iconHover->storage = std::move(storage);
             entered = true;
             SetTimer(controller, kIconHoverTimer, 330, nullptr);
             *effect = allowed;
@@ -8533,7 +8584,7 @@ struct IconFileTarget
                 leaveIcon(folder);
         } catch (...) {
         }
-        if (entered && fileDragActive && !primaryMouseDown() && controller)
+        if (entered && !stopping && fileDragActive && controller && !primaryMouseDown())
             PostMessageW(controller, WM_TIMER, kFileSurfaceTimer, 0);
         entered = false;
         return S_OK;
@@ -8549,12 +8600,12 @@ struct IconFileTarget
         try {
             if (current() && allowed) {
                 DropJob job{folder};
-                job.before = incomingAnchor(iconHover.token);
-                job.previewToken = iconHover.token;
-                if (!iconHover.apps.empty())
-                    job.apps = std::move(iconHover.apps);
+                job.before = incomingAnchor(iconHover->token);
+                job.previewToken = iconHover->token;
+                if (!iconHover->apps.empty())
+                    job.apps = std::move(iconHover->apps);
                 else
-                    job.storage = iconHover.storage;
+                    job.storage = iconHover->storage;
                 bool queued = (!job.apps.empty() || job.storage) &&
                               queueDrop(std::move(job));
                 resetIconHover(queued);
@@ -8574,7 +8625,7 @@ static bool registerFileWindow(HWND owner,
                                const RECT& r,
                                const wstring& id,
                                FrameworkElement const& element) {
-    if (std::any_of(fileWindows.begin(), fileWindows.end(),
+    if (std::any_of(fileWindows->begin(), fileWindows->end(),
                     [&](const auto& v) { return v.folder == id; }))
         return true;
     if (IsRectEmpty(&r))
@@ -8586,7 +8637,8 @@ static bool registerFileWindow(HWND owner,
     wc.lpfnWndProc = DefWindowProcW;
     if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
         return false;
-    FileDropWindow entry{nullptr, id};
+    FileDropWindow entry{nullptr, id, target.as<IDropTarget>()};
+    fileWindows->reserve(fileWindows->size() + 1);
     if (FAILED(OleInitialize(nullptr)))
         return false;
     auto w = CreateWindowExW(
@@ -8601,7 +8653,7 @@ static bool registerFileWindow(HWND owner,
         return false;
     }
     entry.window = w;
-    fileWindows.push_back(std::move(entry));
+    fileWindows->push_back(std::move(entry));
     ShowWindow(w, SW_SHOWNOACTIVATE);
     return true;
 }
@@ -8623,7 +8675,7 @@ static void checkFileWindows() {
         }
         // A timer may run after the physical release but before OLE dispatches
         // Drop.
-        if (iconHover.fileTarget && !iconHover.leaving) {
+        if (iconHover->fileTarget && !iconHover->leaving) {
             auto now = motionTime();
             if (!fileReleasedAt)
                 fileReleasedAt = now;
@@ -8631,8 +8683,8 @@ static void checkFileWindows() {
                 return;
         }
     }
-    if (iconHover.fileTarget && !iconHover.leaving)
-        leaveIcon(iconHover.folder);
+    if (iconHover->fileTarget && !iconHover->leaving)
+        leaveIcon(iconHover->folder);
     resetFileWindows();
 }
 static void shortcutDrop(const wstring& folder,
@@ -8648,7 +8700,7 @@ static void shortcutDrop(const wstring& folder,
         operation = Operation::Copy;
     else if ((allowed & Operation::Link) != Operation::None)
         operation = Operation::Link;
-    if (operation == Operation::None || !controller || !ui.drag.app.empty())
+    if (operation == Operation::None || !controller || !ui->drag.app.empty())
         return;
     auto view = e.DataView();
     if (!view.Contains(Data::StandardDataFormats::StorageItems()))
@@ -8658,17 +8710,17 @@ static void shortcutDrop(const wstring& folder,
     e.Handled(true);
     {
         if (!received) {
-            if (!iconHover.fileTarget)
+            if (!iconHover->fileTarget)
                 hoverShortcut(folder, anchor, view);
         } else {
             DropJob job{folder};
-            if (iconHover.folder == folder && !iconHover.native) {
-                if (iconHover.ready || !iconHover.apps.empty())
-                    job.apps = std::move(iconHover.apps);
+            if (iconHover->folder == folder && !iconHover->native) {
+                if (iconHover->ready || !iconHover->apps.empty())
+                    job.apps = std::move(iconHover->apps);
                 else
-                    job.storage = iconHover.storage;
-                job.before = incomingAnchor(iconHover.token);
-                job.previewToken = iconHover.token;
+                    job.storage = iconHover->storage;
+                job.before = incomingAnchor(iconHover->token);
+                job.previewToken = iconHover->token;
             } else
                 job.storage = view.GetStorageItemsAsync();
             bool queued =
@@ -8688,9 +8740,9 @@ struct TaskbarFolderMenu {
     winrt::event_token closed{};
     std::vector<std::function<void()>> handlers;
 };
-[[clang::no_destroy]] static TaskbarFolderMenu folderMenu;
+[[clang::no_destroy]] static std::optional<TaskbarFolderMenu> folderMenu;
 static void closeTaskbarFolderMenu(bool hide = true) {
-    auto old = std::exchange(folderMenu, TaskbarFolderMenu{});
+    auto old = std::exchange(*folderMenu, TaskbarFolderMenu{});
     if (!old.flyout)
         return;
     if (old.closed.value)
@@ -8753,17 +8805,17 @@ static bool showTaskbarFolderMenu(const wstring& id,
         return false;
     try {
         closeTaskbarFolderMenu();
-        auto flyout = folderMenu.flyout = C::MenuFlyout();
+        auto flyout = folderMenu->flyout = C::MenuFlyout();
         flyout.ShouldConstrainToRootBounds(false);
         flyout.Placement(C::Primitives::FlyoutPlacementMode::Top);
-        folderMenu.closed = flyout.Closed([](auto const& sender, auto&&) {
+        folderMenu->closed = flyout.Closed([](auto const& sender, auto&&) {
             try {
-                if (sender == folderMenu.flyout)
+                if (sender == folderMenu->flyout)
                     closeTaskbarFolderMenu(false);
             } catch (...) {
             }
         });
-        fillTaskbarFolderMenu(folderMenu, *folder, !pinnedFolder(id));
+        fillTaskbarFolderMenu(*folderMenu, *folder, !pinnedFolder(id));
         flyout.ShowAt(anchor);
         return true;
     } catch (...) {
@@ -8772,8 +8824,8 @@ static bool showTaskbarFolderMenu(const wstring& id,
     }
 }
 static C::ControlTemplate folderButtonTemplate() {
-    if (!ui.tileTemplate) {
-        ui.tileTemplate = X::Markup::XamlReader::Load(
+    if (!ui->tileTemplate) {
+        ui->tileTemplate = X::Markup::XamlReader::Load(
                               LR"(
 <ControlTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" TargetType="Button">
@@ -8804,7 +8856,7 @@ static C::ControlTemplate folderButtonTemplate() {
 </ControlTemplate>)")
                               .as<C::ControlTemplate>();
     }
-    return ui.tileTemplate;
+    return ui->tileTemplate;
 }
 static Button makeTile(const AppFolder& f) {
     Button b;
@@ -8828,7 +8880,7 @@ static Button makeTile(const AppFolder& f) {
     mosaic.Source(previewFor(f).image);
     b.Content(mosaic);
     auto id = f.id;
-    click(b, ui.tileOff, [id, w = winrt::make_weak(b)]() {
+    click(b, ui->tileOff, [id, w = winrt::make_weak(b)]() {
         if (auto v = w.get(); v && !suppressFolderClick(id))
             showFolder(id, v);
     });
@@ -8842,7 +8894,7 @@ static Button makeTile(const AppFolder& f) {
             } catch (...) {
             }
         });
-    ui.tileOff.push_back([w = winrt::make_weak(b), context] {
+    ui->tileOff.push_back([w = winrt::make_weak(b), context] {
         if (auto v = w.get())
             v.ContextRequested(context);
     });
@@ -8859,7 +8911,7 @@ static Button makeTile(const AppFolder& f) {
     auto leave =
         b.DragLeave([id](F::IInspectable const&, X::DragEventArgs const&) {
             try {
-                if (!iconHover.fileTarget)
+                if (!iconHover->fileTarget)
                     leaveIcon(id);
             } catch (...) {
             }
@@ -8871,7 +8923,7 @@ static Button makeTile(const AppFolder& f) {
             } catch (...) {
             }
         });
-    ui.tileOff.push_back([w = winrt::make_weak(b), enter, over, leave, drop]() {
+    ui->tileOff.push_back([w = winrt::make_weak(b), enter, over, leave, drop]() {
         if (auto v = w.get()) {
             v.DragEnter(enter);
             v.DragOver(over);
@@ -8882,12 +8934,12 @@ static Button makeTile(const AppFolder& f) {
     return b;
 }
 
-static void detach(C::Panel const& panel, X::UIElement const& child) {
-    if (!panel || !child)
+static void detach(C::Panel const& parent, X::UIElement const& child) {
+    if (!parent || !child)
         return;
     uint32_t i = 0;
-    if (panel.Children().IndexOf(child, i))
-        panel.Children().RemoveAt(i);
+    if (parent.Children().IndexOf(child, i))
+        parent.Children().RemoveAt(i);
 }
 static void restore(Hidden& h) {
     auto e = h.item.get();
@@ -8902,43 +8954,54 @@ static void restore(Hidden& h) {
 }
 static void resetNative();
 static void clearFolderPlacement();
+static void restoreRepeaterMargin() {
+    if (!std::exchange(ui->marginSet, false) || !ui->repeater ||
+        ui->repeater.Margin() != ui->appliedMargin)
+        return;
+    auto property = FrameworkElement::MarginProperty();
+    if (ui->marginBinding)
+        ui->repeater.SetBinding(property, ui->marginBinding);
+    else if (!ui->localMargin || ui->localMargin == X::DependencyProperty::UnsetValue())
+        ui->repeater.ClearValue(property);
+    else
+        ui->repeater.SetValue(property, ui->localMargin);
+}
 static void clearView() {
-    closeTaskbarFolderMenu();
-    resetFileWindows();
-    resetIconHover();
-    resetNative();
-    clearFolderPlacement();
+    closePanel();
+    duringCleanup([] { closeTaskbarFolderMenu(); });
+    duringCleanup(resetFileWindows);
+    duringCleanup([] { resetIconHover(); });
+    duringCleanup(resetNative);
+    duringCleanup(clearFolderPlacement);
     if (controller) {
         KillTimer(controller, kLayoutTimer);
         KillTimer(controller, kDropTimer);
         KillTimer(controller, kNativeDropTimer);
     }
-    off(ui.frameOff);
-    closePanel();
-    off(ui.tileOff);
-    off(ui.menuOff);
-    for (auto& h : ui.hidden)
+    off(ui->frameOff);
+    off(ui->tileOff);
+    off(ui->menuOff);
+    for (auto& h : ui->hidden)
         try {
             restore(h);
         } catch (...) {
         }
-    if (ui.marginSet && ui.repeater)
-        ui.repeater.Margin(ui.baseMargin);
-    detach(ui.root, ui.overlay);
-    detach(ui.root, ui.strip);
-    ui = View{};
-    previews.clear();
+    duringCleanup(restoreRepeaterMargin);
+    duringCleanup([] { detach(ui->root, ui->overlay); });
+    duringCleanup([] { detach(ui->root, ui->strip); });
+    *ui = View{};
+    previews->clear();
 }
 struct NativeButton {
     FrameworkElement element;
     wstring id;
 };
-[[clang::no_destroy]] static std::vector<NativeButton> buttons;
+[[clang::no_destroy]] static std::optional<std::vector<NativeButton>> buttons;
 static bool pinnedFolder(const wstring& id) {
     auto key = pinId(id);
     if (key.empty())
         return false;
-    return std::any_of(buttons.begin(), buttons.end(),
+    return std::any_of(buttons->begin(), buttons->end(),
                        [&](const auto& b) { return equal(key, b.id); });
 }
 
@@ -8960,17 +9023,17 @@ static void removeFolderPin(wstring dest) {
         cleanPinFiles(old, true);
     pinStamps.erase(dest);
 }
-[[clang::no_destroy]] static std::vector<std::function<void()>> dropOff;
-[[clang::no_destroy]] static std::vector<NativeButton> dropHosts;
+[[clang::no_destroy]] static std::optional<std::vector<std::function<void()>>> dropOff;
+[[clang::no_destroy]] static std::optional<std::vector<NativeButton>> dropHosts;
 static void prepareFileWindows(const Data::DataPackageView& view) {
-    if (fileDragActive || !controller || stopping || !ui.drag.app.empty() ||
-        ui.tiles.empty())
+    if (fileDragActive || !controller || stopping || !ui->drag.app.empty() ||
+        ui->tiles.empty())
         return;
     RECT bar{};
     auto owner = tray();
     if (!owner || !GetWindowRect(owner, &bar))
         return;
-    fileWindows.reserve(ui.tiles.size() + dropHosts.size());
+    fileWindows->reserve(ui->tiles.size() + dropHosts->size());
     if (!SetTimer(controller, kFileSurfaceTimer, 75, nullptr))
         return;
     fileDragActive = true;
@@ -8981,9 +9044,9 @@ static void prepareFileWindows(const Data::DataPackageView& view) {
             anchorScreenRect(owner, e, r) && IntersectRect(&clipped, &r, &bar))
             registerFileWindow(owner, clipped, id, e);
     };
-    for (const auto& t : ui.tiles)
+    for (const auto& t : ui->tiles)
         add(t.id, t.button);
-    for (const auto& b : dropHosts)
+    for (const auto& b : *dropHosts)
         if (auto f = folderForPin(b.id))
             add(f->id, b.element);
 }
@@ -8996,7 +9059,7 @@ struct LiveIcon {
     X::Data::BindingBase binding{nullptr};
     int64_t token = 0;
 };
-[[clang::no_destroy]] static std::vector<LiveIcon> liveIcons;
+[[clang::no_destroy]] static std::optional<std::vector<LiveIcon>> liveIcons;
 static C::Image pinGlyph(const FrameworkElement& host) {
     C::Image exact{nullptr}, inPanel{nullptr};
     int candidates = 0;
@@ -9038,25 +9101,25 @@ static void syncGlyphs(const std::vector<NativeButton>& hosts) {
     for (const auto& b : hosts)
         if (auto g = pinGlyph(b.element))
             targets.push_back({&b, g});
-    for (auto it = liveIcons.begin(); it != liveIcons.end();) {
+    for (auto it = liveIcons->begin(); it != liveIcons->end();) {
         if (std::any_of(targets.begin(), targets.end(), [&](const Target& t) {
                 return t.glyph == it->glyph && equal(t.b->id, it->id);
             })) {
             ++it;
             continue;
         }
-        restoreGlyph(*it);
-        it = liveIcons.erase(it);
+        duringCleanup([&] { restoreGlyph(*it); });
+        it = liveIcons->erase(it);
     }
     for (const auto& t : targets) {
         auto f = folderForPin(t.b->id);
         if (!f)
             continue;
         auto it =
-            std::find_if(liveIcons.begin(), liveIcons.end(),
+            std::find_if(liveIcons->begin(), liveIcons->end(),
                          [&](const LiveIcon& l) { return l.glyph == t.glyph; });
         auto dp = C::Image::SourceProperty();
-        bool fresh = it == liveIcons.end();
+        bool fresh = it == liveIcons->end();
         if (fresh) {
             LiveIcon state;
             state.host = t.b->element;
@@ -9064,8 +9127,8 @@ static void syncGlyphs(const std::vector<NativeButton>& hosts) {
             state.id = t.b->id;
             state.token = t.glyph.RegisterPropertyChangedCallback(
                 dp, [](auto&&, auto&&) { requestLayout(); });
-            liveIcons.push_back(std::move(state));
-            it = std::prev(liveIcons.end());
+            liveIcons->push_back(std::move(state));
+            it = std::prev(liveIcons->end());
         }
         auto wanted = previewFor(*f).image;
         auto shown = t.glyph.Source();
@@ -9100,7 +9163,7 @@ struct CaptionTarget {
     wstring id;
     bool accessible = false;
 };
-[[clang::no_destroy]] static std::vector<PinCaption> pinCaptions;
+[[clang::no_destroy]] static std::optional<std::vector<PinCaption>> pinCaptions;
 static bool ownsCaption(const PinCaption& c, const F::IInspectable& value) {
     if (!c.written)
         return false;
@@ -9157,7 +9220,7 @@ static void syncPinCaptions(const std::vector<NativeButton>& hosts) {
                 // If the template acquired an inner tooltip, retire our
                 // synthetic root label.
                 bool synthetic = std::any_of(
-                    pinCaptions.begin(), pinCaptions.end(), [&](const auto& c) {
+                    pinCaptions->begin(), pinCaptions->end(), [&](const auto& c) {
                         return !c.accessible && c.owner == owner && !c.tip &&
                                c.written == value &&
                                (!c.original ||
@@ -9178,22 +9241,22 @@ static void syncPinCaptions(const std::vector<NativeButton>& hosts) {
         return c.host == t.host && c.owner == t.owner && c.tip == t.tip &&
                c.accessible == t.accessible && equal(c.id, t.id);
     };
-    for (auto i = pinCaptions.begin(); i != pinCaptions.end();) {
+    for (auto i = pinCaptions->begin(); i != pinCaptions->end();) {
         if (std::any_of(targets.begin(), targets.end(),
                         [&](const auto& t) { return matches(*i, t); })) {
             ++i;
             continue;
         }
-        restoreCaption(*i);
-        i = pinCaptions.erase(i);
+        duringCleanup([&] { restoreCaption(*i); });
+        i = pinCaptions->erase(i);
     }
     for (auto& t : targets) {
         auto f = folderForPin(t.id);
         if (!f)
             continue;
-        auto i = std::find_if(pinCaptions.begin(), pinCaptions.end(),
+        auto i = std::find_if(pinCaptions->begin(), pinCaptions->end(),
                               [&](const auto& c) { return matches(c, t); });
-        if (i == pinCaptions.end()) {
+        if (i == pinCaptions->end()) {
             PinCaption c;
             c.host = t.host;
             c.owner = t.owner;
@@ -9218,7 +9281,7 @@ static void syncPinCaptions(const std::vector<NativeButton>& hosts) {
                         if (stopping)
                             return;
                         try {
-                            for (auto& entry : pinCaptions)
+                            for (auto& entry : *pinCaptions)
                                 if (entry.tip == sender &&
                                     equal(appKey(entry.host), entry.id)) {
                                     if (auto folder = folderForPin(entry.id))
@@ -9228,29 +9291,29 @@ static void syncPinCaptions(const std::vector<NativeButton>& hosts) {
                         }
                     });
             }
-            pinCaptions.push_back(std::move(c));
-            i = std::prev(pinCaptions.end());
+            pinCaptions->push_back(std::move(c));
+            i = std::prev(pinCaptions->end());
         }
         applyCaption(*i, f->name);
     }
 }
 
 static void resetNative() {
-    syncPinCaptions({});
-    syncGlyphs({});
-    off(dropOff);
-    dropHosts.clear();
-    buttons.clear();
+    duringCleanup([] { syncPinCaptions({}); });
+    duringCleanup([] { syncGlyphs({}); });
+    off(*dropOff);
+    dropHosts->clear();
+    buttons->clear();
 }
 static void setNativeDrops(const std::vector<NativeButton>& hosts) {
-    if (hosts.size() == dropHosts.size() &&
-        std::equal(hosts.begin(), hosts.end(), dropHosts.begin(),
+    if (hosts.size() == dropHosts->size() &&
+        std::equal(hosts.begin(), hosts.end(), dropHosts->begin(),
                    [](const auto& a, const auto& b) {
                        return a.element == b.element && a.id == b.id;
                    }))
         return;
-    off(dropOff);
-    dropHosts = hosts;
+    off(*dropOff);
+    *dropHosts = hosts;
     for (const auto& b : hosts) {
         auto e = b.element;
         auto f = folderForPin(b.id);
@@ -9268,7 +9331,7 @@ static void setNativeDrops(const std::vector<NativeButton>& hosts) {
         auto leave = winrt::box_value(X::DragEventHandler(
             [id = f->id](F::IInspectable const&, X::DragEventArgs const&) {
                 try {
-                    if (!iconHover.fileTarget)
+                    if (!iconHover->fileTarget)
                         leaveIcon(id);
                 } catch (...) {
                 }
@@ -9286,7 +9349,7 @@ static void setNativeDrops(const std::vector<NativeButton>& hosts) {
         e.AddHandler(X::UIElement::DragOverEvent(), over, true);
         e.AddHandler(X::UIElement::DragLeaveEvent(), leave, true);
         e.AddHandler(X::UIElement::DropEvent(), drop, true);
-        dropOff.push_back([e, old, over, leave, drop] {
+        dropOff->push_back([e, old, over, leave, drop] {
             e.RemoveHandler(X::UIElement::DragEnterEvent(), over);
             e.RemoveHandler(X::UIElement::DragOverEvent(), over);
             e.RemoveHandler(X::UIElement::DragLeaveEvent(), leave);
@@ -9355,8 +9418,8 @@ static std::vector<App> taskbarChoices(const AppFolder& folder) {
     std::set<wstring> seen;
     std::optional<std::set<wstring>> binaries;
     const auto pinDirectory = pinnedLinks();
-    if (ui.repeater)
-        visit(ui.repeater, [&](FrameworkElement const& e) {
+    if (ui->repeater)
+        visit(ui->repeater, [&](FrameworkElement const& e) {
             if (winrt::get_class_name(e) != L"Taskbar.TaskListButton")
                 return true;
             auto id = appKey(e);
@@ -9389,22 +9452,22 @@ static std::vector<App> taskbarChoices(const AppFolder& folder) {
     return choices;
 }
 static bool under(FrameworkElement const& e, POINT pt) {
-    if (!e || !ui.root || e.Visibility() == X::Visibility::Collapsed)
+    if (!e || !ui->root || e.Visibility() == X::Visibility::Collapsed)
         return false;
     RECT rect{};
-    return e.XamlRoot() == ui.root.XamlRoot() &&
+    return e.XamlRoot() == ui->root.XamlRoot() &&
            anchorScreenRect(tray(), e, rect) && isIn(rect, pt);
 }
 static Button projectedButton(const wstring& id);
 static wstring dropFolderAt(POINT point, FrameworkElement* anchor) {
-    for (const auto& b : buttons)
+    for (const auto& b : *buttons)
         if (auto folder = folderForPin(b.id);
             folder && !projectedButton(folder->id) && under(b.element, point)) {
             if (anchor)
                 *anchor = b.element;
             return folder->id;
         }
-    for (const auto& tile : ui.tiles)
+    for (const auto& tile : ui->tiles)
         if (M::VisualTreeHelper::GetParent(tile.button) &&
             under(tile.button, point)) {
             if (anchor)
@@ -9417,21 +9480,21 @@ static wstring dropFolderAt(POINT point) {
     return dropFolderAt(point, nullptr);
 }
 static void cancelTaskbarPreview() {
-    clearIncoming(ui.drag.token);
-    ui.drag = {};
-    if (iconHover.native)
+    clearIncoming(ui->drag.token);
+    ui->drag = {};
+    if (iconHover->native)
         resetIconHover();
 }
 static void previewTaskbarApp(POINT screen) {
-    auto& drag = ui.drag;
+    auto& drag = ui->drag;
     HWND window = GetAncestor(WindowFromPoint(screen), GA_ROOT);
-    bool inPanel = window && window == panel.window && !panel.choosing &&
-                   !panel.browsing && !panel.closing;
+    bool inPanel = window && window == panel->window && !panel->choosing &&
+                   !panel->browsing && !panel->closing;
     FrameworkElement anchor{nullptr};
-    auto folder = inPanel            ? panel.folder
+    auto folder = inPanel            ? panel->folder
                   : window == tray() ? dropFolderAt(screen, &anchor)
                                      : wstring{};
-    if (iconHover.native && iconHover.folder != folder)
+    if (iconHover->native && iconHover->folder != folder)
         resetIconHover();
     if (drag.previewFolder != folder) {
         clearIncoming(std::exchange(drag.token, 0));
@@ -9447,84 +9510,84 @@ static void previewTaskbarApp(POINT screen) {
         return;
     if (inPanel) {
         if (drag.previewFolder != folder ||
-            (drag.token && drag.token != panel.incoming.token)) {
+            (drag.token && drag.token != panel->incoming.token)) {
             drag.previewFolder = folder;
             drag.token = beginIncoming({*drag.resolved}, screen);
         }
-        if (drag.token == panel.incoming.token)
+        if (drag.token == panel->incoming.token)
             positionIncoming(screen);
         return;
     }
-    if (!iconHover.native || iconHover.folder != folder) {
+    if (!iconHover->native || iconHover->folder != folder) {
         resetIconHover();
-        iconHover.folder = folder;
-        iconHover.anchor = anchor;
-        iconHover.apps = {*drag.resolved};
-        iconHover.native = true;
+        iconHover->folder = folder;
+        iconHover->anchor = anchor;
+        iconHover->apps = {*drag.resolved};
+        iconHover->native = true;
         if (!SetTimer(controller, kIconHoverTimer, 330, nullptr))
             resetIconHover();
     }
 }
 static void trackPeer(POINT screen) {
     wstring dest;
-    if (isIn(panel.bar, screen))
+    if (isIn(panel->bar, screen))
         dest = dropFolderAt(screen);
-    if (dest == panel.folder)
+    if (dest == panel->folder)
         dest.clear();
-    if (dest == panel.hoverFolder)
+    if (dest == panel->hoverFolder)
         return;
-    KillTimer(panel.list, kPeerTimer);
-    panel.hoverFolder = dest;
+    KillTimer(panel->list, kPeerTimer);
+    panel->hoverFolder = dest;
     if (!dest.empty())
-        SetTimer(panel.list, kPeerTimer, 330, nullptr);
+        SetTimer(panel->list, kPeerTimer, 330, nullptr);
 }
 static void enterPeer(const wstring& dest, POINT screen) {
-    if (!lookup(groups, dest) || dest == panel.folder ||
-        GetCapture() != panel.list || panel.rendered != revision)
+    if (!lookup(groups, dest) || dest == panel->folder ||
+        GetCapture() != panel->list || panel->rendered != revision)
         return;
-    if (!panel.transfer) {
-        if (!panel.dragging || !validIndex(panel.pressed, panel.apps.size()))
+    if (!panel->transfer) {
+        if (!panel->dragging || !validIndex(panel->pressed, panel->apps.size()))
             return;
-        if (panel.dragApps.empty())
-            collectDragApps(panel.pressed);
-        panel.transfer = FolderPanel::TransferDrag{
-            panel.folder, panel.dragApps, panel.anchor,
-            panel.filtering ? panel.searchOrigin : panel.page};
+        if (panel->dragApps.empty())
+            collectDragApps(panel->pressed);
+        panel->transfer = FolderPanel::TransferDrag{
+            panel->folder, panel->dragApps, panel->anchor,
+            panel->filtering ? panel->searchOrigin : panel->page};
     }
-    auto floating = std::move(panel.dragImage);
+    auto floating = std::move(panel->dragImage);
     finishDrag();
-    panel.filtering = false;
+    panel->filtering = false;
     clearPanelSelection();
-    panel.incoming = {};
-    panel.transfer->token = 0;
-    panel.folder = dest;
-    panel.anchor = {screen.x - px(18), panel.bar.top, screen.x + px(18),
-                    panel.bar.bottom};
-    panel.page = 0;
+    panel->incoming = {};
+    panel->transfer->token = 0;
+    panel->folder = dest;
+    panel->anchor = {screen.x - px(18), panel->bar.top, screen.x + px(18),
+                    panel->bar.bottom};
+    panel->page = 0;
     refreshPanel();
-    if (panel.window && panel.transfer && dest != panel.transfer->source)
-        panel.transfer->token =
-            beginIncoming(panel.transfer->apps, screen, true);
-    if (panel.window && panel.transfer) {
-        panel.dragImage = std::move(floating);
+    if (panel->window && panel->transfer && dest != panel->transfer->source)
+        panel->transfer->token =
+            beginIncoming(panel->transfer->apps, screen, true);
+    if (panel->window && panel->transfer) {
+        panel->dragImage = std::move(floating);
         moveDragImage(screen);
     }
 }
 static void endPeer(std::optional<POINT> drop) {
-    if (!panel.transfer)
+    if (!panel->transfer)
         return;
-    auto origin = *panel.transfer;
-    auto dest = panel.folder;
+    auto origin = *panel->transfer;
+    auto dest = panel->folder;
     auto anchor = incomingAnchor(origin.token);
     if (drop) {
         auto hit = WindowFromPoint(*drop);
         auto root = GetAncestor(hit, GA_ROOT);
-        if (root == panel.window) {
+        if (root == panel->window) {
             positionIncoming(*drop);
             anchor = incomingAnchor(origin.token);
         } else if (root == tray()) {
             dest = dropFolderAt(*drop);
-            if (dest != panel.folder)
+            if (dest != panel->folder)
                 anchor.reset();
         } else if (fileSurface(hit, root) != FileSurface::None) {
             dest.clear();
@@ -9532,8 +9595,8 @@ static void endPeer(std::optional<POINT> drop) {
         } else
             drop.reset();
     }
-    auto floating = std::move(panel.dragImage);
-    panel.transfer.reset();
+    auto floating = std::move(panel->dragImage);
+    panel->transfer.reset();
     finishDrag();
     if (drop && !dest.empty() && dest != origin.source) {
         bool saved = editMove([&](Model& m) {
@@ -9543,22 +9606,22 @@ static void endPeer(std::optional<POINT> drop) {
         syncPanel();
         return;
     }
-    panel.incoming = {};
-    panel.folder = origin.source;
-    panel.anchor = origin.anchor;
-    panel.page = origin.page;
+    panel->incoming = {};
+    panel->folder = origin.source;
+    panel->anchor = origin.anchor;
+    panel->page = origin.page;
     refreshPanel();
-    if (panel.window && origin.apps.size() > 1)
+    if (panel->window && origin.apps.size() > 1)
         for (const auto& app : origin.apps)
-            panel.selection.insert(app.target);
-    if (drop && dest.empty() && panel.window) {
-        panel.dragImage = std::move(floating);
-        panel.dragApps = origin.apps;
+            panel->selection.insert(app.target);
+    if (drop && dest.empty() && panel->window) {
+        panel->dragImage = std::move(floating);
+        panel->dragApps = origin.apps;
         auto it = std::find_if(
-            panel.apps.begin(), panel.apps.end(),
+            panel->apps.begin(), panel->apps.end(),
             [&](const App& a) { return sameApp(a, origin.apps.front()); });
-        if (it != panel.apps.end())
-            moveAppOutside(int(it - panel.apps.begin()), *drop);
+        if (it != panel->apps.end())
+            moveAppOutside(int(it - panel->apps.begin()), *drop);
         else
             finishDrag();
     }
@@ -9576,8 +9639,7 @@ struct ShortcutExport {
             CloseThreadpoolWork(work);
     }
 };
-[[clang::no_destroy]] static std::vector<std::unique_ptr<ShortcutExport>>
-    exports;
+[[clang::no_destroy]] static std::optional<std::vector<std::unique_ptr<ShortcutExport>>> exports;
 static void CALLBACK writeShortcuts(PTP_CALLBACK_INSTANCE,
                                     void* context,
                                     PTP_WORK) noexcept {
@@ -9611,18 +9673,18 @@ static bool startExport(const wstring& source,
     job->work = CreateThreadpoolWork(writeShortcuts, job.get(), nullptr);
     if (!job->work)
         return false;
-    exports.push_back(std::move(job));
-    SubmitThreadpoolWork(exports.back()->work);
+    exports->push_back(std::move(job));
+    SubmitThreadpoolWork(exports->back()->work);
     return true;
 }
 static void finishExport(ShortcutExport* result, bool reportFailure = true) {
     auto it =
-        std::find_if(exports.begin(), exports.end(),
+        std::find_if(exports->begin(), exports->end(),
                      [&](const auto& entry) { return entry.get() == result; });
-    if (it == exports.end())
+    if (it == exports->end())
         return;
     auto job = std::move(*it);
-    exports.erase(it);
+    exports->erase(it);
     WaitForThreadpoolWorkCallbacks(job->work, FALSE);
     std::map<wstring, const App*, IgnoreCase> successful;
     if (!stopping)
@@ -9644,20 +9706,20 @@ static void finishExport(ShortcutExport* result, bool reportFailure = true) {
                 placed.push_back(app);
         }
     if (!placed.empty()) {
-        bool visible = !stopping && panel.window &&
-                       panel.folder == job->source && !panel.dragging &&
-                       !panel.transfer;
+        bool visible = !stopping && panel->window &&
+                       panel->folder == job->source && !panel->dragging &&
+                       !panel->transfer;
         auto poses = visible ? visiblePoses() : decltype(visiblePoses()){};
-        int page = panel.page;
+        int page = panel->page;
         if (editMove([&](Model& m) {
                 moveFolderMembers(m, job->source, L"", placed);
             }) &&
             visible) {
             for (const auto& a : placed)
-                panel.selection.erase(a.target);
+                panel->selection.erase(a.target);
             syncPanel();
-            if (panel.window && panel.folder == job->source) {
-                if (panel.page != page && pageItems())
+            if (panel->window && panel->folder == job->source) {
+                if (panel->page != page && pageItems())
                     gridEntrance(-1);
                 else
                     settleTiles(poses);
@@ -9668,28 +9730,28 @@ static void finishExport(ShortcutExport* result, bool reportFailure = true) {
         note(uiText(UiString::ExportFailed));
 }
 static void moveAppOutside(int index, POINT screenPoint) {
-    if (panel.rendered != revision || !validIndex(index, panel.apps.size())) {
+    if (panel->rendered != revision || !validIndex(index, panel->apps.size())) {
         finishDrag();
         return;
     }
-    if (panel.dragApps.empty())
+    if (panel->dragApps.empty())
         collectDragApps(index);
-    auto apps = panel.dragApps;
-    auto from = panel.folder;
+    auto apps = panel->dragApps;
+    auto from = panel->folder;
     HWND hit = WindowFromPoint(screenPoint), target = GetAncestor(hit, GA_ROOT);
     wstring to;
     FileDestination files;
     if (target && target == tray())
         to = dropFolderAt(screenPoint);
     else {
-        auto window = panel.window;
+        auto window = panel->window;
         auto serial = revision;
-        int pressed = panel.pressed;
+        int pressed = panel->pressed;
         files = dropDirectory(hit, target, screenPoint);
-        if (panel.window != window || panel.folder != from ||
-            revision != serial || panel.pressed != pressed) {
-            if (panel.window == window && panel.folder == from &&
-                panel.pressed == pressed)
+        if (panel->window != window || panel->folder != from ||
+            revision != serial || panel->pressed != pressed) {
+            if (panel->window == window && panel->folder == from &&
+                panel->pressed == pressed)
                 finishDrag(true);
             return;
         }
@@ -9709,30 +9771,30 @@ static void moveAppOutside(int index, POINT screenPoint) {
             note(uiText(UiString::ExportFailed));
             return;
         }
-        auto image = std::move(panel.dragImage);
+        auto image = std::move(panel->dragImage);
         finishDrag();
         startExit(std::move(image), screenPoint);
         return;
     }
     auto poses = visiblePoses();
-    auto icon = std::move(panel.dragImage);
-    if (!icon && panel.motion) {
-        const int half = panel.iconSize / 2;
+    auto icon = std::move(panel->dragImage);
+    if (!icon && panel->motion) {
+        const int half = panel->iconSize / 2;
         icon =
             makeDragIcon(index, {screenPoint.x - half, screenPoint.y - half});
     }
-    int oldPage = panel.page;
+    int oldPage = panel->page;
     finishDrag();
     if (!editMove([&](Model& m) { moveFolderMembers(m, from, to, apps); }) ||
-        !panel.window || panel.folder != from)
+        !panel->window || panel->folder != from)
         return;
 
     clearPanelSelection();
     startExit(std::move(icon), screenPoint);
     syncPanel();
-    if (!panel.window)
+    if (!panel->window)
         return;
-    if (panel.page != oldPage && pageItems())
+    if (panel->page != oldPage && pageItems())
         gridEntrance(-1);
     else
         settleTiles(poses);
@@ -9778,7 +9840,7 @@ static F::Rect layoutBoundsIn(FrameworkElement const& element,
         {offset.x, offset.y, size.x, size.y});
 }
 static void matchTaskbarPlate(Tile& tile, FrameworkElement sample) {
-    if (!ui.tileTemplate || tile.button.Template() != ui.tileTemplate)
+    if (!ui->tileTemplate || tile.button.Template() != ui->tileTemplate)
         return;
     if (!tile.plate) {
         tile.button.ApplyTemplate();
@@ -9790,8 +9852,8 @@ static void matchTaskbarPlate(Tile& tile, FrameworkElement sample) {
         if (!tile.plate)
             return;
     }
-    if (!sample && !buttons.empty())
-        sample = buttons.front().element;
+    if (!sample && !buttons->empty())
+        sample = buttons->front().element;
     bool changed = tile.plateHost != sample;
     if (changed) {
         tile.plateHost = sample;
@@ -9848,7 +9910,7 @@ static void matchTaskbarPlate(Tile& tile, FrameworkElement sample) {
         auto key = winrt::box_value(hstring(source)),
              local = winrt::box_value(hstring(target));
         M::Brush found{nullptr};
-        for (auto e = sample ? sample : ui.root.try_as<FrameworkElement>();
+        for (auto e = sample ? sample : ui->root.try_as<FrameworkElement>();
              e && !found;
              e = M::VisualTreeHelper::GetParent(e).try_as<FrameworkElement>()) {
             auto dictionary = e.Resources();
@@ -9898,7 +9960,7 @@ struct PlacedButton {
     F::IInspectable local{nullptr};
     X::Data::BindingBase binding{nullptr};
 };
-[[clang::no_destroy]] static std::map<void*, PlacedButton> placedButtons;
+[[clang::no_destroy]] static std::optional<std::map<void*, PlacedButton>> placedButtons;
 [[clang::no_destroy]] static C::Border folderDivider{nullptr};
 struct ProjectedTile {
     Button button{nullptr};
@@ -9941,8 +10003,8 @@ static RowSpace rowLayoutSpace() {
         auto map = child.TransformToVisual(parent);
         return map.TransformPoint({1, 0}).X < map.TransformPoint({0, 0}).X;
     };
-    auto el = ui.repeater;
-    while (el && el != ui.root) {
+    auto el = ui->repeater;
+    while (el && el != ui->root) {
         auto parent =
             M::VisualTreeHelper::GetParent(el).try_as<FrameworkElement>();
         if (!parent)
@@ -9956,11 +10018,11 @@ static RowSpace rowLayoutSpace() {
         space.y += offset.y;
         el = parent;
     }
-    auto offset = ui.overlay.ActualOffset();
+    auto offset = ui->overlay.ActualOffset();
     space.x -= offset.x;
     space.y -= offset.y;
-    if (mirrors(ui.overlay, ui.root)) {
-        space.x = float(ui.overlay.ActualWidth()) - space.x;
+    if (mirrors(ui->overlay, ui->root)) {
+        space.x = float(ui->overlay.ActualWidth()) - space.x;
         space.mirrored = !space.mirrored;
     }
     return space;
@@ -9996,13 +10058,13 @@ struct StartProjection {
     wstring ignoreClick;
     double ignoreUntil{};
 };
-[[clang::no_destroy]] static StartProjection projection;
+[[clang::no_destroy]] static std::optional<StartProjection> projection;
 static void stopShellMotion() {
-    auto old = std::exchange(projection.shell, ShellMotion{});
+    auto old = std::exchange(projection->shell, ShellMotion{});
     try {
-        if (old.sharedMoves && ui.overlay &&
-            ui.overlay.RenderTransform() == old.sharedMoves)
-            ui.overlay.ClearValue(X::UIElement::RenderTransformProperty());
+        if (old.sharedMoves && ui->overlay &&
+            ui->overlay.RenderTransform() == old.sharedMoves)
+            ui->overlay.ClearValue(X::UIElement::RenderTransformProperty());
     } catch (...) {
     }
     if (old.overlay)
@@ -10010,7 +10072,7 @@ static void stopShellMotion() {
             old.overlay.StopAnimation(L"Translation");
             old.overlay.Properties().InsertVector3(L"Translation", {});
             X::Hosting::ElementCompositionPreview::SetIsTranslationEnabled(
-                ui.overlay, false);
+                ui->overlay, false);
         } catch (...) {
         }
 }
@@ -10029,21 +10091,21 @@ static bool isRowTranslation(M::Transform const& transform) {
     return true;
 }
 static void bindRowTranslations() {
-    auto& moves = projection.shell.sharedMoves;
-    if (moves && ui.overlay.RenderTransform() != moves) {
+    auto& moves = projection->shell.sharedMoves;
+    if (moves && ui->overlay.RenderTransform() != moves) {
         moves = nullptr;
         return;
     }
     if (!moves) {
         auto local =
-            ui.overlay.ReadLocalValue(X::UIElement::RenderTransformProperty());
+            ui->overlay.ReadLocalValue(X::UIElement::RenderTransformProperty());
         if (local && local != X::DependencyProperty::UnsetValue())
             return;
     }
     std::vector<M::Transform> sources;
-    auto parent = M::VisualTreeHelper::GetParent(projection.start)
+    auto parent = M::VisualTreeHelper::GetParent(projection->start)
                       .try_as<FrameworkElement>();
-    while (parent && parent != ui.root) {
+    while (parent && parent != ui->root) {
         auto move = parent.RenderTransform();
         if (move && isRowTranslation(move))
             sources.push_back(move);
@@ -10052,7 +10114,7 @@ static void bindRowTranslations() {
     }
     if (sources.empty()) {
         if (moves) {
-            ui.overlay.ClearValue(X::UIElement::RenderTransformProperty());
+            ui->overlay.ClearValue(X::UIElement::RenderTransformProperty());
             moves = nullptr;
         }
         return;
@@ -10060,16 +10122,16 @@ static void bindRowTranslations() {
     M::TransformGroup group;
     for (auto& source : sources)
         group.Children().Append(source);
-    ui.overlay.RenderTransform(group);
+    ui->overlay.RenderTransform(group);
     moves = group;
 }
 // The shell can move its visuals on the compositor before or after layout
 // reaches the UI thread. Apply only that difference to our own overlay.
 static void syncShellOffsets() {
-    if (!projection.start)
+    if (!projection->start)
         return;
-    projection.rowSpace = rowLayoutSpace();
-    auto& shell = projection.shell;
+    projection->rowSpace = rowLayoutSpace();
+    auto& shell = projection->shell;
     for (auto& part : shell.offsets) {
         auto layout = part.element.ActualOffset();
         if (part.layout != layout) {
@@ -10081,14 +10143,14 @@ static void syncShellOffsets() {
     }
 }
 static void bindShellMotion() {
-    if (projection.shell.anchor == projection.start)
+    if (projection->shell.anchor == projection->start)
         return;
     stopShellMotion();
-    auto& shell = projection.shell;
-    shell.anchor = projection.start;
+    auto& shell = projection->shell;
+    shell.anchor = projection->start;
     try {
         using Preview = X::Hosting::ElementCompositionPreview;
-        auto output = Preview::GetElementVisual(ui.overlay);
+        auto output = Preview::GetElementVisual(ui->overlay);
         auto compositor = output.Compositor();
         auto expression = compositor.CreateExpressionAnimation();
         shell.bases = compositor.CreatePropertySet();
@@ -10098,8 +10160,8 @@ static void bindShellMotion() {
         // with its own delay. Use Start's presented offset as well as the
         // row's. The folder's own Dock hover stays on its separate XAML
         // transform.
-        auto current = projection.start;
-        while (current && current != ui.root) {
+        auto current = projection->start;
+        while (current && current != ui->root) {
             auto parent = M::VisualTreeHelper::GetParent(current)
                               .try_as<FrameworkElement>();
             if (!parent)
@@ -10108,17 +10170,17 @@ static void bindShellMotion() {
             auto index = std::to_wstring(shell.offsets.size());
             hstring ref(L"v" + index), key(L"p" + index);
             const auto layout = current.ActualOffset();
-            auto base = current == projection.start ? layout : visual.Offset();
+            auto base = current == projection->start ? layout : visual.Offset();
             shell.bases.InsertVector3(key, base);
             expression.SetReferenceParameter(ref, visual);
-            auto transform = parent.TransformToVisual(ui.overlay);
+            auto transform = parent.TransformToVisual(ui->overlay);
             const bool mirrored = transform.TransformPoint({1, 0}).X <
                                   transform.TransformPoint({0, 0}).X;
             if (!formula.empty())
                 formula += L" + ";
             wstring delta =
                 L"(" + wstring(ref) + L".Offset - bases." + wstring(key) + L")";
-            if (current == projection.start)
+            if (current == projection->start)
                 formula +=
                     wstring(mirrored ? L"Vector3(-1,0,0)" : L"Vector3(1,0,0)") +
                     L" * " + delta;
@@ -10131,17 +10193,17 @@ static void bindShellMotion() {
             return;
         expression.Expression(formula);
         shell.overlay = output;
-        Preview::SetIsTranslationEnabled(ui.overlay, true);
+        Preview::SetIsTranslationEnabled(ui->overlay, true);
         output.StartAnimation(L"Translation", expression);
         bindRowTranslations();
     } catch (...) {
         stopShellMotion();
-        projection.shell.anchor = projection.start;
+        projection->shell.anchor = projection->start;
     }
 }
 static Button projectedButton(const wstring& id) {
-    auto it = projection.tiles.find(id);
-    return it != projection.tiles.end() ? it->second.button : Button{nullptr};
+    auto it = projection->tiles.find(id);
+    return it != projection->tiles.end() ? it->second.button : Button{nullptr};
 }
 struct HeldProperty {
     FrameworkElement host;
@@ -10149,7 +10211,7 @@ struct HeldProperty {
     F::IInspectable prior;
     X::Data::BindingBase binding{nullptr};
 };
-[[clang::no_destroy]] static std::vector<HeldProperty> proxyProperties;
+[[clang::no_destroy]] static std::optional<std::vector<HeldProperty>> proxyProperties;
 static void restoreProxy(HeldProperty const& p) {
     auto value = p.host.ReadLocalValue(p.property);
     if (!value || value == X::DependencyProperty::UnsetValue())
@@ -10172,7 +10234,7 @@ static void restoreProxy(HeldProperty const& p) {
         p.host.SetValue(p.property, p.prior);
 }
 static void syncProxies(const std::map<wstring, FrameworkElement>& hosts) {
-    for (auto i = proxyProperties.begin(); i != proxyProperties.end();) {
+    for (auto i = proxyProperties->begin(); i != proxyProperties->end();) {
         if (std::any_of(hosts.begin(), hosts.end(),
                         [&](auto& entry) { return entry.second == i->host; })) {
             ++i;
@@ -10182,12 +10244,12 @@ static void syncProxies(const std::map<wstring, FrameworkElement>& hosts) {
             restoreProxy(*i);
         } catch (...) {
         }
-        i = proxyProperties.erase(i);
+        i = proxyProperties->erase(i);
     }
     for (const auto& [id, host] : hosts) {
         auto hold = [&](X::DependencyProperty const& property,
                         F::IInspectable const& value) {
-            if (std::any_of(proxyProperties.begin(), proxyProperties.end(),
+            if (std::any_of(proxyProperties->begin(), proxyProperties->end(),
                             [&](auto& p) {
                                 return p.host == host && p.property == property;
                             }))
@@ -10195,7 +10257,7 @@ static void syncProxies(const std::map<wstring, FrameworkElement>& hosts) {
             auto prior = host.ReadLocalValue(property);
             auto expr = host.GetBindingExpression(property);
             host.SetValue(property, value);
-            proxyProperties.push_back(
+            proxyProperties->push_back(
                 {host, property, prior, expr ? expr.ParentBinding() : nullptr});
         };
         hold(X::UIElement::OpacityProperty(), winrt::box_value(0.0));
@@ -10207,50 +10269,47 @@ static void syncProxies(const std::map<wstring, FrameworkElement>& hosts) {
     }
 }
 static void stopPlacementFrames() {
-    if (!std::exchange(projection.rendering, false))
+    if (!std::exchange(projection->rendering, false))
         return;
     try {
-        M::CompositionTarget::Rendering(projection.frame);
+        M::CompositionTarget::Rendering(projection->frame);
     } catch (...) {
     }
 }
 static void unwatchDivider() {
-    for (const auto& watch : projection.dividerWatches) {
+    for (const auto& watch : projection->dividerWatches) {
         try {
             watch.object.UnregisterPropertyChangedCallback(watch.property,
                                                            watch.token);
         } catch (...) {
         }
     }
-    projection.dividerWatches.clear();
-    projection.watchedStart = nullptr;
-    projection.watchedFolder = nullptr;
+    projection->dividerWatches.clear();
+    projection->watchedStart = nullptr;
+    projection->watchedFolder = nullptr;
 }
 static bool suppressFolderClick(const wstring& id) {
-    return (projection.gesture.id == id && projection.gesture.moved) ||
-           (projection.ignoreClick == id &&
-            motionTime() < projection.ignoreUntil);
+    return (projection->gesture.id == id && projection->gesture.moved) ||
+           (projection->ignoreClick == id &&
+            motionTime() < projection->ignoreUntil);
 }
 static void endFolderGesture(bool commit);
 static void clearProjectedTiles() {
     stopPlacementFrames();
     stopShellMotion();
     unwatchDivider();
-    for (auto& [id, t] : projection.tiles) {
-        try {
-            if (t.layer) {
-                detach(t.layer, t.button);
-                detach(ui.overlay, t.layer);
-            }
-        } catch (...) {
+    for (auto& [id, t] : projection->tiles) {
+        if (t.layer) {
+            duringCleanup([&] { detach(t.layer, t.button); });
+            duringCleanup([&] { detach(ui->overlay, t.layer); });
         }
     }
-    for (auto& tile : ui.tiles)
+    for (auto& tile : ui->tiles)
         try {
             followNativeMotion(tile, nullptr);
         } catch (...) {
         }
-    projection = StartProjection{};
+    *projection = StartProjection{};
 }
 static void restorePosition(const PlacedButton& p) {
     if (p.element.Margin() != p.applied)
@@ -10264,19 +10323,19 @@ static void restorePosition(const PlacedButton& p) {
         p.element.SetValue(property, p.local);
 }
 static void clearFolderPlacement() {
-    if (!projection.start && projection.tiles.empty() &&
-        placedButtons.empty() && proxyProperties.empty() && !folderDivider)
+    if (!projection->start && projection->tiles.empty() &&
+        placedButtons->empty() && proxyProperties->empty() && !folderDivider)
         return;
-    clearProjectedTiles();
-    syncProxies({});
-    for (auto& [key, p] : placedButtons)
+    duringCleanup(clearProjectedTiles);
+    duringCleanup([] { syncProxies({}); });
+    for (auto& [key, p] : *placedButtons)
         try {
             restorePosition(p);
         } catch (...) {
         }
-    placedButtons.clear();
+    placedButtons->clear();
     if (folderDivider) {
-        detach(ui.overlay, folderDivider);
+        duringCleanup([] { detach(ui->overlay, folderDivider); });
         folderDivider = nullptr;
     }
 }
@@ -10312,8 +10371,8 @@ static bool orderFolderSlots(std::vector<BarSlot>& slots,
     if (start == slots.size() || folders.empty())
         return false;
     std::map<wstring, size_t> rank;
-    for (size_t i = 0; i < ui.tiles.size(); ++i)
-        rank.emplace(ui.tiles[i].id, i);
+    for (size_t i = 0; i < ui->tiles.size(); ++i)
+        rank.emplace(ui->tiles[i].id, i);
     std::stable_sort(folders.begin(), folders.end(), [&](size_t a, size_t b) {
         return rank.at(slots[a].folder) < rank.at(slots[b].folder);
     });
@@ -10346,7 +10405,7 @@ static bool orderFolderSlots(std::vector<BarSlot>& slots,
 static FrameworkElement repeaterChild(FrameworkElement child) {
     while (child) {
         auto parent = M::VisualTreeHelper::GetParent(child);
-        if (parent == ui.repeater)
+        if (parent == ui->repeater)
             return child;
         child = parent.try_as<FrameworkElement>();
     }
@@ -10354,7 +10413,7 @@ static FrameworkElement repeaterChild(FrameworkElement child) {
 }
 static void shiftButton(FrameworkElement const& e, double offset) {
     auto key = winrt::get_abi(e);
-    auto [it, added] = placedButtons.try_emplace(key);
+    auto [it, added] = placedButtons->try_emplace(key);
     auto& p = it->second;
     auto current = e.Margin();
     if (added || current != p.applied) {
@@ -10387,9 +10446,9 @@ static F::Rect folderContentBounds(const BarSlot& slot,
                                    bool rtl) {
     auto item = slot.element;
     auto content = layoutBoundsIn(host, item);
-    auto placed = placedButtons.find(winrt::get_abi(item));
+    auto placed = placedButtons->find(winrt::get_abi(item));
     auto margin =
-        placed == placedButtons.end() ? item.Margin() : placed->second.base;
+        placed == placedButtons->end() ? item.Margin() : placed->second.base;
     double spare = std::max(
         0., slot.rect.Width - margin.Left - margin.Right - item.ActualWidth());
     auto align = item.HorizontalAlignment();
@@ -10405,15 +10464,15 @@ static F::Rect folderContentBounds(const BarSlot& slot,
 }
 
 static std::vector<wstring> draggedFolderOrder() {
-    auto order = projection.order;
-    auto& g = projection.gesture;
-    if (!g.moved || !projection.tiles.contains(g.id))
+    auto order = projection->order;
+    auto& g = projection->gesture;
+    if (!g.moved || !projection->tiles.contains(g.id))
         return order;
     double center =
-        centerX(projection.tiles.at(g.id).slot) + g.point.X - g.origin.X;
+        centerX(projection->tiles.at(g.id).slot) + g.point.X - g.origin.X;
     std::erase(order, g.id);
     auto next = std::find_if(order.begin(), order.end(), [&](const auto& id) {
-        return center < centerX(projection.tiles.at(id).slot);
+        return center < centerX(projection->tiles.at(id).slot);
     });
     order.insert(next, g.id);
     return order;
@@ -10424,32 +10483,32 @@ static void setFolderTargets(const std::vector<wstring>& order,
                              bool animate = true) {
     if (order.empty())
         return;
-    const auto& slots = projection.order;
-    double x = projection.tiles.at(slots.front()).slot.X;
-    const auto last = projection.tiles.at(slots.back()).slot;
+    const auto& slots = projection->order;
+    double x = projection->tiles.at(slots.front()).slot.X;
+    const auto last = projection->tiles.at(slots.back()).slot;
     const double right = last.X + last.Width;
     for (size_t i = 0; i < order.size(); ++i) {
-        auto& tile = projection.tiles.at(order[i]);
-        if (drag && order[i] == projection.gesture.id) {
-            double wanted = tile.slot.X + projection.gesture.point.X -
-                            projection.gesture.origin.X;
+        auto& tile = projection->tiles.at(order[i]);
+        if (drag && order[i] == projection->gesture.id) {
+            double wanted = tile.slot.X + projection->gesture.point.X -
+                            projection->gesture.origin.X;
             double bounded = std::clamp(
-                wanted, double(projection.tiles.at(slots.front()).slot.X),
-                std::max(double(projection.tiles.at(slots.front()).slot.X),
+                wanted, double(projection->tiles.at(slots.front()).slot.X),
+                std::max(double(projection->tiles.at(slots.front()).slot.X),
                          right - tile.slot.Width));
             // A little resistance at the edge also gives a single folder
             // feedback.
             tile.x.set(bounded + 12 * std::tanh((wanted - bounded) / 42.));
         } else if (tile.x.end != x || (!animate && tile.x.duration)) {
-            if (animate && projection.motion)
+            if (animate && projection->motion)
                 tile.x.to(x, Slide::settleMs, now);
             else
                 tile.x.set(x);
         }
         x += tile.slot.Width;
         if (i + 1 < slots.size()) {
-            auto a = projection.tiles.at(slots[i]).slot;
-            x += projection.tiles.at(slots[i + 1]).slot.X - a.X - a.Width;
+            auto a = projection->tiles.at(slots[i]).slot;
+            x += projection->tiles.at(slots[i + 1]).slot.X - a.X - a.Width;
         }
     }
 }
@@ -10462,22 +10521,22 @@ static void watchDividerProperty(X::DependencyObject const& object,
                                  bool rowMotion = false) {
     auto token = object.RegisterPropertyChangedCallback(
         property, [rebind, rowMotion](auto&&, auto&&) {
-            if (stopping || ui.rootDetached || !projection.line)
+            if (stopping || ui->rootDetached || !projection->line)
                 return;
-            projection.rebindDivider |= rebind;
-            projection.dividerChanged = true;
+            projection->rebindDivider |= rebind;
+            projection->dividerChanged = true;
             try {
                 if (rowMotion && rebind)
                     bindRowTranslations();
-                if (rowMotion || projection.pointerDown)
+                if (rowMotion || projection->pointerDown)
                     paintProjection(motionTime(), false);
-                else if (projection.watchedFolder)
-                    alignFolderDivider(projection.watchedFolder);
+                else if (projection->watchedFolder)
+                    alignFolderDivider(projection->watchedFolder);
                 watchPlacementMotion();
             } catch (...) {
             }
         });
-    projection.dividerWatches.push_back({object, property, token});
+    projection->dividerWatches.push_back({object, property, token});
 }
 static void watchDividerTransform(M::Transform const& transform,
                                   bool rowMotion = false) {
@@ -10515,27 +10574,27 @@ static void watchDividerTransform(M::Transform const& transform,
     }
 }
 static void watchDividerEdges(FrameworkElement const& folder) {
-    if (!projection.rebindDivider &&
-        projection.start == projection.watchedStart &&
-        folder == projection.watchedFolder)
+    if (!projection->rebindDivider &&
+        projection->start == projection->watchedStart &&
+        folder == projection->watchedFolder)
         return;
     unwatchDivider();
-    projection.rebindDivider = false;
-    for (const auto& edge : {projection.start, folder}) {
+    projection->rebindDivider = false;
+    for (const auto& edge : {projection->start, folder}) {
         watchDividerProperty(edge, X::UIElement::RenderTransformProperty(),
                              true);
         watchDividerProperty(edge,
                              X::UIElement::RenderTransformOriginProperty());
         watchDividerTransform(edge.RenderTransform());
     }
-    auto ancestor = M::VisualTreeHelper::GetParent(projection.start)
+    auto ancestor = M::VisualTreeHelper::GetParent(projection->start)
                         .try_as<FrameworkElement>();
-    while (ancestor && ancestor != ui.root) {
+    while (ancestor && ancestor != ui->root) {
         watchDividerProperty(ancestor, X::UIElement::RenderTransformProperty(),
                              true, true);
         auto transform = ancestor.RenderTransform();
         if (transform &&
-            (!projection.shell.sharedMoves || !isRowTranslation(transform))) {
+            (!projection->shell.sharedMoves || !isRowTranslation(transform))) {
             watchDividerProperty(ancestor,
                                  X::UIElement::RenderTransformOriginProperty(),
                                  false, true);
@@ -10544,15 +10603,15 @@ static void watchDividerEdges(FrameworkElement const& folder) {
         ancestor =
             M::VisualTreeHelper::GetParent(ancestor).try_as<FrameworkElement>();
     }
-    projection.watchedStart = projection.start;
-    projection.watchedFolder = folder;
+    projection->watchedStart = projection->start;
+    projection->watchedFolder = folder;
 }
 static F::Rect visibleButtonBounds(FrameworkElement const& element) {
     const auto size = element.ActualSize();
     F::Rect r{0, 0, size.x, size.y};
-    if (element != projection.start)
-        return element.TransformToVisual(ui.overlay).TransformBounds(r);
-    if (element.FlowDirection() == ui.repeater.FlowDirection()) {
+    if (element != projection->start)
+        return element.TransformToVisual(ui->overlay).TransformBounds(r);
+    if (element.FlowDirection() == ui->repeater.FlowDirection()) {
         // Read the live Dock transform around the XAML pivot. Start's
         // compositor Offset already moves the entire overlay and must not move
         // the line twice.
@@ -10568,14 +10627,14 @@ static F::Rect visibleButtonBounds(FrameworkElement const& element) {
         r.X += offset.x;
         r.Y += offset.y;
     } else {
-        r = element.TransformToVisual(ui.repeater).TransformBounds(r);
+        r = element.TransformToVisual(ui->repeater).TransformBounds(r);
     }
-    return projection.rowSpace.map(r);
+    return projection->rowSpace.map(r);
 }
 static void alignFolderDivider(FrameworkElement const& button) {
-    auto start = visibleButtonBounds(projection.start),
+    auto start = visibleButtonBounds(projection->start),
          folder = visibleButtonBounds(button);
-    const bool left = projection.side == FolderPlacement::LeftOfStart;
+    const bool left = projection->side == FolderPlacement::LeftOfStart;
     double x = ((left ? start.X + folder.X + folder.Width
                       : start.X + start.Width + folder.X) -
                 folderDivider.Width()) /
@@ -10583,22 +10642,22 @@ static void alignFolderDivider(FrameworkElement const& button) {
     double y =
         (start.Y + start.Height / 2. + folder.Y + folder.Height / 2.) / 2. -
         C::Canvas::GetTop(folderDivider) - folderDivider.Height() / 2.;
-    if (std::abs(projection.line.X() - x) > .005)
-        projection.line.X(x);
-    if (std::abs(projection.line.Y() - y) > .005)
-        projection.line.Y(y);
+    if (std::abs(projection->line.X() - x) > .005)
+        projection->line.X(x);
+    if (std::abs(projection->line.Y() - y) > .005)
+        projection->line.Y(y);
 }
 static bool paintProjection(double now, bool bindObservers) {
-    if (!projection.start || !projection.line || projection.tiles.empty())
+    if (!projection->start || !projection->line || projection->tiles.empty())
         return false;
-    const bool left = projection.side == FolderPlacement::LeftOfStart;
+    const bool left = projection->side == FolderPlacement::LeftOfStart;
     auto actual =
-        projection.rowSpace.map(layoutBoundsIn(projection.start, ui.repeater));
-    double shift = actual.X - projection.startLayout.X;
-    double shiftY = actual.Y - projection.startLayout.Y;
-    bool nativeDrag = projection.pointerDown || now < projection.releaseAfter;
+        projection->rowSpace.map(layoutBoundsIn(projection->start, ui->repeater));
+    double shift = actual.X - projection->startLayout.X;
+    double shiftY = actual.Y - projection->startLayout.Y;
+    bool nativeDrag = projection->pointerDown || now < projection->releaseAfter;
     if (nativeDrag) {
-        auto rendered = visibleButtonBounds(projection.start);
+        auto rendered = visibleButtonBounds(projection->start);
         shift +=
             left ? rendered.X - actual.X
                  : (rendered.X + rendered.Width) - (actual.X + actual.Width);
@@ -10607,8 +10666,8 @@ static bool paintProjection(double now, bool bindObservers) {
     double adjacent = left ? std::numeric_limits<double>::lowest()
                            : std::numeric_limits<double>::max();
     const ProjectedTile* nearest = nullptr;
-    for (auto& [id, t] : projection.tiles) {
-        if (!projection.motion && t.x.duration)
+    for (auto& [id, t] : projection->tiles) {
+        if (!projection->motion && t.x.duration)
             t.x.set(t.x.end);
         double x = t.x.value(now) + shift;
         if (std::abs(t.translation.X() - x) > .005)
@@ -10625,42 +10684,42 @@ static bool paintProjection(double now, bool bindObservers) {
     if (bindObservers)
         watchDividerEdges(nearest->button);
     alignFolderDivider(nearest->button);
-    bool changed = std::exchange(projection.dividerChanged, false);
-    return changed || active || projection.pointerDown ||
-           now < projection.watchUntil;
+    bool changed = std::exchange(projection->dividerChanged, false);
+    return changed || active || projection->pointerDown ||
+           now < projection->watchUntil;
 }
 static void watchPlacementMotion(double milliseconds) {
-    if (!projection.start || (projection.rendering && milliseconds == 0))
+    if (!projection->start || (projection->rendering && milliseconds == 0))
         return;
-    projection.watchUntil =
-        std::max(projection.watchUntil, motionTime() + milliseconds);
-    if (projection.rendering)
+    projection->watchUntil =
+        std::max(projection->watchUntil, motionTime() + milliseconds);
+    if (projection->rendering)
         return;
-    projection.frame = M::CompositionTarget::Rendering([](auto&&, auto&&) {
+    projection->frame = M::CompositionTarget::Rendering([](auto&&, auto&&) {
         try {
-            if (!stopping && !ui.rootDetached && paintProjection(motionTime()))
+            if (!stopping && !ui->rootDetached && paintProjection(motionTime()))
                 return;
         } catch (...) {
         }
         stopPlacementFrames();
     });
-    projection.rendering = true;
+    projection->rendering = true;
 }
 static void beginFolderGesture(const wstring& id,
                                uint32_t pointer,
                                F::Point origin,
                                bool mouse = false) {
-    if (!projection.tiles.contains(id) || !projection.gesture.id.empty())
+    if (!projection->tiles.contains(id) || !projection->gesture.id.empty())
         return;
-    projection.ignoreClick.clear();
-    projection.gesture = {id, pointer, origin, origin, false, mouse};
+    projection->ignoreClick.clear();
+    projection->gesture = {id, pointer, origin, origin, false, mouse};
 }
 static void moveFolderGesture(uint32_t pointer, F::Point point) {
-    auto& g = projection.gesture;
+    auto& g = projection->gesture;
     if (g.id.empty() || g.pointer != pointer)
         return;
     g.point = point;
-    auto scale = ui.root.XamlRoot().RasterizationScale();
+    auto scale = ui->root.XamlRoot().RasterizationScale();
     UINT dpi = UINT(std::lround(96 * scale));
     POINT delta{LONG(std::lround((point.X - g.origin.X) * scale)),
                 LONG(std::lround((point.Y - g.origin.Y) * scale))};
@@ -10692,37 +10751,37 @@ static void reorderFolder(Model& model,
         std::rotate(to, item, std::next(item));
 }
 static void endFolderGesture(bool commit) {
-    if (projection.gesture.id.empty())
+    if (projection->gesture.id.empty())
         return;
     auto order = draggedFolderOrder();
-    auto g = std::exchange(projection.gesture, FolderGesture{});
+    auto g = std::exchange(projection->gesture, FolderGesture{});
     if (g.moved || !commit) {
-        projection.ignoreClick = g.id;
-        projection.ignoreUntil = motionTime() + 400;
+        projection->ignoreClick = g.id;
+        projection->ignoreUntil = motionTime() + 400;
     }
     if (!g.moved)
         return;
-    auto bounds = projection.tiles.at(g.id).slot;
+    auto bounds = projection->tiles.at(g.id).slot;
     if (g.point.Y < bounds.Y - 5 || g.point.Y > bounds.Y + bounds.Height + 5)
         commit = false;
-    if (!commit || order == projection.order ||
+    if (!commit || order == projection->order ||
         !edit([&](Model& m) { reorderFolder(m, g.id, order); }))
-        order = projection.order;
+        order = projection->order;
     setFolderTargets(order, motionTime(), false);
     watchPlacementMotion();
     requestLayout();
 }
 static bool positionByStart(const std::map<wstring, FrameworkElement>& hosts) {
     auto side = folderPlacement.load();
-    if (side == FolderPlacement::Normal || !ui.repeater || ui.tiles.empty())
+    if (side == FolderPlacement::Normal || !ui->repeater || ui->tiles.empty())
         return false;
-    auto width = ui.repeater.ActualWidth();
+    auto width = ui->repeater.ActualWidth();
     if (width < 2)
         return false;
     const auto toOverlay = rowLayoutSpace();
     const bool rtl = toOverlay.mirrored;
     const bool rowRtl =
-        ui.repeater.FlowDirection() == X::FlowDirection::RightToLeft;
+        ui->repeater.FlowDirection() == X::FlowDirection::RightToLeft;
     std::map<void*, wstring> members;
     for (const auto& [id, button] : hosts) {
         if (!usableAnchor(button))
@@ -10733,9 +10792,9 @@ static bool positionByStart(const std::map<wstring, FrameworkElement>& hosts) {
     }
     std::vector<BarSlot> slots;
     std::optional<F::Rect> start;
-    auto count = M::VisualTreeHelper::GetChildrenCount(ui.repeater);
+    auto count = M::VisualTreeHelper::GetChildrenCount(ui->repeater);
     for (int i = 0; i < count; ++i) {
-        auto e = M::VisualTreeHelper::GetChild(ui.repeater, i)
+        auto e = M::VisualTreeHelper::GetChild(ui->repeater, i)
                      .try_as<FrameworkElement>();
         if (!usableAnchor(e) || e.ActualHeight() < 2)
             continue;
@@ -10765,7 +10824,7 @@ static bool positionByStart(const std::map<wstring, FrameworkElement>& hosts) {
         begin = std::min(begin, s.x);
         end = std::max(end, s.x + s.rect.Width);
     }
-    for (const auto& tile : ui.tiles) {
+    for (const auto& tile : ui->tiles) {
         if (hosts.contains(tile.id)) {
             if (std::none_of(slots.begin(), slots.end(),
                              [&](auto& s) { return s.folder == tile.id; }))
@@ -10795,13 +10854,13 @@ static bool positionByStart(const std::map<wstring, FrameworkElement>& hosts) {
     auto rowBounds = mapped(slots.front().x, start->Y,
                             float(end - slots.front().x), start->Height);
     if (rowBounds.X < -1 ||
-        rowBounds.X + rowBounds.Width > ui.overlay.ActualWidth() + 1)
+        rowBounds.X + rowBounds.Width > ui->overlay.ActualWidth() + 1)
         return false;
-    bool first = !projection.start;
-    bool moved = first || projection.side != side;
-    projection.motion = allowMotion();
-    projection.side = side;
-    projection.order.clear();
+    bool first = !projection->start;
+    bool moved = first || projection->side != side;
+    projection->motion = allowMotion();
+    projection->side = side;
+    projection->order.clear();
     std::set<void*> shifted;
     for (const auto& slot : slots) {
         const auto offset = (slot.target - slot.x) * (rtl ? -1 : 1);
@@ -10811,9 +10870,9 @@ static bool positionByStart(const std::map<wstring, FrameworkElement>& hosts) {
         }
         if (!slot.folder.empty()) {
             auto tile =
-                std::find_if(ui.tiles.begin(), ui.tiles.end(),
+                std::find_if(ui->tiles.begin(), ui->tiles.end(),
                              [&](auto& t) { return t.id == slot.folder; });
-            auto& t = projection.tiles[slot.folder];
+            auto& t = projection->tiles[slot.folder];
             const float h = slot.element ? slot.rect.Height
                                          : std::min(38.f, slot.rect.Height);
             auto rect = mapped(slot.target, row - h / 2, slot.rect.Width, h);
@@ -10828,7 +10887,7 @@ static bool positionByStart(const std::map<wstring, FrameworkElement>& hosts) {
             moved |= rect != t.slot;
             t.slot = rect;
             reparent(t.button, t.layer);
-            reparent(t.layer, ui.overlay);
+            reparent(t.layer, ui->overlay);
             auto native = hosts.find(tile->id);
             auto host = native == hosts.end() ? FrameworkElement{nullptr}
                                               : native->second;
@@ -10856,48 +10915,48 @@ static bool positionByStart(const std::map<wstring, FrameworkElement>& hosts) {
                 C::Canvas::SetLeft(t.layer, 0);
             if (C::Canvas::GetTop(t.layer) != rect.Y)
                 C::Canvas::SetTop(t.layer, rect.Y);
-            projection.order.push_back(slot.folder);
+            projection->order.push_back(slot.folder);
             // Explorer keeps its real slot for pin management. The visible
             // button owns pointer capture and can never start a native pin
             // reorder.
             continue;
         }
         if (slot.start) {
-            projection.start = slot.element;
-            projection.startLayout = folderContentBounds(
+            projection->start = slot.element;
+            projection->startLayout = folderContentBounds(
                 slot, slot.element, toOverlay,
                 rtl ? width - slot.target - slot.rect.Width : slot.target,
                 rowRtl);
         }
     }
-    for (auto i = placedButtons.begin(); i != placedButtons.end();) {
+    for (auto i = placedButtons->begin(); i != placedButtons->end();) {
         if (shifted.contains(i->first)) {
             ++i;
             continue;
         }
         restorePosition(i->second);
-        i = placedButtons.erase(i);
+        i = placedButtons->erase(i);
     }
-    std::sort(projection.order.begin(), projection.order.end(),
+    std::sort(projection->order.begin(), projection->order.end(),
               [](const auto& a, const auto& b) {
-                  return projection.tiles.at(a).slot.X <
-                         projection.tiles.at(b).slot.X;
+                  return projection->tiles.at(a).slot.X <
+                         projection->tiles.at(b).slot.X;
               });
-    setFolderTargets(projection.order, motionTime(), false, false);
+    setFolderTargets(projection->order, motionTime(), false, false);
     if (!folderDivider) {
         folderDivider = C::Border();
         folderDivider.IsHitTestVisible(false);
         folderDivider.Width(1);
-        projection.line = M::TranslateTransform();
-        folderDivider.RenderTransform(projection.line);
+        projection->line = M::TranslateTransform();
+        folderDivider.RenderTransform(projection->line);
         C::Canvas::SetLeft(folderDivider, 0);
         X::Automation::AutomationProperties::SetAccessibilityView(
             folderDivider, X::Automation::Peers::AccessibilityView::Raw);
     }
     uint32_t index = 0;
-    if (!ui.overlay.Children().IndexOf(folderDivider, index))
-        ui.overlay.Children().Append(folderDivider);
-    auto theme = ui.root.ActualTheme();
+    if (!ui->overlay.Children().IndexOf(folderDivider, index))
+        ui->overlay.Children().Append(folderDivider);
+    auto theme = ui->root.ActualTheme();
     bool dark = theme == X::ElementTheme::Dark;
     W::UI::Color color =
         dark ? W::UI::Color{68, 255, 255, 255} : W::UI::Color{62, 0, 0, 0};
@@ -10916,7 +10975,7 @@ static bool positionByStart(const std::map<wstring, FrameworkElement>& hosts) {
     if (folderDivider.Height() != h)
         folderDivider.Height(h);
     if (first)
-        projection.line.X(at.X);
+        projection->line.X(at.X);
     if (C::Canvas::GetTop(folderDivider) != at.Y)
         C::Canvas::SetTop(folderDivider, at.Y);
     bindShellMotion();
@@ -10927,12 +10986,12 @@ static bool positionByStart(const std::map<wstring, FrameworkElement>& hosts) {
 }
 static void syncOpacity(const std::vector<FrameworkElement>&);
 static bool deferPlacementScan(double now, bool down) {
-    if (!projection.start || folderPlacement.load() != projection.side ||
-        ui.tiles.size() != groups.size())
+    if (!projection->start || folderPlacement.load() != projection->side ||
+        ui->tiles.size() != groups.size())
         return false;
     if (fileDragActive || now < fileLayoutAfter)
         return true;
-    auto& gesture = projection.gesture;
+    auto& gesture = projection->gesture;
     if (!gesture.id.empty()) {
         if (!gesture.mouse || down) {
             gesture.missedRelease = 0;
@@ -10945,26 +11004,26 @@ static bool deferPlacementScan(double now, bool down) {
             return true;
         endFolderGesture(false);
     }
-    if (projection.pointerDown) {
+    if (projection->pointerDown) {
         if (down)
             return true;
-        projection.pointerDown = false;
-        projection.releaseAfter = now + 140;
+        projection->pointerDown = false;
+        projection->releaseAfter = now + 140;
     }
-    return now < projection.releaseAfter;
+    return now < projection->releaseAfter;
 }
 static bool holdTransientLayout(double now) {
-    if (!projection.start || folderPlacement.load() != projection.side)
+    if (!projection->start || folderPlacement.load() != projection->side)
         return false;
-    if (!projection.invalidSince)
-        projection.invalidSince = now;
-    return now - projection.invalidSince < 420;
+    if (!projection->invalidSince)
+        projection->invalidSince = now;
+    return now - projection->invalidSince < 420;
 }
 static FrameworkElement groupedSlot(FrameworkElement button) {
     auto current = button;
     while (auto parent = M::VisualTreeHelper::GetParent(current)
                              .try_as<FrameworkElement>()) {
-        if (parent == ui.repeater)
+        if (parent == ui->repeater)
             return current;
         if (M::VisualTreeHelper::GetChildrenCount(parent) != 1)
             break;
@@ -10974,21 +11033,21 @@ static FrameworkElement groupedSlot(FrameworkElement button) {
 }
 static bool syncHiddenSlots(const std::vector<FrameworkElement>& needed) {
     bool changed = false;
-    for (auto it = ui.hidden.begin(); it != ui.hidden.end();) {
+    for (auto it = ui->hidden.begin(); it != ui->hidden.end();) {
         auto e = it->item.get();
         if (e && std::find(needed.begin(), needed.end(), e) != needed.end()) {
             ++it;
             continue;
         }
         restore(*it);
-        it = ui.hidden.erase(it);
+        it = ui->hidden.erase(it);
         changed = true;
     }
     for (auto& e : needed)
         if (e.Visibility() != X::Visibility::Collapsed) {
             auto prop = X::UIElement::VisibilityProperty();
             auto binding = e.GetBindingExpression(prop);
-            ui.hidden.push_back({winrt::make_weak(e), e.ReadLocalValue(prop),
+            ui->hidden.push_back({winrt::make_weak(e), e.ReadLocalValue(prop),
                                  binding ? binding.ParentBinding() : nullptr});
             e.Visibility(X::Visibility::Collapsed);
             changed = true;
@@ -10996,33 +11055,33 @@ static bool syncHiddenSlots(const std::vector<FrameworkElement>& needed) {
     return changed;
 }
 static void scan() {
-    if (stopping || ui.rootDetached || !ui.frame || !ui.root || !ui.overlay)
+    if (stopping || ui->rootDetached || !ui->frame || !ui->root || !ui->overlay)
         return;
-    if (projection.start && fileDragActive)
+    if (projection->start && fileDragActive)
         return;
     if (deferPlacementScan(motionTime(), primaryMouseDown())) {
         requestLayout();
         return;
     }
-    if (revision != ui.painted) {
+    if (revision != ui->painted) {
         bool reuse =
-            ui.tiles.size() == groups.size() &&
+            ui->tiles.size() == groups.size() &&
             std::all_of(groups.begin(), groups.end(), [](auto& f) {
-                return std::any_of(ui.tiles.begin(), ui.tiles.end(),
+                return std::any_of(ui->tiles.begin(), ui->tiles.end(),
                                    [&](auto& t) { return t.id == f.id; });
             });
         if (!reuse) {
             clearFolderPlacement();
-            off(ui.tileOff);
-            ui.overlay.Children().Clear();
-            ui.strip.Children().Clear();
-            ui.tiles.clear();
+            off(ui->tileOff);
+            ui->overlay.Children().Clear();
+            ui->strip.Children().Clear();
+            ui->tiles.clear();
         } else {
             for (size_t i = 0; i < groups.size(); ++i) {
                 auto next =
-                    std::find_if(ui.tiles.begin() + i, ui.tiles.end(),
+                    std::find_if(ui->tiles.begin() + i, ui->tiles.end(),
                                  [&](auto& t) { return t.id == groups[i].id; });
-                std::iter_swap(ui.tiles.begin() + i, next);
+                std::iter_swap(ui->tiles.begin() + i, next);
             }
         }
         for (size_t i = 0; i < groups.size(); ++i) {
@@ -11035,10 +11094,10 @@ static void scan() {
                     Wh_Log(L"Folder preview update deferred.");
                 }
             if (!reuse) {
-                ui.tiles.push_back({makeTile(f), f.id});
+                ui->tiles.push_back({makeTile(f), f.id});
                 continue;
             }
-            auto b = ui.tiles[i].button;
+            auto b = ui->tiles[i].button;
             if (X::Automation::AutomationProperties::GetName(b) != f.name) {
                 X::Automation::AutomationProperties::SetName(b, f.name);
                 C::ToolTipService::SetToolTip(
@@ -11050,24 +11109,24 @@ static void scan() {
                     image.Source(preview);
             }
         }
-        std::erase_if(previews, [](const auto& entry) {
+        std::erase_if(*previews, [](const auto& entry) {
             return !lookup(groups, entry.first);
         });
-        ui.groupByApp.clear();
+        ui->groupByApp.clear();
         for (const auto& folder : groups)
             for (const auto& app : folder.apps)
                 if (app.groupTaskbarButton && !app.id.empty())
-                    ui.groupByApp.try_emplace(app.id, folder.id);
-        ui.painted = revision;
+                    ui->groupByApp.try_emplace(app.id, folder.id);
+        ui->painted = revision;
     }
-    buttons.clear();
-    if (ui.repeater && !groups.empty())
-        visit(ui.repeater, [](FrameworkElement const& e) {
+    buttons->clear();
+    if (ui->repeater && !groups.empty())
+        visit(ui->repeater, [](FrameworkElement const& e) {
             if (winrt::get_class_name(e) != L"Taskbar.TaskListButton")
                 return true;
             auto id = appKey(e);
             if (!id.empty())
-                buttons.push_back({e, id});
+                buttons->push_back({e, id});
             return false;
         });
     std::map<wstring, FrameworkElement> anchors;
@@ -11075,16 +11134,16 @@ static void scan() {
     std::vector<NativeButton> hosts;
     std::set<wstring> pinned;
     if (nativeReady.load())
-        for (auto& b : buttons)
+        for (auto& b : *buttons)
             if (auto f = folderForPin(b.id)) {
                 hosts.push_back(b);
                 pinned.insert(f->id);
             }
-    for (auto const& b : buttons) {
+    for (auto const& b : *buttons) {
         if (prefix(b.id, kPinPrefix))
             continue;
-        auto group = ui.groupByApp.find(b.id);
-        if (group == ui.groupByApp.end() || !canGroupClosedButton(b.element))
+        auto group = ui->groupByApp.find(b.id);
+        if (group == ui->groupByApp.end() || !canGroupClosedButton(b.element))
             continue;
         const auto& id = group->second;
         if (!pinned.contains(id) && !anchors.contains(id))
@@ -11092,7 +11151,7 @@ static void scan() {
         else
             childrenToHide.push_back(groupedSlot(b.element));
     }
-    if (syncHiddenSlots(childrenToHide) && projection.start) {
+    if (syncHiddenSlots(childrenToHide) && projection->start) {
         requestLayout();
         return;
     }
@@ -11113,7 +11172,7 @@ static void scan() {
         }
         clearFolderPlacement();
     } else
-        projection.invalidSince = 0;
+        projection->invalidSince = 0;
     if (positioned) {
         syncOpacity({});
         syncPinCaptions({});
@@ -11128,7 +11187,7 @@ static void scan() {
                            : std::map<wstring, FrameworkElement>{});
     int loose = 0;
     std::vector<FrameworkElement> hideGlyphs;
-    for (auto& tile : ui.tiles) {
+    for (auto& tile : ui->tiles) {
         auto sample = folderHosts.find(tile.id);
         try {
             matchTaskbarPlate(tile, sample == folderHosts.end()
@@ -11152,13 +11211,13 @@ static void scan() {
         if (i == anchors.end() || !usableAnchor(i->second)) {
             ++loose;
             followNativeMotion(tile, nullptr);
-            reparent(tile.button, ui.strip);
+            reparent(tile.button, ui->strip);
             continue;
         }
         auto anchor = i->second;
         auto width = anchor.ActualWidth(), height = anchor.ActualHeight();
-        auto pos = layoutBoundsIn(anchor, ui.overlay);
-        reparent(tile.button, ui.overlay);
+        auto pos = layoutBoundsIn(anchor, ui->overlay);
+        reparent(tile.button, ui->overlay);
         followNativeMotion(tile, anchor);
         if (tile.button.Width() != width)
             tile.button.Width(width);
@@ -11170,8 +11229,8 @@ static void scan() {
             C::Canvas::SetTop(tile.button, pos.Y);
         hideGlyphs.push_back(anchor);
     }
-    for (auto const& tile : ui.tiles)
-        if (M::VisualTreeHelper::GetParent(tile.button) == ui.strip) {
+    for (auto const& tile : ui->tiles)
+        if (M::VisualTreeHelper::GetParent(tile.button) == ui->strip) {
             if (tile.button.Width() != 40)
                 tile.button.Width(40);
             if (tile.button.Height() != 38)
@@ -11179,21 +11238,33 @@ static void scan() {
         }
     syncOpacity(hideGlyphs);
     double gap = loose * 40.;
-    if (ui.repeater && gap != ui.reserved) {
-        if (!ui.marginSet)
-            ui.baseMargin = ui.repeater.Margin();
-        auto m = ui.baseMargin;
-        m.Right += gap;
-        ui.repeater.Margin(m);
-        ui.marginSet = gap != 0;
-        ui.reserved = gap;
+    if (ui->repeater && gap != ui->reserved) {
+        if (gap) {
+            if (!ui->marginSet || ui->repeater.Margin() != ui->appliedMargin) {
+                auto property = FrameworkElement::MarginProperty();
+                ui->baseMargin = ui->repeater.Margin();
+                ui->localMargin = ui->repeater.ReadLocalValue(property);
+                auto binding = ui->repeater.GetBindingExpression(property);
+                ui->marginBinding = binding ? binding.ParentBinding() : nullptr;
+            }
+            auto margin = ui->baseMargin;
+            margin.Right += gap;
+            ui->repeater.Margin(margin);
+            ui->appliedMargin = margin;
+            ui->marginSet = true;
+        } else {
+            restoreRepeaterMargin();
+            ui->localMargin = nullptr;
+            ui->marginBinding = nullptr;
+        }
+        ui->reserved = gap;
     }
 }
 struct Faded {
     winrt::weak_ref<FrameworkElement> e;
     F::IInspectable old;
 };
-[[clang::no_destroy]] static std::vector<Faded> faded;
+[[clang::no_destroy]] static std::optional<std::vector<Faded>> faded;
 static void unfade(Faded& f) {
     if (auto e = f.e.get(); e && e.Opacity() == 0) {
         if (!f.old || f.old == X::DependencyProperty::UnsetValue())
@@ -11203,18 +11274,24 @@ static void unfade(Faded& f) {
     }
 }
 static void syncOpacity(const std::vector<FrameworkElement>& wanted) {
-    for (auto i = faded.begin(); i != faded.end();) {
-        auto e = i->e.get();
-        if (e && std::find(wanted.begin(), wanted.end(), e) != wanted.end()) {
+    for (auto i = faded->begin(); i != faded->end();) {
+        bool keep = false;
+        duringCleanup([&] {
+            if (!wanted.empty())
+                if (auto e = i->e.get())
+                    keep = std::find(wanted.begin(), wanted.end(), e) != wanted.end();
+            if (!keep)
+                unfade(*i);
+        });
+        if (keep) {
             ++i;
             continue;
         }
-        unfade(*i);
-        i = faded.erase(i);
+        i = faded->erase(i);
     }
     for (auto const& e : wanted)
         if (e.Opacity() != 0) {
-            faded.push_back(
+            faded->push_back(
                 {winrt::make_weak(e),
                  e.ReadLocalValue(X::UIElement::OpacityProperty())});
             e.Opacity(0);
@@ -11233,7 +11310,7 @@ static std::optional<App> droppedShortcut(const wstring& name) {
 }
 static void collectDrops() {
     std::vector<DropJob> completed;
-    for (auto job = ui.drops.begin(); job != ui.drops.end();) {
+    for (auto job = ui->drops.begin(); job != ui->drops.end();) {
         try {
             if (job->storage) {
                 auto status = job->storage.Status();
@@ -11250,9 +11327,9 @@ static void collectDrops() {
             Wh_Log(L"Could not read the dropped shortcut.");
         }
         completed.push_back(std::move(*job));
-        job = ui.drops.erase(job);
+        job = ui->drops.erase(job);
     }
-    if (ui.drops.empty() && controller)
+    if (ui->drops.empty() && controller)
         KillTimer(controller, kDropTimer);
     for (auto& job : completed) {
         bool saved = false;
@@ -11271,9 +11348,9 @@ static void collectDrops() {
 }
 static FrameworkElement buttonOf(X::DependencyObject);
 static wstring projectedFolderAt(X::DependencyObject node) {
-    while (node && node != ui.root) {
+    while (node && node != ui->root) {
         if (auto b = node.try_as<Button>())
-            for (const auto& [id, tile] : projection.tiles)
+            for (const auto& [id, tile] : projection->tiles)
                 if (tile.button == b)
                     return id;
         node = M::VisualTreeHelper::GetParent(node);
@@ -11281,13 +11358,13 @@ static wstring projectedFolderAt(X::DependencyObject node) {
     return {};
 }
 static void watchFrame() {
-    auto root = ui.root;
+    auto root = ui->root;
     auto enterEvent = X::UIElement::DragEnterEvent();
     auto enter = winrt::box_value(X::DragEventHandler(
         [](F::IInspectable const&, X::DragEventArgs const& e) {
             try {
-                if (stopping || fileDragActive || !ui.drag.app.empty() ||
-                    ui.tiles.empty())
+                if (stopping || fileDragActive || !ui->drag.app.empty() ||
+                    ui->tiles.empty())
                     return;
                 auto view = e.DataView();
                 if (view.Contains(Data::StandardDataFormats::StorageItems()))
@@ -11296,28 +11373,28 @@ static void watchFrame() {
             }
         }));
     root.AddHandler(enterEvent, enter, true);
-    ui.frameOff.push_back(
+    ui->frameOff.push_back(
         [root, enterEvent, enter] { root.RemoveHandler(enterEvent, enter); });
     auto unload = root.Unloaded([](auto&&, auto&&) {
-        ui.rootDetached = true;
-        projection.gesture = {};
-        projection.pointerDown = false;
+        ui->rootDetached = true;
+        projection->gesture = {};
+        projection->pointerDown = false;
         stopPlacementFrames();
     });
-    ui.frameOff.push_back([root, unload] { root.Unloaded(unload); });
+    ui->frameOff.push_back([root, unload] { root.Unloaded(unload); });
     auto load = root.Loaded([](auto&&, auto&&) {
-        ui.rootDetached = false;
+        ui->rootDetached = false;
         requestLayout();
     });
-    ui.frameOff.push_back([root, load] { root.Loaded(load); });
+    ui->frameOff.push_back([root, load] { root.Loaded(load); });
     auto size = root.SizeChanged([](auto&&, auto&&) {
         if (!groups.empty())
             requestLayout();
     });
-    ui.frameOff.push_back([root, size] { root.SizeChanged(size); });
-    auto repeater = ui.repeater;
+    ui->frameOff.push_back([root, size] { root.SizeChanged(size); });
+    auto repeater = ui->repeater;
     auto token = repeater.LayoutUpdated([](auto&&, auto&&) {
-        if (projection.start && !ui.rootDetached && !stopping)
+        if (projection->start && !ui->rootDetached && !stopping)
             try {
                 syncShellOffsets();
                 if (paintProjection(motionTime()))
@@ -11327,12 +11404,12 @@ static void watchFrame() {
         if (!groups.empty())
             requestLayout();
     });
-    ui.frameOff.push_back([repeater, token] { repeater.LayoutUpdated(token); });
+    ui->frameOff.push_back([repeater, token] { repeater.LayoutUpdated(token); });
     using Update = W::UI::Input::PointerUpdateKind;
     auto attach = [&](auto event, I::PointerEventHandler handler) {
         auto boxed = winrt::box_value(handler);
         root.AddHandler(event, boxed, true);
-        ui.frameOff.push_back(
+        ui->frameOff.push_back(
             [root, event, boxed] { root.RemoveHandler(event, boxed); });
     };
     attach(X::UIElement::PointerPressedEvent(),
@@ -11350,12 +11427,12 @@ static void watchFrame() {
                        return;
                    auto source =
                        e.OriginalSource().try_as<X::DependencyObject>();
-                   if (projection.start) {
+                   if (projection->start) {
                        auto id = projectedFolderAt(source);
                        if (!id.empty()) {
                            beginFolderGesture(
                                id, p.PointerId(),
-                               e.GetCurrentPoint(ui.overlay).Position(),
+                               e.GetCurrentPoint(ui->overlay).Position(),
                                e.Pointer().PointerDeviceType() ==
                                    W::Devices::Input::PointerDeviceType::Mouse);
                            requestLayout();
@@ -11364,15 +11441,15 @@ static void watchFrame() {
                    }
                    auto button = buttonOf(source);
                    if (button)
-                       ui.drag = {appKey(button), screen, p.PointerId()};
-                   if (projection.start &&
+                       ui->drag = {appKey(button), screen, p.PointerId()};
+                   if (projection->start &&
                        (button ||
                         repeaterChild(source.try_as<FrameworkElement>()))) {
-                       projection.pointerDown = true;
+                       projection->pointerDown = true;
                        watchPlacementMotion(Slide::settleMs);
                        requestLayout();
                    }
-                   if (ui.drag.app.empty() || prefix(ui.drag.app, kPinPrefix))
+                   if (ui->drag.app.empty() || prefix(ui->drag.app, kPinPrefix))
                        dismissOutside(screen);
                } catch (...) {
                }
@@ -11381,23 +11458,23 @@ static void watchFrame() {
            [](F::IInspectable const&, I::PointerRoutedEventArgs const& e) {
                try {
                    if (stopping ||
-                       (ui.drag.app.empty() && projection.gesture.id.empty() &&
-                        !projection.pointerDown))
+                       (ui->drag.app.empty() && projection->gesture.id.empty() &&
+                        !projection->pointerDown))
                        return;
-                   if (projection.start) {
-                       auto p = e.GetCurrentPoint(ui.overlay);
-                       if (!projection.gesture.id.empty() &&
-                           projection.gesture.pointer == p.PointerId()) {
+                   if (projection->start) {
+                       auto p = e.GetCurrentPoint(ui->overlay);
+                       if (!projection->gesture.id.empty() &&
+                           projection->gesture.pointer == p.PointerId()) {
                            if (p.Properties().IsLeftButtonPressed())
                                moveFolderGesture(p.PointerId(), p.Position());
                            return;
                        }
-                       if (projection.pointerDown &&
+                       if (projection->pointerDown &&
                            p.Properties().IsLeftButtonPressed())
                            watchPlacementMotion(Slide::settleMs);
                    }
-                   if (ui.drag.app.empty() || prefix(ui.drag.app, kPinPrefix) ||
-                       e.Pointer().PointerId() != ui.drag.pointerId)
+                   if (ui->drag.app.empty() || prefix(ui->drag.app, kPinPrefix) ||
+                       e.Pointer().PointerId() != ui->drag.pointerId)
                        return;
                    if (!e.GetCurrentPoint(nullptr)
                             .Properties()
@@ -11409,7 +11486,7 @@ static void watchFrame() {
                    if (!GetCursorPos(&screen))
                        return;
                    UINT dpi = GetDpiForWindow(tray());
-                   if (pastDragThreshold(ui.drag.start, screen, dpi ? dpi : 96))
+                   if (pastDragThreshold(ui->drag.start, screen, dpi ? dpi : 96))
                        previewTaskbarApp(screen);
                } catch (...) {
                }
@@ -11418,9 +11495,9 @@ static void watchFrame() {
         X::UIElement::PointerReleasedEvent(),
         [](F::IInspectable const&, I::PointerRoutedEventArgs const& e) {
             try {
-                if (!projection.gesture.id.empty() &&
-                    projection.gesture.pointer == e.Pointer().PointerId()) {
-                    auto p = e.GetCurrentPoint(ui.overlay);
+                if (!projection->gesture.id.empty() &&
+                    projection->gesture.pointer == e.Pointer().PointerId()) {
+                    auto p = e.GetCurrentPoint(ui->overlay);
                     if (p.Properties().PointerUpdateKind() ==
                         Update::LeftButtonReleased) {
                         moveFolderGesture(p.PointerId(), p.Position());
@@ -11428,15 +11505,15 @@ static void watchFrame() {
                     }
                     return;
                 }
-                if (projection.pointerDown && !primaryMouseDown()) {
-                    projection.pointerDown = false;
-                    projection.releaseAfter = motionTime() + 140;
+                if (projection->pointerDown && !primaryMouseDown()) {
+                    projection->pointerDown = false;
+                    projection->releaseAfter = motionTime() + 140;
                     requestLayout();
                 }
-                if (stopping || ui.drag.app.empty())
+                if (stopping || ui->drag.app.empty())
                     return;
                 auto p = e.GetCurrentPoint(nullptr);
-                if (p.PointerId() != ui.drag.pointerId ||
+                if (p.PointerId() != ui->drag.pointerId ||
                     p.Properties().PointerUpdateKind() !=
                         Update::LeftButtonReleased)
                     return;
@@ -11447,34 +11524,34 @@ static void watchFrame() {
                     cancelTaskbarPreview();
                     return;
                 }
-                if (!pastDragThreshold(ui.drag.start, screen, dpi ? dpi : 96) ||
-                    prefix(ui.drag.app, kPinPrefix)) {
+                if (!pastDragThreshold(ui->drag.start, screen, dpi ? dpi : 96) ||
+                    prefix(ui->drag.app, kPinPrefix)) {
                     cancelTaskbarPreview();
                     dismissOutside(screen);
                     return;
                 }
                 auto root = GetAncestor(WindowFromPoint(screen), GA_ROOT);
-                bool inPanel = root && root == panel.window &&
-                               !panel.choosing && !panel.closing &&
-                               !panel.browsing;
-                auto folder = inPanel                  ? panel.folder
+                bool inPanel = root && root == panel->window &&
+                               !panel->choosing && !panel->closing &&
+                               !panel->browsing;
+                auto folder = inPanel                  ? panel->folder
                               : owner && root == owner ? dropFolderAt(screen)
                                                        : wstring{};
                 if (folder.empty()) {
                     cancelTaskbarPreview();
                     return;
                 }
-                auto drag = std::exchange(ui.drag, TaskbarDrag{});
-                if (inPanel && drag.token && drag.token == panel.incoming.token)
+                auto drag = std::exchange(ui->drag, TaskbarDrag{});
+                if (inPanel && drag.token && drag.token == panel->incoming.token)
                     positionIncoming(screen);
-                ui.releasedButtons.push_back(
+                ui->releasedButtons.push_back(
                     {std::move(drag.app), folder, incomingAnchor(drag.token),
                      drag.token, std::move(drag.resolved)});
-                if (iconHover.native)
+                if (iconHover->native)
                     resetIconHover(true);
                 if (!SetTimer(controller, kNativeDropTimer, 140, nullptr) &&
                     !PostMessageW(controller, kTaskbarDrop, 0, 0)) {
-                    ui.releasedButtons.pop_back();
+                    ui->releasedButtons.pop_back();
                     clearIncoming(drag.token);
                 }
                 requestLayout();
@@ -11484,10 +11561,10 @@ static void watchFrame() {
     I::PointerEventHandler cancel = [](F::IInspectable const&,
                                        I::PointerRoutedEventArgs const& e) {
         try {
-            if (!projection.gesture.id.empty() &&
-                projection.gesture.pointer == e.Pointer().PointerId())
+            if (!projection->gesture.id.empty() &&
+                projection->gesture.pointer == e.Pointer().PointerId())
                 endFolderGesture(false);
-            if (e.Pointer().PointerId() == ui.drag.pointerId)
+            if (e.Pointer().PointerId() == ui->drag.pointerId)
                 cancelTaskbarPreview();
         } catch (...) {
         }
@@ -11496,9 +11573,9 @@ static void watchFrame() {
     attach(X::UIElement::PointerCaptureLostEvent(),
            [](F::IInspectable const&, I::PointerRoutedEventArgs const& e) {
                try {
-                   if (!projection.gesture.id.empty() &&
-                       projection.gesture.pointer == e.Pointer().PointerId()) {
-                       auto point = e.GetCurrentPoint(ui.overlay);
+                   if (!projection->gesture.id.empty() &&
+                       projection->gesture.pointer == e.Pointer().PointerId()) {
+                       auto point = e.GetCurrentPoint(ui->overlay);
                        bool release = point.Properties().PointerUpdateKind() ==
                                       Update::LeftButtonReleased;
                        if (release)
@@ -11506,7 +11583,7 @@ static void watchFrame() {
                                              point.Position());
                        endFolderGesture(release);
                    }
-                   if (e.Pointer().PointerId() == ui.drag.pointerId)
+                   if (e.Pointer().PointerId() == ui->drag.pointerId)
                        cancelTaskbarPreview();
                } catch (...) {
                }
@@ -11514,7 +11591,7 @@ static void watchFrame() {
     I::KeyEventHandler key = [](F::IInspectable const&,
                                 I::KeyRoutedEventArgs const& e) {
         try {
-            if (!projection.gesture.id.empty() &&
+            if (!projection->gesture.id.empty() &&
                 e.Key() == W::System::VirtualKey::Escape) {
                 endFolderGesture(false);
                 e.Handled(true);
@@ -11525,7 +11602,7 @@ static void watchFrame() {
     auto keyHandler = winrt::box_value(key);
     auto keyEvent = X::UIElement::KeyDownEvent();
     root.AddHandler(keyEvent, keyHandler, true);
-    ui.frameOff.push_back([root, keyEvent, keyHandler] {
+    ui->frameOff.push_back([root, keyEvent, keyHandler] {
         root.RemoveHandler(keyEvent, keyHandler);
     });
 }
@@ -11674,6 +11751,44 @@ static void invokeNativeAction(WPARAM seq, LPARAM ordinal) {
         note(uiText(UiString::AppMissing));
 }
 
+static void initTaskbarState() {
+    ui.emplace();
+    previews.emplace();
+    panel.emplace();
+    exitClock.emplace();
+    iconHover.emplace();
+    fileWindows.emplace();
+    folderMenu.emplace();
+    buttons.emplace();
+    dropOff.emplace();
+    dropHosts.emplace();
+    liveIcons.emplace();
+    pinCaptions.emplace();
+    exports.emplace();
+    placedButtons.emplace();
+    projection.emplace();
+    proxyProperties.emplace();
+    faded.emplace();
+}
+static void releaseTaskbarState() noexcept {
+    faded.reset();
+    proxyProperties.reset();
+    projection.reset();
+    placedButtons.reset();
+    exports.reset();
+    pinCaptions.reset();
+    liveIcons.reset();
+    dropHosts.reset();
+    dropOff.reset();
+    buttons.reset();
+    folderMenu.reset();
+    fileWindows.reset();
+    iconHover.reset();
+    exitClock.reset();
+    panel.reset();
+    previews.reset();
+    ui.reset();
+}
 static LRESULT CALLBACK controlProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     try {
         if (stopping && msg == kCancelModal) {
@@ -11697,9 +11812,30 @@ static LRESULT CALLBACK controlProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             stopExitFrames();
             return 0;
         }
+        if (msg == kStop && stopping) {
+            static bool closingController = false;
+            if (std::exchange(closingController, true))
+                return 0;
+            struct FinishStop {
+                HWND window;
+                ~FinishStop() {
+                    DestroyWindow(window);
+                    controller = nullptr;
+                    published = nullptr;
+                    releaseTaskbarState();
+                }
+            } finish{h};
+            duringCleanup(closePanel);
+            while (!exports->empty())
+                duringCleanup([] { finishExport(exports->back().get(), false); });
+            duringCleanup([] { syncOpacity({}); });
+            duringCleanup(clearView);
+            return 0;
+        }
+        if (stopping)
+            return DefWindowProcW(h, msg, wp, lp);
         if (msg == kMenuLaunchReady) {
-            if (!stopping)
-                acceptMenuLaunches();
+            acceptMenuLaunches();
             return 0;
         }
         if (msg == kExitFrame || (msg == WM_TIMER && wp == kExitTimer)) {
@@ -11713,9 +11849,9 @@ static LRESULT CALLBACK controlProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         }
         if (msg == kAppearanceChanged) {
             requestLayout();
-            if (panel.window) {
-                if (panel.designMenu)
-                    applyPanelStyle(panel.requestedStyle, true);
+            if (panel->window) {
+                if (panel->designMenu)
+                    applyPanelStyle(panel->requestedStyle, true);
                 else
                     restorePanelStyle();
             }
@@ -11725,27 +11861,6 @@ static LRESULT CALLBACK controlProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             finishExport(reinterpret_cast<ShortcutExport*>(wp));
             return 0;
         }
-        if (msg == kStop) {
-            while (!exports.empty())
-                finishExport(exports.back().get(), false);
-            syncOpacity({});
-            clearView();
-            decltype(buttons){}.swap(buttons);
-            decltype(dropHosts){}.swap(dropHosts);
-            decltype(liveIcons){}.swap(liveIcons);
-            decltype(pinCaptions){}.swap(pinCaptions);
-            decltype(dropOff){}.swap(dropOff);
-            decltype(proxyProperties){}.swap(proxyProperties);
-            decltype(faded){}.swap(faded);
-            decltype(fileWindows){}.swap(fileWindows);
-            decltype(exports){}.swap(exports);
-            DestroyWindow(h);
-            controller = nullptr;
-            published = nullptr;
-            return 0;
-        }
-        if (stopping)
-            return DefWindowProcW(h, msg, wp, lp);
         if (msg == kFilesDone || msg == kCatalogDone) {
             workerFinished(msg);
             return 0;
@@ -11753,7 +11868,7 @@ static LRESULT CALLBACK controlProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         if (msg == kTaskbarDrop ||
             (msg == WM_TIMER && wp == kNativeDropTimer)) {
             KillTimer(h, kNativeDropTimer);
-            auto released = std::exchange(ui.releasedButtons, {});
+            auto released = std::exchange(ui->releasedButtons, {});
             for (auto& pending : released) {
                 bool saved = false;
                 if (lookup(groups, pending.folder)) {
@@ -11774,7 +11889,7 @@ static LRESULT CALLBACK controlProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         if (msg == WM_TIMER) {
             if (wp == kLayoutTimer) {
                 KillTimer(h, kLayoutTimer);
-                ui.layoutPending = false;
+                ui->layoutPending = false;
                 scan();
                 syncPanel();
                 return 0;
@@ -11813,6 +11928,8 @@ static HINSTANCE moduleInstance() {
     return h;
 }
 static bool ensureControl() {
+    if (stopping)
+        return false;
     if (controller)
         return uiThread == GetCurrentThreadId();
     WNDCLASSW wc{};
@@ -11858,7 +11975,7 @@ static void ensureFrame(FrameworkElement const& frame) {
     if (!primary ||
         GetWindowThreadProcessId(primary, nullptr) != GetCurrentThreadId())
         return;
-    if (ui.frame == frame && isPrimaryRoot(frame))
+    if (ui->frame == frame && isPrimaryRoot(frame))
         return;
     auto monitor = MonitorFromWindow(primary, MONITOR_DEFAULTTONULL);
     if (!monitor || !isPrimaryFrame(frame, primary, monitor))
@@ -11876,23 +11993,23 @@ static void ensureFrame(FrameworkElement const& frame) {
         return;
     syncOpacity({});
     clearView();
-    ui.primary = primary;
-    ui.monitor = monitor;
-    ui.frame = frame;
-    ui.root = root;
-    ui.repeater = repeater;
-    ui.overlay = C::Canvas();
-    ui.strip = C::StackPanel();
-    ui.strip.Orientation(C::Orientation::Horizontal);
-    ui.strip.HorizontalAlignment(X::HorizontalAlignment::Right);
-    ui.strip.VerticalAlignment(X::VerticalAlignment::Center);
-    ui.overlay.FlowDirection(X::FlowDirection::LeftToRight);
-    C::Grid::SetColumnSpan(ui.overlay,
+    ui->primary = primary;
+    ui->monitor = monitor;
+    ui->frame = frame;
+    ui->root = root;
+    ui->repeater = repeater;
+    ui->overlay = C::Canvas();
+    ui->strip = C::StackPanel();
+    ui->strip.Orientation(C::Orientation::Horizontal);
+    ui->strip.HorizontalAlignment(X::HorizontalAlignment::Right);
+    ui->strip.VerticalAlignment(X::VerticalAlignment::Center);
+    ui->overlay.FlowDirection(X::FlowDirection::LeftToRight);
+    C::Grid::SetColumnSpan(ui->overlay,
                            std::max(1u, root.ColumnDefinitions().Size()));
-    C::Grid::SetColumnSpan(ui.strip,
+    C::Grid::SetColumnSpan(ui->strip,
                            std::max(1u, root.ColumnDefinitions().Size()));
-    root.Children().Append(ui.overlay);
-    root.Children().Append(ui.strip);
+    root.Children().Append(ui->overlay);
+    root.Children().Append(ui->strip);
     watchFrame();
     scan();
 }
@@ -11995,7 +12112,7 @@ static void addBlankCommands(
             } catch (...) {
             }
         });
-        ui.menuOff.push_back([items, w = winrt::make_weak(entry), t] {
+        ui->menuOff.push_back([items, w = winrt::make_weak(entry), t] {
             if (auto v = w.get()) {
                 v.Click(t);
                 uint32_t position{};
@@ -12028,15 +12145,15 @@ static void __fastcall blank(FrameworkElement const& sender,
                 GetCurrentThreadId() == uiThread) {
                 inBlank = true;
                 clearSelection();
-                off(ui.menuOff);
+                off(ui->menuOff);
                 auto node = args.OriginalSource().try_as<X::DependencyObject>();
                 while (node) {
                     auto b = node.try_as<Button>();
                     if (b) {
                         auto i = std::find_if(
-                            ui.tiles.begin(), ui.tiles.end(),
+                            ui->tiles.begin(), ui->tiles.end(),
                             [&](auto& t) { return t.button == b; });
-                        if (i != ui.tiles.end()) {
+                        if (i != ui->tiles.end()) {
                             if (args.Handled() ||
                                 showTaskbarFolderMenu(i->id, b)) {
                                 args.Handled(true);
@@ -12069,15 +12186,16 @@ static void __fastcall blank(FrameworkElement const& sender,
 static void __fastcall append(void* self,
                               C::MenuFlyoutItemBase const& original) {
     oldAppend(self, original);
-    if (!inBlank || added || stopping || !ui.root ||
+    if (!inBlank || added || stopping || !ui->root ||
         GetCurrentThreadId() != uiThread)
         return;
-    added = true;
     try {
-        auto items =
-            reinterpret_cast<F::Collections::IVector<C::MenuFlyoutItemBase>*>(
-                self);
-        addBlankCommands(*items);
+        auto items = static_cast<const F::IInspectable*>(self)->try_as<
+            F::Collections::IVector<C::MenuFlyoutItemBase>>();
+        if (items) {
+            added = true;
+            addBlankCommands(items);
+        }
     } catch (...) {
     }
 }
@@ -12092,7 +12210,7 @@ static int WINAPI frameMove(void* self, void* args) {
     auto hr = oldPointer(self, args);
     if (!stopping && (!published.load() || GetCurrentThreadId() == uiThread))
         try {
-            if (!ui.root || ui.rootDetached)
+            if (!ui->root || ui->rootDetached)
                 ensureFrame(fromAbi(self));
         } catch (...) {
         }
@@ -12166,7 +12284,7 @@ static bool openPin(void* group) {
         return false;
     FrameworkElement anchor = projectedButton(f->id);
     if (!anchor)
-        for (const auto& b : buttons)
+        for (const auto& b : *buttons)
             if (equal(b.id, raw)) {
                 anchor = b.element;
                 break;
@@ -12177,29 +12295,29 @@ static bool openPin(void* group) {
     return true;
 }
 static void openMenuFolder(const wstring& id) {
-    if (panel.window && panel.folder == id) {
-        if (panel.browsing)
+    if (panel->window && panel->folder == id) {
+        if (panel->browsing)
             return;
-        if (panel.closing)
+        if (panel->closing)
             revealPanel();
-        if (panel.choosing) {
-            panel.choosing = false;
-            panel.page = 0;
+        if (panel->choosing) {
+            panel->choosing = false;
+            panel->page = 0;
             refreshPanel();
         }
-        SetForegroundWindow(panel.window);
-        SetFocus(panel.apps.empty() ? panel.add : panel.list);
+        SetForegroundWindow(panel->window);
+        SetFocus(panel->apps.empty() ? panel->add : panel->list);
         return;
     }
     FrameworkElement anchor = projectedButton(id);
     if (!anchor)
-        for (const auto& b : buttons)
+        for (const auto& b : *buttons)
             if (equal(b.id, pinId(id))) {
                 anchor = b.element;
                 break;
             }
     if (!anchor)
-        for (const auto& t : ui.tiles)
+        for (const auto& t : ui->tiles)
             if (t.id == id) {
                 anchor = t.button;
                 break;
@@ -12264,12 +12382,15 @@ struct JumpFooter {
     C::StackPanel existing{nullptr};
     bool hadLocalNull{};
 };
-[[clang::no_destroy]] static thread_local JumpFooter footer;
+[[clang::no_destroy]] static thread_local std::optional<JumpFooter> footer;
 static thread_local HWND hostWindow = nullptr;
 static std::mutex hostsLock;
 static std::vector<HWND> hosts;
 static void clearFooter() {
-    auto old = std::exchange(footer, JumpFooter{});
+    if (!footer)
+        return;
+    auto old = std::move(*footer);
+    footer.reset();
     if (!old.rows)
         return;
     try {
@@ -12411,8 +12532,8 @@ static bool attachJump(HWND ctl) {
         clearFooter();
         return true;
     }
-    if (footer.controller == ctl && footer.ticket == seq && footer.rows &&
-        footer.rows.XamlRoot())
+    if (footer && footer->controller == ctl && footer->ticket == seq && footer->rows &&
+        footer->rows.XamlRoot())
         return true;
     clearFooter();
     if (GetTickCount64() - time > 7000)
@@ -12467,11 +12588,10 @@ static bool attachJump(HWND ctl) {
         rows.Items().Append(jumpCommandRow(value));
     auto prop = header ? C::ListViewBase::HeaderProperty()
                        : C::ListViewBase::FooterProperty();
-    footer = {system, rows,     {},
-              {},     ctl,      seq,
-              header, existing, !system.ReadLocalValue(prop)};
+    footer.emplace(JumpFooter{system, rows, {}, {}, ctl, seq, header, existing,
+                              !system.ReadLocalValue(prop)});
     try {
-        footer.clicked = rows.ItemClick(
+        footer->clicked = rows.ItemClick(
             [ctl, seq](auto const& sender, C::ItemClickEventArgs const& args) {
                 try {
                     if (stopping)
@@ -12486,10 +12606,10 @@ static bool attachJump(HWND ctl) {
                 } catch (...) {
                 }
             });
-        footer.unloaded =
+        footer->unloaded =
             system.Unloaded([time](auto const& sender, auto const&) {
                 try {
-                    if (footer.system == sender) {
+                    if (footer && footer->system == sender) {
                         clearFooter();
                         if (hostWindow && !stopping &&
                             GetTickCount64() - time < 450)
@@ -12551,7 +12671,7 @@ static void startJumpProbe() {
     probeJump();
 }
 static LRESULT CALLBACK hostProc(HWND w, UINT m, WPARAM wp, LPARAM lp) {
-    if (m == kStop) {
+    if (m == kStop && stopping) {
         stopJumpProbe();
         try {
             clearFooter();
@@ -12589,11 +12709,19 @@ static bool ensureHost() {
         return false;
     hostWindow = CreateWindowExW(0, kHost, L"", 0, 0, 0, 0, 0, HWND_MESSAGE,
                                  nullptr, cls.hInstance, nullptr);
-    if (hostWindow) {
+    if (!hostWindow)
+        return false;
+    try {
         std::lock_guard guard(hostsLock);
-        hosts.push_back(hostWindow);
+        if (!stopping) {
+            hosts.push_back(hostWindow);
+            return true;
+        }
+    } catch (...) {
     }
-    return hostWindow != nullptr;
+    DestroyWindow(hostWindow);
+    hostWindow = nullptr;
+    return false;
 }
 static decltype(&DispatchMessageW) oldDispatch;
 static LRESULT WINAPI dispatch(const MSG* msg) {
@@ -12727,6 +12855,13 @@ BOOL Wh_ModInit() {
         modalDrained = CreateEventW(nullptr, TRUE, FALSE, nullptr);
         if (!modalDrained)
             return FALSE;
+        try {
+            initTaskbarState();
+        } catch (...) {
+            releaseTaskbarState();
+            CloseHandle(std::exchange(modalDrained, nullptr));
+            return FALSE;
+        }
     }
     bool messages = WindhawkUtils::SetFunctionHook(DispatchMessageW, dispatch,
                                                    &oldDispatch);
@@ -12740,6 +12875,7 @@ BOOL Wh_ModInit() {
     bool ok = wireView(viewModule());
     wireGroups(GetModuleHandleW(L"taskbar.dll"));
     if (!ok && !loader) {
+        releaseTaskbarState();
         CloseHandle(std::exchange(modalDrained, nullptr));
         return FALSE;
     }
@@ -12776,6 +12912,8 @@ void Wh_ModBeforeUninit() {
             SendMessageW(w, kStop, 0, 0);
 }
 void Wh_ModUninit() {
+    // The UI thread already released live objects. Explorer can also unload before its first frame.
+    releaseTaskbarState();
     if (modalDrained)
         CloseHandle(std::exchange(modalDrained, nullptr));
     UnregisterClassW(kFileSurfaceClass, moduleInstance());
