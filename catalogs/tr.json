@@ -4851,6 +4851,31 @@
         "version": "1.0.0"
       }
     },
+    "desktop-clock-weather": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795680267000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795680267000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "DineroOne",
+        "compilerOptions": "-lgdi32 -lgdiplus -lwinhttp -luser32 -ladvapi32",
+        "description": "Time, weekday, date and weekly weather on the desktop - behind icons, not clickable",
+        "github": "https://github.com/DineroOne",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Desktop Clock & Weather",
+        "version": "1.0.7"
+      }
+    },
     "desktop-disk-icon": {
       "details": {
         "defaultSorting": 1060,

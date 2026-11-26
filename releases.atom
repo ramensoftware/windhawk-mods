@@ -2,12 +2,50 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-26T07:02:38.000Z</updated>
+    <updated>2026-11-26T08:04:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Desktop Clock & Weather 1.0.7]]></title>
+        <id>https://windhawk.net/mods/desktop-clock-weather#9e30cde12c8838f10f8bca0cf40b5b213ec1ed54</id>
+        <link href="https://windhawk.net/mods/desktop-clock-weather"/>
+        <updated>2026-11-26T08:04:27.000Z</updated>
+        <content type="html"><![CDATA[<h1>Desktop Clock &amp; Weather</h1>
+<p><img src="https://raw.githubusercontent.com/DineroOne/windhawk-desktop-clock-weather/main/screenshot-small.png" alt="Illustration of the widget"></p>
+<p>The widget is drawn directly on the desktop: <strong>above the wallpaper but below icons and folders</strong>,
+so it never intercepts clicks.</p>
+<p>Shows time, weekday, date and a 3-7 day weather forecast.
+Weather comes from <a href="https://open-meteo.com">Open-Meteo</a> (free, no API key needed).
+Set the city name in the settings; coordinates are found automatically.</p>
+<p>Everything (position, size, font, colors, shadow, background, date format, etc.) is configurable in the settings tab.</p>
+<p>The optional <strong>Adjust font color to wallpaper</strong> switch picks a light or a dark text color automatically.
+It first samples the pixels visible behind the widget, when the desktop is unobstructed. If screen capture
+is unavailable, it estimates brightness from the wallpaper file and Windows wallpaper layout settings.
+This processing is local; no wallpaper data is sent anywhere.</p>
+<h2>Why this is a separate mod</h2>
+<p><a href="https://windhawk.net/mods/desktop-live-overlay">Desktop Live Overlay</a> is a general-purpose overlay built from free-form text patterns and system metrics.
+This mod does one narrower thing: a structured 3-7 day forecast grid (weekday, icon, high/low, precipitation chance, as a row or a column)
+with an independent font, size and color for the time, weekday, date and weather, an element order, an overall scale and a text color that follows the wallpaper.
+It uses Open-Meteo instead of wttr.in. If the maintainer prefers, the forecast part can instead be offered to the author of Desktop Live Overlay as a contribution.</p>
+<h2>Network use</h2>
+<p>Weather is the only feature that uses the network. Requests are made only when <strong>Show weather</strong> is on,
+a city is configured, and <code>weather</code> is included in the <strong>Order of elements</strong> setting.
+The mod sends HTTPS requests to two Open-Meteo hosts:</p>
+<ul>
+<li><code>geocoding-api.open-meteo.com</code> - once each time the mod loads (for example at every Explorer start) and when the city or the date/weekday language changes, to turn the city name into coordinates (the city name and language code are sent).</li>
+<li><code>api.open-meteo.com</code> - at startup and then every N minutes (30 by default, see <strong>Update weather every</strong>), to get the forecast (the coordinates are sent). Failed requests are retried after about one minute.</li>
+</ul>
+<p>Like any web server, Open-Meteo can see your IP address. No API key or account is required.
+No weather requests are made while the city is empty, <strong>Show weather</strong> is off, or <code>weather</code> is omitted from the element order.</p>
+]]></content>
+        <author>
+            <name>DineroOne</name>
+            <uri>https://github.com/DineroOne</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Adaptive Tray Contrast 0.3.16]]></title>
         <id>https://windhawk.net/mods/adaptive-tray-contrast#dd2b0cad4fd0a38e53c19fa604468577ef4f663a</id>
@@ -1185,88 +1223,6 @@ is created, the approach worked out in
         <author>
             <name>Peter2oo1</name>
             <uri>https://github.com/Peter2oo1</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Language Cursor 1.0.0]]></title>
-        <id>https://windhawk.net/mods/language-cursor#c2a5b795c4f2a875ee16d53da32a57a761bbf54d</id>
-        <link href="https://windhawk.net/mods/language-cursor"/>
-        <updated>2026-11-23T02:01:07.000Z</updated>
-        <content type="html"><![CDATA[<h1>Language Cursor</h1>
-<p>Shows the current keyboard layout as a small badge next to the mouse pointer,
-so you know which language you are about to type in before you press a key. It
-follows the layout of the app you are working in.</p>
-<p><img src="https://i.imgur.com/tph9cXo.png" alt="Badge next to the text caret, with the Caps Lock and Num Lock marks">
-<img src="https://i.imgur.com/YMY9W4X.png" alt="Badge for the Ukrainian layout with the Caps Lock mark">
-<img src="https://i.imgur.com/vFnIUrc.png" alt="Badge with the Caps Lock and Num Lock marks"></p>
-<h2>Indicator modes</h2>
-<ul>
-<li><strong>Label next to pointer</strong>: a floating badge that follows the mouse pointer.</li>
-<li><strong>Label inside text cursor</strong>: the label is drawn into the I-beam pointer that
-Windows shows over text fields. This replaces the system I-beam pointer while
-the mod is running.</li>
-<li><strong>Off</strong>: no badge. Custom pointers per language still apply.</li>
-</ul>
-<h2>When the badge is shown</h2>
-<ul>
-<li><strong>Always</strong>.</li>
-<li><strong>Only over text fields</strong>: while the pointer is an I-beam.</li>
-<li><strong>Briefly after switching language</strong>: for a duration you choose.</li>
-</ul>
-<p>With <strong>Show at the text caret while typing</strong> turned on, the badge moves next to
-the text caret when you start typing, and goes back to the mouse pointer when
-you move the mouse. This works in apps that report where their caret is.</p>
-<p>It can also hide when the pointer is hidden and in full-screen apps. You can
-set its position around the pointer, distance, font size, opacity, corner
-roundness and drop shadow.</p>
-<h2>Caps Lock and Num Lock</h2>
-<p>The label can also show a mark while a lock key is on: <code>⇪</code> for Caps Lock and
-<code>#</code> for Num Lock. Each one has its own setting. The marks are part of the text
-label, so they aren't shown on badges that use an image.</p>
-<h2>Per-language styles</h2>
-<p>Add one entry per keyboard layout under <strong>Languages</strong>. Each entry can set:</p>
-<ul>
-<li>a label of up to 6 characters (by default the language code, such as <code>EN</code>);</li>
-<li>a background color as hex RGB, such as <code>#FFB900</code>;</li>
-<li>an image shown in place of the label (PNG, JPG, BMP or GIF, first frame);</li>
-<li>a custom mouse pointer (CUR or ANI) used while that layout is active.</li>
-</ul>
-<p>The layout is identified by its locale, such as <code>uk-UA</code>, <code>en-US</code>, <code>en-GB</code> or
-<code>pl-PL</code>, or by its HKL value as 8 or 16 hex digits. Layouts without an entry
-get an automatic label and color. Paths may contain environment variables such
-as <code>%USERPROFILE%</code>, and the files must stay available.</p>
-<h2>Custom pointers and safety</h2>
-<p>Custom pointers and the text-cursor mode change the Windows system pointers.
-The mod restores the Windows pointer scheme when it is disabled or unloaded,
-and on its next start if it was closed unexpectedly while pointers were
-changed. To restore them by hand, open Windows Mouse settings &gt; Pointers and
-click Apply.</p>
-<p>Restoring reloads the whole Windows pointer scheme, so pointers that another
-mod or app changed at run time are reset too.</p>
-<h2>Performance</h2>
-<p>The mod runs in its own <code>windhawk.exe</code> process, not inside Explorer or other
-apps, and installs no hooks. It checks
-the pointer 60 times a second only while the badge is visible and the pointer
-is moving, and slows down to about 8 checks a second when nothing is happening.
-While the badge sits at the text caret, the mod also asks the app you are typing
-in for its caret position 8 to 20 times a second.</p>
-<h2>Limitations</h2>
-<ul>
-<li>The badge isn't shown over the secure desktop (UAC prompts, lock screen), and
-may not appear over some full-screen games.</li>
-<li>Animated GIF images show only their first frame.</li>
-<li>Showing the badge at the text caret depends on the app. Some apps don't
-report the caret position, and there the badge stays with the mouse pointer.</li>
-<li><strong>Only over text fields</strong> and the text-cursor mode work with the standard
-Windows I-beam pointer. Apps that draw their own text pointer are not
-detected.</li>
-<li>The label I-beam in text-cursor mode is always black and white. It does not
-follow a custom pointer color or scheme.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Sanekx Arcs</name>
-            <uri>https://github.com/SanekxArcs</uri>
         </author>
     </entry>
 </feed>

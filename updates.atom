@@ -2,12 +2,50 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-26T07:02:38.000Z</updated>
+    <updated>2026-11-26T08:04:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Desktop Clock & Weather 1.0.7]]></title>
+        <id>https://windhawk.net/mods/desktop-clock-weather#9e30cde12c8838f10f8bca0cf40b5b213ec1ed54</id>
+        <link href="https://windhawk.net/mods/desktop-clock-weather"/>
+        <updated>2026-11-26T08:04:27.000Z</updated>
+        <content type="html"><![CDATA[<h1>Desktop Clock &amp; Weather</h1>
+<p><img src="https://raw.githubusercontent.com/DineroOne/windhawk-desktop-clock-weather/main/screenshot-small.png" alt="Illustration of the widget"></p>
+<p>The widget is drawn directly on the desktop: <strong>above the wallpaper but below icons and folders</strong>,
+so it never intercepts clicks.</p>
+<p>Shows time, weekday, date and a 3-7 day weather forecast.
+Weather comes from <a href="https://open-meteo.com">Open-Meteo</a> (free, no API key needed).
+Set the city name in the settings; coordinates are found automatically.</p>
+<p>Everything (position, size, font, colors, shadow, background, date format, etc.) is configurable in the settings tab.</p>
+<p>The optional <strong>Adjust font color to wallpaper</strong> switch picks a light or a dark text color automatically.
+It first samples the pixels visible behind the widget, when the desktop is unobstructed. If screen capture
+is unavailable, it estimates brightness from the wallpaper file and Windows wallpaper layout settings.
+This processing is local; no wallpaper data is sent anywhere.</p>
+<h2>Why this is a separate mod</h2>
+<p><a href="https://windhawk.net/mods/desktop-live-overlay">Desktop Live Overlay</a> is a general-purpose overlay built from free-form text patterns and system metrics.
+This mod does one narrower thing: a structured 3-7 day forecast grid (weekday, icon, high/low, precipitation chance, as a row or a column)
+with an independent font, size and color for the time, weekday, date and weather, an element order, an overall scale and a text color that follows the wallpaper.
+It uses Open-Meteo instead of wttr.in. If the maintainer prefers, the forecast part can instead be offered to the author of Desktop Live Overlay as a contribution.</p>
+<h2>Network use</h2>
+<p>Weather is the only feature that uses the network. Requests are made only when <strong>Show weather</strong> is on,
+a city is configured, and <code>weather</code> is included in the <strong>Order of elements</strong> setting.
+The mod sends HTTPS requests to two Open-Meteo hosts:</p>
+<ul>
+<li><code>geocoding-api.open-meteo.com</code> - once each time the mod loads (for example at every Explorer start) and when the city or the date/weekday language changes, to turn the city name into coordinates (the city name and language code are sent).</li>
+<li><code>api.open-meteo.com</code> - at startup and then every N minutes (30 by default, see <strong>Update weather every</strong>), to get the forecast (the coordinates are sent). Failed requests are retried after about one minute.</li>
+</ul>
+<p>Like any web server, Open-Meteo can see your IP address. No API key or account is required.
+No weather requests are made while the city is empty, <strong>Show weather</strong> is off, or <code>weather</code> is omitted from the element order.</p>
+]]></content>
+        <author>
+            <name>DineroOne</name>
+            <uri>https://github.com/DineroOne</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Adaptive Tray Contrast 0.3.16]]></title>
         <id>https://windhawk.net/mods/adaptive-tray-contrast#dd2b0cad4fd0a38e53c19fa604468577ef4f663a</id>
@@ -752,60 +790,6 @@ for reporting bugs.</li>
         <author>
             <name>2ndSky95</name>
             <uri>https://github.com/2ndSky95</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MultiWM Companion 0.3.2]]></title>
-        <id>https://windhawk.net/mods/multiwm-companion#06b03acabc00a697cb9daf1518086a2c0c09191f</id>
-        <link href="https://windhawk.net/mods/multiwm-companion"/>
-        <updated>2026-11-25T19:05:11.000Z</updated>
-        <content type="html"><![CDATA[<h1>MultiWM Companion</h1>
-<p>An optional add-on for <a href="https://github.com/Meteoni/MultiWM">MultiWM</a>. Without it,
-a new window first appears where the app puts it, then jumps into its tile. With
-it, the window opens in its tile directly.</p>
-<h2>What it does</h2>
-<ul>
-<li>New windows open in the tile MultiWM will give them, with your gap, insets and
-window rules applied.</li>
-<li>Windows restored from the taskbar or the tray reappear in their own tile.</li>
-<li>Windows that will float (by a rule, in the Floating layout, or because they
-don't fit) open where they'll float.</li>
-<li>If a guess turns out wrong (say the app resizes itself right after opening),
-MultiWM moves the window as usual.</li>
-</ul>
-<p>Dialogs, tool windows, excluded windows, and windows that open maximized or
-fullscreen are left alone.</p>
-<h2>Requirements</h2>
-<ul>
-<li>MultiWM installed and running, in Automatic mode. In Manual mode this mod does
-nothing.</li>
-<li>A matching MultiWM release (see the version chart below). Try to update MultiWM
-and the companion together: mismatched versions may give no hints.</li>
-</ul>
-<h2>Compatibility</h2>
-<p>Don't combine with other mods that move windows before they appear, such as
-Window Centralizer or Center New Windows: both would move the same window.</p>
-<h2>Troubleshooting</h2>
-<p>Enable logging for this mod in Windhawk to see each placement decision.</p>
-<h2>Version chart</h2>
-<table>
-<thead>
-<tr>
-<th>Companion</th>
-<th>MultiWM</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>0.3.2</td>
-<td>1.16.1+</td>
-</tr>
-</tbody>
-</table>
-]]></content>
-        <author>
-            <name>meteoni</name>
-            <uri>https://github.com/Meteoni</uri>
         </author>
     </entry>
 </feed>

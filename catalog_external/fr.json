@@ -157,35 +157,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/db8842f6699931bdde1c9190c16b0b94d5670362/mods/desktop-app-groups.wh.cpp"
       }
     },
-    "desktop-clock-weather": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795545412441,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795545412441,
-        "users": 0
-      },
-      "metadata": {
-        "author": "DineroOne",
-        "compilerOptions": "-lgdi32 -lgdiplus -lwinhttp -luser32 -ladvapi32",
-        "description": "Time, weekday, date and weekly weather on the desktop - behind icons, not clickable",
-        "github": "https://github.com/DineroOne",
-        "include": [
-          "explorer.exe"
-        ],
-        "license": "MIT",
-        "name": "Desktop Clock & Weather",
-        "version": "1.0.7"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7820",
-      "source": {
-        "sha256": "8591f709a4e74a07ad2d9b684e9991ae98b16d81ef2954416bda114861e2b4cd",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/56ef7d33bb6e8beb765449cb7cb8e74d6747fa10/mods/desktop-clock-weather.wh.cpp"
-      }
-    },
     "desktop-media-glass-mod": {
       "details": {
         "defaultSorting": 0,
