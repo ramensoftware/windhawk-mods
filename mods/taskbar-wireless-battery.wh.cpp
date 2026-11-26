@@ -7,7 +7,7 @@
 // @github          https://github.com/simonzk27
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lhid -lsetupapi -lshcore -lshlwapi -lversion
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lhid -lsetupapi -lshcore -lshlwapi -lversion -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -25,22 +25,35 @@ Hover a device to see its details:
 
 ![Controller tooltip](https://raw.githubusercontent.com/simonzk27/windhawk-mod-assets/main/taskbar-wireless-battery/tooltip-controller.png)
 
+Click the indicator to open a panel with every device, its level, charging
+state, estimated time remaining and last reading:
+
+![Devices panel](https://raw.githubusercontent.com/simonzk27/windhawk-mod-assets/main/taskbar-wireless-battery/panel.png)
+
 ## Supported devices
 
-| Device | Battery | Charging | Notes |
+| Device | Battery | Charging | Tested |
 |---|---|---|---|
-| Razer mice (HyperSpeed dongle or cable) | ✅ exact % | ✅ | Read directly from the device, Razer Synapse is not required |
-| Xbox controllers and other XInput controllers | ✅ approximate (4 levels) | — | Shows a plug icon when the controller is wired without batteries |
+| Razer mice and keyboards (HyperSpeed dongle or cable) | exact % | ✅ | DeathAdder V3 Pro |
+| Bluetooth devices whose battery Windows shows (headphones, earbuds, keyboards, mice…) | exact % | — | Redmi Buds 6 Active |
+| PlayStation DualShock 4 and DualSense (USB) | % | ✅ | DualShock 4 |
+| PlayStation controllers over Bluetooth | % | ✅ | — (see notes) |
+| Xbox and other XInput controllers | exact % when Windows reports it, otherwise 4 levels | ✅ | Wired Xbox Series controller |
+| Logitech HID++ devices (Lightspeed, Unifying, Bolt receivers or cable) | % or estimated from voltage | ✅ | — (not tested on real hardware) |
 
-Tested with a Razer DeathAdder V3 Pro. Other Razer mice that use the same
-protocol should work too.
+Wired controllers without batteries are shown with a plug icon.
 
-## Display
+## Features
 
-- Each device shows an icon (mouse, controller), its battery percentage and a
-  lightning bolt while charging.
-- Hover a device to see its name and status.
-- Below the low battery threshold the device turns red.
+- **Estimated time remaining**: from how fast the level changes, e.g. "About
+  14 h left" or "Full in about 40 min". It needs about 10–20 minutes of
+  readings and is kept across Explorer restarts. Shown in the tooltip and the
+  panel, or next to the percentage.
+- **Devices panel** on click, or open Bluetooth settings instead.
+- Icon per device type (mouse, keyboard, headphones, controller), lightning bolt
+  while charging, red below the low battery threshold.
+- Primary taskbar only or all taskbars, left or right of the hidden icons
+  arrow.
 
 ## Customization
 
@@ -53,13 +66,16 @@ SVG icon.
 ## Notes
 
 - Windows 11 only.
-- If you enable the mod while Explorer is already running, the indicator
-  appears when the clock changes minute or when you hover the system tray.
-- Razer mice are read every 60 seconds by default (configurable), controllers
-  every 5 seconds.
-- Razer Synapse sends the same kind of requests to the mouse. Running it at the
-  same time can occasionally cause a missed reading, which is retried on the
-  next refresh.
+- Razer and Logitech devices are read every 60 seconds by default
+  (configurable), Bluetooth devices and PlayStation controllers every 15
+  seconds, XInput controllers every 5 seconds.
+- Bluetooth PlayStation controllers are only read after another app (for
+  example Steam) has switched them to full reports. The mod doesn't do that
+  itself, because it breaks DirectInput for other apps until the controller is
+  turned off.
+- Razer Synapse and Logitech G HUB send the same kind of requests to the
+  devices. Running them at the same time can occasionally cause a missed
+  reading, which is retried on the next refresh.
 - Compatible with Windows 11 Taskbar Styler: the indicator is a `StackPanel`
   named `BatteryWidget` and can be styled with the target
   `StackPanel#BatteryWidget`.
@@ -108,6 +124,19 @@ SVG icon.
 - showOnAllTaskbars: false
   $name: Show on all taskbars
   $description: By default the indicator is shown only on the taskbar that has the notification area
+- timeEstimate: tooltip
+  $name: Estimated time remaining
+  $description: Estimated from how fast the level changes. Needs about 20 minutes of readings
+  $options:
+  - tooltip: In the tooltip and the panel
+  - inline: Next to the percentage
+  - off: Off
+- clickAction: panel
+  $name: Click action
+  $options:
+  - panel: Show the devices panel
+  - bluetoothSettings: Open Bluetooth settings
+  - none: Nothing
 - devices:
   - - match: ""
       $name: Device name contains
@@ -134,10 +163,15 @@ SVG icon.
 
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Devices.Power.h>
+#include <winrt/Windows.Gaming.Input.h>
+#include <winrt/Windows.System.Power.h>
 #include <winrt/Windows.Storage.Streams.h>
 #include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.UI.Xaml.Automation.Peers.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
+#include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
+#include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Media.Imaging.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.h>
@@ -158,6 +192,10 @@ namespace wuxm = winrt::Windows::UI::Xaml::Media;
 enum class DisplayMode { IconAndPercent, IconOnly, PercentOnly, BatteryBar };
 
 enum class Position { LeftOfChevron, RightOfChevron };
+
+enum class TimeEstimateMode { Tooltip, Inline, Off };
+
+enum class ClickAction { Panel, BluetoothSettings, None };
 
 struct DeviceOverride {
     std::wstring match;
@@ -181,10 +219,12 @@ struct Settings {
     int pollInterval = 60;
     int deviceSpacing = 8;
     bool showOnAllTaskbars = false;
+    TimeEstimateMode timeEstimate = TimeEstimateMode::Tooltip;
+    ClickAction clickAction = ClickAction::Panel;
     std::vector<DeviceOverride> devices;
 };
 
-enum class DeviceKind { Mouse, Gamepad };
+enum class DeviceKind { Mouse, Gamepad, Headphones, Keyboard, Generic };
 
 struct DeviceState {
     std::wstring key;
@@ -197,12 +237,15 @@ struct DeviceState {
     bool stale = false;
     ULONGLONG lastSeen = 0;
     std::wstring updated;
+    int estimateMinutes = -1;
+    double precisePercent = -1;
 
     bool SameDisplay(const DeviceState& o) const {
         return key == o.key && name == o.name && kind == o.kind &&
                percent == o.percent && approximate == o.approximate &&
                charging == o.charging && wiredNoBattery == o.wiredNoBattery &&
-               stale == o.stale && updated == o.updated;
+               stale == o.stale && updated == o.updated &&
+               estimateMinutes == o.estimateMinutes;
     }
 };
 
@@ -292,6 +335,15 @@ void LoadSettings() {
     s.pollInterval = std::clamp(Wh_GetIntSetting(L"pollInterval"), 10, 3600);
     s.deviceSpacing = std::clamp(Wh_GetIntSetting(L"deviceSpacing"), 0, 64);
     s.showOnAllTaskbars = Wh_GetIntSetting(L"showOnAllTaskbars") != 0;
+
+    std::wstring estimate = ReadStringSetting(L"timeEstimate");
+    s.timeEstimate = estimate == L"inline" ? TimeEstimateMode::Inline
+                     : estimate == L"off"  ? TimeEstimateMode::Off
+                                            : TimeEstimateMode::Tooltip;
+    std::wstring click = ReadStringSetting(L"clickAction");
+    s.clickAction = click == L"bluetoothSettings" ? ClickAction::BluetoothSettings
+                    : click == L"none"            ? ClickAction::None
+                                                   : ClickAction::Panel;
 
     for (int i = 0; i < 32; i++) {
         std::wstring matchStr =
@@ -422,9 +474,11 @@ bool RazerQuery(HANDLE h,
 struct RazerReading {
     USHORT pid;
     std::wstring name;
+    DeviceKind kind;
     bool wired;
     bool ok;
     int percent;
+    double precisePercent;
     bool charging;
 };
 
@@ -479,12 +533,21 @@ std::vector<RazerReading> PollRazer() {
             HidD_FreePreparsedData(pp);
         }
 
-        if (capsOk && caps.UsagePage == 0x01 && caps.Usage == 0x02 &&
+        bool alreadyRead = std::any_of(
+            readings.begin(), readings.end(),
+            [&](const RazerReading& r) { return r.pid == attrs.ProductID && r.ok; });
+        if (capsOk && !alreadyRead && caps.UsagePage == 0x01 &&
+            (caps.Usage == 0x02 || caps.Usage == 0x06) &&
             caps.FeatureReportByteLength == sizeof(RazerReport)) {
             const RazerModel* model = FindRazerModel(attrs.ProductID);
             RazerReading reading{};
             reading.pid = attrs.ProductID;
-            reading.name = model ? model->name : L"Razer Mouse";
+            reading.kind = !model && caps.Usage == 0x06 ? DeviceKind::Keyboard
+                                                        : DeviceKind::Mouse;
+            reading.name = model ? model->name
+                         : reading.kind == DeviceKind::Keyboard
+                             ? L"Razer Keyboard"
+                             : L"Razer Mouse";
             reading.wired = model ? model->wired : false;
 
             const unsigned char txIds[] = {0x1F, 0x3F, 0xFF};
@@ -493,6 +556,7 @@ std::vector<RazerReading> PollRazer() {
                 if (RazerQuery(h, tx, 0x07, 0x80, r)) {
                     reading.ok = true;
                     reading.percent = (r.arguments[1] * 100 + 127) / 255;
+                    reading.precisePercent = r.arguments[1] * 100.0 / 255.0;
                     if (RazerQuery(h, tx, 0x07, 0x84, r)) {
                         reading.charging = r.arguments[1] != 0;
                     }
@@ -703,8 +767,759 @@ std::vector<XInputReading> PollXInput() {
 
 #pragma endregion
 
-#pragma region polling
+#pragma region bluetooth
 
+const DEVPROPKEY kBatteryLevelKey = {
+    {0x104EA319, 0x6EE2, 0x4701, {0xBD, 0x47, 0x8D, 0xDB, 0xF4, 0x25, 0xBB, 0xE5}},
+    2};
+const DEVPROPKEY kIsConnectedKey = {
+    {0x83DA6326, 0x97A6, 0x4088, {0x94, 0x53, 0xA1, 0x92, 0x3F, 0x57, 0x3B, 0x29}},
+    15};
+const DEVPROPKEY kClassOfDeviceKey = {
+    {0x2BD67D8B, 0x8BEB, 0x48D5, {0x87, 0xE0, 0x6C, 0xDA, 0x34, 0x28, 0x04, 0x0A}},
+    10};
+const DEVPROPKEY kClassOfDeviceAltKey = {
+    {0x2BD67D8B, 0x8BEB, 0x48D5, {0x87, 0xE0, 0x6C, 0xDA, 0x34, 0x28, 0x04, 0x0A}},
+    4};
+const DEVPROPKEY kFriendlyNameKey = {
+    {0xA45C254E, 0xDF1C, 0x4EFD, {0x80, 0x20, 0x67, 0xD1, 0x46, 0xA8, 0x50, 0xE0}},
+    14};
+
+struct BluetoothReading {
+    std::wstring address;
+    std::wstring name;
+    DeviceKind kind;
+    int percent;
+};
+
+std::wstring ExtractBluetoothAddress(const std::wstring& instanceId) {
+    std::wstring upper = instanceId;
+    for (auto& c : upper) {
+        c = (wchar_t)towupper(c);
+    }
+    std::wstring result;
+    for (size_t i = 0; i + 12 <= upper.size(); i++) {
+        bool hex = true;
+        for (size_t j = 0; j < 12 && hex; j++) {
+            hex = iswxdigit(upper[i + j]) != 0;
+        }
+        bool boundaryBefore = i == 0 || !iswxdigit(upper[i - 1]);
+        bool boundaryAfter = i + 12 == upper.size() || !iswxdigit(upper[i + 12]);
+        if (hex && boundaryBefore && boundaryAfter) {
+            result = upper.substr(i, 12);
+        }
+    }
+    return result;
+}
+
+DeviceKind KindFromClassOfDevice(DWORD cod, const std::wstring& name) {
+    if (cod) {
+        DWORD major = (cod >> 8) & 0x1F;
+        DWORD minor = (cod >> 2) & 0x3F;
+        if (major == 0x04) {
+            return DeviceKind::Headphones;
+        }
+        if (major == 0x05) {
+            if (minor & 0x10) {
+                return DeviceKind::Keyboard;
+            }
+            if (minor & 0x20) {
+                return DeviceKind::Mouse;
+            }
+            DWORD sub = minor & 0x0F;
+            if (sub == 0x01 || sub == 0x02) {
+                return DeviceKind::Gamepad;
+            }
+        }
+    }
+    std::wstring lower = ToLower(name);
+    const std::pair<PCWSTR, DeviceKind> keywords[] = {
+        {L"buds", DeviceKind::Headphones},  {L"headset", DeviceKind::Headphones},
+        {L"headphone", DeviceKind::Headphones}, {L"earbud", DeviceKind::Headphones},
+        {L"airpods", DeviceKind::Headphones}, {L"keyboard", DeviceKind::Keyboard},
+        {L"teclado", DeviceKind::Keyboard}, {L"mouse", DeviceKind::Mouse},
+        {L"controller", DeviceKind::Gamepad}, {L"gamepad", DeviceKind::Gamepad},
+    };
+    for (const auto& [word, kind] : keywords) {
+        if (lower.find(word) != std::wstring::npos) {
+            return kind;
+        }
+    }
+    return DeviceKind::Generic;
+}
+
+bool GetDevProp(HDEVINFO set,
+                SP_DEVINFO_DATA* data,
+                const DEVPROPKEY& key,
+                std::vector<BYTE>& out,
+                DEVPROPTYPE* type) {
+    DWORD size = 0;
+    DEVPROPTYPE t = 0;
+    SetupDiGetDevicePropertyW(set, data, &key, &t, nullptr, 0, &size, 0);
+    if (!size) {
+        return false;
+    }
+    out.resize(size);
+    if (!SetupDiGetDevicePropertyW(set, data, &key, &t, out.data(), size,
+                                   &size, 0)) {
+        return false;
+    }
+    if (type) {
+        *type = t;
+    }
+    return true;
+}
+
+std::vector<BluetoothReading> PollBluetooth(
+    std::vector<std::wstring>* connectedAddresses) {
+    struct DeviceNode {
+        std::wstring name;
+        bool connected = false;
+        DWORD cod = 0;
+    };
+    std::vector<std::pair<std::wstring, DeviceNode>> deviceNodes;
+    std::vector<std::pair<std::wstring, int>> batteries;
+
+    HDEVINFO set = SetupDiGetClassDevsW(nullptr, nullptr, nullptr,
+                                        DIGCF_ALLCLASSES | DIGCF_PRESENT);
+    if (set == INVALID_HANDLE_VALUE) {
+        return {};
+    }
+
+    SP_DEVINFO_DATA data{sizeof(data)};
+    WCHAR instanceId[512];
+    std::vector<BYTE> buf;
+    for (DWORD i = 0; SetupDiEnumDeviceInfo(set, i, &data); i++) {
+        if (!SetupDiGetDeviceInstanceIdW(set, &data, instanceId,
+                                         ARRAYSIZE(instanceId), nullptr)) {
+            continue;
+        }
+        std::wstring id = instanceId;
+        if (_wcsnicmp(instanceId, L"BTH", 3) != 0) {
+            continue;
+        }
+
+        bool isDeviceNode = _wcsnicmp(instanceId, L"BTHENUM\\DEV_", 12) == 0 ||
+                            _wcsnicmp(instanceId, L"BTHLE\\DEV_", 10) == 0;
+        if (isDeviceNode) {
+            DeviceNode node;
+            DEVPROPTYPE type = 0;
+            if (GetDevProp(set, &data, kFriendlyNameKey, buf, &type) &&
+                type == DEVPROP_TYPE_STRING) {
+                node.name = reinterpret_cast<const wchar_t*>(buf.data());
+            }
+            if (GetDevProp(set, &data, kIsConnectedKey, buf, &type) &&
+                type == DEVPROP_TYPE_BOOLEAN && !buf.empty()) {
+                node.connected = buf[0] != 0;
+            }
+            if ((GetDevProp(set, &data, kClassOfDeviceKey, buf, &type) ||
+                 GetDevProp(set, &data, kClassOfDeviceAltKey, buf, &type)) &&
+                type == DEVPROP_TYPE_UINT32 && buf.size() >= 4) {
+                node.cod = *reinterpret_cast<const DWORD*>(buf.data());
+            }
+            deviceNodes.emplace_back(ExtractBluetoothAddress(id),
+                                     std::move(node));
+        }
+
+        DEVPROPTYPE type = 0;
+        if (GetDevProp(set, &data, kBatteryLevelKey, buf, &type) &&
+            type == DEVPROP_TYPE_BYTE && !buf.empty() && buf[0] <= 100) {
+            std::wstring address = ExtractBluetoothAddress(id);
+            if (!address.empty()) {
+                batteries.emplace_back(address, (int)buf[0]);
+            }
+        }
+    }
+    SetupDiDestroyDeviceInfoList(set);
+
+    std::vector<BluetoothReading> readings;
+    for (const auto& [address, percent] : batteries) {
+        if (std::any_of(readings.begin(), readings.end(),
+                        [&](const BluetoothReading& r) {
+                            return r.address == address;
+                        })) {
+            continue;
+        }
+        auto it = std::find_if(
+            deviceNodes.begin(), deviceNodes.end(),
+            [&](const auto& n) { return n.first == address; });
+        if (it == deviceNodes.end() || !it->second.connected) {
+            continue;
+        }
+        BluetoothReading r;
+        r.address = address;
+        r.name = it->second.name.empty() ? L"Bluetooth device" : it->second.name;
+        r.kind = KindFromClassOfDevice(it->second.cod, r.name);
+        r.percent = percent;
+        readings.push_back(std::move(r));
+    }
+
+    if (connectedAddresses) {
+        connectedAddresses->clear();
+        for (const auto& [address, node] : deviceNodes) {
+            if (node.connected && !address.empty()) {
+                connectedAddresses->push_back(address);
+            }
+        }
+    }
+    return readings;
+}
+
+struct BluetoothCacheEntry {
+    BluetoothReading reading;
+    ULONGLONG lastSeen;
+};
+
+std::vector<BluetoothCacheEntry> g_bluetoothCache;
+
+// Some headsets close the profile that reports the battery while idle, so the
+// level disappears for a while although the device is still connected. Keep
+// the last level until the device actually disconnects.
+void UpdateBluetoothCache(const std::vector<BluetoothReading>& readings,
+                          const std::vector<std::wstring>& connected) {
+    ULONGLONG now = GetTickCount64();
+    for (const auto& r : readings) {
+        auto it = std::find_if(g_bluetoothCache.begin(), g_bluetoothCache.end(),
+                               [&](const BluetoothCacheEntry& e) {
+                                   return e.reading.address == r.address;
+                               });
+        if (it != g_bluetoothCache.end()) {
+            it->reading = r;
+            it->lastSeen = now;
+        } else {
+            g_bluetoothCache.push_back({r, now});
+        }
+    }
+
+    constexpr ULONGLONG kMaxAgeMs = 30 * 60 * 1000;
+    g_bluetoothCache.erase(
+        std::remove_if(g_bluetoothCache.begin(), g_bluetoothCache.end(),
+                       [&](const BluetoothCacheEntry& e) {
+                           bool stillConnected =
+                               std::find(connected.begin(), connected.end(),
+                                         e.reading.address) != connected.end();
+                           bool remove =
+                               !stillConnected || now - e.lastSeen > kMaxAgeMs;
+                           if (remove) {
+                               Wh_Log(L"Bluetooth %s removed (connected=%d)",
+                                      e.reading.name.c_str(), stillConnected);
+                           }
+                           return remove;
+                       }),
+        g_bluetoothCache.end());
+}
+
+#pragma endregion
+
+#pragma region playstation
+
+struct PlayStationReading {
+    std::wstring key;
+    std::wstring name;
+    int percent;
+    bool charging;
+};
+
+PCWSTR PlayStationModelName(USHORT pid, bool* isDualSense) {
+    *isDualSense = false;
+    switch (pid) {
+        case 0x0CE6:
+            *isDualSense = true;
+            return L"DualSense";
+        case 0x0DF2:
+            *isDualSense = true;
+            return L"DualSense Edge";
+        case 0x05C4:
+        case 0x09CC:
+            return L"DualShock 4";
+        case 0x0BA0:
+            return L"DualShock 4 (Wireless Adapter)";
+    }
+    return nullptr;
+}
+
+bool ReadInputReport(HANDLE h, std::vector<BYTE>& buf, DWORD timeoutMs) {
+    OVERLAPPED ov{};
+    ov.hEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    if (!ov.hEvent) {
+        return false;
+    }
+    DWORD read = 0;
+    bool ok = ReadFile(h, buf.data(), (DWORD)buf.size(), &read, &ov);
+    if (!ok && GetLastError() == ERROR_IO_PENDING) {
+        HANDLE handles[] = {ov.hEvent, g_stopEvent};
+        DWORD wait = WaitForMultipleObjects(2, handles, FALSE, timeoutMs);
+        if (wait == WAIT_OBJECT_0) {
+            ok = GetOverlappedResult(h, &ov, &read, FALSE);
+        } else {
+            CancelIoEx(h, &ov);
+            GetOverlappedResult(h, &ov, &read, TRUE);
+            ok = false;
+        }
+    }
+    CloseHandle(ov.hEvent);
+    if (ok) {
+        buf.resize(read);
+    }
+    return ok && read > 0;
+}
+
+bool ParsePlayStationReport(const std::vector<BYTE>& r,
+                            bool isDualSense,
+                            bool usb,
+                            int* percent,
+                            bool* charging) {
+    if (r.empty()) {
+        return false;
+    }
+    if (isDualSense) {
+        size_t offset = 0;
+        if (usb && r[0] == 0x01 && r.size() >= 54) {
+            offset = 53;
+        } else if (!usb && r[0] == 0x31 && r.size() >= 55) {
+            offset = 54;
+        } else {
+            return false;
+        }
+        BYTE status = r[offset];
+        int level = status & 0x0F;
+        int state = status >> 4;
+        if (state > 2) {
+            return false;
+        }
+        *percent = std::min(100, level * 10 + 5);
+        if (state == 2) {
+            *percent = 100;
+        }
+        *charging = state == 1;
+        return true;
+    }
+
+    size_t offset = 0;
+    if (usb && r[0] == 0x01 && r.size() >= 31) {
+        offset = 30;
+    } else if (!usb && r[0] == 0x11 && r.size() >= 33) {
+        offset = 32;
+    } else {
+        return false;
+    }
+    BYTE status = r[offset];
+    int level = status & 0x0F;
+    bool cable = (status & 0x10) != 0;
+    int max = cable ? 11 : 8;
+    *percent = std::min(100, level * 100 / max);
+    *charging = cable && level < 11;
+    return true;
+}
+
+std::vector<PlayStationReading> PollPlayStation() {
+    std::vector<PlayStationReading> readings;
+
+    GUID hidGuid;
+    HidD_GetHidGuid(&hidGuid);
+    HDEVINFO set = SetupDiGetClassDevsW(&hidGuid, nullptr, nullptr,
+                                        DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+    if (set == INVALID_HANDLE_VALUE) {
+        return readings;
+    }
+
+    SP_DEVICE_INTERFACE_DATA ifData{sizeof(ifData)};
+    for (DWORD i = 0;
+         SetupDiEnumDeviceInterfaces(set, nullptr, &hidGuid, i, &ifData);
+         i++) {
+        DWORD needed = 0;
+        SetupDiGetDeviceInterfaceDetailW(set, &ifData, nullptr, 0, &needed,
+                                         nullptr);
+        if (!needed) {
+            continue;
+        }
+        std::vector<BYTE> detailBuf(needed);
+        auto detail =
+            reinterpret_cast<SP_DEVICE_INTERFACE_DETAIL_DATA_W*>(detailBuf.data());
+        detail->cbSize = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA_W);
+        if (!SetupDiGetDeviceInterfaceDetailW(set, &ifData, detail, needed,
+                                              nullptr, nullptr)) {
+            continue;
+        }
+        std::wstring path = ToLower(detail->DevicePath);
+        if (path.find(L"vid_054c") == std::wstring::npos &&
+            path.find(L"054c_pid") == std::wstring::npos) {
+            continue;
+        }
+
+        HANDLE h = CreateFileW(detail->DevicePath, GENERIC_READ | GENERIC_WRITE,
+                               FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                               OPEN_EXISTING, FILE_FLAG_OVERLAPPED, nullptr);
+        if (h == INVALID_HANDLE_VALUE) {
+            continue;
+        }
+
+        HIDD_ATTRIBUTES attrs{sizeof(attrs)};
+        HIDP_CAPS caps{};
+        PHIDP_PREPARSED_DATA pp = nullptr;
+        bool capsOk = false;
+        if (HidD_GetAttributes(h, &attrs) && HidD_GetPreparsedData(h, &pp)) {
+            capsOk = HidP_GetCaps(pp, &caps) == HIDP_STATUS_SUCCESS;
+            HidD_FreePreparsedData(pp);
+        }
+
+        bool isDualSense = false;
+        PCWSTR model = capsOk ? PlayStationModelName(attrs.ProductID, &isDualSense)
+                              : nullptr;
+        if (model && caps.UsagePage == 0x01 && caps.Usage == 0x05 &&
+            caps.InputReportByteLength > 0) {
+            bool usb = caps.InputReportByteLength == 64;
+            int percent = -1;
+            bool charging = false;
+            bool parsed = false;
+            for (int attempt = 0; attempt < 4 && !parsed; attempt++) {
+                std::vector<BYTE> report(caps.InputReportByteLength);
+                if (!ReadInputReport(h, report, 250)) {
+                    break;
+                }
+                parsed = ParsePlayStationReport(report, isDualSense, usb,
+                                                &percent, &charging);
+            }
+            static std::wstring lastLogged;
+            WCHAR logLine[160];
+            _snwprintf_s(logLine, _TRUNCATE,
+                         L"PlayStation pid=%04X usb=%d inputLen=%u parsed=%d "
+                         L"percent=%d charging=%d",
+                         attrs.ProductID, usb, caps.InputReportByteLength,
+                         parsed, percent, charging);
+            if (lastLogged != logLine) {
+                Wh_Log(L"%s", logLine);
+                lastLogged = logLine;
+            }
+            if (parsed) {
+                PlayStationReading r;
+                r.key = L"ps:" + path;
+                r.name = model;
+                r.percent = percent;
+                r.charging = charging;
+                readings.push_back(std::move(r));
+            }
+        }
+
+        CloseHandle(h);
+    }
+
+    SetupDiDestroyDeviceInfoList(set);
+    return readings;
+}
+
+#pragma endregion
+
+#pragma region logitech
+
+struct LogitechReading {
+    std::wstring key;
+    std::wstring name;
+    DeviceKind kind;
+    int percent;
+    bool charging;
+    bool approximate;
+};
+
+bool WriteOutputReport(HANDLE h, const BYTE* data, DWORD size) {
+    OVERLAPPED ov{};
+    ov.hEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    if (!ov.hEvent) {
+        return false;
+    }
+    DWORD written = 0;
+    bool ok = WriteFile(h, data, size, &written, &ov);
+    if (!ok && GetLastError() == ERROR_IO_PENDING) {
+        if (WaitForSingleObject(ov.hEvent, 500) == WAIT_OBJECT_0) {
+            ok = GetOverlappedResult(h, &ov, &written, FALSE);
+        } else {
+            CancelIoEx(h, &ov);
+            GetOverlappedResult(h, &ov, &written, TRUE);
+            ok = false;
+        }
+    }
+    CloseHandle(ov.hEvent);
+    return ok;
+}
+
+constexpr BYTE kHidppSoftwareId = 0x0A;
+
+bool HidppRequest(HANDLE h,
+                  DWORD inputLength,
+                  BYTE deviceIndex,
+                  BYTE featureIndex,
+                  BYTE function,
+                  std::initializer_list<BYTE> params,
+                  BYTE response[20]) {
+    BYTE request[20]{};
+    request[0] = 0x11;
+    request[1] = deviceIndex;
+    request[2] = featureIndex;
+    request[3] = (BYTE)((function << 4) | kHidppSoftwareId);
+    size_t i = 4;
+    for (BYTE p : params) {
+        if (i < sizeof(request)) {
+            request[i++] = p;
+        }
+    }
+    if (!WriteOutputReport(h, request, sizeof(request))) {
+        return false;
+    }
+
+    ULONGLONG deadline = GetTickCount64() + 400;
+    while (GetTickCount64() < deadline) {
+        std::vector<BYTE> buf(std::max<DWORD>(inputLength, 20));
+        DWORD remaining = (DWORD)(deadline - GetTickCount64());
+        if (!ReadInputReport(h, buf, std::max<DWORD>(remaining, 1))) {
+            return false;
+        }
+        if (buf.size() < 20 || buf[0] != 0x11 || buf[1] != deviceIndex) {
+            continue;
+        }
+        if (buf[2] == 0xFF && buf[3] == featureIndex) {
+            return false;
+        }
+        if (buf[2] == featureIndex && buf[3] == request[3]) {
+            memcpy(response, buf.data(), 20);
+            return true;
+        }
+    }
+    return false;
+}
+
+BYTE HidppFeatureIndex(HANDLE h, DWORD inputLength, BYTE deviceIndex, WORD featureId) {
+    BYTE r[20];
+    if (!HidppRequest(h, inputLength, deviceIndex, 0x00, 0,
+                      {(BYTE)(featureId >> 8), (BYTE)(featureId & 0xFF)}, r)) {
+        return 0;
+    }
+    return r[4];
+}
+
+bool ReadLogitechDevice(HANDLE h,
+                        DWORD inputLength,
+                        BYTE deviceIndex,
+                        LogitechReading& out) {
+    BYTE r[20];
+    out.percent = -1;
+    out.charging = false;
+    out.approximate = false;
+
+    if (BYTE idx = HidppFeatureIndex(h, inputLength, deviceIndex, 0x1004)) {
+        if (HidppRequest(h, inputLength, deviceIndex, idx, 1, {}, r)) {
+            int soc = r[4];
+            BYTE levels = r[5];
+            BYTE status = r[6];
+            if (soc > 0 && soc <= 100) {
+                out.percent = soc;
+            } else if (levels) {
+                out.percent = (levels & 0x08) ? 100
+                              : (levels & 0x04) ? 60
+                              : (levels & 0x02) ? 20
+                                                : 5;
+                out.approximate = true;
+            }
+            out.charging = status == 1 || status == 2;
+            if (status == 3) {
+                out.percent = 100;
+            }
+        }
+    } else if (BYTE idx = HidppFeatureIndex(h, inputLength, deviceIndex, 0x1000)) {
+        if (HidppRequest(h, inputLength, deviceIndex, idx, 0, {}, r)) {
+            if (r[4] <= 100) {
+                out.percent = r[4];
+            }
+            BYTE status = r[6];
+            out.charging = status == 1 || status == 2 || status == 4;
+            if (status == 3) {
+                out.percent = 100;
+            }
+        }
+    } else if (BYTE idx = HidppFeatureIndex(h, inputLength, deviceIndex, 0x1001)) {
+        if (HidppRequest(h, inputLength, deviceIndex, idx, 0, {}, r)) {
+            int millivolts = (r[4] << 8) | r[5];
+            if (millivolts > 0) {
+                out.percent = std::clamp((millivolts - 3500) * 100 / 650, 0, 100);
+                out.approximate = true;
+            }
+            out.charging = (r[6] & 0x80) != 0;
+        }
+    } else {
+        return false;
+    }
+
+    if (out.percent < 0) {
+        return false;
+    }
+
+    out.kind = DeviceKind::Generic;
+    out.name = L"Logitech device";
+    if (BYTE idx = HidppFeatureIndex(h, inputLength, deviceIndex, 0x0005)) {
+        if (HidppRequest(h, inputLength, deviceIndex, idx, 0, {}, r)) {
+            int length = std::min<int>(r[4], 64);
+            std::string name;
+            while ((int)name.size() < length) {
+                if (!HidppRequest(h, inputLength, deviceIndex, idx, 1,
+                                  {(BYTE)name.size()}, r)) {
+                    break;
+                }
+                for (int i = 4; i < 20 && (int)name.size() < length; i++) {
+                    if (!r[i]) {
+                        break;
+                    }
+                    name.push_back((char)r[i]);
+                }
+                if (r[4] == 0) {
+                    break;
+                }
+            }
+            if (!name.empty()) {
+                out.name = L"Logitech " + std::wstring(name.begin(), name.end());
+            }
+        }
+        if (HidppRequest(h, inputLength, deviceIndex, idx, 2, {}, r)) {
+            switch (r[4]) {
+                case 0:
+                case 2:
+                    out.kind = DeviceKind::Keyboard;
+                    break;
+                case 3:
+                case 4:
+                case 5:
+                    out.kind = DeviceKind::Mouse;
+                    break;
+                case 8:
+                    out.kind = DeviceKind::Headphones;
+                    break;
+                case 11:
+                case 12:
+                    out.kind = DeviceKind::Gamepad;
+                    break;
+            }
+        }
+    }
+    return true;
+}
+
+std::vector<LogitechReading> PollLogitech() {
+    std::vector<LogitechReading> readings;
+
+    GUID hidGuid;
+    HidD_GetHidGuid(&hidGuid);
+    HDEVINFO set = SetupDiGetClassDevsW(&hidGuid, nullptr, nullptr,
+                                        DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+    if (set == INVALID_HANDLE_VALUE) {
+        return readings;
+    }
+
+    SP_DEVICE_INTERFACE_DATA ifData{sizeof(ifData)};
+    for (DWORD i = 0;
+         SetupDiEnumDeviceInterfaces(set, nullptr, &hidGuid, i, &ifData);
+         i++) {
+        if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) {
+            break;
+        }
+        DWORD needed = 0;
+        SetupDiGetDeviceInterfaceDetailW(set, &ifData, nullptr, 0, &needed,
+                                         nullptr);
+        if (!needed) {
+            continue;
+        }
+        std::vector<BYTE> detailBuf(needed);
+        auto detail =
+            reinterpret_cast<SP_DEVICE_INTERFACE_DETAIL_DATA_W*>(detailBuf.data());
+        detail->cbSize = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA_W);
+        if (!SetupDiGetDeviceInterfaceDetailW(set, &ifData, detail, needed,
+                                              nullptr, nullptr)) {
+            continue;
+        }
+        std::wstring path = ToLower(detail->DevicePath);
+        if (path.find(L"vid_046d") == std::wstring::npos) {
+            continue;
+        }
+
+        HANDLE h = CreateFileW(detail->DevicePath, GENERIC_READ | GENERIC_WRITE,
+                               FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                               OPEN_EXISTING, FILE_FLAG_OVERLAPPED, nullptr);
+        if (h == INVALID_HANDLE_VALUE) {
+            continue;
+        }
+
+        HIDP_CAPS caps{};
+        PHIDP_PREPARSED_DATA pp = nullptr;
+        bool capsOk = false;
+        if (HidD_GetPreparsedData(h, &pp)) {
+            capsOk = HidP_GetCaps(pp, &caps) == HIDP_STATUS_SUCCESS;
+            HidD_FreePreparsedData(pp);
+        }
+
+        if (capsOk && caps.UsagePage == 0xFF00 && caps.Usage == 0x0002 &&
+            caps.OutputReportByteLength >= 20) {
+            const BYTE deviceIndexes[] = {0xFF, 1, 2, 3, 4, 5, 6};
+            for (BYTE deviceIndex : deviceIndexes) {
+                LogitechReading reading;
+                if (ReadLogitechDevice(h, caps.InputReportByteLength,
+                                       deviceIndex, reading)) {
+                    reading.key = L"logi:" + path + L":" +
+                                  std::to_wstring(deviceIndex);
+                    Wh_Log(L"Logitech %s index=%u percent=%d charging=%d",
+                           reading.name.c_str(), deviceIndex, reading.percent,
+                           reading.charging);
+                    readings.push_back(std::move(reading));
+                    if (deviceIndex == 0xFF) {
+                        break;
+                    }
+                }
+            }
+        }
+
+        CloseHandle(h);
+    }
+
+    SetupDiDestroyDeviceInfoList(set);
+    return readings;
+}
+
+#pragma endregion
+
+#pragma region gaming_input
+struct GamingInputBattery {
+    int percent;
+    bool charging;
+};
+
+std::vector<GamingInputBattery> PollGamingInputBatteries() {
+    std::vector<GamingInputBattery> result;
+    try {
+        auto gamepads = winrt::Windows::Gaming::Input::Gamepad::Gamepads();
+        for (auto const& gamepad : gamepads) {
+            auto report = gamepad.TryGetBatteryReport();
+            if (!report) {
+                continue;
+            }
+            auto status = report.Status();
+            if (status == winrt::Windows::System::Power::BatteryStatus::NotPresent) {
+                continue;
+            }
+            auto full = report.FullChargeCapacityInMilliwattHours();
+            auto remaining = report.RemainingCapacityInMilliwattHours();
+            if (!full || !remaining || full.Value() <= 0) {
+                continue;
+            }
+            int percent = std::clamp(remaining.Value() * 100 / full.Value(), 0, 100);
+            result.push_back(
+                {percent,
+                 status == winrt::Windows::System::Power::BatteryStatus::Charging});
+        }
+    } catch (...) {
+        Wh_Log(L"Windows.Gaming.Input failed: %08X", winrt::to_hresult().value);
+    }
+    return result;
+}
+
+#pragma endregion
+
+#pragma region polling
 std::vector<DeviceState> g_razerCache;
 
 void PublishDevices(std::vector<DeviceState> devices) {
@@ -778,8 +1593,9 @@ void UpdateRazerCache(const std::vector<RazerReading>& readings,
         DeviceState state;
         state.key = key;
         state.name = r.name;
-        state.kind = DeviceKind::Mouse;
+        state.kind = best->kind;
         state.percent = best->percent;
+        state.precisePercent = best->precisePercent;
         state.charging = false;
         for (const auto& c : readings) {
             if (c.name == r.name && c.ok &&
@@ -820,8 +1636,168 @@ void UpdateRazerCache(const std::vector<RazerReading>& readings,
     }
 }
 
-DWORD WINAPI PollThreadProc(LPVOID) {
+constexpr int kEstimating = -2;
+
+struct LevelHistory {
+    std::wstring key;
+    bool charging;
+    double anchorPercent;
+    long long anchorTime;
+    double lastPercent;
+};
+
+std::vector<LevelHistory> g_levelHistory;
+bool g_levelHistoryLoaded = false;
+
+long long UnixSecondsNow() {
+    FILETIME ft;
+    GetSystemTimeAsFileTime(&ft);
+    ULARGE_INTEGER u{{ft.dwLowDateTime, ft.dwHighDateTime}};
+    return (long long)(u.QuadPart / 10000000ULL) - 11644473600LL;
+}
+
+void LoadLevelHistory() {
+    g_levelHistoryLoaded = true;
+    WCHAR buf[4096];
+    if (!Wh_GetStringValue(L"levelHistory", buf, ARRAYSIZE(buf))) {
+        return;
+    }
+    long long now = UnixSecondsNow();
+    std::wstring all = buf;
+    size_t pos = 0;
+    while (pos < all.size()) {
+        size_t end = all.find(L'\n', pos);
+        if (end == std::wstring::npos) {
+            end = all.size();
+        }
+        std::wstring line = all.substr(pos, end - pos);
+        pos = end + 1;
+        size_t a = line.rfind(L'|');
+        size_t b = a == std::wstring::npos ? a : line.rfind(L'|', a - 1);
+        size_t c = b == std::wstring::npos ? b : line.rfind(L'|', b - 1);
+        if (c == std::wstring::npos) {
+            continue;
+        }
+        LevelHistory h;
+        h.key = line.substr(0, c);
+        h.charging = line.substr(c + 1, b - c - 1) == L"1";
+        h.anchorPercent = _wtof(line.substr(b + 1, a - b - 1).c_str());
+        h.anchorTime = _wtoi64(line.substr(a + 1).c_str());
+        h.lastPercent = h.anchorPercent;
+        if (now - h.anchorTime < 24 * 3600 && now >= h.anchorTime) {
+            g_levelHistory.push_back(h);
+        }
+    }
+}
+
+void SaveLevelHistory() {
+    std::wstring all;
+    for (const auto& h : g_levelHistory) {
+        WCHAR line[600];
+        _snwprintf_s(line, _TRUNCATE, L"%s|%d|%.2f|%lld\n", h.key.c_str(),
+                     h.charging ? 1 : 0, h.anchorPercent, h.anchorTime);
+        if (all.size() + wcslen(line) >= 4000) {
+            break;
+        }
+        all += line;
+    }
+    Wh_SetStringValue(L"levelHistory", all.c_str());
+}
+
+int RoundEstimate(int minutes) {
+    if (minutes < 60) {
+        return std::max(5, (minutes + 2) / 5 * 5);
+    }
+    if (minutes < 600) {
+        return (minutes + 7) / 15 * 15;
+    }
+    return (minutes + 30) / 60 * 60;
+}
+
+// Estimates the time until empty (or until full while charging) from the
+// level change since the last time the charging state changed. The anchor is
+// saved, so the estimate survives mod and Explorer restarts.
+void ApplyEstimates(std::vector<DeviceState>& devices) {
+    if (!g_levelHistoryLoaded) {
+        LoadLevelHistory();
+    }
+    long long now = UnixSecondsNow();
+    bool changed = false;
+    for (auto& d : devices) {
+        if (d.percent < 0 || d.approximate || d.wiredNoBattery || d.stale) {
+            continue;
+        }
+        double level = d.precisePercent >= 0 ? d.precisePercent : d.percent;
+        auto it = std::find_if(g_levelHistory.begin(), g_levelHistory.end(),
+                               [&](const LevelHistory& h) { return h.key == d.key; });
+        if (it == g_levelHistory.end()) {
+            g_levelHistory.push_back({d.key, d.charging, level, now, level});
+            d.estimateMinutes = kEstimating;
+            changed = true;
+            continue;
+        }
+        bool wrongDirection = d.charging ? level < it->lastPercent - 0.5
+                                         : level > it->lastPercent + 0.5;
+        if (it->charging != d.charging || wrongDirection) {
+            *it = {d.key, d.charging, level, now, level};
+            d.estimateMinutes = kEstimating;
+            changed = true;
+            continue;
+        }
+        it->lastPercent = level;
+
+        double delta = std::abs(level - it->anchorPercent);
+        double elapsedMinutes = (now - it->anchorTime) / 60.0;
+        d.estimateMinutes = kEstimating;
+        if (delta < 1.0 || elapsedMinutes < 10) {
+            continue;
+        }
+        double minutesPerPercent = elapsedMinutes / delta;
+        double remaining = d.charging ? 100 - level : level;
+        double estimate = remaining * minutesPerPercent;
+        if (estimate <= 0 || estimate > 99 * 60) {
+            continue;
+        }
+        d.estimateMinutes = RoundEstimate((int)estimate);
+    }
+    if (changed) {
+        SaveLevelHistory();
+    }
+}
+std::wstring FormatDuration(int minutes) {
+    if (minutes < 60) {
+        return std::to_wstring(minutes) + L" min";
+    }
+    int hours = minutes / 60;
+    int rest = minutes % 60;
+    if (hours >= 10 || rest == 0) {
+        return std::to_wstring(hours) + L" h";
+    }
+    return std::to_wstring(hours) + L" h " + std::to_wstring(rest) + L" min";
+}
+
+std::wstring EstimateText(const DeviceState& d) {
+    if (d.estimateMinutes == kEstimating) {
+        return L"Estimating time remaining\u2026";
+    }
+    if (d.estimateMinutes < 0) {
+        return L"";
+    }
+    return d.charging ? L"Full in about " + FormatDuration(d.estimateMinutes)
+                      : L"About " + FormatDuration(d.estimateMinutes) + L" left";
+}
+
+DWORD WINAPI PollThreadProc(LPVOID) {    bool apartmentInitialized = false;
+    try {
+        winrt::init_apartment(winrt::apartment_type::multi_threaded);
+        apartmentInitialized = true;
+    } catch (...) {
+    }
+
     ULONGLONG lastRazerPoll = 0;
+    ULONGLONG lastBluetoothPoll = 0;
+    std::vector<PlayStationReading> playStation;
+    std::vector<LogitechReading> logitech;
     bool firstRun = true;
 
     while (true) {
@@ -835,13 +1811,59 @@ DWORD WINAPI PollThreadProc(LPVOID) {
                 break;
             }
             UpdateRazerCache(razer, settings.hideDisconnected);
+            logitech = PollLogitech();
             lastRazerPoll = now;
-            firstRun = false;
         }
+
+        if (firstRun || now - lastBluetoothPoll >= 15000) {
+            std::vector<std::wstring> connectedBluetooth;
+            auto bluetooth = PollBluetooth(&connectedBluetooth);
+            UpdateBluetoothCache(bluetooth, connectedBluetooth);
+            playStation = PollPlayStation();
+            lastBluetoothPoll = now;
+        }
+        firstRun = false;
 
         std::vector<DeviceState> devices = g_razerCache;
 
-        for (const auto& x : PollXInput()) {
+        for (const auto& l : logitech) {
+            DeviceState state;
+            state.key = l.key;
+            state.name = l.name;
+            state.kind = l.kind;
+            state.percent = l.percent;
+            state.approximate = l.approximate;
+            state.charging = l.charging;
+            state.lastSeen = now;
+            devices.push_back(std::move(state));
+        }
+
+        for (const auto& p : playStation) {
+            DeviceState state;
+            state.key = p.key;
+            state.name = p.name;
+            state.kind = DeviceKind::Gamepad;
+            state.percent = p.percent;
+            state.charging = p.charging;
+            state.lastSeen = now;
+            devices.push_back(std::move(state));
+        }
+
+        for (const auto& entry : g_bluetoothCache) {
+            const auto& b = entry.reading;
+            DeviceState state;
+            state.key = L"bt:" + b.address;
+            state.name = b.name;
+            state.kind = b.kind;
+            state.percent = b.percent;
+            state.lastSeen = now;
+            devices.push_back(std::move(state));
+        }
+
+        auto xinputReadings = PollXInput();
+        auto gamingInputBatteries = PollGamingInputBatteries();
+        size_t nextGamingInput = 0;
+        for (const auto& x : xinputReadings) {
             DeviceState state;
             state.key = L"xinput:" + std::to_wstring(x.index);
             state.name = x.index == 0
@@ -851,10 +1873,18 @@ DWORD WINAPI PollThreadProc(LPVOID) {
             state.percent = x.percent;
             state.approximate = x.percent >= 0;
             state.wiredNoBattery = x.wiredNoBattery;
+            if (!x.wiredNoBattery &&
+                nextGamingInput < gamingInputBatteries.size()) {
+                const auto& exact = gamingInputBatteries[nextGamingInput++];
+                state.percent = exact.percent;
+                state.charging = exact.charging;
+                state.approximate = false;
+            }
             state.lastSeen = now;
             devices.push_back(std::move(state));
         }
 
+        ApplyEstimates(devices);
         PublishDevices(std::move(devices));
 
         HANDLE handles[] = {g_stopEvent, g_refreshEvent};
@@ -868,6 +1898,9 @@ DWORD WINAPI PollThreadProc(LPVOID) {
     }
 
     UnloadXInput();
+    if (apartmentInitialized) {
+        winrt::uninit_apartment();
+    }
     return 0;
 }
 
@@ -1027,9 +2060,24 @@ wux::UIElement BuildDeviceItem(const Settings& settings,
             }
         }
         if (!iconElement) {
-            auto glyph = MakeGlyph(
-                device.kind == DeviceKind::Mouse ? L"" : L"",
-                settings.iconSize);
+            PCWSTR glyphCode = L"\uE702";
+            switch (device.kind) {
+                case DeviceKind::Mouse:
+                    glyphCode = L"\uE962";
+                    break;
+                case DeviceKind::Gamepad:
+                    glyphCode = L"\uE7FC";
+                    break;
+                case DeviceKind::Headphones:
+                    glyphCode = L"\uE7F6";
+                    break;
+                case DeviceKind::Keyboard:
+                    glyphCode = L"\uE765";
+                    break;
+                case DeviceKind::Generic:
+                    break;
+            }
+            auto glyph = MakeGlyph(glyphCode, settings.iconSize);
             applyForeground(glyph);
             iconElement = glyph;
         }
@@ -1041,6 +2089,10 @@ wux::UIElement BuildDeviceItem(const Settings& settings,
         std::wstring value = std::to_wstring(device.percent) + L"%";
         if (device.approximate) {
             value = L"~" + value;
+        }
+        if (settings.timeEstimate == TimeEstimateMode::Inline &&
+            device.estimateMinutes >= 0) {
+            value += L" " + FormatDuration(device.estimateMinutes);
         }
         text.Text(value);
         text.FontFamily(wuxm::FontFamily(settings.fontFamily));
@@ -1083,11 +2135,11 @@ wux::UIElement BuildDeviceItem(const Settings& settings,
     }
 
     if (device.wiredNoBattery) {
-        auto plug = MakeGlyph(L"", settings.iconSize * 0.8);
+        auto plug = MakeGlyph(L"\uECF0", settings.iconSize * 0.8);
         applyForeground(plug);
         item.Children().Append(plug);
     } else if (device.charging && settings.showChargingIndicator) {
-        auto bolt = MakeGlyph(L"", settings.iconSize * 0.75);
+        auto bolt = MakeGlyph(L"\uE945", settings.iconSize * 0.75);
         applyForeground(bolt);
         item.Children().Append(bolt);
     }
@@ -1114,6 +2166,10 @@ wux::UIElement BuildDeviceItem(const Settings& settings,
     if (device.stale) {
         tooltip += L"\nNot responding, showing last known level";
     }
+    if (settings.timeEstimate != TimeEstimateMode::Off &&
+        device.estimateMinutes != -1) {
+        tooltip += L"\n" + EstimateText(device);
+    }
     if (!device.updated.empty()) {
         tooltip += L"\nLast reading: " + device.updated;
     }
@@ -1122,8 +2178,190 @@ wux::UIElement BuildDeviceItem(const Settings& settings,
     return item;
 }
 
-void RenderInstance(WidgetInstance& inst,
-                    const Settings& settings,
+PCWSTR GlyphForKind(DeviceKind kind) {
+    switch (kind) {
+        case DeviceKind::Mouse:
+            return L"\uE962";
+        case DeviceKind::Gamepad:
+            return L"\uE7FC";
+        case DeviceKind::Headphones:
+            return L"\uE7F6";
+        case DeviceKind::Keyboard:
+            return L"\uE765";
+        case DeviceKind::Generic:
+            break;
+    }
+    return L"\uE702";
+}
+
+// Released on the taskbar thread in Wh_ModBeforeUninit.
+[[clang::no_destroy]] winrt::weak_ref<wuxc::Flyout> g_openFlyout;
+
+void OpenBluetoothSettings() {
+    ShellExecuteW(nullptr, L"open", L"ms-settings:bluetooth", nullptr, nullptr,
+                  SW_SHOWNORMAL);
+}
+
+wuxc::TextBlock MakePanelText(const std::wstring& text,
+                              double size,
+                              bool semibold,
+                              double opacity) {
+    wuxc::TextBlock block;
+    block.Text(text);
+    block.FontSize(size);
+    if (semibold) {
+        block.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+    }
+    block.Opacity(opacity);
+    block.TextWrapping(wux::TextWrapping::NoWrap);
+    return block;
+}
+
+void ShowDevicePanel(wux::FrameworkElement const& anchor) {
+    std::vector<DeviceState> devices;
+    {
+        std::lock_guard<std::mutex> lock(g_devicesMutex);
+        devices = g_devices;
+    }
+    Settings settings = GetSettingsCopy();
+
+    wuxc::StackPanel root;
+    root.Spacing(12);
+    root.MinWidth(280);
+    root.Children().Append(MakePanelText(L"Wireless devices", 15, true, 1.0));
+
+    int shown = 0;
+    for (const auto& device : devices) {
+        const DeviceOverride* o = FindOverride(settings, device);
+        if (o && o->hide) {
+            continue;
+        }
+        shown++;
+        std::wstring name =
+            o && !o->displayName.empty() ? o->displayName : device.name;
+
+        wuxc::StackPanel row;
+        row.Orientation(wuxc::Orientation::Horizontal);
+        row.Spacing(12);
+        if (device.stale) {
+            row.Opacity(0.6);
+        }
+
+        auto icon = MakeGlyph(GlyphForKind(device.kind), 22);
+        icon.VerticalAlignment(wux::VerticalAlignment::Top);
+        icon.Margin(wux::Thickness{0, 2, 0, 0});
+        row.Children().Append(icon);
+
+        wuxc::StackPanel details;
+        details.Spacing(2);
+        details.Children().Append(MakePanelText(name, 13, true, 1.0));
+
+        std::wstring status;
+        if (device.wiredNoBattery) {
+            status = L"Wired (no battery)";
+        } else if (device.percent >= 0) {
+            status = (device.approximate ? L"About " : L"") +
+                     std::to_wstring(device.percent) + L"%";
+            if (device.charging) {
+                status += L" \u00B7 Charging";
+            }
+        } else {
+            status = L"Battery level unavailable";
+        }
+        details.Children().Append(MakePanelText(status, 12, false, 0.85));
+
+        if (device.percent >= 0 && !device.wiredNoBattery) {
+            wuxc::ProgressBar bar;
+            bar.Minimum(0);
+            bar.Maximum(100);
+            bar.Value(device.percent);
+            bar.Width(200);
+            bar.HorizontalAlignment(wux::HorizontalAlignment::Left);
+            bool low = device.percent <= settings.lowBatteryThreshold &&
+                       !device.charging;
+            if (low) {
+                auto c = ParseColor(settings.lowBatteryColor);
+                bar.Foreground(wuxm::SolidColorBrush(
+                    c ? *c : winrt::Windows::UI::Color{0xFF, 0xE8, 0x11, 0x23}));
+            }
+            details.Children().Append(bar);
+        }
+
+        if (settings.timeEstimate != TimeEstimateMode::Off &&
+            device.estimateMinutes != -1) {
+            details.Children().Append(
+                MakePanelText(EstimateText(device), 12, false, 0.85));
+        }
+        if (device.stale) {
+            details.Children().Append(MakePanelText(
+                L"Not responding, showing last known level", 11, false, 0.7));
+        }
+        if (!device.updated.empty()) {
+            details.Children().Append(MakePanelText(
+                L"Last reading: " + device.updated, 11, false, 0.7));
+        }
+
+        row.Children().Append(details);
+        root.Children().Append(row);
+    }
+
+    if (!shown) {
+        root.Children().Append(
+            MakePanelText(L"No devices detected", 12, false, 0.85));
+    }
+
+    wuxc::Flyout flyout;
+    wuxc::Button button;
+    button.Content(winrt::box_value(L"Bluetooth settings"));
+    button.HorizontalAlignment(wux::HorizontalAlignment::Stretch);
+    auto weakFlyout = winrt::make_weak(flyout);
+    button.Click([weakFlyout](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+        OpenBluetoothSettings();
+        if (auto f = weakFlyout.get()) {
+            f.Hide();
+        }
+    });
+    root.Children().Append(button);
+
+    flyout.Content(root);
+    flyout.Placement(wuxc::Primitives::FlyoutPlacementMode::Top);
+    flyout.ShouldConstrainToRootBounds(false);
+    flyout.ShowAt(anchor);
+    g_openFlyout = weakFlyout;
+}
+
+void HideDevicePanel() {
+    if (auto flyout = g_openFlyout.get()) {
+        try {
+            flyout.Hide();
+        } catch (...) {
+        }
+    }
+    g_openFlyout = nullptr;
+}
+
+void OnWidgetTapped(wf::IInspectable const& sender,
+                    wux::Input::TappedRoutedEventArgs const& args) {
+    if (g_unloading) {
+        return;
+    }
+    switch (GetSettingsCopy().clickAction) {
+        case ClickAction::Panel:
+            if (auto anchor = sender.try_as<wux::FrameworkElement>()) {
+                args.Handled(true);
+                ShowDevicePanel(anchor);
+            }
+            break;
+        case ClickAction::BluetoothSettings:
+            args.Handled(true);
+            OpenBluetoothSettings();
+            break;
+        case ClickAction::None:
+            break;
+    }
+}
+
+void RenderInstance(WidgetInstance& inst,                    const Settings& settings,
                     const std::vector<DeviceState>& devices) {
     if (!inst.widget) {
         return;
@@ -1464,6 +2702,7 @@ bool InsertWidget(WidgetInstance& inst,
                   Position position) {
     wuxc::StackPanel widget;
     widget.Name(L"BatteryWidget");
+    widget.Tapped(OnWidgetTapped);
     widget.Orientation(wuxc::Orientation::Horizontal);
     widget.VerticalAlignment(wux::VerticalAlignment::Center);
     widget.Margin(wux::Thickness{6, 0, 6, 0});
@@ -1955,6 +3194,179 @@ HWND FindCurrentProcessTaskbarWnd() {
 
 #pragma endregion
 
+#pragma region taskbar_xaml_root
+
+void* CTaskBand_ITaskListWndSite_vftable;
+
+using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis, void** result);
+CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original;
+
+void* TaskbarHost_FrameHeight_Original;
+
+using std__Ref_count_base__Decref_t = void(WINAPI*)(void* pThis);
+std__Ref_count_base__Decref_t std__Ref_count_base__Decref_Original;
+
+bool g_taskbarSymbolsResolved = false;
+
+bool ResolveTaskbarDllSymbols() {
+    HMODULE module =
+        LoadLibraryEx(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!module) {
+        Wh_Log(L"Failed to load taskbar.dll");
+        return false;
+    }
+
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
+        {
+            {LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
+            &CTaskBand_ITaskListWndSite_vftable,
+        },
+        {
+            {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
+            &CTaskBand_GetTaskbarHost_Original,
+        },
+        {
+            {LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
+            &TaskbarHost_FrameHeight_Original,
+        },
+        {
+            {LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
+            &std__Ref_count_base__Decref_Original,
+        },
+    };
+
+    if (!WindhawkUtils::HookSymbols(module, taskbarDllHooks,
+                                    ARRAYSIZE(taskbarDllHooks))) {
+        Wh_Log(L"taskbar.dll symbols not found, using layout hooks only");
+        return false;
+    }
+    return CTaskBand_ITaskListWndSite_vftable &&
+           CTaskBand_GetTaskbarHost_Original &&
+           TaskbarHost_FrameHeight_Original &&
+           std__Ref_count_base__Decref_Original;
+}
+
+wux::XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
+    if (!g_taskbarSymbolsResolved) {
+        return nullptr;
+    }
+
+    HWND hTaskSwWnd = (HWND)GetProp(hTaskbarWnd, L"TaskbandHWND");
+    if (!hTaskSwWnd) {
+        return nullptr;
+    }
+
+    void* taskBand = (void*)GetWindowLongPtr(hTaskSwWnd, 0);
+    if (!taskBand) {
+        return nullptr;
+    }
+    void* taskBandForTaskListWndSite = taskBand;
+    for (int i = 0; *(void**)taskBandForTaskListWndSite !=
+                    CTaskBand_ITaskListWndSite_vftable;
+         i++) {
+        if (i == 20) {
+            return nullptr;
+        }
+        taskBandForTaskListWndSite = (void**)taskBandForTaskListWndSite + 1;
+    }
+
+    void* taskbarHostSharedPtr[2]{};
+    CTaskBand_GetTaskbarHost_Original(taskBandForTaskListWndSite,
+                                      taskbarHostSharedPtr);
+    if (!taskbarHostSharedPtr[0] && !taskbarHostSharedPtr[1]) {
+        return nullptr;
+    }
+
+    size_t taskbarElementIUnknownOffset = 0x10;
+    {
+        // 48:83EC 28 | sub rsp,28
+        // 48:83C1 48 | add rcx,48
+        const BYTE* b = (const BYTE*)TaskbarHost_FrameHeight_Original;
+        if (b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC && b[4] == 0x48 &&
+            b[5] == 0x83 && b[6] == 0xC1 && b[7] <= 0x7F) {
+            taskbarElementIUnknownOffset = b[7];
+        } else {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+        }
+    }
+
+    wux::XamlRoot result{nullptr};
+    if (taskbarHostSharedPtr[0]) {
+        auto* taskbarElementIUnknown =
+            *(IUnknown**)((BYTE*)taskbarHostSharedPtr[0] +
+                          taskbarElementIUnknownOffset);
+        wux::FrameworkElement taskbarElement{nullptr};
+        if (taskbarElementIUnknown) {
+            taskbarElementIUnknown->QueryInterface(
+                winrt::guid_of<wux::FrameworkElement>(),
+                winrt::put_abi(taskbarElement));
+        }
+        if (taskbarElement) {
+            result = taskbarElement.XamlRoot();
+        }
+    }
+
+    if (taskbarHostSharedPtr[1]) {
+        std__Ref_count_base__Decref_Original(taskbarHostSharedPtr[1]);
+    }
+
+    return result;
+}
+
+wux::FrameworkElement FindDescendantByClassName(wux::DependencyObject const& root,
+                                                PCWSTR className,
+                                                int depth) {
+    if (!root || depth < 0) {
+        return nullptr;
+    }
+    int count = wuxm::VisualTreeHelper::GetChildrenCount(root);
+    for (int i = 0; i < count; i++) {
+        auto child = wuxm::VisualTreeHelper::GetChild(root, i);
+        if (auto fe = child.try_as<wux::FrameworkElement>()) {
+            if (winrt::get_class_name(fe) == className) {
+                return fe;
+            }
+        }
+        if (auto found = FindDescendantByClassName(child, className, depth - 1)) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
+void InsertIntoPrimaryTaskbarNow() {
+    HWND hTaskbar = FindCurrentProcessTaskbarWnd();
+    if (!hTaskbar || !g_taskbarSymbolsResolved) {
+        return;
+    }
+    RunFromWindowThread(
+        hTaskbar,
+        [](PVOID param) {
+            try {
+                auto xamlRoot = GetTaskbarXamlRoot((HWND)param);
+                if (!xamlRoot) {
+                    Wh_Log(L"Getting taskbar XamlRoot failed");
+                    return;
+                }
+                auto content = xamlRoot.Content();
+                auto frame = FindDescendantByClassName(
+                    content, L"SystemTray.SystemTrayFrame", 40);
+                if (!frame) {
+                    Wh_Log(L"System tray frame not found in taskbar XamlRoot");
+                    return;
+                }
+                RememberFrame(frame).kind = TrayKind::Primary;
+                EnsureWidgetForFrame(frame);
+            } catch (...) {
+                Wh_Log(L"InsertIntoPrimaryTaskbarNow failed: %08X",
+                       winrt::to_hresult().value);
+            }
+        },
+        hTaskbar);
+}
+
+#pragma endregion
+
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
@@ -1984,6 +3396,8 @@ BOOL Wh_ModInit() {
                                        &LoadLibraryExW_Original);
     }
 
+    g_taskbarSymbolsResolved = ResolveTaskbarDllSymbols();
+
     g_pollThread = CreateThread(nullptr, 0, PollThreadProc, nullptr, 0, nullptr);
     return TRUE;
 }
@@ -1992,6 +3406,7 @@ void Wh_ModAfterInit() {
     Wh_Log(L">");
 
     HookSystemTrayModuleIfLoaded(nullptr, true);
+    InsertIntoPrimaryTaskbarNow();
 }
 
 void Wh_ModBeforeUninit() {
@@ -2012,6 +3427,7 @@ void Wh_ModBeforeUninit() {
         RunFromWindowThread(
             hTaskbar,
             [](PVOID) {
+                HideDevicePanel();
                 StopUiTimer();
                 RemoveAllWidgets();
                 g_instances.reset();
