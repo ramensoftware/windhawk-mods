@@ -4,7 +4,7 @@
 // @description     Stops Windows 11 from redirecting Control Panel pages (System, Troubleshooting, Fonts, ...) to the Settings app
 // @version         3.4.1
 // @author          AdmXP8
-// @github          https://github.com/admxp8
+// @github          https://github.com/AdmXP8
 // @include         explorer.exe
 // @include         rundll32.exe
 // @architecture    x86-64
