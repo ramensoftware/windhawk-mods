@@ -13736,6 +13736,30 @@
         "version": "1.2.4"
       }
     },
+    "now-playing-windhawk": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795748423000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795748423000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "sultansaad-dev",
+        "compilerOptions": "-lgdiplus -ld2d1 -ldwrite -lole32 -loleaut32 -lruntimeobject -lshcore -lwindowsapp -luuid -lshell32 -lshlwapi -luser32 -lgdi32",
+        "description": "A sleek now-playing bar that drops down from the top edge of your screen when you hover there, then shows whatever music or audio you're listening to",
+        "github": "https://github.com/sultansaad-dev",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Now Playing...",
+        "version": "1.0.0"
+      }
+    },
     "npp-taskdlg-textcolor": {
       "details": {
         "defaultSorting": 1290,
@@ -17882,6 +17906,34 @@
       "metadataEnglish": {
         "description": "Hold the right (or a side) mouse button and click or scroll to close, minimize, maximize the window under the cursor, skip tracks and more",
         "name": "Super Shortcuts for Mouse"
+      }
+    },
+    "super-topmost-windows": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795748429000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795748429000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Ingan121",
+        "compilerOptions": "-lwtsapi32",
+        "description": "Show ordinary windows on top of almost all apps and games (read mod description first)",
+        "github": "https://github.com/Ingan121",
+        "homepage": "https://www.ingan121.com/",
+        "include": [
+          "ctfmon.exe",
+          "LockApp.exe"
+        ],
+        "license": "MIT",
+        "name": "Super Topmost Windows",
+        "twitter": "https://twitter.com/Ingan121",
+        "version": "1.0"
       }
     },
     "suppress-run-box-error-message": {

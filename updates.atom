@@ -2,12 +2,117 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-27T02:03:55.000Z</updated>
+    <updated>2026-11-27T03:00:29.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Super Topmost Windows 1.0]]></title>
+        <id>https://windhawk.net/mods/super-topmost-windows#c04d34828d9cb1a8f398bb36ff648f8846a4f606</id>
+        <link href="https://windhawk.net/mods/super-topmost-windows"/>
+        <updated>2026-11-27T03:00:29.000Z</updated>
+        <content type="html"><![CDATA[<h1>Super Topmost Windows</h1>
+<ul>
+<li>This mod allows pinning any window on top of immersive UI components (Action Center, Start Menu, search, volume HUD, taskbar flyouts, etc.), fullscreen UWP apps, games in borderless or optimized fullscreen mode, Task Manager, and any other ordinary &quot;Always On Top&quot; windows.</li>
+<li>Press the configured hotkey (default: <code>Win+Ctrl+Shift+T</code>) to toggle the super-topmost state of the current foreground window.</li>
+<li>This mod absolutely requires the UIAccess privilege, so it may not work with a portable Windhawk installation running without admin.
+<ul>
+<li>The mod runs inside <code>ctfmon.exe</code>. This mod won't work if <code>ctfmon.exe</code> is disabled by debloating tools. Also, the mod process will show up in Task Manager as second <code>CTF Loader</code> process.</li>
+</ul>
+</li>
+<li>Known issue: It won't work with UWP windows and layered windows (<code>WS_EX_LAYERED</code>).</li>
+<li>Fullscreen games might minimize when focusing the topmost window. You will need a workaround, such as the <a href="https://windhawk.net/mods/ignore-focus-loss">Ignore Focus Loss</a> mod.</li>
+</ul>
+<h2>⚠ Important security notice ⚠</h2>
+<ul>
+<li>Windows set as super-topmost by this mod may <strong>show on top of Windows 10/11's default lock screen, which might expose sensitive information or allow logon bypass.</strong></li>
+<li>This mod tries its best to avoid this issue by temporarily restoring all super-topmost windows to the original state while locked, but it could go wrong (e.g., the mod process dies with super-topmost windows left).</li>
+<li>If this concerns you, either do not use this mod, or disable the lock screen entirely (<a href="https://www.elevenforum.com/t/enable-or-disable-lock-screen-in-windows-11.1287/">use the NoLockScreen registry/GPO</a>) and/or enable the mod's mitigation in the options page.
+<ul>
+<li>If your system requires pressing Ctrl+Alt+Del on logon, you must enable the mod's mitigation, as <code>NoLockScreen</code> still doesn't disable <code>LockApp.exe</code> in that case.</li>
+</ul>
+</li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/Ingan121/files/refs/heads/master/supertopmost.webp" alt="Animated Screenshot"></p>
+<h2>Hotkey</h2>
+<p>Change the hotkey in the mod's settings. Write any modifiers and exactly one
+key, joined by <code>+</code>, for example <code>Ctrl+Alt+M</code>, <code>Win+Shift+F9</code> or <code>Pause</code>.</p>
+<ul>
+<li>Modifiers: <code>Ctrl</code>, <code>Alt</code>, <code>Shift</code>, <code>Win</code>.</li>
+<li>Keys: <code>A</code>-<code>Z</code>, <code>0</code>-<code>9</code>, <code>F1</code>-<code>F24</code>, <code>Space</code>, <code>Tab</code>, <code>Enter</code>, <code>Esc</code>,
+<code>Backspace</code>, <code>Insert</code>, <code>Delete</code>, <code>Home</code>, <code>End</code>, <code>PageUp</code>, <code>PageDown</code>, <code>Up</code>,
+<code>Down</code>, <code>Left</code>, <code>Right</code>, <code>Pause</code>, <code>ScrollLock</code>, <code>PrintScreen</code>, <code>Numpad0</code>-
+<code>Numpad9</code>, <code>VolumeMute</code>, <code>VolumeDown</code>, <code>VolumeUp</code>, <code>MediaPlayPause</code>,
+<code>MediaNext</code>, <code>MediaPrev</code>, <code>MediaStop</code>.</li>
+<li>Any other key: its virtual-key code in hexadecimal, such as <code>0x4D</code>.</li>
+</ul>
+<p>Windows gives a hotkey to only one program at a time, and other apps stop
+receiving that key combination. If the hotkey does nothing, another program may
+already own it. Turn on logging in the mod's Advanced tab to see why.</p>
+]]></content>
+        <author>
+            <name>Ingan121</name>
+            <uri>https://github.com/Ingan121</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Now Playing... 1.0.0]]></title>
+        <id>https://windhawk.net/mods/now-playing-windhawk#44e701832ef526b8fdec5e46bf1fc23222ff7ff8</id>
+        <link href="https://windhawk.net/mods/now-playing-windhawk"/>
+        <updated>2026-11-27T03:00:23.000Z</updated>
+        <content type="html"><![CDATA[<h1>Now Playing...</h1>
+<p>Push your mouse to the top of your screen and a now-playing bar drops down,
+kind of like the taskbar popping up but upside down. It shows whatever you're
+listening to: Spotify, SoundCloud, YouTube in your browser, Apple Music, VLC,
+pretty much anything that shows up in Windows' media controls.</p>
+<p><img src="https://raw.githubusercontent.com/sultansaad-dev/now-playing-windhawk/main/screenshots/showcase.png" alt="Now Playing... close-ups"></p>
+<p><img src="https://raw.githubusercontent.com/sultansaad-dev/now-playing-windhawk/main/screenshots/desktop-youtube.png" alt="On the desktop"></p>
+<p><img src="https://raw.githubusercontent.com/sultansaad-dev/now-playing-windhawk/main/screenshots/in-game-fortnite.png" alt="In Fortnite"></p>
+<h2>What's on it</h2>
+<ul>
+<li>The album art or video thumbnail, with the app's icon in the corner</li>
+<li>Song title and artist (fancy fonts in names show up properly, no boxes)</li>
+<li>A little button next to the artist that jumps you straight to the app</li>
+<li>Play/pause, plus 10 second skip back and forward</li>
+<li>A progress line you can click or drag to jump anywhere</li>
+<li>Previous and next, but only when the app actually lets you skip</li>
+<li>A wave line that moves with the music</li>
+</ul>
+<h2>Stuff you can change</h2>
+<ul>
+<li>Put it top center, top left or top right, on any monitor</li>
+<li>Background: auto (takes its colour from the album art), translucent, a solid
+colour from the list, or light</li>
+<li>The drip, which is the little liquid neck that makes it look like it's
+hanging off the top of your screen</li>
+<li><strong>Persistent mode:</strong> press Ctrl + Shift + ? and the bar pops up instantly
+and stays up, even in games. Press it again to hide it</li>
+<li>It can peek for a few seconds when a new song starts</li>
+</ul>
+<p>It stays hidden over full screen stuff by default so it won't get in the way
+of your games or videos (use <strong>Persistent mode</strong> if you want it in a game).</p>
+<p>There's a lot more in the <strong>Settings</strong> tab to play around with: size, width,
+corner roundness, animation speed, hover delays, colours, the visualizer
+style and more. Tweak it however you like, everything applies straight away.</p>
+<h2>Good to know</h2>
+<ul>
+<li>Some players, like YouTube in a browser, don't let Windows move the position
+or toggle playback. For those, the skip buttons, the progress bar and
+play/pause send the player's own keyboard shortcuts (J/K/L and number keys on
+YouTube, arrows and space elsewhere) to that app's window in the background,
+only when you click them.</li>
+<li>Similar mods: Dynamic Island Media Player, Dynamic Island for Windows, SMTC
+Now Playing Desktop Widgets and Island Media Controls. This one is different
+because it stays fully hidden until you hover the top edge, then drops down.</li>
+</ul>
+]]></content>
+        <author>
+            <name>sultansaad-dev</name>
+            <uri>https://github.com/sultansaad-dev</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Live HUD 1.2.2]]></title>
         <id>https://windhawk.net/mods/taskbar-live-hud-radar#93b59d196aea6422f64386cef985b4dd1d567d7e</id>
@@ -916,60 +1021,6 @@ Enable only one session-restoration mod at a time.</p>
         <author>
             <name>Maxxwell Quinn</name>
             <uri>https://github.com/MXXQN</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Task Manager Pause Button 1.1.1]]></title>
-        <id>https://windhawk.net/mods/task-manager-pause-button#7e4ed06f199782d1e3c512e259ba5866b8590fb6</id>
-        <link href="https://windhawk.net/mods/task-manager-pause-button"/>
-        <updated>2026-11-26T05:03:44.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>The previous version relied on Task Manager’s Ctrl-key pause, which only worked while the window had focus. Clicking the taskbar or choosing <strong>Open file location</strong> could make the process list start updating again while <strong>Pause</strong> was still active.</li>
-<li><strong>Pause</strong> now controls list updates directly, so the list stays frozen even when Task Manager loses focus.</li>
-<li>Thanks to @F404X for reporting the <strong>Open file location</strong> case in <a href="https://github.com/luizbizzio/task-manager-pause-button/issues/1">issue #1</a>.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Luiz Bizzio</name>
-            <uri>https://github.com/luizbizzio</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Lock Screen Clock Styler 3.0.0]]></title>
-        <id>https://windhawk.net/mods/lock-screen-clock-styler#01c358fdfa0df94fd9192933fa37190a144f9c08</id>
-        <link href="https://windhawk.net/mods/lock-screen-clock-styler"/>
-        <updated>2026-11-26T05:03:38.000Z</updated>
-        <content type="html"><![CDATA[<h3>New Clock Style</h3>
-<ul>
-<li><strong>ANSI Shadow (Terminal ASCII):</strong> Added a new retro terminal ASCII block-art clock style (<code>ansiShadow</code>) with 4 phosphor color presets (Matrix Green, Amber CRT, Cyber Cyan, Classic Monochrome).</li>
-</ul>
-<h3>Per-Theme Customization Groups</h3>
-<p>Added dedicated per-theme customization sections with rich new options:</p>
-<ul>
-<li><strong>Retro Pixel (<code>pixelSettings</code>):</strong> LED dot shape (<code>Circle</code>, <code>Square</code>, <code>Rounded</code>), 14 curated LED colors, and frosted backplate toggle &amp; opacity (<code>0–255</code>).</li>
-<li><strong>Vertical Stack Clocks (<code>verticalSettings</code>):</strong> Row spacing adjustment, minute digit opacity control, 14 curated text colors, custom font selector (built-in Windows fonts), and drop-shadow toggle.</li>
-<li><strong>ANSI Shadow (<code>ansiSettings</code>):</strong> 4 terminal phosphor color presets (<code>amber</code>, <code>green</code>, <code>cyan</code>, <code>mono</code>), terminal prompt header bar toggle, phosphor glow toggle, and card opacity (<code>0–255</code>).</li>
-<li><strong>Flip Clocks (<code>flipSettings</code>):</strong> Frosted glass / card opacity, corner radius (<code>-1</code> theme default or custom), center split seam toggle, and 14 curated digit colors.</li>
-<li><strong>Minimalist Sonoma (<code>minimalistSettings</code>):</strong> Font weight selector, 14 curated text colors, custom font selector (built-in Windows fonts), and drop-shadow toggle.</li>
-<li><strong>Cyberpunk Sci-Fi HUD (<code>cyberpunkSettings</code>):</strong> 4 HUD color presets (<code>default</code>, <code>matrix</code>, <code>crimson</code>, <code>violet</code>), top telemetry header bar toggle, and chassis opacity (<code>0–255</code>).</li>
-</ul>
-<h3>Breaking &amp; Behavior Changes</h3>
-<ul>
-<li><strong>Minimalist Aura style removed:</strong> Existing <code>aura</code> configurations are automatically migrated to <strong>Minimalist Sonoma</strong> (<code>macos</code>).</li>
-<li><strong><code>hideDefaultClock</code> removed:</strong> The stock Windows lock screen clock is now always hidden whenever a custom clock style is active. To keep the stock Windows clock visible instead, select <strong>Default Clock Only</strong> (<code>defaultOnly</code>).</li>
-<li><strong><code>showSeconds</code> changed from a toggle to <code>auto</code> / <code>on</code> / <code>off</code>:</strong> Existing boolean toggle values fall back to <code>auto</code> (theme default: enabled on Retro Pixel, ANSI Shadow, and Cyberpunk HUD; disabled on Minimalist Sonoma). Users who previously turned seconds off can set <code>showSeconds</code> to <strong>Always Hide</strong> (<code>off</code>).</li>
-<li><strong><code>glassOpacity</code> moved:</strong> The Flip clock glass opacity setting is now located under the <strong>Flip Clock</strong> (<code>flipSettings.glassOpacity</code>) group. Users who had a custom value can re-apply it in the new group.</li>
-</ul>
-<h3>Improvements &amp; Polish</h3>
-<ul>
-<li><strong>14-Locale Settings UI:</strong> Added emoji prefixes across settings titles and polished translations across all 14 supported languages.</li>
-<li><strong>Refined Defaults:</strong> Updated default <code>clockFontSize</code> to <code>165</code> and tuned Retro Pixel &amp; Cyberpunk HUD defaults.</li>
-<li><strong>Updated Docs &amp; Screenshots:</strong> Refreshed README and mod screenshots for v3.0.0, and updated license to <code>GPL-3.0-only</code>.</li>
-</ul>
-]]></content>
-        <author>
-            <name>ali0zdas</name>
-            <uri>https://github.com/ali0zdas</uri>
         </author>
     </entry>
 </feed>

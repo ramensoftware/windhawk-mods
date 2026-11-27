@@ -2,12 +2,117 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-27T02:03:49.000Z</updated>
+    <updated>2026-11-27T03:00:29.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Super Topmost Windows 1.0]]></title>
+        <id>https://windhawk.net/mods/super-topmost-windows#c04d34828d9cb1a8f398bb36ff648f8846a4f606</id>
+        <link href="https://windhawk.net/mods/super-topmost-windows"/>
+        <updated>2026-11-27T03:00:29.000Z</updated>
+        <content type="html"><![CDATA[<h1>Super Topmost Windows</h1>
+<ul>
+<li>This mod allows pinning any window on top of immersive UI components (Action Center, Start Menu, search, volume HUD, taskbar flyouts, etc.), fullscreen UWP apps, games in borderless or optimized fullscreen mode, Task Manager, and any other ordinary &quot;Always On Top&quot; windows.</li>
+<li>Press the configured hotkey (default: <code>Win+Ctrl+Shift+T</code>) to toggle the super-topmost state of the current foreground window.</li>
+<li>This mod absolutely requires the UIAccess privilege, so it may not work with a portable Windhawk installation running without admin.
+<ul>
+<li>The mod runs inside <code>ctfmon.exe</code>. This mod won't work if <code>ctfmon.exe</code> is disabled by debloating tools. Also, the mod process will show up in Task Manager as second <code>CTF Loader</code> process.</li>
+</ul>
+</li>
+<li>Known issue: It won't work with UWP windows and layered windows (<code>WS_EX_LAYERED</code>).</li>
+<li>Fullscreen games might minimize when focusing the topmost window. You will need a workaround, such as the <a href="https://windhawk.net/mods/ignore-focus-loss">Ignore Focus Loss</a> mod.</li>
+</ul>
+<h2>⚠ Important security notice ⚠</h2>
+<ul>
+<li>Windows set as super-topmost by this mod may <strong>show on top of Windows 10/11's default lock screen, which might expose sensitive information or allow logon bypass.</strong></li>
+<li>This mod tries its best to avoid this issue by temporarily restoring all super-topmost windows to the original state while locked, but it could go wrong (e.g., the mod process dies with super-topmost windows left).</li>
+<li>If this concerns you, either do not use this mod, or disable the lock screen entirely (<a href="https://www.elevenforum.com/t/enable-or-disable-lock-screen-in-windows-11.1287/">use the NoLockScreen registry/GPO</a>) and/or enable the mod's mitigation in the options page.
+<ul>
+<li>If your system requires pressing Ctrl+Alt+Del on logon, you must enable the mod's mitigation, as <code>NoLockScreen</code> still doesn't disable <code>LockApp.exe</code> in that case.</li>
+</ul>
+</li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/Ingan121/files/refs/heads/master/supertopmost.webp" alt="Animated Screenshot"></p>
+<h2>Hotkey</h2>
+<p>Change the hotkey in the mod's settings. Write any modifiers and exactly one
+key, joined by <code>+</code>, for example <code>Ctrl+Alt+M</code>, <code>Win+Shift+F9</code> or <code>Pause</code>.</p>
+<ul>
+<li>Modifiers: <code>Ctrl</code>, <code>Alt</code>, <code>Shift</code>, <code>Win</code>.</li>
+<li>Keys: <code>A</code>-<code>Z</code>, <code>0</code>-<code>9</code>, <code>F1</code>-<code>F24</code>, <code>Space</code>, <code>Tab</code>, <code>Enter</code>, <code>Esc</code>,
+<code>Backspace</code>, <code>Insert</code>, <code>Delete</code>, <code>Home</code>, <code>End</code>, <code>PageUp</code>, <code>PageDown</code>, <code>Up</code>,
+<code>Down</code>, <code>Left</code>, <code>Right</code>, <code>Pause</code>, <code>ScrollLock</code>, <code>PrintScreen</code>, <code>Numpad0</code>-
+<code>Numpad9</code>, <code>VolumeMute</code>, <code>VolumeDown</code>, <code>VolumeUp</code>, <code>MediaPlayPause</code>,
+<code>MediaNext</code>, <code>MediaPrev</code>, <code>MediaStop</code>.</li>
+<li>Any other key: its virtual-key code in hexadecimal, such as <code>0x4D</code>.</li>
+</ul>
+<p>Windows gives a hotkey to only one program at a time, and other apps stop
+receiving that key combination. If the hotkey does nothing, another program may
+already own it. Turn on logging in the mod's Advanced tab to see why.</p>
+]]></content>
+        <author>
+            <name>Ingan121</name>
+            <uri>https://github.com/Ingan121</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Now Playing... 1.0.0]]></title>
+        <id>https://windhawk.net/mods/now-playing-windhawk#44e701832ef526b8fdec5e46bf1fc23222ff7ff8</id>
+        <link href="https://windhawk.net/mods/now-playing-windhawk"/>
+        <updated>2026-11-27T03:00:23.000Z</updated>
+        <content type="html"><![CDATA[<h1>Now Playing...</h1>
+<p>Push your mouse to the top of your screen and a now-playing bar drops down,
+kind of like the taskbar popping up but upside down. It shows whatever you're
+listening to: Spotify, SoundCloud, YouTube in your browser, Apple Music, VLC,
+pretty much anything that shows up in Windows' media controls.</p>
+<p><img src="https://raw.githubusercontent.com/sultansaad-dev/now-playing-windhawk/main/screenshots/showcase.png" alt="Now Playing... close-ups"></p>
+<p><img src="https://raw.githubusercontent.com/sultansaad-dev/now-playing-windhawk/main/screenshots/desktop-youtube.png" alt="On the desktop"></p>
+<p><img src="https://raw.githubusercontent.com/sultansaad-dev/now-playing-windhawk/main/screenshots/in-game-fortnite.png" alt="In Fortnite"></p>
+<h2>What's on it</h2>
+<ul>
+<li>The album art or video thumbnail, with the app's icon in the corner</li>
+<li>Song title and artist (fancy fonts in names show up properly, no boxes)</li>
+<li>A little button next to the artist that jumps you straight to the app</li>
+<li>Play/pause, plus 10 second skip back and forward</li>
+<li>A progress line you can click or drag to jump anywhere</li>
+<li>Previous and next, but only when the app actually lets you skip</li>
+<li>A wave line that moves with the music</li>
+</ul>
+<h2>Stuff you can change</h2>
+<ul>
+<li>Put it top center, top left or top right, on any monitor</li>
+<li>Background: auto (takes its colour from the album art), translucent, a solid
+colour from the list, or light</li>
+<li>The drip, which is the little liquid neck that makes it look like it's
+hanging off the top of your screen</li>
+<li><strong>Persistent mode:</strong> press Ctrl + Shift + ? and the bar pops up instantly
+and stays up, even in games. Press it again to hide it</li>
+<li>It can peek for a few seconds when a new song starts</li>
+</ul>
+<p>It stays hidden over full screen stuff by default so it won't get in the way
+of your games or videos (use <strong>Persistent mode</strong> if you want it in a game).</p>
+<p>There's a lot more in the <strong>Settings</strong> tab to play around with: size, width,
+corner roundness, animation speed, hover delays, colours, the visualizer
+style and more. Tweak it however you like, everything applies straight away.</p>
+<h2>Good to know</h2>
+<ul>
+<li>Some players, like YouTube in a browser, don't let Windows move the position
+or toggle playback. For those, the skip buttons, the progress bar and
+play/pause send the player's own keyboard shortcuts (J/K/L and number keys on
+YouTube, arrows and space elsewhere) to that app's window in the background,
+only when you click them.</li>
+<li>Similar mods: Dynamic Island Media Player, Dynamic Island for Windows, SMTC
+Now Playing Desktop Widgets and Island Media Controls. This one is different
+because it stays fully hidden until you hover the top edge, then drops down.</li>
+</ul>
+]]></content>
+        <author>
+            <name>sultansaad-dev</name>
+            <uri>https://github.com/sultansaad-dev</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Environment Variable Spoofer 1.0]]></title>
         <id>https://windhawk.net/mods/env-var-spoofer#217ffdec2390e936d7e3f3a07070bfbfb65c26f5</id>
@@ -1067,164 +1172,6 @@ shows its own percentage, so it never appears twice.</li>
         <author>
             <name>Faizaan</name>
             <uri>https://github.com/LoneFaizaan</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Twinkle Brightness 1.1.0]]></title>
-        <id>https://windhawk.net/mods/twinkle-brightness#6ec92a920503db975426e6489bb3537a44b534fd</id>
-        <link href="https://windhawk.net/mods/twinkle-brightness"/>
-        <updated>2026-11-25T07:05:10.000Z</updated>
-        <content type="html"><![CDATA[<h1>Twinkle Brightness</h1>
-<p>Control the brightness of <strong>all your displays</strong> - external monitors and laptop
-screens - from a tray icon or the keyboard. Inspired by the
-excellent <a href="https://github.com/xanderfrangos/twinkle-tray">Twinkle Tray</a> app,
-re-imagined as a lightweight Windhawk mod with no Electron runtime.</p>
-<p><img src="https://raw.githubusercontent.com/isousluer/twinkle-brightness/main/assets/screenshot-panel.png" alt="Screenshot"></p>
-<h2>Features</h2>
-<ul>
-<li><strong>Tray panel:</strong> click the sun icon in the notification area to get a
-brightness slider for every display. The panel follows the Windows
-light/dark theme and accent color.</li>
-<li><strong>Link displays:</strong> the chain button in the panel links the displays. While
-linked, one slider controls all displays and the hotkeys change all of them.
-Linked displays are always set to the same level: the first change brings
-them together. To make displays that differ in brightness look alike at the
-same level, use the per-display minimum and maximum. While unlinked, each
-display has its own slider and the hotkeys change the display with the
-active window.</li>
-<li><strong>Hotkeys:</strong> bind any key combination to increase, decrease or set the
-brightness, turn the displays off, or open the panel. A hotkey can also
-target a specific display.</li>
-<li><strong>On-screen indicator:</strong> a small overlay shows the new level when you use a
-hotkey, with one row per display when they are at different levels.</li>
-<li><strong>Schedule:</strong> change the brightness automatically at given times of the day,
-with a smooth transition.</li>
-<li><strong>Idle dimming:</strong> dim the displays after a period of inactivity and restore
-them as soon as you touch the mouse or keyboard.</li>
-<li><strong>Per-display options:</strong> custom names, hiding displays, and min/max
-brightness to normalize displays that are brighter or darker than others.</li>
-<li><strong>Tray menu:</strong> refresh displays, turn displays off, pause automatic
-brightness, and copy display names/IDs for use in the settings.</li>
-</ul>
-<h2>How it works</h2>
-<ul>
-<li><strong>External monitors</strong> are controlled with <strong>DDC/CI</strong> (VCP code <code>0x10</code>), the
-same channel the monitor's own on-screen menu uses. DDC/CI must be enabled in
-the monitor's menu. Some docks, adapters, KVM switches and VGA/DVI
-connections do not pass DDC/CI through.</li>
-<li><strong>Laptop and tablet screens</strong> are controlled through <strong>WMI</strong>, like the
-Windows brightness slider.</li>
-</ul>
-<p>The mod runs in its own dedicated <code>windhawk.exe</code> process (Windhawk &quot;tool mod&quot;)
-and does not inject code into Explorer or any other program.</p>
-<h2>Hotkey format</h2>
-<p>Combine <code>Ctrl</code>, <code>Alt</code>, <code>Shift</code> and <code>Win</code> with one key, separated by <code>+</code>, for
-example <code>Ctrl+Alt+Up</code>, <code>Win+Shift+PageDown</code> or <code>Ctrl+Alt+F1</code>. Supported keys:
-<code>A</code>-<code>Z</code>, <code>0</code>-<code>9</code>, <code>F1</code>-<code>F24</code>, <code>Up</code>, <code>Down</code>, <code>Left</code>, <code>Right</code>, <code>PageUp</code>,
-<code>PageDown</code>, <code>Home</code>, <code>End</code>, <code>Insert</code>, <code>Delete</code>, <code>Space</code>, <code>Plus</code>, <code>Minus</code>,
-<code>NumpadPlus</code>, <code>NumpadMinus</code>, <code>Numpad0</code>-<code>Numpad9</code>.</p>
-<h2>Choosing displays in the settings</h2>
-<p>Hotkeys, schedule entries and per-display options accept a part of a display's
-<strong>name</strong> (as shown in the panel) or <strong>ID</strong>. Right-click the tray icon and choose
-<strong>Copy display info</strong> to copy the names and IDs of all connected displays.
-Leave the field empty to target all displays (for hotkeys: to follow the
-link button).</p>
-<h2>Troubleshooting</h2>
-<ul>
-<li><strong>A monitor says &quot;not supported&quot;:</strong> enable DDC/CI in its on-screen menu, use a
-direct HDMI/DisplayPort/USB-C cable instead of a dock or adapter, then choose
-<strong>Refresh displays</strong> in the tray menu.</li>
-<li><strong>A monitor stops responding after sleep:</strong> choose <strong>Refresh displays</strong>, or
-turn the monitor off and on with its power button.</li>
-<li><strong>A hotkey does nothing:</strong> another program may already use that combination.
-Check the Windhawk log for &quot;RegisterHotKey failed&quot;. The default
-<code>Ctrl+Alt+Up</code>/<code>Ctrl+Alt+Down</code> are also used by Visual Studio Code (add a
-cursor) and some Intel graphics drivers (rotate the screen); change them in
-the settings if you need those shortcuts.</li>
-<li><strong>The AMD Radeon software can interfere</strong> with DDC/CI brightness. Disable
-&quot;Custom Colors&quot; there if brightness changes have no effect.</li>
-</ul>
-<p>This mod is not affiliated with Twinkle Tray or its author.</p>
-]]></content>
-        <author>
-            <name>isousluer</name>
-            <uri>https://github.com/isousluer</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[AutoClean 2.2026.2211]]></title>
-        <id>https://windhawk.net/mods/autoclean#c822be02a4206d4b849a83cbdc631aa81f7f3959</id>
-        <link href="https://windhawk.net/mods/autoclean"/>
-        <updated>2026-11-25T07:05:04.000Z</updated>
-        <content type="html"><![CDATA[<h1>AutoClean</h1>
-<p>Silent, event-driven background Temp folder and Recycle Bin cleaner running in a dedicated Windhawk Tool Mod process.</p>
-<p><img src="https://raw.githubusercontent.com/k-ashix/ashix-windhawk-mods/main/Auto_Clean/Auto_Clean.png" alt="AutoClean OLED Toast"></p>
-<h2>Action Triggers — Temp &amp; Recycle Bin</h2>
-<table>
-<thead>
-<tr>
-<th>Icon</th>
-<th>Shortcut / Trigger</th>
-<th>Action</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>🖱️</td>
-<td><code>3x Left-Click</code> (<code>Desktop &amp; Taskbar empty space</code>)</td>
-<td>Clean Temp folders immediately and show OLED corner toast</td>
-</tr>
-<tr>
-<td>🖱️</td>
-<td><code>Middle-Click</code> (<code>1x</code>/<code>2x</code>/<code>3x</code>, <code>Desktop &amp; Taskbar empty space</code>)</td>
-<td>Empty Recycle Bin immediately and show OLED corner toast</td>
-</tr>
-<tr>
-<td>🚀</td>
-<td><code>Windows Login / Startup</code></td>
-<td>Clean Temp folders (and optionally Recycle Bin) automatically after login</td>
-</tr>
-<tr>
-<td>📦</td>
-<td><code>Size Limit</code> (<code>KB</code>/<code>MB</code>/<code>GB</code>/<code>TB</code>)</td>
-<td>Prune oldest items first or full sweep when Temp or Recycle Bin hits limit</td>
-</tr>
-<tr>
-<td>🔢</td>
-<td><code>File Count Limit</code> (<code>X items</code>)</td>
-<td>Prune oldest-deleted items or empty Recycle Bin at <code>X</code> items</td>
-</tr>
-<tr>
-<td>⏱️</td>
-<td><code>Timer / Retention</code></td>
-<td>Clean Temp on a repeating schedule and expire Recycle Bin items older than your retention window</td>
-</tr>
-<tr>
-<td>⚠️</td>
-<td><code>Low Disk Space Emergency</code></td>
-<td>Free Temp and oldest Recycle Bin items on the low-space drive when free space crosses below the floor</td>
-</tr>
-</tbody>
-</table>
-<h2>How AutoClean Differs from Windows Storage Sense</h2>
-<p>Windows Storage Sense covers basic periodic Temp and Recycle Bin cleanup, whereas AutoClean adds:</p>
-<ul>
-<li><strong>True Event-Driven Watching</strong>: Uses <code>ReadDirectoryChangesW</code> for <code>%TEMP%</code> and <code>SHChangeNotifyRegister</code> on the Recycle Bin so idle CPU and disk usage stay at zero (secondary HDDs can spin down normally).</li>
-<li><strong>AI Agent <code>%TEMP%</code> Protection</strong>: Preserves local <code>%TEMP%</code> scratchpads and worktrees created by AI coding &amp; desktop agents (Claude Code, Codex, Hermes, OpenClaw, Gemini CLI, OpenCode, Cursor, Windsurf, Goose, Aider, Copilot, MCP) by default.</li>
-<li><strong>Instant Empty-Space Mouse Shortcuts</strong>: Triple left-click empty Desktop/Taskbar space to clean Temp, or middle-click empty space to empty the Recycle Bin, with UI Automation checks so taskbar buttons and desktop icons are never triggered.</li>
-<li><strong>Granular Controls &amp; Smart Deferral</strong>: Exact <code>KB</code>/<code>MB</code>/<code>GB</code>/<code>TB</code> size caps, oldest-first pruning to a target percentage, wildcard exclusions, fullscreen/battery deferral, single-shot Dry-Run simulation, and borderless OLED corner toasts.</li>
-</ul>
-<h2>Safety Guards</h2>
-<ul>
-<li><strong>Temp Path Validation</strong>: Refuses to clean drive roots, <code>%windir%</code>, <code>%USERPROFILE%</code>, or known user folders (Desktop, Documents, Downloads, Pictures, Music, Videos, AppData) if <code>%TEMP%</code> is misconfigured.</li>
-<li><strong>Minimum Age Grace Periods</strong>: Honored on all Temp sweeps (default 24 hours / 1440 minutes) and Recycle Bin pruning (default 24 hours / 1440 minutes) so active installers, build tools, PyInstaller payloads, and recent deletions stay protected.</li>
-<li><strong>Reparse-Point &amp; Attribute Safety</strong>: Skips junctions/symlinks, respects Windows file locks, and restores Read-Only/Hidden/System attributes if a locked file cannot be deleted.</li>
-<li><strong>Safe Recycle Bin Defaults</strong>: Automatic Recycle Bin size/count thresholds and startup cleaning are off by default; only 30-day age expiry is enabled out of the box.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Ashix</name>
-            <uri>https://github.com/k-ashix</uri>
         </author>
     </entry>
 </feed>
