@@ -738,35 +738,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/6dbedd5cbee58eb9afcc1bd2b9bb671fd1aa6fb2/mods/native-audio-router.wh.cpp"
       }
     },
-    "split-layouts-radial-switcher": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795720052111,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795720052111,
-        "users": 0
-      },
-      "metadata": {
-        "author": "khorkovenko",
-        "compilerOptions": "-ldwmapi -lshcore -lgdi32 -lgdiplus -lshell32 -ladvapi32",
-        "description": "Drag windows to the top or the screen edges to arrange them in split layouts, and switch between windows and split groups with a radial Alt+Tab wheel",
-        "github": "https://github.com/khorkovenko",
-        "include": [
-          "windhawk.exe"
-        ],
-        "license": "MIT",
-        "name": "Split Layouts & Radial Switcher",
-        "version": "1.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/8003",
-      "source": {
-        "sha256": "087034146d7a88d0c81af083f1a77323d9d66dd047731a80dd986f9a02b5cf3a",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/bc4fcd2918260bb6dfaecd0cff85def48335bf19/mods/split-layouts-radial-switcher.wh.cpp"
-      }
-    },
     "swipe-for-10start": {
       "details": {
         "defaultSorting": 0,

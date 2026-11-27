@@ -4889,7 +4889,7 @@
         "ratingUsers": 2,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1795680267000,
+        "updated": 1795802613000,
         "users": 14
       },
       "metadata": {
@@ -4902,7 +4902,7 @@
         ],
         "license": "MIT",
         "name": "Desktop Clock & Weather",
-        "version": "1.0.7"
+        "version": "1.0.8"
       }
     },
     "desktop-disk-icon": {

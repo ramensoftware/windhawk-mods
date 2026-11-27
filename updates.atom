@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-27T16:03:28.000Z</updated>
+    <updated>2026-11-27T18:03:33.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Desktop Clock & Weather 1.0.8]]></title>
+        <id>https://windhawk.net/mods/desktop-clock-weather#b7f94ea816d96ae84e77b656a5a741838ab908d4</id>
+        <link href="https://windhawk.net/mods/desktop-clock-weather"/>
+        <updated>2026-11-27T18:03:33.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>README: note that the mod was tested on Windows 10</li>
+</ul>
+]]></content>
+        <author>
+            <name>DineroOne</name>
+            <uri>https://github.com/DineroOne</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar App State Indicators 1.0.0]]></title>
         <id>https://windhawk.net/mods/taskbar-app-state-indicators#3736d7598a4c9bf35e3647941de86bd5b20804ac</id>
@@ -1165,21 +1179,6 @@ DirectUI, in the thread &quot;Secure restoration of Control Panel applets in Win
         <author>
             <name>isousluer</name>
             <uri>https://github.com/isousluer</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar System Utilities 1.3.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-system-utilities#cf14dbb32023207ff6ceb6bdbee234c3a2cc62f8</id>
-        <link href="https://windhawk.net/mods/taskbar-system-utilities"/>
-        <updated>2026-11-26T19:00:56.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the taskbar menu items not showing on newer Windows 11 builds (25H2 26200.7171 and later), thanks to @Logiinx.</li>
-<li>Added localized mod names and descriptions.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Marco Petrucci</name>
-            <uri>https://github.com/marco00petrucci</uri>
         </author>
     </entry>
 </feed>
