@@ -551,54 +551,36 @@ static void STDMETHODCALLTYPE RCDtor_h(void* t) {
 }
 
 // The WASAPI implementation classes of AudioSes.dll, resolved by symbol (x64).
-// Windhawk may report the names with or without "__ptr64".
 static bool HookAudioSes(HMODULE audioSes) {
-    return WindhawkUtils::HookSymbols(
-        audioSes,
-        {
-            {{L"public: virtual long __cdecl CAudioClient::Initialize(enum "
-              L"_AUDCLNT_SHAREMODE,unsigned long,__int64,__int64,struct "
-              L"tWAVEFORMATEX const * __ptr64,struct _GUID const * __ptr64) "
-              L"__ptr64",
-              L"public: virtual long __cdecl CAudioClient::Initialize(enum "
-              L"_AUDCLNT_SHAREMODE,unsigned long,__int64,__int64,struct "
-              L"tWAVEFORMATEX const *,struct _GUID const *)"},
-             (void**)&Init_o,
-             (void*)Init_h},
-            {{L"public: virtual long __cdecl CAudioClient::GetService(struct "
-              L"_GUID const & __ptr64,void * __ptr64 * __ptr64) __ptr64",
-              L"public: virtual long __cdecl CAudioClient::GetService(struct "
-              L"_GUID const &,void * *)"},
-             (void**)&GS_o,
-             (void*)GS_h},
-            {{L"public: virtual long __cdecl "
-              L"CAudioRenderClient::GetBuffer(unsigned int,unsigned char * "
-              L"__ptr64 * __ptr64) __ptr64",
-              L"public: virtual long __cdecl "
-              L"CAudioRenderClient::GetBuffer(unsigned int,unsigned char * *)"},
-             (void**)&GB_o,
-             (void*)GB_h},
-            {{L"public: virtual long __cdecl "
-              L"CAudioRenderClient::ReleaseBuffer(unsigned int,unsigned long) "
-              L"__ptr64",
-              L"public: virtual long __cdecl "
-              L"CAudioRenderClient::ReleaseBuffer(unsigned int,unsigned long)"},
-             (void**)&RB_o,
-             (void*)RB_h},
-            {{L"protected: virtual __cdecl CAudioClient::~CAudioClient(void) "
-              L"__ptr64",
-              L"protected: virtual __cdecl CAudioClient::~CAudioClient(void)"},
-             (void**)&ACDtor_o,
-             (void*)ACDtor_h,
-             true},
-            {{L"public: virtual __cdecl "
-              L"CAudioRenderClient::~CAudioRenderClient(void) __ptr64",
-              L"public: virtual __cdecl "
-              L"CAudioRenderClient::~CAudioRenderClient(void)"},
-             (void**)&RCDtor_o,
-             (void*)RCDtor_h,
-             true},
-        });
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        {{L"public: virtual long __cdecl CAudioClient::Initialize(enum "
+          L"_AUDCLNT_SHAREMODE,unsigned long,__int64,__int64,struct "
+          L"tWAVEFORMATEX const *,struct _GUID const *)"},
+         (void**)&Init_o,
+         (void*)Init_h},
+        {{L"public: virtual long __cdecl CAudioClient::GetService(struct "
+          L"_GUID const &,void * *)"},
+         (void**)&GS_o,
+         (void*)GS_h},
+        {{L"public: virtual long __cdecl "
+          L"CAudioRenderClient::GetBuffer(unsigned int,unsigned char * *)"},
+         (void**)&GB_o,
+         (void*)GB_h},
+        {{L"public: virtual long __cdecl "
+          L"CAudioRenderClient::ReleaseBuffer(unsigned int,unsigned long)"},
+         (void**)&RB_o,
+         (void*)RB_h},
+        {{L"protected: virtual __cdecl CAudioClient::~CAudioClient(void)"},
+         (void**)&ACDtor_o,
+         (void*)ACDtor_h,
+         true},
+        {{L"public: virtual __cdecl "
+          L"CAudioRenderClient::~CAudioRenderClient(void)"},
+         (void**)&RCDtor_o,
+         (void*)RCDtor_h,
+         true},
+    };
+    return WindhawkUtils::HookSymbols(audioSes, hooks, ARRAYSIZE(hooks));
 }
 
 // Hooks must be in place before the app's own Initialize runs, so they are
