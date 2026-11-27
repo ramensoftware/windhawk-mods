@@ -7719,8 +7719,14 @@ static void Capture(Widget* wd) {
                 GetSystemMetrics(SM_XVIRTUALSCREEN) + GetSystemMetrics(SM_CXVIRTUALSCREEN),
                 GetSystemMetrics(SM_YVIRTUALSCREEN) + GetSystemMetrics(SM_CYVIRTUALSCREEN)};
     } else if (HDC desk = DesktopPicture(wd)) {
-        RECT in;
-        if (g_deskFromScreen && !(IntersectRect(&in, &rc, &g_deskRc) && EqualRect(&in, &rc))) {
+        // Only the part on the screens counts: the capture area of a widget at the screen's edge reaches past it, and
+        // that part is never read (it would read the screen again for that widget every time)
+        RECT screens = {GetSystemMetrics(SM_XVIRTUALSCREEN), GetSystemMetrics(SM_YVIRTUALSCREEN),
+                        GetSystemMetrics(SM_XVIRTUALSCREEN) + GetSystemMetrics(SM_CXVIRTUALSCREEN),
+                        GetSystemMetrics(SM_YVIRTUALSCREEN) + GetSystemMetrics(SM_CYVIRTUALSCREEN)};
+        RECT want, in;
+        if (!IntersectRect(&want, &rc, &screens)) want = rc;
+        if (g_deskFromScreen && !(IntersectRect(&in, &want, &g_deskRc) && EqualRect(&in, &want))) {
             // Read before this widget existed or moved there: read again, with it
             FreeDesktopPicture();
             desk = DesktopPicture(wd);
