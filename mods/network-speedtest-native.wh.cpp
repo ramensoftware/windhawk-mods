@@ -214,6 +214,8 @@ struct UiStrings {
     PCWSTR errUpload;
     PCWSTR errDownload;
     PCWSTR errUnexpected;
+    PCWSTR defaultAction;
+    PCWSTR keyboardShortcut;
 };
 
 static const UiStrings kStringsEn = {
@@ -228,6 +230,7 @@ static const UiStrings kStringsEn = {
     L"Upload: the server received no data. Try again in a few minutes.",
     L"Download: the server returned no data. Try again in a few minutes.",
     L"Unexpected error during the test.",
+    L"Activate", L"Tab / Enter",
 };
 
 // Italian
@@ -243,6 +246,7 @@ static const UiStrings kStringsIt = {
     L"Upload: il server non ha ricevuto dati. Riprova tra qualche minuto.",
     L"Download: il server non ha restituito dati. Riprova tra qualche minuto.",
     L"Errore imprevisto durante il test.",
+    L"Attiva", L"Tab / Invio",
 };
 
 // Spanish
@@ -258,6 +262,7 @@ static const UiStrings kStringsEs = {
     L"Carga: el servidor no recibió datos. Inténtalo de nuevo en unos minutos.",
     L"Descarga: el servidor no devolvió datos. Inténtalo de nuevo en unos minutos.",
     L"Error inesperado durante la prueba.",
+    L"Activar", L"Tab / Intro",
 };
 
 // French
@@ -275,6 +280,7 @@ static const UiStrings kStringsFr = {
     L"Téléchargement\x202F: le serveur n'a renvoyé aucune donnée. Réessayez "
     L"dans quelques minutes.",
     L"Erreur inattendue pendant le test.",
+    L"Activer", L"Tab / Entrée",
 };
 
 // German
@@ -293,6 +299,7 @@ static const UiStrings kStringsDe = {
     L"Herunterladen: Der Server hat keine Daten zurückgegeben. Versuchen Sie "
     L"es in einigen Minuten erneut.",
     L"Unerwarteter Fehler beim Test.",
+    L"Aktivieren", L"Tab / Eingabe",
 };
 
 // Portuguese (Brazil)
@@ -309,6 +316,7 @@ static const UiStrings kStringsPt = {
     L"Download: o servidor não retornou dados. Tente novamente em alguns "
     L"minutos.",
     L"Erro inesperado durante o teste.",
+    L"Ativar", L"Tab / Enter",
 };
 
 // Russian
@@ -328,6 +336,7 @@ static const UiStrings kStringsRu = {
     L"Скачивание: сервер не вернул данные. Повторите попытку через несколько "
     L"минут.",
     L"Непредвиденная ошибка во время теста.",
+    L"Активировать", L"Tab / Ввод",
 };
 
 // Japanese
@@ -343,6 +352,7 @@ static const UiStrings kStringsJa = {
     L"アップロード: サーバーがデータを受信しませんでした。数分後にもう一度お試しください。",
     L"ダウンロード: サーバーからデータが返されませんでした。数分後にもう一度お試しください。",
     L"テスト中に予期しないエラーが発生しました。",
+    L"アクティブ化", L"Tab / Enter",
 };
 
 // Korean
@@ -358,6 +368,7 @@ static const UiStrings kStringsKo = {
     L"업로드: 서버가 데이터를 받지 못했습니다. 몇 분 후 다시 시도하세요.",
     L"다운로드: 서버가 데이터를 반환하지 않았습니다. 몇 분 후 다시 시도하세요.",
     L"테스트 중 예기치 않은 오류가 발생했습니다.",
+    L"활성화", L"Tab / Enter",
 };
 
 // Chinese (Simplified)
@@ -373,6 +384,7 @@ static const UiStrings kStringsZhHans = {
     L"上传：服务器未收到数据。请在几分钟后重试。",
     L"下载：服务器未返回数据。请在几分钟后重试。",
     L"测试期间发生意外错误。",
+    L"激活", L"Tab / Enter",
 };
 
 // Chinese (Traditional)
@@ -388,6 +400,7 @@ static const UiStrings kStringsZhHant = {
     L"上傳：伺服器未收到資料。請在幾分鐘後重試。",
     L"下載：伺服器未傳回資料。請在幾分鐘後重試。",
     L"測試期間發生意外錯誤。",
+    L"啟用", L"Tab / Enter",
 };
 
 // Dutch
@@ -406,6 +419,7 @@ static const UiStrings kStringsNl = {
     L"Downloaden: de server heeft geen gegevens geretourneerd. Probeer het "
     L"over enkele minuten opnieuw.",
     L"Onverwachte fout tijdens de test.",
+    L"Activeren", L"Tab / Enter",
 };
 
 // Polish
@@ -421,6 +435,7 @@ static const UiStrings kStringsPl = {
     L"Wysyłanie: serwer nie odebrał danych. Spróbuj ponownie za kilka minut.",
     L"Pobieranie: serwer nie zwrócił danych. Spróbuj ponownie za kilka minut.",
     L"Nieoczekiwany błąd podczas testu.",
+    L"Aktywuj", L"Tab / Enter",
 };
 
 // Turkish
@@ -436,6 +451,7 @@ static const UiStrings kStringsTr = {
     L"Yükleme: sunucu veri almadı. Birkaç dakika sonra yeniden deneyin.",
     L"İndirme: sunucu veri döndürmedi. Birkaç dakika sonra yeniden deneyin.",
     L"Test sırasında beklenmeyen bir hata oluştu.",
+    L"Etkinleştir", L"Tab / Enter",
 };
 
 // The languages the flyout strings are available in, matched by the primary
@@ -760,6 +776,16 @@ static double Clamp(double v, double lo, double hi) {
     return v < lo ? lo : (v > hi ? hi : v);
 }
 
+static PCWSTR LocaleDecimalSeparator() {
+    static wchar_t separator[8];
+    if (!separator[0] &&
+        GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SDECIMAL, separator,
+                        ARRAYSIZE(separator)) <= 0) {
+        wcscpy_s(separator, L".");
+    }
+    return separator;
+}
+
 static std::wstring FormatNumber(double value) {
     wchar_t buffer[48];
     if (value >= 100) {
@@ -767,13 +793,15 @@ static std::wstring FormatNumber(double value) {
     } else {
         swprintf(buffer, 48, L"%.1f", value);
     }
-    wchar_t decimalSeparator = g_str == &kStringsEn ? L'.' : L',';
-    for (wchar_t* p = buffer; *p; p++) {
-        if (*p == L'.') {
-            *p = decimalSeparator;
+    std::wstring text = buffer;
+    PCWSTR separator = LocaleDecimalSeparator();
+    if (wcscmp(separator, L".") != 0) {
+        size_t dot = text.find(L'.');
+        if (dot != std::wstring::npos) {
+            text.replace(dot, 1, separator);
         }
     }
-    return buffer;
+    return text;
 }
 
 static std::wstring FormatScale(double value) {
@@ -783,20 +811,30 @@ static std::wstring FormatScale(double value) {
 }
 
 static std::wstring FormatClock(const SYSTEMTIME& t) {
-    wchar_t buffer[16];
-    swprintf(buffer, 16, L"%02u:%02u", t.wHour, t.wMinute);
+    wchar_t buffer[64];
+    if (GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, TIME_NOSECONDS, &t, nullptr,
+                        buffer, ARRAYSIZE(buffer)) > 0) {
+        return buffer;
+    }
+    swprintf(buffer, ARRAYSIZE(buffer), L"%02u:%02u", t.wHour, t.wMinute);
     return buffer;
 }
 
 static std::wstring FormatDate(const SYSTEMTIME& t) {
-    wchar_t buffer[24];
-    if (g_str == &kStringsEn) {
-        swprintf(buffer, 24, L"%02u/%02u/%04u %02u:%02u", t.wMonth, t.wDay,
-                 t.wYear, t.wHour, t.wMinute);
-    } else {
-        swprintf(buffer, 24, L"%02u/%02u/%04u %02u:%02u", t.wDay, t.wMonth,
-                 t.wYear, t.wHour, t.wMinute);
+    wchar_t date[64];
+    wchar_t time[64];
+    if (GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, DATE_SHORTDATE, &t, nullptr,
+                        date, ARRAYSIZE(date), nullptr) > 0 &&
+        GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, TIME_NOSECONDS, &t, nullptr,
+                        time, ARRAYSIZE(time)) > 0) {
+        std::wstring text = date;
+        text += L' ';
+        text += time;
+        return text;
     }
+    wchar_t buffer[64];
+    swprintf(buffer, ARRAYSIZE(buffer), L"%04u-%02u-%02u %02u:%02u", t.wYear,
+             t.wMonth, t.wDay, t.wHour, t.wMinute);
     return buffer;
 }
 
@@ -2248,11 +2286,13 @@ struct TextKey {
     int valign;
     bool wrap;
     int family;
+    PCWSTR locale;
 
     bool operator==(const TextKey& other) const {
         return size == other.size && weight == other.weight &&
                align == other.align && valign == other.valign &&
-               wrap == other.wrap && family == other.family;
+               wrap == other.wrap && family == other.family &&
+               wcscmp(locale, other.locale) == 0;
     }
 };
 
@@ -2269,22 +2309,59 @@ static PCWSTR FamilyName(int family) {
     }
 }
 
-// Locale name for text shaping (digit forms, line breaking, bidi): follows the
-// user's regional format, independent of the flyout language.
-static PCWSTR LocaleName() {
-    static wchar_t name[LOCALE_NAME_MAX_LENGTH];
-    if (!name[0] &&
-        GetUserDefaultLocaleName(name, LOCALE_NAME_MAX_LENGTH) <= 0) {
-        wcscpy_s(name, L"en-US");
+// Locale name for text shaping (digit forms, line breaking, bidi, fallback
+// font selection): follows the flyout language, not the regional format, so
+// Traditional Chinese text is shaped with Traditional Chinese glyph forms even
+// when the regional format is zh-CN or en-US.
+static PCWSTR UiLocaleName() {
+    if (g_str == &kStringsIt) {
+        return L"it-IT";
     }
-    return name;
+    if (g_str == &kStringsEs) {
+        return L"es-ES";
+    }
+    if (g_str == &kStringsFr) {
+        return L"fr-FR";
+    }
+    if (g_str == &kStringsDe) {
+        return L"de-DE";
+    }
+    if (g_str == &kStringsPt) {
+        return L"pt-BR";
+    }
+    if (g_str == &kStringsRu) {
+        return L"ru-RU";
+    }
+    if (g_str == &kStringsJa) {
+        return L"ja-JP";
+    }
+    if (g_str == &kStringsKo) {
+        return L"ko-KR";
+    }
+    if (g_str == &kStringsZhHans) {
+        return L"zh-CN";
+    }
+    if (g_str == &kStringsZhHant) {
+        return L"zh-TW";
+    }
+    if (g_str == &kStringsNl) {
+        return L"nl-NL";
+    }
+    if (g_str == &kStringsPl) {
+        return L"pl-PL";
+    }
+    if (g_str == &kStringsTr) {
+        return L"tr-TR";
+    }
+    return L"en-US";
 }
 
 static IDWriteTextFormat* GetTextFormat(float size, DWRITE_FONT_WEIGHT weight,
                                         DWRITE_TEXT_ALIGNMENT align,
                                         DWRITE_PARAGRAPH_ALIGNMENT valign,
                                         bool wrap, int family) {
-    TextKey key = {size, (int)weight, (int)align, (int)valign, wrap, family};
+    TextKey key = {size, (int)weight, (int)align, (int)valign, wrap, family,
+                   UiLocaleName()};
     for (const auto& entry : g_textFormats) {
         if (entry.first == key) {
             return entry.second;
@@ -2297,7 +2374,7 @@ static IDWriteTextFormat* GetTextFormat(float size, DWRITE_FONT_WEIGHT weight,
     IDWriteTextFormat* format = nullptr;
     if (FAILED(g_dwriteFactory->CreateTextFormat(
             FamilyName(family), nullptr, weight, DWRITE_FONT_STYLE_NORMAL,
-            DWRITE_FONT_STRETCH_NORMAL, size, LocaleName(), &format))) {
+            DWRITE_FONT_STRETCH_NORMAL, size, key.locale, &format))) {
         return nullptr;
     }
     format->SetTextAlignment(align);
@@ -2921,12 +2998,29 @@ static UINT MouseButtonsDown() {
 // effects" off get an instant swap.
 static constexpr float kAnimMs = 250.0f;
 static constexpr D2D1_RECT_F kCloseRect = {352.0f, 9.0f, 384.0f, 39.0f};
-static constexpr D2D1_RECT_F kCopyRect = {292.0f, 60.0f, 364.0f, 86.0f};
 static constexpr D2D1_RECT_F kCardRect = {20.0f, 48.0f, 380.0f, 372.0f};
 // Error layout, authored for the 340 px window: the card ends 44 px above the
 // bottom so the footline keeps its usual place underneath.
 static constexpr D2D1_RECT_F kErrorRect = {20.0f, 56.0f, 380.0f, 296.0f};
-static constexpr D2D1_RECT_F kRetryRect = {144.0f, 230.0f, 256.0f, 262.0f};
+
+// The button widths follow their translated labels. The Copy button keeps the
+// width of the longer of "Copy" and "Copied" so it does not jump when clicked.
+static D2D1_RECT_F CopyButtonRect() {
+    float labelWidth =
+        std::max(MeasureWidth(g_str->copy, 12, DWRITE_FONT_WEIGHT_NORMAL),
+                 MeasureWidth(g_str->copied, 12, DWRITE_FONT_WEIGHT_NORMAL));
+    float width = std::max(72.0f, 30.0f + labelWidth);
+    return Rect(364.0f - width, 60.0f, 364.0f, 86.0f);
+}
+
+static D2D1_RECT_F RetryButtonRect() {
+    float width =
+        std::max(112.0f,
+                 MeasureWidth(g_str->retry, 13, DWRITE_FONT_WEIGHT_SEMI_BOLD) +
+                     32.0f);
+    float left = (kWidth - width) / 2.0f;
+    return Rect(left, 230.0f, left + width, 262.0f);
+}
 
 // Height the window is laid out at right now. It animates between
 // ViewHeight() values; every rect below the content top reads it.
@@ -3047,9 +3141,9 @@ static Hot HitTest(float x, float y) {
         return Hot::Close;
     }
     if (g_view == View::Error) {
-        return InRect(kRetryRect, x, y) ? Hot::Retry : Hot::None;
+        return InRect(RetryButtonRect(), x, y) ? Hot::Retry : Hot::None;
     }
-    if (g_view == View::Results && InRect(kCopyRect, x, y)) {
+    if (g_view == View::Results && InRect(CopyButtonRect(), x, y)) {
         return Hot::Copy;
     }
     if (InRect(StartButtonRect(CopyState()), x, y)) {
@@ -3133,18 +3227,27 @@ static void DrawValue(float x, float y, bool hasValue, double value, PCWSTR unit
          DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
 }
 
+// Leave room for the longest of the two latency labels, so translated labels
+// such as "Джиттер" or "ジッター" do not run into their value.
+static float LatencyValueOffset() {
+    float ping = MeasureWidth(g_str->ping, 12, DWRITE_FONT_WEIGHT_NORMAL);
+    float jitter = MeasureWidth(g_str->jitter, 12, DWRITE_FONT_WEIGHT_NORMAL);
+    return std::max(42.0f, std::max(ping, jitter) + 10.0f);
+}
+
 static void DrawLatency(float x, float y, PCWSTR label, bool hasValue, double value,
                         float alpha) {
-    Text(label, Rect(x, y + 3, x + 60, y + 20), 12,
+    float valueX = x + LatencyValueOffset();
+    Text(label, Rect(x, y + 3, valueX - 8, y + 20), 12,
          WithAlpha(g_palette.secondary, alpha));
     std::wstring text = hasValue ? FormatNumber(value) : L"\x2014";
-    Text(text, Rect(x + 42, y, x + 120, y + 20), 13,
+    Text(text, Rect(valueX, y, valueX + 60, y + 20), 13,
          WithAlpha(g_palette.text, alpha), DWRITE_FONT_WEIGHT_MEDIUM,
          DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_PARAGRAPH_ALIGNMENT_NEAR, 0, false, true);
     float width = MeasureWidth(text, 13, DWRITE_FONT_WEIGHT_MEDIUM, 0, true);
     float unitTop = y + BaselineOffset(13, 0) - BaselineOffset(11, 0);
-    Text(L"ms", Rect(x + 42 + width + 4, unitTop, x + 150, unitTop + 17), 11,
-         WithAlpha(g_palette.secondary, alpha));
+    Text(L"ms", Rect(valueX + width + 4, unitTop, valueX + width + 40, unitTop + 17),
+         11, WithAlpha(g_palette.secondary, alpha));
 }
 
 static void DrawLiveStats(float alpha, const TestState& state) {
@@ -3174,7 +3277,7 @@ static void DrawCopyButton(float alpha) {
     bool copied = Now() < g_copyUntil;
     bool hover = g_hot == Hot::Copy;
     bool pressed = g_pressed == Hot::Copy;
-    D2D1_RECT_F rect = kCopyRect;
+    D2D1_RECT_F rect = CopyButtonRect();
 
     FillRounded(rect, 4,
                 WithAlpha(g_palette.controlFill, alpha * (pressed ? 2.4f : (hover ? 1.8f : 1.0f))));
@@ -3244,15 +3347,16 @@ static void DrawError(float alpha, const TestState& state) {
 
     bool hover = g_hot == Hot::Retry;
     bool pressed = g_pressed == Hot::Retry;
-    FillRounded(kRetryRect, 4,
+    D2D1_RECT_F retryRect = RetryButtonRect();
+    FillRounded(retryRect, 4,
                 WithAlpha(pressed ? Shade(g_palette.accent, 0.18f)
                                   : Lighten(g_palette.accent, hover ? 0.18f : 0.0f),
                           alpha));
-    Text(g_str->retry, kRetryRect, 13, WithAlpha(g_palette.accentText, alpha),
+    Text(g_str->retry, retryRect, 13, WithAlpha(g_palette.accentText, alpha),
          DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER,
          DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
     if (g_focus == Hot::Retry && FocusVisible()) {
-        DrawFocusRing(kRetryRect, 4, alpha);
+        DrawFocusRing(retryRect, 4, alpha);
     }
 }
 
@@ -4146,11 +4250,11 @@ static D2D1_RECT_F HotRect(Hot hot) {
         case Hot::Start:
             return StartButtonRect(CopyState());
         case Hot::Copy:
-            return kCopyRect;
+            return CopyButtonRect();
         case Hot::Close:
             return kCloseRect;
         case Hot::Retry:
-            return kRetryRect;
+            return RetryButtonRect();
         default:
             return Rect(0, 0, 0, 0);
     }
@@ -4358,8 +4462,7 @@ public:
         if (!IsValidChild(child) || IsSelf(child)) {
             return E_INVALIDARG;
         }
-        *shortcut = SysAllocString(g_str == &kStringsIt ? L"Tab / Invio"
-                                                        : L"Tab / Enter");
+        *shortcut = SysAllocString(g_str->keyboardShortcut);
         return *shortcut ? S_OK : E_OUTOFMEMORY;
     }
 
@@ -4389,7 +4492,7 @@ public:
         if (!IsValidChild(child) || IsSelf(child)) {
             return E_INVALIDARG;
         }
-        *action = SysAllocString(g_str == &kStringsIt ? L"Attiva" : L"Activate");
+        *action = SysAllocString(g_str->defaultAction);
         return *action ? S_OK : E_OUTOFMEMORY;
     }
 
