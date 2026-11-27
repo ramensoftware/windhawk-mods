@@ -1170,37 +1170,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/d6c26ce332b2eb14e42ee941a895f082e3207cf2/mods/ultimate-minimize-animation.wh.cpp"
       }
     },
-    "vision": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795626308581,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795626308581,
-        "users": 0
-      },
-      "metadata": {
-        "author": "Ashix",
-        "compilerOptions": "-lgdi32 -lgdiplus -ldwmapi -ladvapi32",
-        "description": "Per-window opacity, always-on-top pinning, and soft dimming via title-bar mouse gestures and an optional title-bar % slider",
-        "donateUrl": "https://ko-fi.com/kashix",
-        "github": "https://github.com/k-ashix",
-        "include": [
-          "windhawk-mod.exe",
-          "windhawk.exe"
-        ],
-        "name": "Vision",
-        "twitter": "https://x.com/k_ashix",
-        "version": "1.2026.2511"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7950",
-      "source": {
-        "sha256": "94970972112e2297157e0b33c8c76cb50d12e3f69f37f49e9d81b606fe43303e",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/eff123923d62e2e66cd2b40e981c44fecf2dd746/mods/vision.wh.cpp"
-      }
-    },
     "win7-biometric-devices-restorer": {
       "details": {
         "defaultSorting": 0,

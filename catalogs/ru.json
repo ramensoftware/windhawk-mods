@@ -22886,6 +22886,33 @@
         "version": "1.0"
       }
     },
+    "vision": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795759207000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795759207000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Ashix",
+        "compilerOptions": "-lgdi32 -lgdiplus -ldwmapi -ladvapi32",
+        "description": "Per-window opacity, always-on-top pinning, and soft dimming via title-bar mouse gestures and an optional title-bar % slider",
+        "donateUrl": "https://ko-fi.com/kashix",
+        "github": "https://github.com/k-ashix",
+        "include": [
+          "windhawk-mod.exe",
+          "windhawk.exe"
+        ],
+        "name": "Vision",
+        "twitter": "https://x.com/k_ashix",
+        "version": "1.2026.2511"
+      }
+    },
     "visual-studio-anti-rich-header": {
       "details": {
         "defaultSorting": 368,

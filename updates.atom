@@ -2,12 +2,83 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-27T05:03:40.000Z</updated>
+    <updated>2026-11-27T06:00:07.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Vision 1.2026.2511]]></title>
+        <id>https://windhawk.net/mods/vision#5ce5f9a25284e88fcdd6ff5864cb8441095b0341</id>
+        <link href="https://windhawk.net/mods/vision"/>
+        <updated>2026-11-27T06:00:07.000Z</updated>
+        <content type="html"><![CDATA[<h1>Vision</h1>
+<p><img src="https://raw.githubusercontent.com/k-ashix/ashix-windhawk-mods/main/Vision/Vision.png" alt="Vision Screenshot"></p>
+<p>Control any window's <strong>opacity</strong>, <strong>always-on-top</strong> state, and <strong>per-window dimming overlay</strong> directly from its title bar.</p>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>Default Trigger</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Adjust Opacity</td>
+<td><code>Alt + Shift + Wheel</code> over title bar</td>
+<td>25%–100%, 5% step</td>
+</tr>
+<tr>
+<td>Toggle Saved App Opacity</td>
+<td><code>Alt + Shift + Double-Click</code> over title bar</td>
+<td>Toggles ON/OFF without erasing saved app opacity</td>
+</tr>
+<tr>
+<td>Toggle Pin (Always on Top)</td>
+<td><code>Alt + Shift + Middle-Click</code> over title bar</td>
+<td>Pins or unpins the window</td>
+</tr>
+<tr>
+<td>Adjust Dim</td>
+<td><code>Ctrl + Wheel</code> over title bar</td>
+<td>Soft per-window overlay, never 100% pitch black</td>
+</tr>
+<tr>
+<td>Toggle Saved App Dim</td>
+<td><code>Ctrl + Double-Click</code> over title bar</td>
+<td>Toggles ON/OFF without erasing saved app dim</td>
+</tr>
+<tr>
+<td>Header <code>%</code> Button &amp; Slider</td>
+<td>Optional (disabled by default)</td>
+<td>Minimal <code>%</code> indicator in the title bar; hover reveals a dim slider</td>
+</tr>
+</tbody>
+</table>
+<h3>Highlights</h3>
+<ul>
+<li><strong>Per-Window Dimming Relative to Your Current Monitor Brightness:</strong> Dim any individual window (such as a bright PDF, browser, or editor) without changing your monitor's hardware brightness, gamma ramp, or OSD settings. Whatever brightness your display is set to is always treated as 100%.</li>
+<li><strong>Saved Per-App Dim &amp; Opacity Levels:</strong> Each app remembers your last dim and opacity percentages per Windows user, so you can toggle them back on with a quick title-bar click.</li>
+<li><strong>Optional Title-Bar <code>%</code> Control:</strong> Enable a compact <code>%</code> badge in the active window's title bar that reveals a smooth slider on hover for one-handed dim adjustments.</li>
+<li><strong>Screenshot &amp; Recording Control:</strong> Choose whether dim overlays, reduced opacity, and the title-bar slider are hidden from or included in screenshots and screen recordings (<code>exclude_all</code>, <code>show_dim</code>, <code>show_controls</code>, <code>show_all</code>).</li>
+<li><strong>Clean Resize &amp; Window Tracking:</strong> Dim overlays follow window moves and resizes smoothly without flashing black or white strips, and never interfere with monitor control utilities or per-pixel transparent windows.</li>
+<li><strong>Standalone Tool Mod:</strong> Runs in its own dedicated Windhawk tool process (compatible with both Windhawk 1.7.3 and 2.0) and restores all modified windows when disabled or unloaded.</li>
+</ul>
+<h3>How Vision Differs from Similar Mods</h3>
+<ul>
+<li><strong>Background Dimmer</strong> dims all <em>inactive</em> windows behind the active one using a global backdrop. Vision instead lets you manually dim <em>any specific window</em> (including the active one you are reading) to its own level with the scroll wheel or title-bar slider, and remembers that dim level per app.</li>
+<li><strong>Scroll Window Opacity</strong> adjusts window transparency with a modifier + scroll wheel, but does not offer a per-window dimming overlay, saved per-app dim/opacity quick-toggles, or a title-bar <code>%</code> slider.</li>
+<li><strong>Middle Click Minimize</strong> and <strong>Always On Top Windows</strong> focus on window state actions (minimize/close/pin via click or hotkey) without per-window dimming or opacity controls.</li>
+<li><strong>Window Rules</strong> applies static rules automatically when matching windows open, whereas Vision is designed for instant, interactive on-the-fly adjustments directly from any title bar.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Ashix</name>
+            <uri>https://github.com/k-ashix</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Devices and drives in Explorer Home 1.0.0]]></title>
         <id>https://windhawk.net/mods/explorer-home-devices#838750ce7cafc0833bedac28633aa4b389c22201</id>
@@ -998,44 +1069,6 @@ DirectUI, in the thread &quot;Secure restoration of Control Panel applets in Win
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop Clock & Weather 1.0.7]]></title>
-        <id>https://windhawk.net/mods/desktop-clock-weather#9e30cde12c8838f10f8bca0cf40b5b213ec1ed54</id>
-        <link href="https://windhawk.net/mods/desktop-clock-weather"/>
-        <updated>2026-11-26T08:04:27.000Z</updated>
-        <content type="html"><![CDATA[<h1>Desktop Clock &amp; Weather</h1>
-<p><img src="https://raw.githubusercontent.com/DineroOne/windhawk-desktop-clock-weather/main/screenshot-small.png" alt="Illustration of the widget"></p>
-<p>The widget is drawn directly on the desktop: <strong>above the wallpaper but below icons and folders</strong>,
-so it never intercepts clicks.</p>
-<p>Shows time, weekday, date and a 3-7 day weather forecast.
-Weather comes from <a href="https://open-meteo.com">Open-Meteo</a> (free, no API key needed).
-Set the city name in the settings; coordinates are found automatically.</p>
-<p>Everything (position, size, font, colors, shadow, background, date format, etc.) is configurable in the settings tab.</p>
-<p>The optional <strong>Adjust font color to wallpaper</strong> switch picks a light or a dark text color automatically.
-It first samples the pixels visible behind the widget, when the desktop is unobstructed. If screen capture
-is unavailable, it estimates brightness from the wallpaper file and Windows wallpaper layout settings.
-This processing is local; no wallpaper data is sent anywhere.</p>
-<h2>Why this is a separate mod</h2>
-<p><a href="https://windhawk.net/mods/desktop-live-overlay">Desktop Live Overlay</a> is a general-purpose overlay built from free-form text patterns and system metrics.
-This mod does one narrower thing: a structured 3-7 day forecast grid (weekday, icon, high/low, precipitation chance, as a row or a column)
-with an independent font, size and color for the time, weekday, date and weather, an element order, an overall scale and a text color that follows the wallpaper.
-It uses Open-Meteo instead of wttr.in. If the maintainer prefers, the forecast part can instead be offered to the author of Desktop Live Overlay as a contribution.</p>
-<h2>Network use</h2>
-<p>Weather is the only feature that uses the network. Requests are made only when <strong>Show weather</strong> is on,
-a city is configured, and <code>weather</code> is included in the <strong>Order of elements</strong> setting.
-The mod sends HTTPS requests to two Open-Meteo hosts:</p>
-<ul>
-<li><code>geocoding-api.open-meteo.com</code> - once each time the mod loads (for example at every Explorer start) and when the city or the date/weekday language changes, to turn the city name into coordinates (the city name and language code are sent).</li>
-<li><code>api.open-meteo.com</code> - at startup and then every N minutes (30 by default, see <strong>Update weather every</strong>), to get the forecast (the coordinates are sent). Failed requests are retried after about one minute.</li>
-</ul>
-<p>Like any web server, Open-Meteo can see your IP address. No API key or account is required.
-No weather requests are made while the city is empty, <strong>Show weather</strong> is off, or <code>weather</code> is omitted from the element order.</p>
-]]></content>
-        <author>
-            <name>DineroOne</name>
-            <uri>https://github.com/DineroOne</uri>
         </author>
     </entry>
 </feed>

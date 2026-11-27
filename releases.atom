@@ -2,12 +2,83 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-27T05:03:40.000Z</updated>
+    <updated>2026-11-27T06:00:07.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Vision 1.2026.2511]]></title>
+        <id>https://windhawk.net/mods/vision#5ce5f9a25284e88fcdd6ff5864cb8441095b0341</id>
+        <link href="https://windhawk.net/mods/vision"/>
+        <updated>2026-11-27T06:00:07.000Z</updated>
+        <content type="html"><![CDATA[<h1>Vision</h1>
+<p><img src="https://raw.githubusercontent.com/k-ashix/ashix-windhawk-mods/main/Vision/Vision.png" alt="Vision Screenshot"></p>
+<p>Control any window's <strong>opacity</strong>, <strong>always-on-top</strong> state, and <strong>per-window dimming overlay</strong> directly from its title bar.</p>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>Default Trigger</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Adjust Opacity</td>
+<td><code>Alt + Shift + Wheel</code> over title bar</td>
+<td>25%–100%, 5% step</td>
+</tr>
+<tr>
+<td>Toggle Saved App Opacity</td>
+<td><code>Alt + Shift + Double-Click</code> over title bar</td>
+<td>Toggles ON/OFF without erasing saved app opacity</td>
+</tr>
+<tr>
+<td>Toggle Pin (Always on Top)</td>
+<td><code>Alt + Shift + Middle-Click</code> over title bar</td>
+<td>Pins or unpins the window</td>
+</tr>
+<tr>
+<td>Adjust Dim</td>
+<td><code>Ctrl + Wheel</code> over title bar</td>
+<td>Soft per-window overlay, never 100% pitch black</td>
+</tr>
+<tr>
+<td>Toggle Saved App Dim</td>
+<td><code>Ctrl + Double-Click</code> over title bar</td>
+<td>Toggles ON/OFF without erasing saved app dim</td>
+</tr>
+<tr>
+<td>Header <code>%</code> Button &amp; Slider</td>
+<td>Optional (disabled by default)</td>
+<td>Minimal <code>%</code> indicator in the title bar; hover reveals a dim slider</td>
+</tr>
+</tbody>
+</table>
+<h3>Highlights</h3>
+<ul>
+<li><strong>Per-Window Dimming Relative to Your Current Monitor Brightness:</strong> Dim any individual window (such as a bright PDF, browser, or editor) without changing your monitor's hardware brightness, gamma ramp, or OSD settings. Whatever brightness your display is set to is always treated as 100%.</li>
+<li><strong>Saved Per-App Dim &amp; Opacity Levels:</strong> Each app remembers your last dim and opacity percentages per Windows user, so you can toggle them back on with a quick title-bar click.</li>
+<li><strong>Optional Title-Bar <code>%</code> Control:</strong> Enable a compact <code>%</code> badge in the active window's title bar that reveals a smooth slider on hover for one-handed dim adjustments.</li>
+<li><strong>Screenshot &amp; Recording Control:</strong> Choose whether dim overlays, reduced opacity, and the title-bar slider are hidden from or included in screenshots and screen recordings (<code>exclude_all</code>, <code>show_dim</code>, <code>show_controls</code>, <code>show_all</code>).</li>
+<li><strong>Clean Resize &amp; Window Tracking:</strong> Dim overlays follow window moves and resizes smoothly without flashing black or white strips, and never interfere with monitor control utilities or per-pixel transparent windows.</li>
+<li><strong>Standalone Tool Mod:</strong> Runs in its own dedicated Windhawk tool process (compatible with both Windhawk 1.7.3 and 2.0) and restores all modified windows when disabled or unloaded.</li>
+</ul>
+<h3>How Vision Differs from Similar Mods</h3>
+<ul>
+<li><strong>Background Dimmer</strong> dims all <em>inactive</em> windows behind the active one using a global backdrop. Vision instead lets you manually dim <em>any specific window</em> (including the active one you are reading) to its own level with the scroll wheel or title-bar slider, and remembers that dim level per app.</li>
+<li><strong>Scroll Window Opacity</strong> adjusts window transparency with a modifier + scroll wheel, but does not offer a per-window dimming overlay, saved per-app dim/opacity quick-toggles, or a title-bar <code>%</code> slider.</li>
+<li><strong>Middle Click Minimize</strong> and <strong>Always On Top Windows</strong> focus on window state actions (minimize/close/pin via click or hotkey) without per-window dimming or opacity controls.</li>
+<li><strong>Window Rules</strong> applies static rules automatically when matching windows open, whereas Vision is designed for instant, interactive on-the-fly adjustments directly from any title bar.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Ashix</name>
+            <uri>https://github.com/k-ashix</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Devices and drives in Explorer Home 1.0.0]]></title>
         <id>https://windhawk.net/mods/explorer-home-devices#838750ce7cafc0833bedac28633aa4b389c22201</id>
@@ -1285,119 +1356,6 @@ and Terminal and power actions under <strong>Command settings</strong>.</p>
         <author>
             <name>CTravkin</name>
             <uri>https://github.com/CTravkin</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Enable Preview Pane for Downloaded Files 1.0.0]]></title>
-        <id>https://windhawk.net/mods/enable-preview-pane-for-downloads#9aa89adc4abf51d510fcd800e510ccc5854fb73c</id>
-        <link href="https://windhawk.net/mods/enable-preview-pane-for-downloads"/>
-        <updated>2026-11-26T06:00:14.000Z</updated>
-        <content type="html"><![CDATA[<h1>Enable Preview Pane for Downloaded Files</h1>
-<p>Files saved from a browser, an email client or a chat app usually get a
-<code>Zone.Identifier</code> NTFS alternate data stream, known as the Mark of the Web
-(MOTW), which places them in the Internet security zone. File Explorer refuses
-to show such files in the preview pane: &quot;The file you are attempting to preview
-could harm your computer.&quot;</p>
-<p>This mod lets the preview pane show files in the Internet zone for the file
-extensions you choose. By default only <code>pdf</code> is affected.</p>
-<p>Before, a PDF with the Mark of the Web shows the warning:</p>
-<p><img src="https://raw.githubusercontent.com/javierpetrucci/windhawk-enable-preview-pane-for-downloads/main/images/before.png" alt="Preview pane showing the warning"></p>
-<p>After, the same PDF is previewed:</p>
-<p><img src="https://raw.githubusercontent.com/javierpetrucci/windhawk-enable-preview-pane-for-downloads/main/images/after.png" alt="Preview pane showing the PDF"></p>
-<p>The Mark of the Web is <strong>not</strong> removed or modified. Files keep their
-<code>Zone.Identifier</code> stream, so SmartScreen, Office Protected View, Microsoft
-Defender and every other program that checks the mark behave as before.</p>
-<h2>How it works</h2>
-<p>Before the preview pane loads a preview handler, File Explorer asks the URL
-security manager (<code>IInternetSecurityManager::ProcessUrlAction</code>) whether the
-<code>URLACTION_SHELL_PREVIEW</code> action is allowed for the file. In the Internet zone
-the answer is &quot;disallow&quot;, and the warning is shown instead of the preview.</p>
-<p>The mod hooks that method inside <code>explorer.exe</code>. When the original answer is
-not &quot;allow&quot;, the answer is changed to &quot;allow&quot; only if all of these are true:</p>
-<ul>
-<li>The action is <code>URLACTION_SHELL_PREVIEW</code>. No other security action is changed.</li>
-<li>The file is on a local fixed, removable or RAM drive (<code>C:\...</code>). Network
-shares (<code>\\server\...</code>) and mapped network drives are never exempted.</li>
-<li>The path has no alternate data stream, the file itself is not a symbolic
-link or another type of reparse point, and no folder in the path is a
-directory symbolic link. Cloud placeholder files, such as OneDrive files,
-and directory junctions are allowed.</li>
-<li>The extension is in the list from the settings.</li>
-<li>The security manager maps the file to the Internet zone (zone 3). Files in
-the Restricted Sites zone, or in any other zone, are left alone.</li>
-</ul>
-<h2>Settings</h2>
-<ul>
-<li><strong>Extensions</strong>: comma-separated list without the dot, for example
-<code>pdf, txt, png</code>. A leading dot is accepted too. Matching is not case
-sensitive.</li>
-<li><strong>Only when the path contains</strong> (optional): only exempt files whose path
-contains this text, not case sensitive. For example <code>\Downloads\</code>.</li>
-</ul>
-<h2>Types that are never exempted</h2>
-<p>The following extensions are ignored even if they are listed in the settings:</p>
-<ul>
-<li>Executables, libraries and installers: <code>exe</code>, <code>com</code>, <code>scr</code>, <code>pif</code>, <code>cpl</code>,
-<code>dll</code>, <code>ocx</code>, <code>sys</code>, <code>drv</code>, <code>efi</code>, <code>msi</code>, <code>msp</code>, <code>mst</code>, <code>msu</code>, <code>appx</code>,
-<code>appxbundle</code>, <code>msix</code>, <code>msixbundle</code>, <code>appinstaller</code>, <code>application</code>,
-<code>appref-ms</code>, <code>xbap</code>, <code>gadget</code>, <code>jar</code>, <code>msc</code>.</li>
-<li>Scripts and command files: <code>bat</code>, <code>cmd</code>, <code>ps1</code>, <code>psm1</code>, <code>psd1</code>, <code>ps1xml</code>,
-<code>pssc</code>, <code>psc1</code>, <code>vb</code>, <code>vbs</code>, <code>vbe</code>, <code>js</code>, <code>jse</code>, <code>ws</code>, <code>wsf</code>, <code>wsc</code>, <code>wsh</code>,
-<code>hta</code>, <code>sct</code>, <code>inf</code>, <code>ins</code>, <code>isp</code>, <code>reg</code>, <code>scf</code>, <code>shb</code>, <code>shs</code>, <code>mof</code>, <code>hlp</code>,
-<code>chm</code>, <code>diagcab</code>, <code>diagcfg</code>, <code>diagpkg</code>, <code>rdp</code>, <code>py</code>, <code>pyw</code>.</li>
-<li>Shortcuts and shell links: <code>lnk</code>, <code>url</code>, <code>website</code>, <code>library-ms</code>,
-<code>search-ms</code>, <code>searchconnector-ms</code>, <code>settingcontent-ms</code>.</li>
-<li>Office files with macros, including legacy formats that can carry VBA:
-<code>docm</code>, <code>dotm</code>, <code>xlsm</code>, <code>xltm</code>, <code>xlsb</code>, <code>xlam</code>, <code>pptm</code>, <code>potm</code>, <code>ppsm</code>,
-<code>ppam</code>, <code>sldm</code>, <code>doc</code>, <code>dot</code>, <code>xls</code>, <code>xlt</code>, <code>xla</code>, <code>ppt</code>, <code>pot</code>, <code>pps</code>,
-<code>ppa</code>, <code>mdb</code>, <code>mde</code>, <code>accdb</code>, <code>accde</code>, <code>ade</code>, <code>adp</code>, <code>xll</code>, <code>wll</code>, <code>one</code>.</li>
-<li>Archives: <code>zip</code>, <code>7z</code>, <code>rar</code>, <code>cab</code>, <code>tar</code>, <code>gz</code>, <code>tgz</code>, <code>bz2</code>, <code>tbz2</code>, <code>xz</code>,
-<code>txz</code>, <code>zst</code>, <code>lzh</code>, <code>lha</code>, <code>arj</code>, <code>z</code>, <code>wim</code>.</li>
-<li>Disk images: <code>iso</code>, <code>img</code>, <code>vhd</code>, <code>vhdx</code>, <code>vmdk</code>.</li>
-</ul>
-<p>This list is a safety net, not a complete security policy. Only add file types
-that you are comfortable previewing from untrusted sources.</p>
-<h2>Notes and limitations</h2>
-<ul>
-<li>Windows blocks these previews because they can leak credentials. A file
-that refers to a remote resource (<code>\\server\...</code>) can make the preview
-handler connect to that server and send it the user's NTLM hash. PDFs can
-do this, and <code>pdf</code> is the default. See Microsoft's
-<a href="https://support.microsoft.com/help/5070960">note on the change</a>. With the
-mod, previewing a listed file can leak the hash this way, just like opening
-it would.</li>
-<li>The preview handler registered for the type (for example the PDF previewer
-of Microsoft Edge, Adobe Acrobat or SumatraPDF) also parses the file, so a
-vulnerable preview handler can be exploited by a malicious file.</li>
-<li>A preview handler can opt in to previewing untrusted files with the
-<code>AutomaticallyPreviewUntrustedFiles</code> value on its CLSID key. Windows then
-shows the preview without this mod. The PDF previewer of Microsoft Edge does
-this. The PDF preview handlers of Adobe Acrobat Reader and SumatraPDF don't,
-so they need the mod.</li>
-<li>Tested by the author on Windows 11 build 26300 with the PDF preview handlers
-of SumatraPDF, Adobe Acrobat Reader and Microsoft Edge.</li>
-<li>Only the File Explorer preview pane in <code>explorer.exe</code> is covered. The preview
-pane in the Open and Save dialogs of other programs runs inside those
-programs. To cover one, add it under <code>Details</code> -&gt; <code>Advanced</code> -&gt;
-<code>Custom process inclusion list</code>. This was tested with the Open dialog of a
-program added to that list.</li>
-<li>Files reached through a directory symbolic link are never exempted, because
-the link can point to a network share. Directory junctions can only point to
-local folders, so they are allowed. Hard links are the same file. File
-Explorer doesn't preview file symbolic links at all, with or without the
-mod.</li>
-<li>The mod overrides the &quot;disallow&quot; answer for the listed types even when it
-comes from a Group Policy setting for the Internet zone.</li>
-<li>This targets the standard URL security manager of Windows (<code>urlmon.dll</code>). If
-a Windows update makes the preview pane use a different check, the mod has no
-effect and the warning is shown as usual.</li>
-<li>Disable the mod to restore the default behavior. Nothing on disk or in the
-registry is modified.</li>
-</ul>
-]]></content>
-        <author>
-            <name>javierpetrucci</name>
-            <uri>https://github.com/javierpetrucci</uri>
         </author>
     </entry>
 </feed>
