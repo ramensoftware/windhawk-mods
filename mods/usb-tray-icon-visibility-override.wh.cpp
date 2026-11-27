@@ -6,6 +6,7 @@
 // @author          Kitsune
 // @github          https://github.com/AromaKitsune
 // @include         explorer.exe
+// @architecture    x86-64
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -15,11 +16,12 @@ By default, the "Safely Remove Hardware and Eject Media" icon in the system tray
 is shown when any removable devices are plugged into the PC, and completely
 hidden when none are plugged in.
 
-This mod allows you to override the default visibility state of this tray icon:
-always show it to keep the "Open Devices and Printers" menu item accessible, or
-always hide it completely to declutter the system tray.
+This mod allows you to override the default visibility of this tray icon: always
+show it to keep the "Open Devices and Printers" menu item accessible, or always
+hide it completely to declutter the system tray.
 
-![](https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/usb-tray-icon-visibility-override.png)
+![](https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/usb-tray-icon-visibility-override.png) \
+*USB tray icon always shown even when no removable devices are plugged in*
 
 Looking to declutter the system tray even further? Check out these mods:
 
@@ -32,8 +34,8 @@ Looking to declutter the system tray even further? Check out these mods:
 
 // ==WindhawkModSettings==
 /*
-- trayIconVisibilityState: alwaysShown
-  $name: Tray icon visibility state
+- trayIconVisibility: alwaysShown
+  $name: Tray icon visibility
   $options:
     - alwaysShown: Always shown
     - alwaysHidden: Always hidden
@@ -50,10 +52,82 @@ Looking to declutter the system tray even further? Check out these mods:
 
 struct
 {
-    std::atomic<int> trayIconVisibilityState = 1;
+    std::atomic<int> trayIconVisibility = 1;
 } settings;
 
 std::atomic<bool> g_unloading = false;
+
+// Helper: Find the system tray window in the current process
+HWND FindSystemTrayWindow()
+{
+    HWND hSysTrayWnd = FindWindowW(L"SystemTray_Main", nullptr);
+    DWORD dwProcessId = 0;
+    if (!hSysTrayWnd || !GetWindowThreadProcessId(hSysTrayWnd, &dwProcessId) ||
+        dwProcessId != GetCurrentProcessId())
+    {
+        return nullptr;
+    }
+    return hSysTrayWnd;
+}
+
+// Helper: Run a callback on the target window's thread
+using RunFromWindowThreadProc_t = void(WINAPI*)(PVOID parameter);
+bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc,
+    PVOID procParam)
+{
+    static const UINT runFromWindowThreadRegisteredMsg =
+        RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+
+    struct RUN_FROM_WINDOW_THREAD_PARAM
+    {
+        RunFromWindowThreadProc_t proc;
+        PVOID procParam;
+    };
+
+    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
+    if (dwThreadId == 0)
+    {
+        return false;
+    }
+
+    if (dwThreadId == GetCurrentThreadId())
+    {
+        proc(procParam);
+        return true;
+    }
+
+    HHOOK hook = SetWindowsHookExW(
+        WH_CALLWNDPROC,
+        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT
+        {
+            if (nCode == HC_ACTION)
+            {
+                const auto* cwp = reinterpret_cast<const CWPSTRUCT*>(lParam);
+                if (cwp->message == runFromWindowThreadRegisteredMsg)
+                {
+                    auto* param =
+                        reinterpret_cast<RUN_FROM_WINDOW_THREAD_PARAM*>(
+                            cwp->lParam);
+                    param->proc(param->procParam);
+                }
+            }
+            return CallNextHookEx(nullptr, nCode, wParam, lParam);
+        },
+        nullptr,
+        dwThreadId
+    );
+    if (!hook)
+    {
+        return false;
+    }
+
+    RUN_FROM_WINDOW_THREAD_PARAM param{proc, procParam};
+    SendMessageW(hWnd, runFromWindowThreadRegisteredMsg, 0,
+        reinterpret_cast<LPARAM>(&param));
+
+    UnhookWindowsHookEx(hook);
+    return true;
+}
 
 // Hook for HotPlugShowNotifyIcon
 using HotPlugShowNotifyIcon_t = void(__cdecl*)(int);
@@ -65,16 +139,12 @@ void __cdecl HotPlugShowNotifyIcon_Hook(int show)
         HotPlugShowNotifyIcon_Original(show);
         return;
     }
-    HotPlugShowNotifyIcon_Original(settings.trayIconVisibilityState.load());
+    HotPlugShowNotifyIcon_Original(settings.trayIconVisibility.load());
 }
 
-// Hook for UpdateHotPlugIconState
+// Pointer for UpdateHotPlugIconState
 using UpdateHotPlugIconState_t = void(__cdecl*)();
 UpdateHotPlugIconState_t UpdateHotPlugIconState_Original;
-void __cdecl UpdateHotPlugIconState_Hook()
-{
-    UpdateHotPlugIconState_Original();
-}
 
 const WindhawkUtils::SYMBOL_HOOK stobjectDllHooks[] =
 {
@@ -87,17 +157,35 @@ const WindhawkUtils::SYMBOL_HOOK stobjectDllHooks[] =
     {
         { UPDATEHOTPLUGICONSTATE },
         &UpdateHotPlugIconState_Original,
-        UpdateHotPlugIconState_Hook,
+        nullptr,
         false
     }
 };
 
+// Thread callback: Apply the configured tray icon visibility
+void WINAPI ApplyTrayIconStateThreadProc(PVOID)
+{
+    if (HotPlugShowNotifyIcon_Original)
+    {
+        HotPlugShowNotifyIcon_Original(settings.trayIconVisibility.load());
+    }
+}
+
+// Thread callback: Restore the default tray icon visibility
+void WINAPI RestoreTrayIconStateThreadProc(PVOID)
+{
+    if (UpdateHotPlugIconState_Original)
+    {
+        UpdateHotPlugIconState_Original();
+    }
+}
+
 // Load settings
 void LoadSettings()
 {
-    bool isTrayIconAlwaysHidden = wcscmp(WindhawkUtils::StringSetting::make(
-        L"trayIconVisibilityState").get(), L"alwaysHidden") == 0;
-    settings.trayIconVisibilityState.store(isTrayIconAlwaysHidden ? 0 : 1);
+    bool isAlwaysHidden = wcscmp(WindhawkUtils::StringSetting::make(
+        L"trayIconVisibility").get(), L"alwaysHidden") == 0;
+    settings.trayIconVisibility.store(isAlwaysHidden ? 0 : 1);
 }
 
 // Mod initialization
@@ -108,20 +196,17 @@ BOOL Wh_ModInit()
     LoadSettings();
 
     // Ensure the current Explorer process owns the taskbar
-    HWND hTrayWnd = FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (hTrayWnd)
+    HWND hTaskbarWnd = FindWindowW(L"Shell_TrayWnd", nullptr);
+    DWORD dwProcessId = 0;
+    if (hTaskbarWnd && GetWindowThreadProcessId(hTaskbarWnd, &dwProcessId) &&
+        dwProcessId != GetCurrentProcessId())
     {
-        DWORD dwProcessId = 0;
-        GetWindowThreadProcessId(hTrayWnd, &dwProcessId);
-        if (dwProcessId != GetCurrentProcessId())
-        {
-            Wh_Log(
-                L"Taskbar is owned by another Explorer process (PID: %lu), "
-                L"skipping initialization",
-                dwProcessId
-            );
-            return FALSE;
-        }
+        Wh_Log(
+            L"Taskbar is owned by another Explorer process (PID: %lu), "
+            L"skipping initialization",
+            dwProcessId
+        );
+        return FALSE;
     }
 
     HMODULE hStObject = LoadLibraryExW(L"stobject.dll", nullptr,
@@ -138,12 +223,18 @@ BOOL Wh_ModInit()
         return FALSE;
     }
 
-    if (HotPlugShowNotifyIcon_Original)
-    {
-        HotPlugShowNotifyIcon_Original(settings.trayIconVisibilityState.load());
-    }
-
     return TRUE;
+}
+
+// Mod post-initialization
+void Wh_ModAfterInit()
+{
+    Wh_Log(L"AfterInit");
+
+    if (HWND hSysTrayWnd = FindSystemTrayWindow())
+    {
+        RunFromWindowThread(hSysTrayWnd, ApplyTrayIconStateThreadProc, nullptr);
+    }
 }
 
 // Mod pre-uninitialization
@@ -153,9 +244,10 @@ void Wh_ModBeforeUninit()
 
     g_unloading.store(true);
 
-    if (UpdateHotPlugIconState_Original)
+    if (HWND hSysTrayWnd = FindSystemTrayWindow())
     {
-        UpdateHotPlugIconState_Original();
+        RunFromWindowThread(hSysTrayWnd, RestoreTrayIconStateThreadProc,
+            nullptr);
     }
 }
 
@@ -164,8 +256,8 @@ void Wh_ModSettingsChanged()
 {
     LoadSettings();
 
-    if (HotPlugShowNotifyIcon_Original)
+    if (HWND hSysTrayWnd = FindSystemTrayWindow())
     {
-        HotPlugShowNotifyIcon_Original(settings.trayIconVisibilityState.load());
+        RunFromWindowThread(hSysTrayWnd, ApplyTrayIconStateThreadProc, nullptr);
     }
 }
