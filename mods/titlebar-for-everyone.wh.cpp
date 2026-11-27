@@ -2,7 +2,7 @@
 // @id              titlebar-for-everyone
 // @name            Titlebar For Everyone
 // @description     Force native title bars and frames for various programs
-// @version         0.5
+// @version         0.6
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
@@ -58,6 +58,7 @@
 * WPF apps
     * Visual Studio (tested: 2022, 2026)
     * PowerToys Workspaces
+    * Known issues: after a Visual Studio launch, an invisible update notification may block mouse and keyboard input. Please press the Esc key to get out of such state for now.
 * Office apps
     * Word, Excel, PowerPoint, OneNote, Access, Outlook, and Publisher
     * Tested: 2010 and LTSC 2021 (Win10 mode)
@@ -267,6 +268,7 @@ void ProcessWindow(HWND hWnd, bool onlyUpdateStyle = false) {
         SetWindowLongW(hWnd, GWL_STYLE, style);
         if (!onlyUpdateStyle) {
             if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, 0)) {
+                SetPropW(hWnd, L"TB4E_Processed", (HANDLE)1);
                 Wh_Log(L"Subclassed %p", hWnd);
             }
         }
@@ -286,11 +288,15 @@ void ProcessWindow(HWND hWnd, bool onlyUpdateStyle = false) {
 
     if (!onlyUpdateStyle) {
         if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, 0)) {
+            SetPropW(hWnd, L"TB4E_Processed", (HANDLE)1);
             Wh_Log(L"Subclassed %p", hWnd);
         }
     }
 
-    style |= WS_CAPTION | WS_SYSMENU;
+    if (!isSteam) {
+        // Allow Steam Big Picture window to stay captionless (keep subclassing because fullscreen mode can be switched in Big Picture settings)
+        style |= WS_CAPTION | WS_SYSMENU;
+    }
     switch (tb4e_settings.clientEdgeSetting) {
         case CE_ADD:
             exStyle |= WS_EX_CLIENTEDGE;
@@ -415,6 +421,7 @@ BOOL CALLBACK UninitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
     GetWindowThreadProcessId(hWnd, &pid);
     // Unsubclass all windows belonging to this process
     if (pid == GetCurrentProcessId()) {
+        RemovePropW(hWnd, L"TB4E_Processed");
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, SubclassProc);
         SetWinUICustomControlsVisibility(hWnd, true);
         if (lParam == 1) {
@@ -425,6 +432,8 @@ BOOL CALLBACK UninitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
 }
 
 BOOL CALLBACK UpdateEnumWindowsProc(HWND hWnd, LPARAM lParam) {
+    if (!GetPropW(hWnd, L"TB4E_Processed"))
+        return TRUE;
     DWORD pid;
     GetWindowThreadProcessId(hWnd, &pid);
     if (pid == GetCurrentProcessId()) {
@@ -620,6 +629,8 @@ bool PrepareSteamIndexHtml() {
 
     // Hook window.open to override browserType to 3, to enable Steam's built-in native frame mod for a window
     // The mode is so buggy on Windows so this mod's subclass fixes them
+    // Note: overlay and VR windows aren't real HWNDs (unless I force their browserType to 3 which completely borks them)
+    // Note 2: Big Picture main window (BPM_*) is browserType=3 by default, regardless of fullscreen mode status
     const char* injectScript =
         "<script>"
             "window.open = (() => {"
@@ -627,9 +638,9 @@ bool PrepareSteamIndexHtml() {
                 "return (s, t, f) => {"
                     "try {"
                         "const u = new URL(s);"
-                        "const a = typeof t === 'string' && t.startsWith('desktopoverlay_'),"
-                            "b = u.searchParams.has('pid') && u.searchParams.get('pid') !== '0';"
-                        "if (a || b) return o(s, t, f);" // exclude in-game overlay windows
+                        "const a = typeof t === 'string' && (t.startsWith('desktopoverlay_') || t.startsWith('MainMenu_')),"
+                            "b = u.searchParams.has('pid') && u.searchParams.get('pid') !== '0', c = u.searchParams.has('vrOverlayKey');"
+                        "if (a || b || c) return o(s, t, f);" // exclude in-game overlay windows, Big Picture main menu, and SteamVR windows
                         "u.searchParams.set('browserType', '3');"
                         "return o(u.toString(), t, f);"
                     "} catch {"
@@ -724,18 +735,12 @@ BOOL Wh_ModInit() {
         mode = MODE_VS;
     }
 
-
-    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_hook,
-                       (void**)&CreateWindowExW_original);
-    Wh_SetFunctionHook((void*)SetWindowThemeAttribute, (void*)SetWindowThemeAttribute_hook,
-                       (void**)&SetWindowThemeAttribute_original);
-    Wh_SetFunctionHook((void*)ShowWindow, (void*)ShowWindow_hook,
-                       (void**)&ShowWindow_original);
-    Wh_SetFunctionHook((void*)SetParent, (void*)SetParent_hook,
-                       (void**)&SetParent_original);
+    WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_hook, &CreateWindowExW_original);
+    WindhawkUtils::SetFunctionHook(SetWindowThemeAttribute, SetWindowThemeAttribute_hook, &SetWindowThemeAttribute_original);
+    WindhawkUtils::SetFunctionHook(ShowWindow, ShowWindow_hook, &ShowWindow_original);
+    WindhawkUtils::SetFunctionHook(SetParent, SetParent_hook, &SetParent_original);
     if (isSteam && steamPrepared && !tb4e_settings.noSteamHtmlInject) {
-        Wh_SetFunctionHook((void*)CreateFileW, (void*)CreateFileW_hook,
-                           (void**)&CreateFileW_original);
+        WindhawkUtils::SetFunctionHook(CreateFileW, CreateFileW_hook, &CreateFileW_original);
     }
 
     EnumWindows(InitEnumWindowsProc, 1);

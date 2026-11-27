@@ -16,31 +16,34 @@ concurrency:
   group: deploy-static-content
   cancel-in-progress: true
 
-# The workflow token pushes the pages branch, and reads the pull requests and
-# their comments for the external catalog.
-permissions:
-  contents: write
-  issues: read
-  pull-requests: read
-
 env:
   PYTHONUTF8: '1'
 
+# The deployment is built in one job and pushed in another, since a job's token
+# is exposed to all of its steps, whichever ones it's passed to. The build runs
+# tools and packages, so only the push job's token can write.
 jobs:
-  run:
+  # Builds the deployment as a commit on top of the pages branch, and hands it
+  # over as a git bundle. The token reads the pull requests and their comments
+  # for the external catalog.
+  build:
     runs-on: windows-latest
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    outputs:
+      changed: ${{ steps.commit.outputs.changed }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          persist-credentials: false
       - name: Setup Python
         uses: actions/setup-python@v7
         with:
           python-version: '3.x'
-          cache-dependency-path: '.github/requirements.txt'
-      - name: Install Python dependencies
-        run: python -m pip install -r .github/requirements.txt
       - name: Clone last deployed content
         run: |
           # The deployed content has image paths that are derived from URLs,
@@ -53,8 +56,8 @@ jobs:
           # Also tell git itself to treat paths case-sensitively, so it doesn't
           # collapse image paths that differ only by case during checkout or,
           # later, when staging the updated content for deployment. The setting
-          # persists in the clone's config and is reused by the deploy step.
-          git clone -c core.ignorecase=false --branch pages --depth 1 https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git "${{ runner.temp }}/last_deploy"
+          # persists in the clone's config and is reused by the commit step.
+          git clone -c core.ignorecase=false --branch pages --depth 1 https://github.com/${{ github.repository }}.git "${{ runner.temp }}/last_deploy"
       - name: Cache Windhawk
         id: cache-windhawk
         uses: actions/cache@v6
@@ -68,6 +71,7 @@ jobs:
           installer_path="${{ runner.temp }}/windhawk_setup.exe"
           echo "Downloading $installer_url to $installer_path"
           curl -L "$installer_url" -o "$installer_path"
+          (cd "${{ runner.temp }}" && echo "5116cc1703384aac88b8d7a3b57f172aea5da32b6df7355fb2f8247d23813c8f windhawk_setup.exe" | sha256sum -c)
 
           extract_path="${{ runner.temp }}\windhawk"
           echo "Extracting $installer_path to $extract_path"
@@ -95,8 +99,9 @@ jobs:
       - name: Install dependencies
         # The dev dependencies are type declarations, used by editors and by
         # type checking. Nothing here consumes them, as tsx strips types without
-        # checking them.
-        run: npm install --omit=dev
+        # checking them. No install scripts run: esbuild, the only package with
+        # one, finds its binary without it.
+        run: npm ci --omit=dev --ignore-scripts
       - name: Prepare static content
         run: npx tsx deploy.ts
         env:
@@ -116,21 +121,74 @@ jobs:
           # Archive new images, compressing GIFs with the image tools.
           export PATH="$(cygpath -u '${{ runner.temp }}/image_tools'):$PATH"
           python scripts/archive_mod_images.py
-      - name: Deploy
+      - name: Commit the deployment
+        id: commit
         run: |
           src_dir=.
           deploy_dir="${{ runner.temp }}/last_deploy"
-          deploy_branch=pages
 
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          # echo Cloning the repository
-          # git clone --branch $deploy_branch --depth 1 --filter=blob:none --no-checkout https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git "$deploy_dir"
           echo Adding generated files to the repository
           git --git-dir="$deploy_dir/.git" --work-tree="$src_dir" add -A
           touch "$deploy_dir/.nojekyll"
           git -C "$deploy_dir" add .nojekyll
+          if git -C "$deploy_dir" diff-index --cached --quiet HEAD; then
+            echo Nothing to deploy
+            echo changed=false >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           echo Committing changes
-          git -C "$deploy_dir" diff-index --cached --quiet HEAD || git --git-dir="$deploy_dir/.git" --work-tree="$src_dir" commit -m "deploy: ${{ github.sha }}"
+          git --git-dir="$deploy_dir/.git" --work-tree="$src_dir" commit -m "deploy: ${{ github.sha }}"
+          # The bundle holds only what the new commit adds to the deployed one.
+          git -C "$deploy_dir" bundle create "${{ runner.temp }}/deploy.bundle" origin/pages..pages
+          echo changed=true >> "$GITHUB_OUTPUT"
+      - name: Upload the deployment
+        if: steps.commit.outputs.changed == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: deployment
+          path: ${{ runner.temp }}/deploy.bundle
+          if-no-files-found: error
+          retention-days: 1
+          # A bundle is compressed already.
+          compression-level: 0
+
+  # Pushes the deployment to the pages branch. Its token can push, so it runs
+  # nothing but git and GitHub's own actions.
+  push:
+    needs: build
+    if: needs.build.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download the deployment
+        uses: actions/download-artifact@v8
+        with:
+          name: deployment
+          path: ${{ runner.temp }}/deployment
+      - name: Push
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          # Blobless, as the bundle holds the new files. Git fetches only the
+          # deployed files that the bundle stores changes to.
+          git clone --bare --filter=blob:none --branch pages --depth 1 https://github.com/${{ github.repository }}.git "${{ runner.temp }}/pages.git"
+          cd "${{ runner.temp }}/pages.git"
+          git fetch "${{ runner.temp }}/deployment/deploy.bundle" pages
+
+          # The compiled mods and the source of each mod version are never
+          # rewritten, since deploy.ts reuses them, so a deployment that changes
+          # or removes one is refused. A mod that's removed on purpose has its
+          # files deleted from the pages branch first.
+          published=$(git diff --no-renames --diff-filter=a --name-only pages FETCH_HEAD -- ':(glob)mods/*/*.dll' ':(glob)mods/*/*.wh.cpp')
+          if [ -n "$published" ]; then
+            echo "::error::The deployment changes or removes published files"
+            printf '%s\n' "$published"
+            exit 1
+          fi
+
           echo Pushing to GitHub
-          git -C "$deploy_dir" push origin $deploy_branch
+          git push "https://x-access-token:$GITHUB_TOKEN@github.com/${{ github.repository }}.git" FETCH_HEAD:refs/heads/pages

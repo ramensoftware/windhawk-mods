@@ -2,7 +2,7 @@
 // @id           better-volume-mixer
 // @name         Better Volume Mixer
 // @description  A customizable volume mixer for master and per-app volume, right from the system tray
-// @version      1.6.3
+// @version      1.6.4
 // @author       0Allu
 // @github       https://github.com/0Allu
 // @homepage     https://github.com/0Allu/better-volume-mixer
@@ -32,6 +32,7 @@ hidden, open the tray overflow menu and drag the icon onto the taskbar.
 * Optional alert sound when you change the volume
 * Muted master-volume indicator in the mixer
 * Tray icon that shows the master volume level
+* Optionally show the volume percentage as the tray icon, with adjustable size
 * Middle-click the tray icon to toggle master mute
 * Scroll over the tray icon to change master volume
 * Mouse-wheel volume adjustment
@@ -103,6 +104,9 @@ and enable **Hide volume icon** in its settings.
   $options:
   - icon: Volume icon
   - percent: Volume percentage
+- trayNumberSize: 100
+  $name: Tray percentage size
+  $description: From 50 to 100 percent of the largest size that fits in the tray.
 - volumeStep: 5
   $name: Mouse-wheel volume step
   $description: Percent per wheel step over a row or the tray icon, from 1 to 20.
@@ -307,6 +311,7 @@ struct Settings {
     bool closeWhenFocusIsLost = true;
     bool closeButton = true;
     bool trayPercent = false;
+    int trayNumberSize = 100;
     bool moveNotifications = true;
     bool animations = true;
     int backgroundOpacity = 85;
@@ -674,6 +679,7 @@ void LoadSettings() {
     g_settings.closeButton = Wh_GetIntSetting(L"closeButton") != 0;
     WindhawkUtils::StringSetting tray = WindhawkUtils::StringSetting::make(L"trayIcon");
     g_settings.trayPercent = wcscmp(tray.get(), L"percent") == 0;
+    g_settings.trayNumberSize = ClampInt(Wh_GetIntSetting(L"trayNumberSize"), 50, 100);
     g_settings.moveNotifications = Wh_GetIntSetting(L"moveNotifications") != 0;
     g_settings.animations = Wh_GetIntSetting(L"animations") != 0;
     g_settings.backgroundOpacity = ClampInt(Wh_GetIntSetting(L"backgroundOpacity"), 0, 100);
@@ -4827,11 +4833,50 @@ HICON LoadMixerIcon(int pixels, bool tray = false, bool muted = false) {
                                          pixels, pixels, 0));
 }
 
+// Tabular figures give every digit the same width, so numbers with the same
+// count of digits take the same space.
+IDWriteTextLayout* CreateNumberLayout(IDWriteFactory* dwrite, IDWriteTextFormat* format,
+                                      IDWriteTypography* typography, const std::wstring& text,
+                                      float side, float size) {
+    IDWriteTextLayout* layout = nullptr;
+    UINT32 length = static_cast<UINT32>(text.size());
+    if (FAILED(dwrite->CreateTextLayout(text.c_str(), length, format, side, side, &layout))) {
+        return nullptr;
+    }
+    layout->SetFontSize(size, {0, length});
+    if (typography) layout->SetTypography(typography, {0, length});
+    return layout;
+}
+
+// The ink box that any number with this many digits can cover, from the
+// overhangs: how far the ink reaches past the layout box, which is negative
+// where it stops short. Sizing by this rather than by the number shown keeps
+// a 40 as large as a 35.
+bool MeasureDigits(IDWriteFactory* dwrite, IDWriteTextFormat* format,
+                   IDWriteTypography* typography, size_t digits, float side, float size,
+                   D2D1_RECT_F* bounds) {
+    // Starts inside out, so the first digit sets every edge.
+    *bounds = {side * 2.0f, side * 2.0f, -side, -side};
+    for (WCHAR digit = L'0'; digit <= L'9'; ++digit) {
+        IDWriteTextLayout* layout = CreateNumberLayout(
+            dwrite, format, typography, std::wstring(digits, digit), side, size);
+        if (!layout) return false;
+        DWRITE_OVERHANG_METRICS ink{};
+        HRESULT result = layout->GetOverhangMetrics(&ink);
+        layout->Release();
+        if (FAILED(result)) return false;
+        bounds->left = std::min(bounds->left, -ink.left);
+        bounds->top = std::min(bounds->top, -ink.top);
+        bounds->right = std::max(bounds->right, side + ink.right);
+        bounds->bottom = std::max(bounds->bottom, side + ink.bottom);
+    }
+    return bounds->right > bounds->left && bounds->bottom > bounds->top;
+}
+
 // A volume glyph fills the square at regular weight, which matches the
 // Windows 11 wifi icon nearly pixel for pixel. A number uses the taskbar
 // clock's font. Tray icons can't be larger than the small-icon size, so it
-// starts as large as the square, shrinks only as far as it must to fit, and
-// is centered on its digits.
+// is made as large as the widest digits allow, then scaled by the setting.
 void DrawIconText(ID2D1RenderTarget* target, IDWriteFactory* dwrite, ID2D1Brush* brush,
                   PCWSTR text, bool number, float side) {
     IDWriteTextFormat* format = nullptr;
@@ -4845,33 +4890,38 @@ void DrawIconText(ID2D1RenderTarget* target, IDWriteFactory* dwrite, ID2D1Brush*
     format->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
     format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
     format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
-    UINT32 length = static_cast<UINT32>(wcslen(text));
-    IDWriteTextLayout* layout = nullptr;
     if (!number) {
-        target->DrawText(text, length, format, D2D1::RectF(0.0f, 0.0f, side, side), brush,
+        target->DrawText(text, static_cast<UINT32>(wcslen(text)), format,
+                         D2D1::RectF(0.0f, 0.0f, side, side), brush,
                          D2D1_DRAW_TEXT_OPTIONS_NO_SNAP);
-    } else if (SUCCEEDED(dwrite->CreateTextLayout(text, length, format, side, side, &layout))) {
-        // The ink box comes from the overhangs: how far the digits reach past
-        // the layout box, which is negative where they stop short.
-        DWRITE_OVERHANG_METRICS ink{};
-        for (int pass = 0; pass < 2 && SUCCEEDED(layout->GetOverhangMetrics(&ink)); ++pass) {
-            float width = side + ink.left + ink.right;
-            float height = side + ink.top + ink.bottom;
-            if (width <= 0.0f || height <= 0.0f) break;
-            float scale = std::min({1.0f, side / width, side / height});
-            if (pass == 0 && scale < 1.0f) {
-                layout->SetFontSize(side * scale, {0, length});
-                continue;
-            }
-            // Whole pixels vertically keep the tops and bottoms of the
-            // digits sharp.
-            D2D1_POINT_2F origin{(side - width) / 2.0f + ink.left,
-                                 std::round((side - height) / 2.0f + ink.top)};
-            target->DrawTextLayout(origin, layout, brush, D2D1_DRAW_TEXT_OPTIONS_NO_SNAP);
-            break;
-        }
-        layout->Release();
+        format->Release();
+        return;
     }
+
+    IDWriteTypography* typography = nullptr;
+    if (SUCCEEDED(dwrite->CreateTypography(&typography))) {
+        typography->AddFontFeature({DWRITE_FONT_FEATURE_TAG_TABULAR_FIGURES, 1});
+    }
+    // A single digit is sized like two, so 5 is no larger than 50.
+    size_t digits = std::max<size_t>(2, wcslen(text));
+    D2D1_RECT_F ink;
+    if (MeasureDigits(dwrite, format, typography, digits, side, side, &ink)) {
+        float fit = std::min({1.0f, side / (ink.right - ink.left),
+                              side / (ink.bottom - ink.top)});
+        float size = side * fit * g_settings.trayNumberSize / 100.0f;
+        IDWriteTextLayout* layout = nullptr;
+        if (MeasureDigits(dwrite, format, typography, digits, side, size, &ink) &&
+            (layout = CreateNumberLayout(dwrite, format, typography, text, side, size))) {
+            // Whole pixels vertically keep the tops and bottoms of the digits
+            // sharp.
+            D2D1_POINT_2F origin{
+                (side - (ink.right - ink.left)) / 2.0f - ink.left,
+                std::round((side - (ink.bottom - ink.top)) / 2.0f - ink.top)};
+            target->DrawTextLayout(origin, layout, brush, D2D1_DRAW_TEXT_OPTIONS_NO_SNAP);
+            layout->Release();
+        }
+    }
+    if (typography) typography->Release();
     format->Release();
 }
 
