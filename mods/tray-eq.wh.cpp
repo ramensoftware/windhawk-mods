@@ -2,16 +2,6 @@
 // @id              tray-eq
 // @name            Tray EQ
 // @description     System-wide equalizer with tray icon, monitor-correction file and a Windows 11 acrylic flyout
-// @name:pt-PT Tray EQ
-// @name:pt-BR Tray EQ
-// @name:es-ES Tray EQ
-// @name:fr-FR Tray EQ
-// @name:de-DE Tray EQ
-// @name:it-IT Tray EQ
-// @name:ru-RU Tray EQ
-// @name:ja-JP Tray EQ
-// @name:ko-KR Tray EQ
-// @name:zh-CN Tray EQ
 // @description:pt-PT Equalizador para todo o sistema com ícone na bandeja, ficheiro de correção de monitores e flyout acrílico no Windows 11
 // @description:pt-BR Equalizador para todo o sistema com ícone na bandeja, arquivo de correção de monitores e flyout acrílico no Windows 11
 // @description:es-ES Ecualizador para todo el sistema con icono en la bandeja, archivo de corrección de monitores y flyout acrílico en Windows 11
@@ -80,6 +70,7 @@ The shared settings block is read-only for other users; only the current user's 
   $description:zh-CN: 完整路径。可选，也可以从托盘弹出窗口加载。
 - trayHost: explorer.exe
   $name: Process that shows the tray icon
+  $description: Executable name, e.g. explorer.exe. The tray icon and flyout run inside this process.
   $name:pt-PT: Processo que mostra o ícone da bandeja
   $name:pt-BR: Processo que exibe o ícone da bandeja
   $name:es-ES: Proceso que muestra el icono de la bandeja
@@ -154,6 +145,7 @@ The shared settings block is read-only for other users; only the current user's 
 #include <cstdlib>
 #include <cstring>
 #include <cwchar>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -340,7 +332,7 @@ struct Stream {
 
 static SRWLOCK g_lk = SRWLOCK_INIT;
 static std::unordered_map<void*, Fmt> g_clients;
-static std::unordered_map<void*, Stream*> g_streams;
+static std::unordered_map<void*, std::unique_ptr<Stream>> g_streams;
 
 static Fmt ParseFmt(const WAVEFORMATEX* w) {
     Fmt f = {w->nChannels, (int)w->nSamplesPerSec, 0, w->nBlockAlign};
@@ -488,14 +480,10 @@ static HRESULT STDMETHODCALLTYPE GS_h(IAudioClient* t, REFIID riid, void** pp) {
     if (SUCCEEDED(hr) && pp && *pp &&
         IsEqualIID(riid, __uuidof(IAudioRenderClient))) {
         AcquireSRWLockExclusive(&g_lk);
-        auto old = g_streams.find(*pp);
-        if (old != g_streams.end()) {
-            delete old->second;
-            g_streams.erase(old);
-        }
+        g_streams.erase(*pp);
         auto it = g_clients.find(t);
         if (it != g_clients.end() && it->second.kind)
-            g_streams[*pp] = new Stream(it->second);
+            g_streams[*pp] = std::make_unique<Stream>(it->second);
         ReleaseSRWLockExclusive(&g_lk);
     }
     return hr;
@@ -530,9 +518,37 @@ static HRESULT STDMETHODCALLTYPE RB_h(IAudioRenderClient* t,
     return RB_o(t, n, flags);
 }
 
-// Build a throw-away shared-mode stream to read the vtable addresses.
-static DWORD WINAPI ProbeThread(LPVOID p) {
-    void** out = (void**)p;
+// Drop per-object state when the COM object dies.
+typedef ULONG(STDMETHODCALLTYPE* Rel_t)(void*);
+static Rel_t ACRel_o, RCRel_o;
+
+static ULONG STDMETHODCALLTYPE ACRel_h(void* t) {
+    ULONG r = ACRel_o(t);
+    if (r == 0) {
+        AcquireSRWLockExclusive(&g_lk);
+        g_clients.erase(t);
+        ReleaseSRWLockExclusive(&g_lk);
+    }
+    return r;
+}
+
+static ULONG STDMETHODCALLTYPE RCRel_h(void* t) {
+    ULONG r = RCRel_o(t);
+    if (r == 0) {
+        AcquireSRWLockExclusive(&g_lk);
+        g_streams.erase(t);
+        ReleaseSRWLockExclusive(&g_lk);
+    }
+    return r;
+}
+
+// Build a throw-away shared-mode stream to read the vtable addresses, then
+// install the hooks. Runs only in processes that load AudioSes.dll.
+static HANDLE g_probeThread;
+static volatile LONG g_probeStarted;
+
+static DWORD WINAPI ProbeThread(LPVOID) {
+    void* vt[6] = {};
     HRESULT hc = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     IMMDeviceEnumerator* en = nullptr;
     IMMDevice* dev = nullptr;
@@ -550,10 +566,12 @@ static DWORD WINAPI ProbeThread(LPVOID p) {
         SUCCEEDED(ac->GetService(__uuidof(IAudioRenderClient), (void**)&rc))) {
         void** v = *(void***)ac;
         void** r = *(void***)rc;
-        out[0] = v[3];
-        out[1] = v[14];
-        out[2] = r[3];
-        out[3] = r[4];
+        vt[0] = v[3];
+        vt[1] = v[14];
+        vt[2] = r[3];
+        vt[3] = r[4];
+        vt[4] = v[2];
+        vt[5] = r[2];
     }
     if (wf)
         CoTaskMemFree(wf);
@@ -567,7 +585,36 @@ static DWORD WINAPI ProbeThread(LPVOID p) {
         en->Release();
     if (SUCCEEDED(hc))
         CoUninitialize();
+    if (vt[0] && vt[1] && vt[2] && vt[3] && vt[4] && vt[5]) {
+        Wh_SetFunctionHook(vt[0], (void*)Init_h, (void**)&Init_o);
+        Wh_SetFunctionHook(vt[1], (void*)GS_h, (void**)&GS_o);
+        Wh_SetFunctionHook(vt[2], (void*)GB_h, (void**)&GB_o);
+        Wh_SetFunctionHook(vt[3], (void*)RB_h, (void**)&RB_o);
+        Wh_SetFunctionHook(vt[4], (void*)ACRel_h, (void**)&ACRel_o);
+        Wh_SetFunctionHook(vt[5], (void*)RCRel_h, (void**)&RCRel_o);
+        Wh_ApplyHookOperations();
+    }
     return 0;
+}
+
+// The probe runs on its own thread (never inside the loader hook) and is
+// joined in Wh_ModUninit.
+static void StartProbe() {
+    if (InterlockedExchange(&g_probeStarted, 1))
+        return;
+    g_probeThread = CreateThread(nullptr, 0, ProbeThread, nullptr, 0, nullptr);
+}
+
+typedef HMODULE(WINAPI* LoadLibraryExW_t)(LPCWSTR, HANDLE, DWORD);
+static LoadLibraryExW_t LoadLibraryExW_o;
+
+static HMODULE WINAPI LoadLibraryExW_h(LPCWSTR name, HANDLE f, DWORD fl) {
+    HMODULE m = LoadLibraryExW_o(name, f, fl);
+    if (m && !g_probeStarted &&
+        !(fl & (LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE)) &&
+        GetModuleHandleW(L"AudioSes.dll") == m)
+        StartProbe();
+    return m;
 }
 
 // ---------------------------------------------------------------- tray-side
@@ -1157,6 +1204,7 @@ static void LoadCurve(const wchar_t* path) {
     if (!g_cfg.nFile && g_pts.size() >= 4) {
         std::sort(g_pts.begin(), g_pts.end());
         g_curveRaw = true;
+        g_cfg.invert = 1;  // a raw measurement must be inverted to correct it
         FitCurve();
         g_pts.clear();
         g_pts.shrink_to_fit();
@@ -1172,8 +1220,10 @@ static const UINT WM_TRAY = WM_APP + 1, WM_SETCH = WM_APP + 2,
                   WM_PICK = WM_APP + 3;
 static const float W = 400, H = 530, PX = 20, PW = 360;
 
-static HWND g_hTray, g_hFly;
+static volatile HWND g_hTray;
+static HWND g_hFly;
 static HANDLE g_trayThread, g_trayMutex;
+static DWORD g_trayTid;
 static ID2D1Factory* g_d2d;
 static IDWriteFactory* g_dw;
 static ID2D1HwndRenderTarget* g_rt;
@@ -1468,19 +1518,25 @@ static DWORD WINAPI SpecThread(LPVOID) {
     return 0;
 }
 
+static void SpecStop();
 static void SpecStart() {
-    if (g_spThread)
+    if (g_spThread && !g_spStop)
         return;
+    SpecStop();  // join a previous capture thread that was still shutting down
     g_spStop = 0;
     g_spThread = CreateThread(nullptr, 0, SpecThread, nullptr, 0, nullptr);
     for (int i = 0; i < kSpec; i++)
         g_spec[i] = -120;
 }
+// Non-blocking: the flyout hides without waiting for the audio setup.
+static void SpecRequestStop() {
+    g_spStop = 1;
+}
 static void SpecStop() {
     if (!g_spThread)
         return;
     g_spStop = 1;
-    WaitForSingleObject(g_spThread, 500);
+    WaitForSingleObject(g_spThread, INFINITE);
     CloseHandle(g_spThread);
     g_spThread = nullptr;
 }
@@ -1664,25 +1720,36 @@ static void SanBand(Band& b) {
     b.on = b.on != 0;
 }
 
+// One value per preset: portable Windhawk caps a stored binary value at
+// about 16 KB.
+static int g_presetsStored;
 static void SavePresets() {
-    static char buf[sizeof(int) + MAXPRE * sizeof(Preset)];
     int n = (int)g_pre.size();
-    memcpy(buf, &n, sizeof n);
-    if (n)
-        memcpy(buf + sizeof n, g_pre.data(), n * sizeof(Preset));
-    Wh_SetBinaryValue(L"presets", buf, sizeof n + n * sizeof(Preset));
+    wchar_t key[24];
+    for (int i = 0; i < n; i++) {
+        swprintf(key, 24, L"preset%d", i);
+        Wh_SetBinaryValue(key, &g_pre[i], sizeof(Preset));
+    }
+    for (int i = n; i < g_presetsStored; i++) {
+        swprintf(key, 24, L"preset%d", i);
+        Wh_DeleteValue(key);
+    }
+    g_presetsStored = n;
+    Wh_SetIntValue(L"presetCount", n);
 }
 static void LoadPresets() {
-    static char buf[sizeof(int) + MAXPRE * sizeof(Preset)];
-    size_t r = Wh_GetBinaryValue(L"presets", buf, sizeof buf);
-    int n = 0;
-    if (r >= sizeof n)
-        memcpy(&n, buf, sizeof n);
-    if (n < 0 || n > MAXPRE || r != sizeof n + n * sizeof(Preset))
-        n = 0;
-    g_pre.assign(n, Preset{});
-    if (n)
-        memcpy(g_pre.data(), buf + sizeof n, n * sizeof(Preset));
+    int n = Wh_GetIntValue(L"presetCount", 0);
+    n = n < 0 ? 0 : n > MAXPRE ? MAXPRE : n;
+    g_pre.clear();
+    wchar_t key[24];
+    for (int i = 0; i < n; i++) {
+        Preset p;
+        swprintf(key, 24, L"preset%d", i);
+        if (Wh_GetBinaryValue(key, &p, sizeof p) != sizeof p)
+            break;
+        g_pre.push_back(p);
+    }
+    g_presetsStored = (int)g_pre.size();
     for (Preset& p : g_pre) {
         p.name[31] = 0;
         p.curve[39] = 0;
@@ -2532,7 +2599,7 @@ static LRESULT CALLBACK FlyProc(HWND h, UINT m, WPARAM w, LPARAM l) {
                     g_p = 0;
                     KillTimer(h, 2);
                     KillTimer(h, 4);
-                    SpecStop();
+                    SpecRequestStop();
                     ShowWindow(h, SW_HIDE);
                     SetWindowRgn(h, nullptr, FALSE);
                     return 0;
@@ -2752,8 +2819,8 @@ static DWORD WINAPI TrayThread(LPVOID) {
         stored = true;
     }
     g_cfg.version = 0;
-    wchar_t nm[64] = L"";
-    Wh_GetStringValue(L"curveName", nm, 64);
+    wchar_t nm[MAX_PATH] = L"";
+    Wh_GetStringValue(L"curveName", nm, MAX_PATH);
     g_curveName = nm;
     PCWSTR sf = Wh_GetStringSetting(L"curveFile");
     g_lastSettingFile = sf ? sf : L"";
@@ -2841,38 +2908,57 @@ BOOL Wh_ModInit() {
     if (!OpenShared(tray))
         Wh_Log(L"shared memory failed");
 
-    void* a[4] = {};
-    HANDLE th = CreateThread(nullptr, 0, ProbeThread, a, 0, nullptr);
-    if (th) {
-        WaitForSingleObject(th, 5000);
-        CloseHandle(th);
-    }
-    if (a[0] && a[1] && a[2] && a[3]) {
-        Wh_SetFunctionHook(a[0], (void*)Init_h, (void**)&Init_o);
-        Wh_SetFunctionHook(a[1], (void*)GS_h, (void**)&GS_o);
-        Wh_SetFunctionHook(a[2], (void*)GB_h, (void**)&GB_o);
-        Wh_SetFunctionHook(a[3], (void*)RB_h, (void**)&RB_o);
+    // Only processes that use audio pay for the probe.
+    if (GetModuleHandleW(L"AudioSes.dll")) {
+        StartProbe();
+    } else if (HMODULE kb = GetModuleHandleW(L"kernelbase.dll")) {
+        void* ll = (void*)GetProcAddress(kb, "LoadLibraryExW");
+        if (ll)
+            Wh_SetFunctionHook(ll, (void*)LoadLibraryExW_h,
+                               (void**)&LoadLibraryExW_o);
     }
     if (tray)
         g_trayThread =
-            CreateThread(nullptr, 0, TrayThread, nullptr, 0, nullptr);
+            CreateThread(nullptr, 0, TrayThread, nullptr, 0, &g_trayTid);
     return TRUE;
 }
 
-void Wh_ModSettingsChanged() {
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+    std::wstring oldHost = g_trayHost;
     LoadSettings();
+    if (_wcsicmp(oldHost.c_str(), g_trayHost.c_str()) != 0) {
+        *bReload = TRUE;  // the tray host is decided at load time
+        return TRUE;
+    }
     if (g_hTray)
         PostMessageW(g_hTray, WM_SETCH, 0, 0);
+    return TRUE;
+}
+
+static BOOL CALLBACK CloseThreadWnd(HWND h, LPARAM) {
+    PostMessageW(h, WM_CLOSE, 0, 0);
+    return TRUE;
 }
 
 void Wh_ModUninit() {
+    if (g_probeThread) {
+        WaitForSingleObject(g_probeThread, INFINITE);
+        CloseHandle(g_probeThread);
+        g_probeThread = nullptr;
+    }
     if (g_trayThread) {
-        if (g_hTray)
-            PostMessageW(g_hTray, WM_CLOSE, 0, 0);
-        WaitForSingleObject(g_trayThread, 3000);
+        // No mod code may run after this returns: keep asking (the window may
+        // not exist yet, or a modal dialog may be open) until the thread ends.
+        while (WaitForSingleObject(g_trayThread, 100) == WAIT_TIMEOUT)
+            EnumThreadWindows(g_trayTid, CloseThreadWnd, 0);
         CloseHandle(g_trayThread);
         g_trayThread = nullptr;
     }
+    SpecStop();
+    AcquireSRWLockExclusive(&g_lk);
+    g_streams.clear();
+    g_clients.clear();
+    ReleaseSRWLockExclusive(&g_lk);
     if (g_sh)
         UnmapViewOfFile(g_sh);
     if (g_map)
