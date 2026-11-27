@@ -332,21 +332,6 @@ enum class UiString : size_t {
     PinInstructions,
     PinFailed,
     CreateTitle,
-    DirUnavailable,
-    DirEmpty,
-    MultiSelect,
-    ChooseApp,
-    DirReadFailed,
-    Places,
-    Up,
-    Go,
-    FoldersApps,
-    Add,
-    ThisPc,
-    Desktop,
-    Downloads,
-    PersonalStart,
-    SharedStart,
     FromFile,
     AddAppsMenu,
     RenameMenu,
@@ -473,60 +458,6 @@ static constexpr PCWSTR
                 L"Crear una carpeta en la barra de tareas",
                 L"Créer un dossier dans la barre des tâches",
                 L"Taskleistenordner erstellen"},  // CreateTitle
-               {L"Can’t open this folder. Check the path or choose another "
-                L"location.",
-                L"Cartella non accessibile. Controlla il percorso o scegli "
-                L"un'altra posizione.",
-                L"No se puede abrir esta carpeta. Comprueba la ruta o elige "
-                L"otra ubicación.",
-                L"Impossible d’ouvrir ce dossier. Vérifiez le chemin ou "
-                L"choisissez un autre emplacement.",
-                L"Der Ordner lässt sich nicht öffnen. Prüfen Sie den Pfad oder "
-                L"wählen Sie einen anderen Speicherort."},  // DirUnavailable
-               {L"No folders or apps here.",
-                L"Nessuna cartella o app in questa posizione.",
-                L"Aquí no hay carpetas ni aplicaciones.",
-                L"Aucun dossier ni aucune application à cet emplacement.",
-                L"Hier gibt es keine Ordner oder Apps."},  // DirEmpty
-               {L"Select apps. Use Ctrl or Shift to select more than one.",
-                L"Seleziona le app. Usa Ctrl o Maiusc per sceglierne più di "
-                L"una.",
-                L"Selecciona las aplicaciones. Usa Ctrl o Mayús para "
-                L"seleccionar varias.",
-                L"Sélectionnez les applications. Utilisez Ctrl ou Maj pour en "
-                L"choisir plusieurs.",
-                L"Wählen Sie Apps aus. Mit Strg oder Umschalt können Sie "
-                L"mehrere auswählen."},  // MultiSelect
-               {L"Select an app or open a folder.",
-                L"Seleziona un'app o apri una cartella.",
-                L"Selecciona una aplicación o abre una carpeta.",
-                L"Sélectionnez une application ou ouvrez un dossier.",
-                L"Wählen Sie eine App aus oder öffnen Sie einen Ordner."},  // ChooseApp
-               {L"Couldn’t read this location.",
-                L"Impossibile leggere questa posizione.",
-                L"No se ha podido leer esta ubicación.",
-                L"Impossible de lire cet emplacement.",
-                L"Dieser Speicherort konnte nicht gelesen werden."},  // DirReadFailed
-               {L"Locations", L"Posizioni", L"Ubicaciones", L"Emplacements",
-                L"Speicherorte"},                             // Places
-               {L"Up", L"Su", L"Subir", L"Monter", L"Hoch"},  // Up
-               {L"Go", L"Vai", L"Ir", L"Aller", L"Los"},      // Go
-               {L"Folders and apps", L"Cartelle e app",
-                L"Carpetas y aplicaciones", L"Dossiers et applications",
-                L"Ordner und Apps"},  // FoldersApps
-               {L"Add", L"Aggiungi", L"Añadir", L"Ajouter",
-                L"Hinzufügen"},  // Add
-               {L"This PC", L"Questo PC", L"Este equipo", L"Ce PC",
-                L"Dieser PC"},  // ThisPc
-               {L"Desktop", L"Desktop", L"Escritorio", L"Bureau",
-                L"Desktop"},  // Desktop
-               {L"Downloads", L"Download", L"Descargas", L"Téléchargements",
-                L"Downloads"},  // Downloads
-               {L"My Start menu", L"Menu Start personale", L"Mi menú Inicio",
-                L"Mon menu Démarrer", L"Mein Startmenü"},  // PersonalStart
-               {L"Shared Start menu", L"Menu Start condiviso",
-                L"Menú Inicio compartido", L"Menu Démarrer partagé",
-                L"Gemeinsames Startmenü"},  // SharedStart
                {L"Choose from file", L"Scegli da file", L"Elegir un archivo",
                 L"Choisir un fichier", L"Datei auswählen"},  // FromFile
                {L"Add apps…", L"Aggiungi app…", L"Añadir aplicaciones…",
@@ -2444,14 +2375,11 @@ static std::optional<App> fromPath(wstring path) {
     wstring name = display(item.get(), SIGDN_NORMALDISPLAY);
     return App{id, name.empty() ? fs::path(path).stem().wstring() : name, path};
 }
-// File picking runs on its own short-lived UI thread. The taskbar remains
-// interactive.
-enum : UINT { kFilesDone = WM_APP + 540, kCatalogDone };
-static constexpr wchar_t kFilesClass[] = L"TaskbarFolders.Files.052";
-[[clang::no_destroy]] static std::optional<std::thread> fileThread, catalogThread;
+enum : UINT { kFilesDone = WM_APP + 540, kCatalogDone, kScanChoices, kChoicesDone };
+[[clang::no_destroy]] static std::optional<std::thread> fileThread, catalogThread, choicesThread;
 static std::atomic<HWND> fileWindow{};
 static std::atomic<bool> filesReady = false, catalogReady = false;
-static std::vector<wstring> selectedPaths;
+static std::vector<App> selectedApps;
 static wstring fileDestination;
 static std::vector<App> installedApps, incomingApps;
 static ULONGLONG catalogTime = 0;
@@ -2468,424 +2396,104 @@ static wstring windowText(HWND w) {
     s.resize(n);
     return s;
 }
-struct FileEntry {
-    fs::path path;
-    bool directory;
-};
-struct FilesWindow {
-    HWND window{}, places{}, address{}, up{}, go{}, list{}, status{}, accept{},
-        cancel{};
-    HFONT font{};
-    HIMAGELIST icons{};
-    UINT dpi = 96;
-    fs::path directory;
-    std::vector<fs::path> roots;
-    std::vector<FileEntry> entries;
-    std::vector<wstring> picked;
-};
-enum : int { kPlaces = 450, kAddress, kUp, kGo, kFilesList, kPick, kCancel };
-static void fileStatus(FilesWindow& w, const wchar_t* s) {
-    SetWindowTextW(w.status, s);
+// The system picker runs its modal loop on a dedicated STA. Its invisible
+// owner lets the same thread dismiss Show during mod unload.
+static constexpr HRESULT kPickerCancelled = HRESULT_FROM_WIN32(ERROR_CANCELLED);
+static LRESULT CALLBACK pickerOwnerProc(HWND w, UINT msg, WPARAM wp, LPARAM lp,
+                                        UINT_PTR id, DWORD_PTR data) {
+    if (msg == WM_CLOSE || (msg == WM_TIMER && wp == id)) {
+        if (msg == WM_CLOSE)
+            SetTimer(w, id, 50, nullptr);
+        reinterpret_cast<IFileOpenDialog*>(data)->Close(kPickerCancelled);
+        return 0;
+    }
+    return DefSubclassProc(w, msg, wp, lp);
 }
-static void loadDirectory(FilesWindow& w, fs::path path) {
-    std::vector<FileEntry> entries;
-    if (path.empty()) {
-        DWORD drives = GetLogicalDrives();
-        for (int i = 0; i < 26; i++)
-            if (drives & (1u << i)) {
-                wstring drive = L"A:\\";
-                drive[0] = (wchar_t)(L'A' + i);
-                entries.push_back({drive, true});
-            }
-    } else {
-        path = path.lexically_normal().make_preferred();
-        std::error_code ec;
-        for (fs::directory_iterator it(path, ec), end; !ec && it != end;
-             it.increment(ec)) {
-            if (stopping)
-                return;
-            std::error_code attr;
-            bool directory = it->is_directory(attr);
-            if (!attr && (directory || appFile(it->path())))
-                entries.push_back({it->path(), directory});
-        }
-        if (ec) {
-            fileStatus(w, uiText(UiString::DirUnavailable));
-            return;
-        }
-        std::sort(entries.begin(), entries.end(),
-                  [](const FileEntry& a, const FileEntry& b) {
-                      if (a.directory != b.directory)
-                          return a.directory;
-                      return _wcsicmp(a.path.c_str(), b.path.c_str()) < 0;
-                  });
-    }
-    w.directory = path;
-    w.entries = std::move(entries);
-    SendMessageW(w.list, WM_SETREDRAW, FALSE, 0);
-    ListView_DeleteAllItems(w.list);
-    for (size_t i = 0; i < w.entries.size(); ++i) {
-        const auto& e = w.entries[i];
-        wstring name =
-            path.empty() ? e.path.wstring() : e.path.filename().wstring();
-        LVITEMW row{};
-        row.mask = LVIF_TEXT | LVIF_IMAGE;
-        row.iItem = (int)i;
-        row.iImage = e.directory ? 0 : 1;
-        row.pszText = name.data();
-        ListView_InsertItem(w.list, &row);
-    }
-    SendMessageW(w.list, WM_SETREDRAW, TRUE, 0);
-    InvalidateRect(w.list, nullptr, TRUE);
-    SetWindowTextW(w.address, path.c_str());
-    auto place = std::find(w.roots.begin(), w.roots.end(), path);
-    SendMessageW(w.places, CB_SETCURSEL,
-                 place == w.roots.end() ? -1 : place - w.roots.begin(), 0);
-    EnableWindow(w.up, !path.empty());
-    fileStatus(w, w.entries.empty() ? uiText(UiString::DirEmpty)
-                                    : uiText(UiString::MultiSelect));
-}
-static void fileAccept(FilesWindow& w, int activated = -1) {
-    if (activated >= 0 && activated < (int)w.entries.size() &&
-        w.entries[activated].directory) {
-        loadDirectory(w, w.entries[activated].path);
-        return;
-    }
-    std::vector<wstring> files;
-    fs::path sub;
-    int dirs = 0;
-    for (int n = ListView_GetNextItem(w.list, -1, LVNI_SELECTED); n >= 0;
-         n = ListView_GetNextItem(w.list, n, LVNI_SELECTED)) {
-        if (n >= (int)w.entries.size())
-            continue;
-        auto& entry = w.entries[n];
-        if (entry.directory) {
-            sub = entry.path;
-            ++dirs;
-        } else
-            files.push_back(entry.path.wstring());
-    }
-    if (files.empty()) {
-        if (dirs == 1)
-            loadDirectory(w, sub);
-        else
-            fileStatus(w, uiText(UiString::ChooseApp));
-        return;
-    }
-    w.picked = std::move(files);
-    DestroyWindow(w.window);
-}
-static void fileGo(FilesWindow& w) {
-    wstring value = windowText(w.address);
-    if (value.size() >= 2 && value.front() == L'"' && value.back() == L'"')
-        value = value.substr(1, value.size() - 2);
-    DWORD count = ExpandEnvironmentStringsW(value.c_str(), nullptr, 0);
-    if (count && count < 32768) {
-        wstring expanded(count, L'\0');
-        if (ExpandEnvironmentStringsW(value.c_str(), expanded.data(), count) ==
-            count) {
-            expanded.pop_back();
-            value = std::move(expanded);
-        }
-    }
-    if (value.empty()) {
-        loadDirectory(w, {});
-        return;
-    }
-    fs::path p(value);
-    if (p.is_relative())
-        p = w.directory / p;
-    std::error_code ec;
-    if (fs::is_regular_file(p, ec) && appFile(p)) {
-        w.picked = {p.make_preferred().wstring()};
-        DestroyWindow(w.window);
-        return;
-    }
-    loadDirectory(w, p);
-}
-static void fileUp(FilesWindow& w) {
-    if (!w.directory.empty())
-        loadDirectory(w, w.directory == w.directory.root_path()
-                             ? fs::path{}
-                             : w.directory.parent_path());
-}
-static int fp(const FilesWindow& w, int dip) {
-    return MulDiv(dip, w.dpi, 96);
-}
-static void layoutFiles(FilesWindow& w) {
-    RECT r{};
-    GetClientRect(w.window, &r);
-    int pad = fp(w, 12), gap = fp(w, 6), hh = fp(w, 27), ww = r.right,
-        hhClient = r.bottom;
-    int y = pad;
-    MoveWindow(w.places, pad, y, ww - 2 * pad, fp(w, 190), TRUE);
-    y += hh + gap;
-    int side = fp(w, 64);
-    MoveWindow(w.up, pad, y, side, hh, TRUE);
-    MoveWindow(w.go, ww - pad - side, y, side, hh, TRUE);
-    int x = pad + side + gap;
-    MoveWindow(w.address, x, y, std::max(1, ww - 2 * x), hh, TRUE);
-    y += hh + gap;
-    int footer = hhClient - pad - hh;
-    MoveWindow(w.list, pad, y, std::max(1, ww - 2 * pad),
-               std::max(1, footer - fp(w, 27) - y), TRUE);
-    RECT client{};
-    GetClientRect(w.list, &client);
-    ListView_SetColumnWidth(w.list, 0, std::max(1L, client.right - 2));
-    MoveWindow(w.status, pad, footer - fp(w, 23), std::max(1, ww - 2 * pad),
-               fp(w, 22), TRUE);
-    int bw = fp(w, 86);
-    MoveWindow(w.cancel, ww - pad - bw, footer, bw, hh, TRUE);
-    MoveWindow(w.accept, ww - pad - 2 * bw - gap, footer, bw, hh, TRUE);
-}
-static LRESULT CALLBACK fileProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
-    auto* w = (FilesWindow*)GetWindowLongPtrW(h, GWLP_USERDATA);
-    if (msg == WM_NCCREATE) {
-        w = (FilesWindow*)((CREATESTRUCTW*)lp)->lpCreateParams;
-        w->window = h;
-        SetWindowLongPtrW(h, GWLP_USERDATA, (LONG_PTR)w);
-    }
-    if (!w)
-        return DefWindowProcW(h, msg, wp, lp);
-    try {
-        switch (msg) {
-            case WM_GETMINMAXINFO: {
-                auto m = (MINMAXINFO*)lp;
-                m->ptMinTrackSize = {fp(*w, 345), fp(*w, 285)};
-                return 0;
-            }
-            case WM_SIZE:
-                if (w->cancel)
-                    layoutFiles(*w);
-                return 0;
-            case WM_COMMAND:
-                switch (LOWORD(wp)) {
-                    case kPlaces:
-                        if (HIWORD(wp) == CBN_SELCHANGE) {
-                            auto i =
-                                SendMessageW(w->places, CB_GETCURSEL, 0, 0);
-                            if (i >= 0 && (size_t)i < w->roots.size())
-                                loadDirectory(*w, w->roots[i]);
-                        }
-                        return 0;
-                    case kGo:
-                        fileGo(*w);
-                        return 0;
-                    case kUp:
-                        fileUp(*w);
-                        return 0;
-                    case IDOK:
-                        if (GetFocus() == w->address)
-                            fileGo(*w);
-                        else
-                            fileAccept(*w);
-                        return 0;
-                    case kPick:
-                        fileAccept(*w);
-                        return 0;
-                    case kCancel:
-                    case IDCANCEL:
-                        DestroyWindow(h);
-                        return 0;
-                }
-                break;
-            case WM_NOTIFY: {
-                auto* n = (NMHDR*)lp;
-                if (n->hwndFrom == w->list && n->code == NM_DBLCLK) {
-                    auto a = (NMITEMACTIVATE*)lp;
-                    if (a->iItem >= 0)
-                        fileAccept(*w, a->iItem);
-                    return 0;
-                }
-                break;
-            }
-            case WM_CLOSE:
-                DestroyWindow(h);
-                return 0;
-            case WM_DESTROY:
-                PostQuitMessage(0);
-                return 0;
-            case WM_NCDESTROY:
-                w->window = nullptr;
-                return DefWindowProcW(h, msg, wp, lp);
-        }
-    } catch (...) {
-        fileStatus(*w, uiText(UiString::DirReadFailed));
-    }
-    return DefWindowProcW(h, msg, wp, lp);
-}
-static void runFiles(FilesWindow& w, const wstring& title, RECT anchor) {
-    WNDCLASSW cls{};
-    cls.hInstance = moduleInstance();
-    cls.lpfnWndProc = fileProc;
-    cls.lpszClassName = kFilesClass;
-    cls.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-    cls.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-    if (!RegisterClassW(&cls) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
-        winrt::throw_last_error();
-    INITCOMMONCONTROLSEX cc{sizeof(cc), ICC_LISTVIEW_CLASSES};
-    InitCommonControlsEx(&cc);
+static HRESULT chooseAppFiles(RECT anchor, std::vector<App>& apps) {
+    com_ptr<IFileOpenDialog> dialog;
+    winrt::check_hresult(CoCreateInstance(CLSID_FileOpenDialog, nullptr,
+                                          CLSCTX_INPROC_SERVER, IID_PPV_ARGS(dialog.put())));
+    constexpr GUID client = {0x64cfcb1e, 0xcbc9, 0x451e,
+                             {0x86, 0xee, 0x6e, 0x39, 0xcc, 0x50, 0x1a, 0xdf}};
+    dialog->SetClientGuid(client);
+    FILEOPENDIALOGOPTIONS options{};
+    winrt::check_hresult(dialog->GetOptions(&options));
+    winrt::check_hresult(dialog->SetOptions(options | FOS_FORCEFILESYSTEM | FOS_ALLOWMULTISELECT |
+        FOS_NOCHANGEDIR | FOS_PATHMUSTEXIST | FOS_FILEMUSTEXIST |
+        FOS_NODEREFERENCELINKS | FOS_DONTADDTORECENT));
+    COMDLG_FILTERSPEC filter{uiText(UiString::Apps), L"*.lnk;*.url;*.exe;*.appref-ms"};
+    winrt::check_hresult(dialog->SetFileTypes(1, &filter));
+    com_ptr<IShellItem> desktop;
+    if (SUCCEEDED(SHGetKnownFolderItem(FOLDERID_Desktop, KF_FLAG_DEFAULT, nullptr,
+                                       IID_PPV_ARGS(desktop.put()))))
+        dialog->SetDefaultFolder(desktop.get());
+
     MONITORINFO mi{sizeof(mi)};
-    GetMonitorInfoW(MonitorFromRect(&anchor, MONITOR_DEFAULTTOPRIMARY), &mi);
-    HWND h = CreateWindowExW(WS_EX_TOOLWINDOW, kFilesClass, title.c_str(),
-                             WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
-                             mi.rcWork.left + 32, mi.rcWork.top + 32, 550, 410,
-                             nullptr, nullptr, cls.hInstance, &w);
-    if (!h)
+    GetMonitorInfoW(MonitorFromRect(&anchor, MONITOR_DEFAULTTONEAREST), &mi);
+    const auto& area = mi.rcWork;
+    HWND owner = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, L"STATIC", L"",
+                                 WS_POPUP, (area.left + area.right) / 2,
+                                 (area.top + area.bottom) / 2, 1, 1, nullptr, nullptr,
+                                 moduleInstance(), nullptr);
+    if (!owner)
         winrt::throw_last_error();
-    struct Cleanup {
-        FilesWindow& w;
-        ~Cleanup() {
-            fileWindow = nullptr;
-            if (w.window)
-                DestroyWindow(w.window);
-            if (w.icons)
-                ImageList_Destroy(w.icons);
-            if (w.font)
-                DeleteObject(w.font);
+    struct Owner {
+        HWND w;
+        ~Owner() {
+            fileWindow.store(nullptr);
+            DestroyWindow(w);
         }
-    } cleanup{w};
-    w.dpi = GetDpiForWindow(h);
-    if (!w.dpi)
-        w.dpi = 96;
-    w.font =
-        CreateFontW(-fp(w, 14), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                    DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
-    auto child = [&](PCWSTR c, PCWSTR t, DWORD style, int id,
-                     DWORD ex = 0) -> HWND {
-        auto control =
-            CreateWindowExW(ex, c, t, WS_CHILD | WS_VISIBLE | style, 0, 0, 1, 1,
-                            h, (HMENU)(INT_PTR)id, cls.hInstance, nullptr);
-        if (!control)
-            winrt::throw_last_error();
-        SendMessageW(control, WM_SETFONT, (WPARAM)w.font, TRUE);
-        return control;
-    };
-    w.places = child(WC_COMBOBOXW, uiText(UiString::Places),
-                     CBS_DROPDOWNLIST | WS_TABSTOP | WS_VSCROLL, kPlaces);
-    w.up = child(L"BUTTON", uiText(UiString::Up), WS_TABSTOP, kUp);
-    w.address = child(L"EDIT", L"", WS_TABSTOP | ES_AUTOHSCROLL, kAddress,
-                      WS_EX_CLIENTEDGE);
-    w.go = child(L"BUTTON", uiText(UiString::Go), WS_TABSTOP, kGo);
-    w.list = child(WC_LISTVIEWW, uiText(UiString::FoldersApps),
-                   WS_TABSTOP | LVS_REPORT | LVS_NOCOLUMNHEADER |
-                       LVS_SHOWSELALWAYS | LVS_SHAREIMAGELISTS,
-                   kFilesList, WS_EX_CLIENTEDGE);
-    w.status = child(L"STATIC", L"", SS_CENTERIMAGE | SS_ENDELLIPSIS, 0);
-    w.accept = child(L"BUTTON", uiText(UiString::Add),
-                     WS_TABSTOP | BS_DEFPUSHBUTTON, kPick);
-    w.cancel = child(L"BUTTON", uiText(UiString::Cancel), WS_TABSTOP, kCancel);
-    ListView_SetExtendedListViewStyle(
-        w.list, LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER);
-    LVCOLUMNW col{};
-    col.mask = LVCF_WIDTH;
-    col.cx = 400;
-    ListView_InsertColumn(w.list, 0, &col);
-    int size = fp(w, 18);
-    w.icons = ImageList_Create(size, size, ILC_COLOR32 | ILC_MASK, 2, 0);
-    if (w.icons) {
-        for (auto sid : {SIID_FOLDER, SIID_APPLICATION}) {
-            SHSTOCKICONINFO info{sizeof(info)};
-            if (SUCCEEDED(SHGetStockIconInfo(sid, SHGSI_ICON | SHGSI_SMALLICON,
-                                             &info))) {
-                ImageList_AddIcon(w.icons, info.hIcon);
-                DestroyIcon(info.hIcon);
-            }
-        }
-        ListView_SetImageList(w.list, w.icons, LVSIL_SMALL);
-    }
-    auto place = [&](PCWSTR name, fs::path dir) {
-        w.roots.push_back(std::move(dir));
-        SendMessageW(w.places, CB_ADDSTRING, 0, (LPARAM)name);
-    };
-    place(uiText(UiString::ThisPc), {});
-    auto addKnown = [&](PCWSTR name, REFKNOWNFOLDERID id) {
-        PWSTR raw = nullptr;
-        if (SUCCEEDED(SHGetKnownFolderPath(id, 0, nullptr, &raw))) {
-            fs::path d(raw);
-            CoTaskMemFree(raw);
-            place(name, d);
-        }
-    };
-    addKnown(uiText(UiString::Desktop), FOLDERID_Desktop);
-    addKnown(uiText(UiString::Downloads), FOLDERID_Downloads);
-    addKnown(uiText(UiString::PersonalStart), FOLDERID_Programs);
-    addKnown(uiText(UiString::SharedStart), FOLDERID_CommonPrograms);
-    int width = std::min<LONG>(fp(w, 560), mi.rcWork.right - mi.rcWork.left),
-        height = std::min<LONG>(fp(w, 420), mi.rcWork.bottom - mi.rcWork.top);
-    SetWindowPos(
-        h, nullptr,
-        mi.rcWork.left + (mi.rcWork.right - mi.rcWork.left - width) / 2,
-        mi.rcWork.top + (mi.rcWork.bottom - mi.rcWork.top - height) / 2, width,
-        height, SWP_NOZORDER | SWP_NOACTIVATE);
-    loadDirectory(w, w.roots.size() > 1 ? w.roots[1] : fs::path{});
-    fileWindow.store(h);
+    } lifetime{owner};
+    if (!SetWindowSubclass(owner, pickerOwnerProc, 1, reinterpret_cast<DWORD_PTR>(dialog.get())))
+        return E_FAIL;
+    fileWindow.store(owner);
     if (stopping)
-        return;
-    ShowWindow(h, SW_SHOW);
-    SetForegroundWindow(h);
-    SetFocus(w.list);
-    MSG m{};
-    while (w.window && !stopping && GetMessageW(&m, nullptr, 0, 0) > 0) {
-        if (m.message == WM_KEYDOWN || m.message == WM_SYSKEYDOWN) {
-            if (m.wParam == VK_ESCAPE) {
-                DestroyWindow(h);
-                continue;
-            }
-            if (m.wParam == 'L' && (GetKeyState(VK_CONTROL) & 0x8000)) {
-                SetFocus(w.address);
-                SendMessageW(w.address, EM_SETSEL, 0, -1);
-                continue;
-            }
-            if (m.wParam == VK_UP && (GetKeyState(VK_MENU) & 0x8000)) {
-                fileUp(w);
-                continue;
-            }
-            if (m.wParam == VK_RETURN &&
-                (m.hwnd == w.address || m.hwnd == w.list)) {
-                if (m.hwnd == w.address)
-                    fileGo(w);
-                else
-                    fileAccept(w);
-                continue;
-            }
-        }
-        if (!IsDialogMessageW(h, &m)) {
-            TranslateMessage(&m);
-            DispatchMessageW(&m);
-        }
+        return kPickerCancelled;
+    HRESULT hr = dialog->Show(owner);
+    if (FAILED(hr) || stopping)
+        return hr;
+    com_ptr<IShellItemArray> items;
+    winrt::check_hresult(dialog->GetResults(items.put()));
+    DWORD count = 0;
+    winrt::check_hresult(items->GetCount(&count));
+    for (DWORD i = 0; i < count && !stopping; ++i) {
+        com_ptr<IShellItem> item;
+        winrt::check_hresult(items->GetItemAt(i, item.put()));
+        if (auto app = fromPath(display(item.get(), SIGDN_FILESYSPATH)))
+            apps.push_back(std::move(*app));
     }
+    return apps.empty() ? S_FALSE : S_OK;
 }
 static HRESULT filesStatus = S_OK;
 static bool browse(const wstring& dest, HWND notify, RECT anchor) {
     if (stopping || !notify)
         return false;
-    if (fileThread.has_value()) {
-        if (HWND h = fileWindow.load())
-            SetForegroundWindow(h);
+    if (fileThread) {
+        if (HWND owner = fileWindow.load()) {
+            HWND dialog = GetLastActivePopup(owner);
+            if (dialog != owner && IsWindowVisible(dialog))
+                SetForegroundWindow(dialog);
+        }
         return false;
     }
     fileDestination = dest;
     filesReady = false;
-    auto f = lookup(groups, dest);
-    wstring title = uiText(UiString::FromFile);
-    if (f)
-        title += L" — " + f->name;
-    fileThread.emplace([notify, anchor, title] {
-        FilesWindow state;
-        auto hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-        HRESULT status = S_OK;
-        try {
-            if (!stopping)
-                runFiles(state, title, anchor);
-        } catch (...) {
-            status = winrt::to_hresult();
-        }
-        if (SUCCEEDED(hr))
+    fileThread.emplace([notify, anchor] {
+        std::vector<App> apps;
+        HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+        if (SUCCEEDED(hr)) {
+            try {
+                hr = stopping ? kPickerCancelled : chooseAppFiles(anchor, apps);
+            } catch (...) {
+                hr = winrt::to_hresult();
+            }
             CoUninitialize();
-        selectedPaths = std::move(state.picked);
-        filesStatus = status;
-        filesReady.store(true);
+        }
+        if (FAILED(hr))
+            apps.clear();
+        selectedApps = std::move(apps);
+        filesStatus = hr;
+        filesReady = true;
         if (!stopping)
             PostMessageW(notify, kFilesDone, 0, 0);
     });
@@ -3063,6 +2671,10 @@ static void stopWorkers() {
     if (catalogThread) {
         catalogThread->join();
         catalogThread.reset();
+    }
+    if (choicesThread) {
+        choicesThread->join();
+        choicesThread.reset();
     }
 }
 
@@ -3426,6 +3038,8 @@ struct FolderPanel : FolderPalette {
     std::vector<App> apps;
     unsigned rendered = ~0u, viewSerial = 0, choicesRevision = ~0u;
     std::vector<App> pins;
+    std::vector<wstring> choiceIds;
+    ULONGLONG choicesUpdated = 0;
     AppSearch search;
     int cellWidth = 0, cellHeight = 0, iconSize = 0, lineHeight = 0;
     bool browsing = false, searchLayout = false;
@@ -5214,7 +4828,7 @@ static void arrangeDrag(int dest) {
     if (!panel->motion || !panel->frame)
         InvalidateRect(panel->list, nullptr, FALSE);
 }
-static void panelPosition(double now) {
+static void panelPosition(double now, UINT flags = 0) {
     RECT r = panel->rest;
     if (r.right <= r.left)
         return;
@@ -5223,7 +4837,7 @@ static void panelPosition(double now) {
     int shift = int(std::lround(sign * px(7) * (1 - reveal)));
     // Keep the surface outside the taskbar even during the first frame.
     SetWindowPos(panel->window, nullptr, r.left, r.top + shift, r.right - r.left,
-                 r.bottom - r.top, SWP_NOZORDER | SWP_NOACTIVATE);
+                 r.bottom - r.top, SWP_NOZORDER | SWP_NOACTIVATE | flags);
     if (panel->layered)
         SetLayeredWindowAttributes(
             panel->window, 0,
@@ -5484,7 +5098,8 @@ static void advanceDragPage(POINT screen) {
         dragAt(pt);
 }
 static void refreshPanel();
-static std::vector<App> taskbarChoices(const AppFolder&);
+static void requestTaskbarChoices();
+static void collectTaskbarChoices();
 struct TilePose {
     wstring key;
     double x, y, vx, vy;
@@ -7102,9 +6717,11 @@ static void refreshPanel() {
     } else {
         if (panel->choicesRevision != revision || panel->choicesFolder != f->id) {
             panel->search.generation.reset();
-            panel->pins = taskbarChoices(*f);
+            panel->pins.clear();
+            panel->choicesUpdated = 0;
             panel->choicesFolder = f->id;
             panel->choicesRevision = revision;
+            PostMessageW(panel->window, kScanChoices, 0, 0);
         }
         if (!searching)
             panel->apps = panel->pins;
@@ -7144,30 +6761,27 @@ static void refreshPanel() {
         px(7);
     int capRows =
         std::clamp((room - gridTop - px(12)) / panel->cellHeight, 1, 4);
-    if (rows > capRows)
-        capRows =
-            std::clamp((room - gridTop - px(39)) / panel->cellHeight, 1, 4);
+    const bool chooser = panel->choosing;
+    if (chooser || rows > capRows)
+        capRows = std::clamp((room - gridTop - px(39)) / panel->cellHeight, 1,
+                             chooser ? 3 : 4);
     int shown =
         panel->filtering
             ? std::min(capRows,
                        std::max(1, ((int)f->apps.size() + cols - 1) / cols))
-        : panel->choosing
-            ? std::min(
-                  capRows,
-                  std::max({2, rows,
-                            std::min(4, ((int)panel->pins.size() + cols - 1) /
-                                            cols)}))
-            : std::min(rows, capRows);
+        : chooser ? capRows : std::min(rows, capRows);
     panel->cellWidth = cellW;
     panel->columns = cols;
     panel->capacity = std::max(1, cols * capRows);
     panel->page = std::clamp(panel->page, 0, pageCount() - 1);
     int width = std::min(monitorW, std::max(px(190), 2 * pad + cols * cellW));
-    int wanted = gridTop + (shown ? shown * panel->cellHeight : px(41)) +
-                 (pageCount() > 1 ? px(36) : px(10));
+    // Reserve the chooser's grid and pager once so incoming suggestions and
+    // typed queries never move the search box or the button under the pointer.
+    const int footer = (chooser || pageCount() > 1) ? px(36) : px(10);
+    int wanted = gridTop + (shown ? shown * panel->cellHeight : px(41)) + footer;
     panel->rest =
         placePanel(mi.rcWork, panel->bar, panel->anchor, width, wanted, px(8));
-    panelPosition(motionTime());
+    panelPosition(motionTime(), redraw.window ? SWP_NOCOPYBITS : 0);
     RECT client{};
     GetClientRect(panel->window, &client);
     int w = client.right, h = client.bottom, side = px(28), gap = px(4);
@@ -7186,8 +6800,7 @@ static void refreshPanel() {
         ShowWindow(panel->lens, searchField ? SW_SHOWNA : SW_HIDE);
         ShowWindow(panel->filter, searchField ? SW_SHOWNA : SW_HIDE);
     }
-    int gridHeight =
-        std::max(1, h - gridTop - (pageCount() > 1 ? px(36) : px(10)));
+    int gridHeight = std::max(1, h - gridTop - footer);
     MoveWindow(panel->empty, pad, gridTop, std::max(1, w - 2 * pad), gridHeight,
                FALSE);
     int listWidth = std::max(1, std::min(w, cols * cellW));
@@ -7389,27 +7002,24 @@ static void beginAdding(const wstring& dest) {
     clearPanelSelection();
     panel->choosing = false;
     SetWindowTextW(panel->filter, L"");
-    if (panel->choicesFolder == dest && panel->choicesRevision == revision) {
-        // Taskbar pins can change outside the mod while the popup is parked.
-        if (auto f = lookup(groups, dest)) {
-            auto pins = taskbarChoices(*f);
-            if (pins != panel->pins) {
-                panel->search.generation.reset();
-                panel->pins = std::move(pins);
-            }
-        }
-    }
     SetWindowTextW(panel->lens, uiText(UiString::SearchInstalled));
     SendMessageW(panel->filter, EM_SETCUEBANNER, TRUE,
                  (LPARAM)uiText(UiString::SearchHint));
     panel->page = 0;
     panel->wheel = 0;
     panel->choosing = true;
+    panel->arrival.set(0);
+    // Revalidate warm suggestions too. A cold refresh queues its own scan.
+    if (panel->choicesFolder == dest && panel->choicesRevision == revision)
+        PostMessageW(panel->window, kScanChoices, 0, 0);
     refreshPanel();
-    gridEntrance(1);
     SetFocus(panel->filter);
 }
 static void workerFinished(UINT msg) {
+    if (msg == kChoicesDone) {
+        collectTaskbarChoices();
+        return;
+    }
     if (msg == kCatalogDone) {
         if (collectCatalog() && panel->window && panel->choosing &&
             GetWindowTextLengthW(panel->filter))
@@ -7421,20 +7031,16 @@ static void workerFinished(UINT msg) {
     fileThread->join();
     fileThread.reset();
     filesReady = false;
-    auto paths = std::move(selectedPaths);
+    auto apps = std::move(selectedApps);
     auto dest = std::exchange(fileDestination, wstring{});
     bool added = false;
-    if (!stopping && lookup(groups, dest) && !paths.empty()) {
-        std::vector<App> apps;
-        for (auto& path : paths)
-            if (auto app = fromPath(path))
-                apps.push_back(std::move(*app));
+    if (!stopping && lookup(groups, dest)) {
         if (!apps.empty())
             added = edit([&](Model& m) {
                 for (const auto& a : apps)
                     transfer(m, dest, a);
             });
-        else
+        else if (filesStatus == S_FALSE)
             note(uiText(UiString::NoUsableFile));
     }
     if (!stopping && panel->window && panel->browsing && panel->folder == dest) {
@@ -7443,13 +7049,13 @@ static void workerFinished(UINT msg) {
             panel->choosing = false;
             panel->page = 0;
         }
-        refreshPanel();
-        gridEntrance(0);
+        if (added || panel->rendered != revision)
+            refreshPanel();
         ShowWindow(panel->window, SW_SHOW);
         SetForegroundWindow(panel->window);
         SetFocus(panel->choosing ? panel->filter : panel->list);
     }
-    if (FAILED(filesStatus) && !stopping)
+    if (FAILED(filesStatus) && filesStatus != kPickerCancelled && !stopping)
         note(uiText(UiString::PickerFailed));
 }
 static void stopPanelActivationCheck(HWND window) {
@@ -7954,7 +7560,7 @@ static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
         if (panel && panel->parkedWindow == w) {
             if (msg == WM_DESTROY) {
                 panel->window = std::exchange(panel->parkedWindow, nullptr);
-            } else if (msg != kFilesDone && msg != kCatalogDone) {
+            } else if (msg != kFilesDone && msg != kCatalogDone && msg != kChoicesDone) {
                 if (msg == WM_THEMECHANGED || msg == WM_SYSCOLORCHANGE ||
                     msg == WM_DWMCOLORIZATIONCOLORCHANGED || msg == WM_SETTINGCHANGE ||
                     msg == WM_DISPLAYCHANGE || msg == WM_DPICHANGED) {
@@ -7968,7 +7574,11 @@ static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
             }
         }
         switch (msg) {
+            case kScanChoices:
+                requestTaskbarChoices();
+                return 0;
             case kFilesDone:
+            case kChoicesDone:
             case kCatalogDone:
                 workerFinished(msg);
                 return 0;
@@ -8237,8 +7847,8 @@ static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
                     if (panel->choosing) {
                         panel->choosing = false;
                         panel->page = 0;
+                        panel->arrival.set(0);
                         refreshPanel();
-                        gridEntrance(-1);
                         SetFocus(panel->apps.empty() ? panel->add : panel->list);
                     } else
                         manage(panel->folder);
@@ -9534,51 +9144,119 @@ static bool suggestWindow(const App& app,
     return std::any_of(pins->begin(), pins->end(),
                        [&](const wstring& p) { return equal(p, target); });
 }
-static std::vector<App> taskbarChoices(const AppFolder& folder) {
-    std::vector<App> choices;
-    auto add = [&](const App& app) {
-        auto matches = [&](const App& x) { return sameApp(x, app); };
-        if (std::none_of(folder.apps.begin(), folder.apps.end(), matches) &&
-            std::none_of(choices.begin(), choices.end(), matches))
-            choices.push_back(app);
-    };
-    // Resolve the current buttons when the user opens Add, even if a layout
-    // update is pending.
+// XAML elements stay on the taskbar thread. Only plain app IDs and a copy
+// of the folder members go to the shell worker.
+static std::vector<wstring> taskbarChoiceIds() {
+    std::vector<wstring> ids;
     std::set<wstring> seen;
-    std::optional<std::set<wstring>> binaries;
-    const auto pinDirectory = pinnedLinks();
     if (ui->repeater)
         visit(ui->repeater, [&](FrameworkElement const& e) {
             if (winrt::get_class_name(e) != L"Taskbar.TaskListButton")
                 return true;
             auto id = appKey(e);
-            if (!id.empty() && !prefix(id, kPinPrefix) &&
-                seen.insert(id).second)
-                if (auto app = byId(id);
-                    app && suggestWindow(*app, binaries, pinDirectory))
-                    add(*app);
+            if (!id.empty() && !prefix(id, kPinPrefix) && seen.insert(id).second)
+                ids.push_back(std::move(id));
             return false;
         });
-    if (choices.empty()) {
-        // Pinned classic shortcuts are useful when an Explorer layout does not
-        // expose app IDs.
-        PWSTR roaming = nullptr;
-        if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, nullptr,
-                                           &roaming))) {
-            fs::path pins = fs::path(roaming) /
-                            L"Microsoft\\Internet Explorer\\Quick Launch\\User "
-                            L"Pinned\\TaskBar";
-            CoTaskMemFree(roaming);
-            std::error_code ec;
-            for (fs::directory_iterator it(pins, ec), end; !ec && it != end;
-                 it.increment(ec)) {
-                if (equal(it->path().extension().wstring(), L".lnk"))
-                    if (auto app = fromPath(it->path().wstring()))
-                        add(*app);
-            }
+    return ids;
+}
+static std::vector<App> resolveTaskbarChoices(const std::vector<wstring>& ids,
+                                              const std::vector<App>& members) {
+    std::vector<App> choices;
+    auto add = [&](const App& app) {
+        auto matches = [&](const App& x) { return sameApp(x, app); };
+        if (std::none_of(members.begin(), members.end(), matches) &&
+            std::none_of(choices.begin(), choices.end(), matches))
+            choices.push_back(app);
+    };
+    auto directory = pinnedLinks();
+    std::optional<std::set<wstring>> binaries;
+    for (const auto& id : ids) {
+        if (stopping)
+            break;
+        if (auto app = byId(id); app && suggestWindow(*app, binaries, directory))
+            add(*app);
+    }
+    if (choices.empty() && !stopping) {
+        std::error_code ec;
+        for (fs::directory_iterator it(directory, ec), end;
+             !ec && it != end && !stopping; it.increment(ec)) {
+            if (equal(it->path().extension().wstring(), L".lnk"))
+                if (auto app = fromPath(it->path().wstring()))
+                    add(*app);
         }
     }
     return choices;
+}
+struct ChoiceScan {
+    wstring folder;
+    unsigned revision{};
+    std::vector<wstring> ids;
+    std::vector<App> apps;
+    bool succeeded{};
+};
+static ChoiceScan choiceScan;
+static std::atomic<bool> choicesReady{};
+static void requestTaskbarChoices() {
+    if (stopping || !panel->window || !panel->choosing)
+        return;
+    if (choicesThread && choicesReady.load())
+        collectTaskbarChoices();
+    auto f = lookup(groups, panel->folder);
+    if (!f)
+        return;
+    auto ids = taskbarChoiceIds();
+    if (ids != panel->choiceIds) {
+        panel->choiceIds = std::move(ids);
+        panel->choicesUpdated = 0;
+    }
+    if (choicesThread || (panel->choicesUpdated &&
+                          GetTickCount64() - panel->choicesUpdated < 2000))
+        return;
+    choiceScan = {f->id, revision, panel->choiceIds};
+    choicesThread.emplace([members = f->apps, notify = controller ? controller : panel->window] {
+        auto hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+        if (SUCCEEDED(hr)) {
+            try {
+                if (!stopping) {
+                    choiceScan.apps = resolveTaskbarChoices(choiceScan.ids, members);
+                    choiceScan.succeeded = true;
+                }
+            } catch (...) {
+            }
+            CoUninitialize();
+        }
+        choicesReady = true;
+        if (!stopping)
+            PostMessageW(notify, kChoicesDone, 0, 0);
+    });
+}
+static void collectTaskbarChoices() {
+    if (!choicesThread || !choicesReady.load())
+        return;
+    choicesThread->join();
+    choicesThread.reset();
+    choicesReady = false;
+    if (stopping)
+        return;
+    if (choiceScan.folder != panel->choicesFolder || choiceScan.revision != revision ||
+        choiceScan.ids != panel->choiceIds) {
+        requestTaskbarChoices();
+        return;
+    }
+    if (!choiceScan.succeeded)
+        return;
+    panel->choicesUpdated = GetTickCount64();
+    if (choiceScan.apps == panel->pins)
+        return;
+    panel->pins = std::move(choiceScan.apps);
+    panel->search.generation.reset();
+    if (panel->window && panel->choosing) {
+        if (panel->browsing)
+            panel->rendered = ~0u;
+        else
+            refreshPanel();
+    }
 }
 static bool under(FrameworkElement const& e, POINT pt) {
     if (!e || !ui->root || e.Visibility() == X::Visibility::Collapsed)
@@ -11990,7 +11668,7 @@ static LRESULT CALLBACK controlProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             finishExport(reinterpret_cast<ShortcutExport*>(wp));
             return 0;
         }
-        if (msg == kFilesDone || msg == kCatalogDone) {
+        if (msg == kFilesDone || msg == kCatalogDone || msg == kChoicesDone) {
             workerFinished(msg);
             return 0;
         }
@@ -13046,7 +12724,6 @@ void Wh_ModUninit() {
     if (modalDrained)
         CloseHandle(std::exchange(modalDrained, nullptr));
     UnregisterClassW(kFileSurfaceClass, moduleInstance());
-    UnregisterClassW(kFilesClass, moduleInstance());
     UnregisterClassW(kPanelClass, moduleInstance());
     UnregisterClassW(kController, moduleInstance());
     UnregisterClassW(kHost, moduleInstance());
