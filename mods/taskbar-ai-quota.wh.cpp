@@ -9,7 +9,7 @@
 // @description:pt-BR Mostra barras configuráveis das cotas de assinaturas de agentes de IA e LLMs da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de tarefas do Windows 11
 // @description:ru-RU Показывает настраиваемые полосы квот подписок на ИИ-агентов и LLM от Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач Windows 11
 // @description:zh-CN 在 Windows 11 任务栏上以可配置的条形显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 智能体/LLM 订阅配额
-// @version         2.27.3
+// @version         2.28.0
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -41,7 +41,8 @@ Supported providers and quotas:
 - **OpenCode Go:** 5-hour, weekly, and monthly usage limits
 
 Optional notifications, under the mod's own name and icon, warn when usage reaches the yellow,
-orange or red threshold you choose, and say when it is projected to reach the limit.
+orange or red threshold you choose, saying when it is projected to reach the limit, and again
+when a quota runs out.
 
 While a provider's public status page (Claude, OpenAI's Codex, GitHub Copilot, OpenCode Go)
 reports a problem, its accounts show a warning triangle, and the details flyout names the
@@ -865,9 +866,10 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Nothing has been recorded yet. The folder is created with the first recorded sample.",
      L"Es wurde noch nichts aufgezeichnet. Der Ordner wird mit dem ersten aufgezeichneten Messwert erstellt."},
     {L"", L"Nothing new is recorded.", L"Es wird nichts Neues aufgezeichnet."},
-    {L"", L"Notifies when a taskbar quota first reaches the chosen threshold. Re-arms after it drops below.",
-     L"Benachrichtigt, wenn ein Taskleisten-Kontingent den gewählten Schwellenwert erstmals erreicht. Wird wieder "
-     L"aktiv, sobald es darunter fällt."},
+    {L"", L"Notifies when a taskbar quota first reaches the chosen threshold, and again at its limit. Re-arms after "
+          L"it drops below.",
+     L"Benachrichtigt, wenn ein Taskleisten-Kontingent den gewählten Schwellenwert erstmals erreicht, und erneut an "
+     L"seinem Limit. Wird wieder aktiv, sobald es darunter fällt."},
     {L"", L"Now caret", L"Jetzt-Dreieck"},
     {L"", L"Now line", L"Jetzt-Linie"},
     {L"", L"Number size", L"Zahlengröße"},
@@ -1628,16 +1630,27 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"notification-level", L"Orange ({threshold}%)", L"Orange ({threshold}%)"},
     {L"notification-level", L"Red ({threshold}%)", L"Rot ({threshold}%)"},
     {L"notification-level", L"Yellow ({threshold}%)", L"Gelb ({threshold}%)"},
+    {L"notification-title", L"5h limit reached", L"5\u00A0Std.: Limit erreicht"},
     {L"notification-title", L"5h usage at {percent}%", L"5\u00A0Std.: {percent}% genutzt"},
     {L"notification-title", L"AI credits usage at {percent}%", L"AI Credits: {percent}% genutzt"},
+    {L"notification-title", L"AI credits used up", L"AI Credits: aufgebraucht"},
     {L"notification-title", L"chat requests usage at {percent}%", L"Chat-Anforderungen: {percent}% genutzt"},
+    {L"notification-title", L"chat requests used up", L"Chat-Anforderungen: aufgebraucht"},
     {L"notification-title", L"credits usage at {percent}%", L"Credits: {percent}% genutzt"},
+    {L"notification-title", L"credits used up", L"Credits: aufgebraucht"},
     {L"notification-title", L"monthly extra usage at {percent}%", L"Monatliche Zusatznutzung: {percent}% genutzt"},
+    {L"notification-title", L"monthly extra usage limit reached", L"Monatliche Zusatznutzung: Limit erreicht"},
+    {L"notification-title", L"monthly limit reached", L"Monat: Limit erreicht"},
     {L"notification-title", L"monthly usage at {percent}%", L"Monat: {percent}% genutzt"},
     {L"notification-title", L"premium requests usage at {percent}%", L"Premium-Anforderungen: {percent}% genutzt"},
+    {L"notification-title", L"premium requests used up", L"Premium-Anforderungen: aufgebraucht"},
+    {L"notification-title", L"weekly limit reached", L"Woche: Limit erreicht"},
     {L"notification-title", L"weekly usage at {percent}%", L"Woche: {percent}% genutzt"},
+    {L"notification-title", L"{name} current limit reached", L"{name} aktuelles Limit: erreicht"},
     {L"notification-title", L"{name} current limit usage at {percent}%", L"{name} aktuelles Limit: {percent}% genutzt"},
+    {L"notification-title", L"{name} weekly limit reached", L"{name} wöchentlich: Limit erreicht"},
     {L"notification-title", L"{name} weekly usage at {percent}%", L"{name} wöchentlich: {percent}% genutzt"},
+    {L"notification-title", L"{name} {hours}h limit reached", L"{name} {hours}\u00A0Std.: Limit erreicht"},
     {L"notification-title", L"{name} {hours}h usage at {percent}%", L"{name} {hours}\u00A0Std.: {percent}% genutzt"},
     {L"outage-action", L"{status}\nOpen the {provider} status page", L"{status}\nStatusseite von {provider} öffnen"},
     {L"outage-level", L"degraded performance", L"eingeschränkte Leistung"},
@@ -2185,9 +2198,10 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"", L"Nothing has been recorded yet. The folder is created with the first recorded sample.",
      L"Todavía no se ha registrado nada. La carpeta se crea con la primera muestra registrada."},
     {L"", L"Nothing new is recorded.", L"No se registra nada nuevo."},
-    {L"", L"Notifies when a taskbar quota first reaches the chosen threshold. Re-arms after it drops below.",
-     L"Avisa cuando una cuota de la barra de tareas alcanza por primera vez el umbral elegido. Se reactiva cuando baja "
-     L"de él."},
+    {L"", L"Notifies when a taskbar quota first reaches the chosen threshold, and again at its limit. Re-arms after "
+          L"it drops below.",
+     L"Avisa cuando una cuota de la barra de tareas alcanza por primera vez el umbral elegido, y de nuevo al llegar a "
+     L"su límite. Se reactiva cuando vuelve a bajar."},
     {L"", L"Now caret", L"Marca de hora actual"},
     {L"", L"Now line", L"Línea de hora actual"},
     {L"", L"Number size", L"Tamaño del número"},
@@ -2946,16 +2960,27 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"notification-level", L"Orange ({threshold}%)", L"Naranja ({threshold}%)"},
     {L"notification-level", L"Red ({threshold}%)", L"Rojo ({threshold}%)"},
     {L"notification-level", L"Yellow ({threshold}%)", L"Amarillo ({threshold}%)"},
+    {L"notification-title", L"5h limit reached", L"5\u00A0h: límite alcanzado"},
     {L"notification-title", L"5h usage at {percent}%", L"5\u00A0h: {percent}% usado"},
     {L"notification-title", L"AI credits usage at {percent}%", L"Créditos de IA: {percent}% usado"},
+    {L"notification-title", L"AI credits used up", L"Créditos de IA: agotados"},
     {L"notification-title", L"chat requests usage at {percent}%", L"Solicitudes de chat: {percent}% usado"},
+    {L"notification-title", L"chat requests used up", L"Solicitudes de chat: agotadas"},
     {L"notification-title", L"credits usage at {percent}%", L"Créditos: {percent}% usado"},
+    {L"notification-title", L"credits used up", L"Créditos: agotados"},
     {L"notification-title", L"monthly extra usage at {percent}%", L"Extra mensual: {percent}% usado"},
+    {L"notification-title", L"monthly extra usage limit reached", L"Extra mensual: límite alcanzado"},
+    {L"notification-title", L"monthly limit reached", L"Mensual: límite alcanzado"},
     {L"notification-title", L"monthly usage at {percent}%", L"Mensual: {percent}% usado"},
     {L"notification-title", L"premium requests usage at {percent}%", L"Solicitudes premium: {percent}% usado"},
+    {L"notification-title", L"premium requests used up", L"Solicitudes premium: agotadas"},
+    {L"notification-title", L"weekly limit reached", L"Semanal: límite alcanzado"},
     {L"notification-title", L"weekly usage at {percent}%", L"Semanal: {percent}% usado"},
+    {L"notification-title", L"{name} current limit reached", L"{name}, límite actual: alcanzado"},
     {L"notification-title", L"{name} current limit usage at {percent}%", L"{name}, límite actual: {percent}% usado"},
+    {L"notification-title", L"{name} weekly limit reached", L"{name} semanal: límite alcanzado"},
     {L"notification-title", L"{name} weekly usage at {percent}%", L"{name} semanal: {percent}% usado"},
+    {L"notification-title", L"{name} {hours}h limit reached", L"{name} {hours}\u00A0h: límite alcanzado"},
     {L"notification-title", L"{name} {hours}h usage at {percent}%", L"{name} {hours}\u00A0h: {percent}% usado"},
     {L"outage-action", L"{status}\nOpen the {provider} status page",
      L"{status}\nAbrir la página de estado de {provider}"},
@@ -3511,9 +3536,10 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"", L"Nothing has been recorded yet. The folder is created with the first recorded sample.",
      L"Rien n’a encore été enregistré. Le dossier est créé avec le premier échantillon enregistré."},
     {L"", L"Nothing new is recorded.", L"Rien de nouveau n’est enregistré."},
-    {L"", L"Notifies when a taskbar quota first reaches the chosen threshold. Re-arms after it drops below.",
-     L"Avertit quand un quota de la barre des tâches atteint pour la première fois le seuil choisi. Se réarme quand il "
-     L"repasse en dessous."},
+    {L"", L"Notifies when a taskbar quota first reaches the chosen threshold, and again at its limit. Re-arms after "
+          L"it drops below.",
+     L"Avertit quand un quota de la barre des tâches atteint pour la première fois le seuil choisi, puis de nouveau à "
+     L"sa limite. Se réarme quand il repasse en dessous."},
     {L"", L"Now caret", L"Triangle de l’heure actuelle"},
     {L"", L"Now line", L"Ligne de l’heure actuelle"},
     {L"", L"Number size", L"Taille des nombres"},
@@ -4280,17 +4306,28 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"notification-level", L"Orange ({threshold}%)", L"Orange ({threshold}%)"},
     {L"notification-level", L"Red ({threshold}%)", L"Rouge ({threshold}%)"},
     {L"notification-level", L"Yellow ({threshold}%)", L"Jaune ({threshold}%)"},
+    {L"notification-title", L"5h limit reached", L"5\u00A0h\u202F: limite atteinte"},
     {L"notification-title", L"5h usage at {percent}%", L"5\u00A0h\u202F: utilisation à {percent}%"},
     {L"notification-title", L"AI credits usage at {percent}%", L"Crédits IA\u202F: utilisation à {percent}%"},
+    {L"notification-title", L"AI credits used up", L"Crédits IA\u202F: épuisés"},
     {L"notification-title", L"chat requests usage at {percent}%", L"Requêtes de chat\u202F: utilisation à {percent}%"},
+    {L"notification-title", L"chat requests used up", L"Requêtes de chat\u202F: épuisées"},
     {L"notification-title", L"credits usage at {percent}%", L"Crédits\u202F: utilisation à {percent}%"},
+    {L"notification-title", L"credits used up", L"Crédits\u202F: épuisés"},
     {L"notification-title", L"monthly extra usage at {percent}%", L"Supplément mensuel\u202F: utilisation à {percent}%"},
+    {L"notification-title", L"monthly extra usage limit reached", L"Supplément mensuel\u202F: limite atteinte"},
+    {L"notification-title", L"monthly limit reached", L"Mensuel\u202F: limite atteinte"},
     {L"notification-title", L"monthly usage at {percent}%", L"Mensuel\u202F: utilisation à {percent}%"},
     {L"notification-title", L"premium requests usage at {percent}%", L"Requêtes premium\u202F: utilisation à {percent}%"},
+    {L"notification-title", L"premium requests used up", L"Requêtes premium\u202F: épuisées"},
+    {L"notification-title", L"weekly limit reached", L"Hebdomadaire\u202F: limite atteinte"},
     {L"notification-title", L"weekly usage at {percent}%", L"Hebdomadaire\u202F: utilisation à {percent}%"},
+    {L"notification-title", L"{name} current limit reached", L"{name}, limite actuelle\u202F: atteinte"},
     {L"notification-title", L"{name} current limit usage at {percent}%",
      L"{name}, limite actuelle\u202F: utilisation à {percent}%"},
+    {L"notification-title", L"{name} weekly limit reached", L"{name} hebdomadaire\u202F: limite atteinte"},
     {L"notification-title", L"{name} weekly usage at {percent}%", L"{name} hebdomadaire\u202F: utilisation à {percent}%"},
+    {L"notification-title", L"{name} {hours}h limit reached", L"{name} {hours}\u00A0h\u202F: limite atteinte"},
     {L"notification-title", L"{name} {hours}h usage at {percent}%", L"{name} {hours}\u00A0h\u202F: utilisation à {percent}%"},
     {L"outage-action", L"{status}\nOpen the {provider} status page", L"{status}\nOuvrir la page d’état {provider}"},
     {L"outage-level", L"degraded performance", L"performances dégradées"},
@@ -4784,8 +4821,9 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Nothing has been recorded yet. The folder is created with the first recorded sample.",
      L"まだ何も記録されていません。フォルダーは最初のサンプルが記録されたときに作成されます。"},
     {L"", L"Nothing new is recorded.", L"新しいデータは記録されません。"},
-    {L"", L"Notifies when a taskbar quota first reaches the chosen threshold. Re-arms after it drops below.",
-     L"タスク バーのクォータが選んだしきい値に初めて達したときに通知します。しきい値を下回ると再び有効になります。"},
+    {L"", L"Notifies when a taskbar quota first reaches the chosen threshold, and again at its limit. Re-arms after "
+          L"it drops below.",
+     L"タスク バーのクォータが選んだしきい値に初めて達したときと、上限に達したときに通知します。下回ると再び有効になります。"},
     {L"", L"Now caret", L"現在時刻のキャレット"},
     {L"", L"Now line", L"現在時刻の線"},
     {L"", L"Number size", L"数値のサイズ"},
@@ -5420,16 +5458,27 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"notification-level", L"Orange ({threshold}%)", L"オレンジ ({threshold}%)"},
     {L"notification-level", L"Red ({threshold}%)", L"赤 ({threshold}%)"},
     {L"notification-level", L"Yellow ({threshold}%)", L"黄色 ({threshold}%)"},
+    {L"notification-title", L"5h limit reached", L"5 時間: 上限に達しました"},
     {L"notification-title", L"5h usage at {percent}%", L"5 時間: 使用率 {percent}%"},
     {L"notification-title", L"AI credits usage at {percent}%", L"AI クレジット: 使用率 {percent}%"},
+    {L"notification-title", L"AI credits used up", L"AI クレジット: 使い切りました"},
     {L"notification-title", L"chat requests usage at {percent}%", L"チャット リクエスト: 使用率 {percent}%"},
+    {L"notification-title", L"chat requests used up", L"チャット リクエスト: 使い切りました"},
     {L"notification-title", L"credits usage at {percent}%", L"クレジット: 使用率 {percent}%"},
+    {L"notification-title", L"credits used up", L"クレジット: 使い切りました"},
     {L"notification-title", L"monthly extra usage at {percent}%", L"月間追加使用量: 使用率 {percent}%"},
+    {L"notification-title", L"monthly extra usage limit reached", L"月間追加使用量: 上限に達しました"},
+    {L"notification-title", L"monthly limit reached", L"月間: 上限に達しました"},
     {L"notification-title", L"monthly usage at {percent}%", L"月間: 使用率 {percent}%"},
     {L"notification-title", L"premium requests usage at {percent}%", L"プレミアム リクエスト: 使用率 {percent}%"},
+    {L"notification-title", L"premium requests used up", L"プレミアム リクエスト: 使い切りました"},
+    {L"notification-title", L"weekly limit reached", L"週間: 上限に達しました"},
     {L"notification-title", L"weekly usage at {percent}%", L"週間: 使用率 {percent}%"},
+    {L"notification-title", L"{name} current limit reached", L"{name} 現在の上限に達しました"},
     {L"notification-title", L"{name} current limit usage at {percent}%", L"{name} 現在の上限: 使用率 {percent}%"},
+    {L"notification-title", L"{name} weekly limit reached", L"{name} 週間: 上限に達しました"},
     {L"notification-title", L"{name} weekly usage at {percent}%", L"{name} 週間: 使用率 {percent}%"},
+    {L"notification-title", L"{name} {hours}h limit reached", L"{name} {hours} 時間: 上限に達しました"},
     {L"notification-title", L"{name} {hours}h usage at {percent}%", L"{name} {hours} 時間: 使用率 {percent}%"},
     {L"outage-action", L"{status}\nOpen the {provider} status page", L"{status}\n{provider} のステータス ページを開く"},
     {L"outage-level", L"degraded performance", L"パフォーマンス低下"},
@@ -5961,9 +6010,10 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"", L"Nothing has been recorded yet. The folder is created with the first recorded sample.",
      L"Nada foi registrado ainda. A pasta é criada com a primeira amostra registrada."},
     {L"", L"Nothing new is recorded.", L"Nada novo é registrado."},
-    {L"", L"Notifies when a taskbar quota first reaches the chosen threshold. Re-arms after it drops below.",
-     L"Avisa quando uma cota da barra de tarefas atinge pela primeira vez o limite escolhido. Volta a avisar depois "
-     L"que ela cai abaixo dele."},
+    {L"", L"Notifies when a taskbar quota first reaches the chosen threshold, and again at its limit. Re-arms after "
+          L"it drops below.",
+     L"Avisa quando uma cota da barra de tarefas atinge pela primeira vez o limite escolhido, e de novo quando ela se "
+     L"esgota. Volta a avisar depois que o uso cai novamente."},
     {L"", L"Now caret", L"Triângulo da hora atual"},
     {L"", L"Now line", L"Linha da hora atual"},
     {L"", L"Number size", L"Tamanho do número"},
@@ -6708,16 +6758,27 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"notification-level", L"Orange ({threshold}%)", L"Laranja ({threshold}%)"},
     {L"notification-level", L"Red ({threshold}%)", L"Vermelho ({threshold}%)"},
     {L"notification-level", L"Yellow ({threshold}%)", L"Amarelo ({threshold}%)"},
+    {L"notification-title", L"5h limit reached", L"5\u00A0h: limite de uso atingido"},
     {L"notification-title", L"5h usage at {percent}%", L"5\u00A0h: {percent}% usado"},
     {L"notification-title", L"AI credits usage at {percent}%", L"Créditos de IA: {percent}% usado"},
+    {L"notification-title", L"AI credits used up", L"Créditos de IA: esgotados"},
     {L"notification-title", L"chat requests usage at {percent}%", L"Solicitações de chat: {percent}% usado"},
+    {L"notification-title", L"chat requests used up", L"Solicitações de chat: esgotadas"},
     {L"notification-title", L"credits usage at {percent}%", L"Créditos: {percent}% usado"},
+    {L"notification-title", L"credits used up", L"Créditos: esgotados"},
     {L"notification-title", L"monthly extra usage at {percent}%", L"Adicional mensal: {percent}% usado"},
+    {L"notification-title", L"monthly extra usage limit reached", L"Adicional mensal: limite atingido"},
+    {L"notification-title", L"monthly limit reached", L"Mensal: limite de uso atingido"},
     {L"notification-title", L"monthly usage at {percent}%", L"Mensal: {percent}% usado"},
     {L"notification-title", L"premium requests usage at {percent}%", L"Solicitações premium: {percent}% usado"},
+    {L"notification-title", L"premium requests used up", L"Solicitações premium: esgotadas"},
+    {L"notification-title", L"weekly limit reached", L"Semanal: limite de uso atingido"},
     {L"notification-title", L"weekly usage at {percent}%", L"Semanal: {percent}% usado"},
+    {L"notification-title", L"{name} current limit reached", L"{name}, limite atual: atingido"},
     {L"notification-title", L"{name} current limit usage at {percent}%", L"{name}, limite atual: {percent}% usado"},
+    {L"notification-title", L"{name} weekly limit reached", L"{name} semanal: limite de uso atingido"},
     {L"notification-title", L"{name} weekly usage at {percent}%", L"{name} semanal: {percent}% usado"},
+    {L"notification-title", L"{name} {hours}h limit reached", L"{name} {hours}\u00A0h: limite de uso atingido"},
     {L"notification-title", L"{name} {hours}h usage at {percent}%", L"{name} {hours}\u00A0h: {percent}% usado"},
     {L"outage-action", L"{status}\nOpen the {provider} status page",
      L"{status}\nAbrir a página de status de {provider}"},
@@ -7262,9 +7323,10 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Nothing has been recorded yet. The folder is created with the first recorded sample.",
      L"Пока ничего не записано. Папка создаётся с первым записанным замером."},
     {L"", L"Nothing new is recorded.", L"Ничего нового не записывается."},
-    {L"", L"Notifies when a taskbar quota first reaches the chosen threshold. Re-arms after it drops below.",
-     L"Уведомляет, когда квота на панели задач впервые достигает выбранного порога. Срабатывает снова, когда она "
-     L"опустится ниже."},
+    {L"", L"Notifies when a taskbar quota first reaches the chosen threshold, and again at its limit. Re-arms after "
+          L"it drops below.",
+     L"Уведомляет, когда квота на панели задач впервые достигает выбранного порога, и ещё раз, когда она исчерпана. "
+     L"Повторное уведомление возможно после того, как она опустится ниже."},
     {L"", L"Now caret", L"Метка «сейчас»"},
     {L"", L"Now line", L"Линия «сейчас»"},
     {L"", L"Number size", L"Размер числа"},
@@ -7999,17 +8061,28 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"notification-level", L"Orange ({threshold}%)", L"Оранжевый ({threshold}%)"},
     {L"notification-level", L"Red ({threshold}%)", L"Красный ({threshold}%)"},
     {L"notification-level", L"Yellow ({threshold}%)", L"Жёлтый ({threshold}%)"},
+    {L"notification-title", L"5h limit reached", L"5\u00A0ч: лимит исчерпан"},
     {L"notification-title", L"5h usage at {percent}%", L"5\u00A0ч: использовано {percent}%"},
     {L"notification-title", L"AI credits usage at {percent}%", L"ИИ-кредиты: использовано {percent}%"},
+    {L"notification-title", L"AI credits used up", L"ИИ-кредиты: исчерпаны"},
     {L"notification-title", L"chat requests usage at {percent}%", L"Запросы в чате: использовано {percent}%"},
+    {L"notification-title", L"chat requests used up", L"Запросы в чате: исчерпаны"},
     {L"notification-title", L"credits usage at {percent}%", L"Кредиты: использовано {percent}%"},
+    {L"notification-title", L"credits used up", L"Кредиты: исчерпаны"},
     {L"notification-title", L"monthly extra usage at {percent}%", L"Доп. за месяц: использовано {percent}%"},
+    {L"notification-title", L"monthly extra usage limit reached", L"Доп. за месяц: лимит исчерпан"},
+    {L"notification-title", L"monthly limit reached", L"Месяц: лимит исчерпан"},
     {L"notification-title", L"monthly usage at {percent}%", L"Месяц: использовано {percent}%"},
     {L"notification-title", L"premium requests usage at {percent}%", L"Премиум-запросы: использовано {percent}%"},
+    {L"notification-title", L"premium requests used up", L"Премиум-запросы: исчерпаны"},
+    {L"notification-title", L"weekly limit reached", L"Неделя: лимит исчерпан"},
     {L"notification-title", L"weekly usage at {percent}%", L"Неделя: использовано {percent}%"},
+    {L"notification-title", L"{name} current limit reached", L"{name}, текущий лимит: исчерпан"},
     {L"notification-title", L"{name} current limit usage at {percent}%",
      L"{name}, текущий лимит: использовано {percent}%"},
+    {L"notification-title", L"{name} weekly limit reached", L"{name}, неделя: лимит исчерпан"},
     {L"notification-title", L"{name} weekly usage at {percent}%", L"{name}, неделя: использовано {percent}%"},
+    {L"notification-title", L"{name} {hours}h limit reached", L"{name}, {hours}\u00A0ч: лимит исчерпан"},
     {L"notification-title", L"{name} {hours}h usage at {percent}%", L"{name}, {hours}\u00A0ч: использовано {percent}%"},
     {L"outage-action", L"{status}\nOpen the {provider} status page",
      L"{status}\nОткрыть страницу состояния {provider}"},
@@ -8494,8 +8567,9 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Nothing has been recorded yet. The folder is created with the first recorded sample.",
      L"尚未记录任何内容。记录第一个样本时会创建该文件夹。"},
     {L"", L"Nothing new is recorded.", L"不会记录新数据。"},
-    {L"", L"Notifies when a taskbar quota first reaches the chosen threshold. Re-arms after it drops below.",
-     L"任务栏配额首次达到所选阈值时通知。降到阈值以下后重新生效。"},
+    {L"", L"Notifies when a taskbar quota first reaches the chosen threshold, and again at its limit. Re-arms after "
+          L"it drops below.",
+     L"任务栏配额首次达到所选阈值时通知，达到上限时再次通知。回落后重新生效。"},
     {L"", L"Now caret", L"当前时间三角标"},
     {L"", L"Now line", L"当前时间线"},
     {L"", L"Number size", L"数字大小"},
@@ -9111,16 +9185,27 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"notification-level", L"Orange ({threshold}%)", L"橙色（{threshold}%）"},
     {L"notification-level", L"Red ({threshold}%)", L"红色（{threshold}%）"},
     {L"notification-level", L"Yellow ({threshold}%)", L"黄色（{threshold}%）"},
+    {L"notification-title", L"5h limit reached", L"5 小时：已达上限"},
     {L"notification-title", L"5h usage at {percent}%", L"5 小时：已用 {percent}%"},
     {L"notification-title", L"AI credits usage at {percent}%", L"AI 积分：已用 {percent}%"},
+    {L"notification-title", L"AI credits used up", L"AI 积分：已用完"},
     {L"notification-title", L"chat requests usage at {percent}%", L"聊天请求：已用 {percent}%"},
+    {L"notification-title", L"chat requests used up", L"聊天请求：已用完"},
     {L"notification-title", L"credits usage at {percent}%", L"积分：已用 {percent}%"},
+    {L"notification-title", L"credits used up", L"积分：已用完"},
     {L"notification-title", L"monthly extra usage at {percent}%", L"每月额外用量：已用 {percent}%"},
+    {L"notification-title", L"monthly extra usage limit reached", L"每月额外用量：已达上限"},
+    {L"notification-title", L"monthly limit reached", L"每月：已达上限"},
     {L"notification-title", L"monthly usage at {percent}%", L"每月：已用 {percent}%"},
     {L"notification-title", L"premium requests usage at {percent}%", L"高级请求：已用 {percent}%"},
+    {L"notification-title", L"premium requests used up", L"高级请求：已用完"},
+    {L"notification-title", L"weekly limit reached", L"每周：已达上限"},
     {L"notification-title", L"weekly usage at {percent}%", L"每周：已用 {percent}%"},
+    {L"notification-title", L"{name} current limit reached", L"{name} 当前限额：已达上限"},
     {L"notification-title", L"{name} current limit usage at {percent}%", L"{name} 当前限额：已用 {percent}%"},
+    {L"notification-title", L"{name} weekly limit reached", L"{name} 每周：已达上限"},
     {L"notification-title", L"{name} weekly usage at {percent}%", L"{name} 每周：已用 {percent}%"},
+    {L"notification-title", L"{name} {hours}h limit reached", L"{name} {hours} 小时：已达上限"},
     {L"notification-title", L"{name} {hours}h usage at {percent}%", L"{name} {hours} 小时：已用 {percent}%"},
     {L"outage-action", L"{status}\nOpen the {provider} status page", L"{status}\n打开 {provider} 状态页面"},
     {L"outage-level", L"degraded performance", L"性能下降"},
@@ -17720,8 +17805,9 @@ static ULONGLONG PollProviderStatuses(ProviderStatusPoll& poll) {
 }
 
 // src/fetch/notifications.h
-// Fetch-thread threshold notifications: a toast under the mod's own name and icon, or, when the
-// toast fails, the balloon of a hidden tray icon, which Windows attributes to Explorer.
+// Fetch-thread threshold notifications, at the chosen threshold and at a quota's limit: a toast
+// under the mod's own name and icon, or, when the toast fails, the balloon of a hidden tray icon,
+// which Windows attributes to Explorer.
 
 // Fetch-thread-owned: hidden message-only window that owns the mod's tray icon.
 static HWND g_notifyWnd = nullptr;
@@ -17766,14 +17852,37 @@ static bool RemoveToastAppId() {
     return false;
 }
 
+// Advances a taskbar quota's notification arm state by a reading and returns what the reading
+// notifies: 0 nothing, 1 the chosen level's `threshold` reached, kQuotaLimitNotification its limit
+// reached. `armed` holds whether the quota was at or past the threshold (by its percentage), then
+// whether at its limit: 100% used, or reported so by its provider (an OpenCode Go window's
+// status; a GitHub Copilot pooled budget used up, which has no percentage). Each is -1 while
+// unknown, which primes without notifying, and keeps its value through a reading that can't tell.
+// A reading that passes both notifies the limit alone, and none notifies the threshold while at
+// the limit.
+static constexpr int kQuotaLimitNotification = 2;
+static int AdvanceQuotaNotification(std::pair<int, int>& armed, const AccountData& data, int slot, int threshold) {
+    const std::array<const WindowUsage*, kQuotaBarCount> usage = {&data.win5h, &data.winWeek, &data.fableWeek,
+                                                                  &data.extraUsage};
+    const double pct = usage[size_t(slot)]->pct;
+    const int reached = pct < 0 ? -1 : pct >= threshold;
+    const int atLimit = slot == kExtraUsageBar && data.copilotUnlimited ? data.copilotExhausted :
+                        pct < 0 ? -1 : pct >= 100 || data.opencodeLimited[size_t(slot)];
+    const int notification = armed.second == 0 && atLimit == 1 ? kQuotaLimitNotification :
+                                                                 armed.first == 0 && reached == 1 && atLimit != 1;
+    if (reached >= 0) armed.first = reached;
+    if (atLimit >= 0) armed.second = atLimit;
+    return notification;
+}
+
 // A threshold notification's title and body in `locale`: the quota's "... usage at {percent}%"
-// (the percentage rounded as %.0f), then the provider's name with `resets` (the reset's
-// FormatReset; empty: none) after it. A GitHub Copilot quota goes by its allowance's unit,
-// Antigravity's by their pools.
+// (the percentage rounded as %.0f), or with `limit` that its limit is reached or it is used up,
+// then the provider's name with `resets` (the reset's FormatReset; empty: none) after it. A
+// GitHub Copilot quota goes by its allowance's unit, Antigravity's by their pools.
 static std::pair<std::wstring, std::wstring> ThresholdNotificationText(const I18nLocale& locale,
                                                                         const std::wstring& provider,
                                                                         const AccountData& data, int slot,
-                                                                        const std::wstring& resets) {
+                                                                        const std::wstring& resets, bool limit) {
     const std::array<const WindowUsage*, kQuotaBarCount> usage = {&data.win5h, &data.winWeek, &data.fableWeek,
                                                                   &data.extraUsage};
     // Room for any double's digits: reported percentages have no upper bound.
@@ -17782,7 +17891,9 @@ static std::pair<std::wstring, std::wstring> ThresholdNotificationText(const I18
     const std::wstring_view percent = number;
     // Its pool's name (Antigravity's Gemini and Argon, Anthropic's Fable): brands.
     auto weekly = [&](PCWSTR name) {
-        return I18nText(locale, TrCtx(L"notification-title", L"{name} weekly usage at {percent}%"),
+        return I18nText(locale,
+                        limit ? TrCtx(L"notification-title", L"{name} weekly limit reached") :
+                                TrCtx(L"notification-title", L"{name} weekly usage at {percent}%"),
                         {{L"name", name}, {L"percent", percent}});
     };
     std::wstring title;
@@ -17790,22 +17901,32 @@ static std::pair<std::wstring, std::wstring> ThresholdNotificationText(const I18
         PCWSTR pool = L"Gemini";  // i18n-en
         ULONGLONG durationMs = data.win5h.windowDurationMs;
         int hours = durationMs == 3ULL * 60 * 60 * 1000 ? 3 : durationMs == 60ULL * 60 * 1000 ? 1 : 5;
-        title = durationMs ? I18nText(locale, TrCtx(L"notification-title", L"{name} {hours}h usage at {percent}%"),
-                                      {{L"name", pool}, {L"hours", hours}, {L"percent", percent}}) :
-                             I18nText(locale, TrCtx(L"notification-title", L"{name} current limit usage at {percent}%"),
-                                      {{L"name", pool}, {L"percent", percent}});
+        I18nKey key = !durationMs ? limit ? TrCtx(L"notification-title", L"{name} current limit reached") :
+                                            TrCtx(L"notification-title", L"{name} current limit usage at {percent}%") :
+                      limit       ? TrCtx(L"notification-title", L"{name} {hours}h limit reached") :
+                                    TrCtx(L"notification-title", L"{name} {hours}h usage at {percent}%");
+        title = I18nText(locale, key, {{L"name", pool}, {L"hours", hours}, {L"percent", percent}});
     } else if (provider == L"antigravity" && (slot == kWeeklyBar || slot == kFableWeeklyBar)) {
         title = weekly(slot == kWeeklyBar ? L"Gemini" : L"Argon");  // i18n-en
     } else if (provider == L"copilot") {
-        title = I18nText(locale,
-                         data.copilotUnit == CopilotUnit::PremiumRequests ?
-                             TrCtx(L"notification-title", L"premium requests usage at {percent}%") :
-                         data.copilotUnit == CopilotUnit::ChatRequests ?
-                             TrCtx(L"notification-title", L"chat requests usage at {percent}%") :
-                             TrCtx(L"notification-title", L"AI credits usage at {percent}%"),
-                         {{L"percent", percent}});
+        I18nKey key = data.copilotUnit == CopilotUnit::PremiumRequests ?
+                          limit ? TrCtx(L"notification-title", L"premium requests used up") :
+                                  TrCtx(L"notification-title", L"premium requests usage at {percent}%") :
+                      data.copilotUnit == CopilotUnit::ChatRequests ?
+                          limit ? TrCtx(L"notification-title", L"chat requests used up") :
+                                  TrCtx(L"notification-title", L"chat requests usage at {percent}%") :
+                          limit ? TrCtx(L"notification-title", L"AI credits used up") :
+                                  TrCtx(L"notification-title", L"AI credits usage at {percent}%");
+        title = I18nText(locale, key, {{L"percent", percent}});
     } else if (slot == kFableWeeklyBar) {
         title = weekly(L"Fable");  // i18n-en
+    } else if (limit) {
+        title = I18nText(locale,
+                         slot == kFiveHourBar    ? TrCtx(L"notification-title", L"5h limit reached") :
+                         slot == kWeeklyBar      ? TrCtx(L"notification-title", L"weekly limit reached") :
+                         provider == L"openai"   ? TrCtx(L"notification-title", L"credits used up") :
+                         provider == L"opencode" ? TrCtx(L"notification-title", L"monthly limit reached") :
+                                                   TrCtx(L"notification-title", L"monthly extra usage limit reached"));
     } else {
         I18nKey key = slot == kFiveHourBar    ? TrCtx(L"notification-title", L"5h usage at {percent}%") :
                       slot == kWeeklyBar      ? TrCtx(L"notification-title", L"weekly usage at {percent}%") :
@@ -18327,9 +18448,8 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
     // Each account's rate limits in a row that named no wait (RateLimitWaitSeconds).
     std::vector<int> rateLimitRefusals;
     std::vector<AccountDetailsCache> accountDetails;
-    // Per-account notification arm state at the chosen threshold, indexed by QuotaBarIndex:
-    // -1 unknown (primes without firing), 0 below/armed, 1 above/already notified.
-    std::vector<std::array<int, kQuotaBarCount>> armState;
+    // Per-account notification arm state, indexed by QuotaBarIndex (AdvanceQuotaNotification's).
+    std::vector<std::array<std::pair<int, int>, kQuotaBarCount>> armState;
     // The chosen level's threshold; Off has none to reach, its value only primes.
     auto notificationThresholdOf = [](const Settings& s) {
         return s.notificationLevel == NotificationLevel::Yellow ? s.yellowThreshold :
@@ -18511,16 +18631,12 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         }
 
         if (settingsChanged || armState.size() != accounts.size()) {
-            armState.assign(accounts.size(),
-                            std::array<int, kQuotaBarCount>{-1, -1, -1, -1});
+            // Primed by the published readings, notifying nothing.
+            armState.resize(accounts.size());
             for (size_t i = 0; i < accounts.size(); i++) {
-                const std::array<const WindowUsage*, kQuotaBarCount> usage = {
-                    &results[i].win5h, &results[i].winWeek, &results[i].fableWeek,
-                    &results[i].extraUsage};
+                armState[i].fill({-1, -1});
                 for (int w = 0; w < kQuotaBarCount; w++) {
-                    if (usage[w]->pct >= 0) {
-                        armState[i][w] = usage[w]->pct >= notificationThreshold ? 1 : 0;
-                    }
+                    AdvanceQuotaNotification(armState[i][w], results[i], w, notificationThreshold);
                 }
             }
         }
@@ -18603,7 +18719,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             // Another sign-in than its last poll's: its notifications and rate limit count start
             // over, as a new account's.
             if (pollSignInGeneration[i] != lastPollGeneration) {
-                armState[i].fill(-1);
+                armState[i].fill({-1, -1});
                 rateLimitRefusals[i] = 0;
             }
             // The journal rejects samples without a known provider code.
@@ -18830,9 +18946,9 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             });
         }
         if (published) {
-            // Notify once per upward crossing of the chosen threshold; re-arm when usage
-            // drops back below. A generation-raced result uses current settings and current
-            // pre-publication data so settings edits alone cannot cause a notification.
+            // Notify once per upward crossing of the chosen threshold, and of the quota's limit;
+            // re-arm when usage drops back below. A generation-raced result uses current settings
+            // and current pre-publication data so settings edits alone cannot cause a notification.
             const auto& publishedAccounts = generationRaced ? currentAccounts : accounts;
             const auto& publishedResults = generationRaced ? remappedResults : results;
             const auto& publishedFetchedOk = generationRaced ? remappedFetchedOk : fetchedOk;
@@ -18841,31 +18957,16 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 const std::array<const WindowUsage*, kQuotaBarCount> usage = {
                     &publishedResults[i].win5h, &publishedResults[i].winWeek,
                     &publishedResults[i].fableWeek, &publishedResults[i].extraUsage};
-                const std::array<const WindowUsage*, kQuotaBarCount> previousUsage = {
-                    generationRaced ? &previousCurrentResults[i].win5h : nullptr,
-                    generationRaced ? &previousCurrentResults[i].winWeek : nullptr,
-                    generationRaced ? &previousCurrentResults[i].fableWeek : nullptr,
-                    generationRaced ? &previousCurrentResults[i].extraUsage : nullptr};
                 for (int w = 0; w < kQuotaBarCount; w++) {
                     if (!publishedAccounts[i].showBars[w]) continue;
-                    const WindowUsage& wu = *usage[w];
-                    if (wu.pct < 0) continue;
-                    bool shouldNotify = false;
+                    // A generation-raced result's state before it: the published reading's.
+                    std::pair<int, int> raced{-1, -1};
                     if (generationRaced) {
-                        const WindowUsage& previous = *previousUsage[w];
-                        shouldNotify = previous.pct >= 0 &&
-                                       previous.pct < publishedThreshold &&
-                                       wu.pct >= publishedThreshold &&
-                                       notificationsEnabled;
-                    } else {
-                        int& st = armState[i][w];
-                        if (wu.pct >= publishedThreshold) {
-                            shouldNotify = st == 0 && notificationsEnabled;
-                            st = 1;
-                        } else {
-                            st = 0;
-                        }
+                        AdvanceQuotaNotification(raced, previousCurrentResults[i], w, publishedThreshold);
                     }
+                    const int notification = AdvanceQuotaNotification(generationRaced ? raced : armState[i][w],
+                                                                      publishedResults[i], w, publishedThreshold);
+                    bool shouldNotify = notification && notificationsEnabled;
                     // Turned off since publication (history and earlier notifications take time):
                     // nothing more shows.
                     if (shouldNotify) {
@@ -18877,13 +18978,15 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                         // (nothing above the fetch loop catches).
                         try {
                             const I18nLocale locale = CurrentLocale();
+                            const WindowUsage& wu = *usage[w];
+                            const bool limit = notification == kQuotaLimitNotification;
                             auto [title, body] = ThresholdNotificationText(
                                 locale, publishedAccounts[i].provider, publishedResults[i], w,
                                 (w != kExtraUsageBar && w != kFableWeeklyBar) || wu.resetUnixMs ?
-                                    FormatReset(locale, wu.resetUnixMs) : L"");
-                            // The flyout's projection to the limit; none for an OpenCode Go window
-                            // at its limit, as there.
-                            std::wstring projection = publishedResults[i].opencodeLimited[w] ? L"" :
+                                    FormatReset(locale, wu.resetUnixMs) : L"",
+                                limit);
+                            // The flyout's projection to the limit; none once there.
+                            std::wstring projection = limit ? L"" :
                                 NotificationProjectionText(locale, publishedAccounts[i].historyId, w, wu);
                             FireThresholdNotification(title, body, projection,
                                                       ProviderDashboardUrl(publishedAccounts[i].provider),
@@ -38184,8 +38287,8 @@ static float SettingsUiBuildBehavior(UiGraphics& g, const SettingsView& view,
     {
         UiCardSpec spec;
         spec.title = I18nText(locale, Tr(L"Threshold notifications"));
-        spec.description = {{I18nText(locale, Tr(L"Notifies when a taskbar quota first reaches the chosen threshold. "
-                                                 L"Re-arms after it drops below."))}};
+        spec.description = {{I18nText(locale, Tr(L"Notifies when a taskbar quota first reaches the chosen threshold, "
+                                                 L"and again at its limit. Re-arms after it drops below."))}};
         y = SettingsAddDropdownCard(
             g, view, items, id, x, y, width, spec, SettingsField::Notifications, 200,
             {{I18nText(locale, TrCtx(L"notification-level", L"Off")), int(NotificationLevel::Off)},
