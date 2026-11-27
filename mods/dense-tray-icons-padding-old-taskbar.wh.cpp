@@ -2,7 +2,7 @@
 // @id              dense-tray-icons-padding-old-taskbar
 // @name            Adjustable tray icons padding for Win10 taskbar
 // @description     Makes padding of tray and tray popup icons adjustable in legacy taskbar
-// @version         2.0
+// @version         2.1
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
@@ -70,7 +70,11 @@ icons). The toolbar refuses `TB_SETBUTTONSIZE` outright, so the mod replaces
 the icon images with scaled copies for the icon-size setting, and answers the
 shell's own theme queries (`TrayNotifyFlyout`, part 3) with the configured
 cell padding instead of the theme's 12 pixels. The popup re-measures itself
-every time it opens.
+every time it opens. The tray and the popup draw from one image list, and the
+shell edits that list in place when a tray icon appears, disappears or is
+replaced, without telling the popup. The scaled copies are therefore rebuilt
+after every such edit; a copy kept from before the edit would draw another
+application's picture under the button's tooltip.
 
 ## Notes
 
@@ -492,6 +496,7 @@ int WINAPI GetSystemMetricsForDpi_Hook(int nIndex, UINT dpi) {
 // Hidden icons popup
 // ---------------------------------------------------------------------------
 
+HWND g_overflowWindow = nullptr;
 HWND g_overflowToolbar = nullptr;
 HIMAGELIST g_overflowOriginalImageList = nullptr;
 HIMAGELIST g_overflowScaledImageList = nullptr;
@@ -507,6 +512,55 @@ constexpr WPARAM kOverflowRefreshRestore = 2;  // put the shell's list back
 constexpr int kOverflowIconSizeOff = -1;
 constexpr int kOverflowIconSizeMin = 8;
 constexpr int kOverflowIconSizeMax = 96;
+
+// The tray and the popup draw from one image list, and the shell edits that
+// list in place when a tray icon appears or disappears; it sends the popup no
+// message about it. Every such edit therefore schedules a rebuild of the scaled
+// copy. The rebuild is posted, so it runs after the shell finished its own
+// update.
+using ImageListReplaceIcon_t = int(WINAPI*)(HIMAGELIST, int, HICON);
+ImageListReplaceIcon_t ImageList_ReplaceIcon_Original = nullptr;
+using ImageListRemove_t = BOOL(WINAPI*)(HIMAGELIST, int);
+ImageListRemove_t ImageList_Remove_Original = nullptr;
+using ImageListDestroy_t = BOOL(WINAPI*)(HIMAGELIST);
+ImageListDestroy_t ImageList_Destroy_Original = nullptr;
+
+void ScheduleOverflowRescale(HIMAGELIST himl) {
+    if (!himl || himl != g_overflowOriginalImageList || g_unloading ||
+        g_settings.overflowIconSize == kOverflowIconSizeOff) {
+        return;
+    }
+
+    HWND hToolbar = g_overflowToolbar;
+    if (hToolbar && IsWindow(hToolbar)) {
+        PostMessageW(hToolbar, g_overflowRefreshMsg, kOverflowRefreshReapply, 0);
+    }
+}
+
+int WINAPI ImageList_ReplaceIcon_Hook(HIMAGELIST himl, int i, HICON hicon) {
+    int result = ImageList_ReplaceIcon_Original(himl, i, hicon);
+    if (result >= 0) {
+        ScheduleOverflowRescale(himl);
+    }
+    return result;
+}
+
+BOOL WINAPI ImageList_Remove_Hook(HIMAGELIST himl, int i) {
+    BOOL result = ImageList_Remove_Original(himl, i);
+    if (result) {
+        ScheduleOverflowRescale(himl);
+    }
+    return result;
+}
+
+BOOL WINAPI ImageList_Destroy_Hook(HIMAGELIST himl) {
+    BOOL result = ImageList_Destroy_Original(himl);
+    if (result && himl == g_overflowOriginalImageList) {
+        g_overflowOriginalImageList = nullptr;
+        g_overflowAppliedSize = 0;
+    }
+    return result;
+}
 
 // The popup's cell is the icon plus the visual style's content margins (class
 // "TrayNotifyFlyout", part 3, state 0, TMT_CONTENTMARGINS = 3602; measured:
@@ -656,6 +710,58 @@ HWND FindOverflowNotifyForToolbar(HWND hToolbar) {
     return nullptr;
 }
 
+// The shell edits the shared tray image list in place when an icon appears or
+// disappears and tells the popup nothing about it, so the scaled copy made
+// earlier keeps the old pictures and the buttons draw the wrong icon under the
+// right tooltip. The image-list hooks rebuild the copy after every such edit;
+// the popup is subclassed as well, so an open always starts from a fresh copy.
+LRESULT CALLBACK OverflowWindowSubclassProc(HWND hWnd,
+                                            UINT uMsg,
+                                            WPARAM wParam,
+                                            LPARAM lParam,
+                                            DWORD_PTR dwRefData) {
+    if (uMsg == WM_SHOWWINDOW && wParam && !g_unloading &&
+        g_settings.overflowIconSize != kOverflowIconSizeOff) {
+        HWND hToolbar = g_overflowToolbar;
+        if (hToolbar && IsWindow(hToolbar)) {
+            HIMAGELIST current = reinterpret_cast<HIMAGELIST>(
+                SendMessageW(hToolbar, TB_GETIMAGELIST, 0, 0));
+            Wh_Log(L"Popup opening: toolbar list %p, %d image(s)",
+                   reinterpret_cast<void*>(current),
+                   current ? ImageList_GetImageCount(current) : 0);
+            SendMessageW(hToolbar, g_overflowRefreshMsg,
+                         kOverflowRefreshReapply, 0);
+        }
+    } else if (uMsg == WM_NCDESTROY && hWnd == g_overflowWindow) {
+        g_overflowWindow = nullptr;
+    }
+
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
+void SubclassOverflowWindow(HWND hOverflow) {
+    if (!hOverflow || !IsWindow(hOverflow) || hOverflow == g_overflowWindow) {
+        return;
+    }
+
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hOverflow, &pid);
+    if (pid != GetCurrentProcessId()) {
+        return;
+    }
+
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
+            hOverflow, OverflowWindowSubclassProc, 0)) {
+        Wh_Log(L"Failed to subclass overflow window 0x%08X",
+               static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(hOverflow)));
+        return;
+    }
+
+    g_overflowWindow = hOverflow;
+    Wh_Log(L"Overflow window 0x%08X",
+           static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(hOverflow)));
+}
+
 // Builds a copy of an image list with all icons scaled to the given size. The
 // image list belongs to the toolbar, which sizes its cells from the images.
 HIMAGELIST ScaleImageList(HIMAGELIST source, int iconSize) {
@@ -676,20 +782,30 @@ HIMAGELIST ScaleImageList(HIMAGELIST source, int iconSize) {
 
     for (int i = 0; i < count; i++) {
         HICON icon = ImageList_GetIcon(source, i, ILD_TRANSPARENT);
-        if (!icon) {
-            continue;
+        HICON small = icon ? static_cast<HICON>(CopyImage(
+                                 icon, IMAGE_ICON, iconSize, iconSize,
+                                 LR_DEFAULTCOLOR))
+                           : nullptr;
+        if (icon) {
+            DestroyIcon(icon);
         }
 
-        HICON small =
-            static_cast<HICON>(CopyImage(icon, IMAGE_ICON, iconSize, iconSize,
-                                         LR_DEFAULTCOLOR));
-        DestroyIcon(icon);
+        // Picture numbers must stay aligned with the shell's list: a skipped
+        // picture would shift every later number and draw the wrong icon under
+        // the tooltip. A copy that cannot be complete is not used at all.
         if (!small) {
-            continue;
+            Wh_Log(L"Failed to copy icon %d, keeping the shell's image list", i);
+            ImageList_Destroy(scaled);
+            return nullptr;
         }
 
         if (ImageList_ReplaceIcon(scaled, -1, small) < 0) {
-            Wh_Log(L"Failed to copy icon %d to the scaled image list", i);
+            Wh_Log(L"Failed to copy icon %d to the scaled image list, keeping "
+                   L"the shell's image list",
+                   i);
+            DestroyIcon(small);
+            ImageList_Destroy(scaled);
+            return nullptr;
         }
 
         DestroyIcon(small);
@@ -766,7 +882,7 @@ void ApplyOverflowIconSize(HWND hToolbar, bool force = false) {
         return;
     }
 
-    DestroyScaledImageList();
+    HIMAGELIST previous = g_overflowScaledImageList;
     g_overflowScaledImageList = scaled;
     g_overflowAppliedSize = iconSize;
 
@@ -774,6 +890,11 @@ void ApplyOverflowIconSize(HWND hToolbar, bool force = false) {
     SendMessageW(hToolbar, TB_SETIMAGELIST, 0,
                  reinterpret_cast<LPARAM>(scaled));
     g_inImageListSwap = false;
+
+    // Destroyed only after the toolbar stopped using it.
+    if (previous) {
+        ImageList_Destroy(previous);
+    }
 
     Wh_Log(L"Overflow icons scaled to %d pixels (image count: %d)", iconSize,
            ImageList_GetImageCount(scaled));
@@ -972,6 +1093,7 @@ BOOL CALLBACK FindOverflowToolbarProc(HWND hWnd, LPARAM lParam) {
 void DiscoverOverflowToolbar() {
     HWND hOverflow = FindWindowW(L"NotifyIconOverflowWindow", nullptr);
     if (hOverflow) {
+        SubclassOverflowWindow(hOverflow);
         HWND hOverflowToolbar = nullptr;
         EnumChildWindows(hOverflow, FindOverflowToolbarProc,
                          reinterpret_cast<LPARAM>(&hOverflowToolbar));
@@ -1088,15 +1210,18 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
     }
 
     WCHAR className[64];
-    if (!GetClassNameW(hWnd, className, ARRAYSIZE(className)) ||
-        _wcsicmp(className, L"ToolbarWindow32") != 0) {
+    if (!GetClassNameW(hWnd, className, ARRAYSIZE(className))) {
         return hWnd;
     }
 
-    if (FindTrayNotifyForToolbar(hWnd)) {
-        SubclassTrayToolbar(hWnd);
-    } else if (FindOverflowNotifyForToolbar(hWnd)) {
-        SubclassOverflowToolbar(hWnd);
+    if (_wcsicmp(className, L"NotifyIconOverflowWindow") == 0) {
+        SubclassOverflowWindow(hWnd);
+    } else if (_wcsicmp(className, L"ToolbarWindow32") == 0) {
+        if (FindTrayNotifyForToolbar(hWnd)) {
+            SubclassTrayToolbar(hWnd);
+        } else if (FindOverflowNotifyForToolbar(hWnd)) {
+            SubclassOverflowToolbar(hWnd);
+        }
     }
 
     return hWnd;
@@ -1165,6 +1290,15 @@ BOOL Wh_ModInit() {
                                    &GetSystemMetrics_Original);
     WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
                                    &CreateWindowExW_Original);
+
+    // Tray icon changes edit the shared image list in place.
+    WindhawkUtils::SetFunctionHook(ImageList_ReplaceIcon,
+                                   ImageList_ReplaceIcon_Hook,
+                                   &ImageList_ReplaceIcon_Original);
+    WindhawkUtils::SetFunctionHook(ImageList_Remove, ImageList_Remove_Hook,
+                                   &ImageList_Remove_Original);
+    WindhawkUtils::SetFunctionHook(ImageList_Destroy, ImageList_Destroy_Hook,
+                                   &ImageList_Destroy_Original);
 
     HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
     if (hUser32) {
@@ -1283,6 +1417,13 @@ void Wh_ModUninit() {
     Wh_Log(L">");
 
     RemoveTraySubclasses();
+
+    HWND hOverflowWindow = g_overflowWindow;
+    if (hOverflowWindow && IsWindow(hOverflowWindow)) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            hOverflowWindow, OverflowWindowSubclassProc);
+    }
+    g_overflowWindow = nullptr;
 
     HWND hOverflowToolbar = g_overflowToolbar;
     if (hOverflowToolbar && IsWindow(hOverflowToolbar)) {
