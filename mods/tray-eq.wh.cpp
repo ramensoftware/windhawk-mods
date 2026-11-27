@@ -18,6 +18,7 @@
 // @homepage        https://github.com/bacoinz/Windhawk-Tray-EQ
 // @license         MIT
 // @include         *
+// @architecture    x86-64
 // @exclude         audiodg.exe
 // @exclude         windhawk.exe
 // @compilerOptions -lole32 -lcomdlg32 -lshell32 -luuid -ldwmapi -ld2d1 -ldwrite -ladvapi32 -luser32 -lgdi32
@@ -38,7 +39,7 @@ Equalizer applied inside every process that plays audio through WASAPI shared mo
   `Filter 1: ON PK Fc 100 Hz Gain -3 dB Q 1.41`), toggled independently from the manual EQ.
 
 Notes: apps must (re)open their audio stream after the mod loads. Exclusive-mode streams are never touched.
-`@include *` is needed because any app can play audio; to limit injection, narrow the process list in the mod's *Advanced* tab.
+Only 64-bit apps are processed. `@include *` is needed because any app can play audio; to limit injection, narrow the process list in the mod's *Advanced* tab.
 The shared settings block is read-only for other users; only the current user's processes can change the EQ.
 */
 // ==/WindhawkModReadme==
@@ -137,6 +138,7 @@ The shared settings block is read-only for other users; only the current user's 
 #include <mmdeviceapi.h>
 #include <sddl.h>
 #include <shellapi.h>
+#include <windhawk_utils.h>
 #include <windows.h>
 #include <windowsx.h>
 #include <algorithm>
@@ -518,91 +520,105 @@ static HRESULT STDMETHODCALLTYPE RB_h(IAudioRenderClient* t,
     return RB_o(t, n, flags);
 }
 
-// Drop per-object state when the COM object dies.
-typedef ULONG(STDMETHODCALLTYPE* Rel_t)(void*);
-static Rel_t ACRel_o, RCRel_o;
-
-static ULONG STDMETHODCALLTYPE ACRel_h(void* t) {
-    ULONG r = ACRel_o(t);
-    if (r == 0) {
-        AcquireSRWLockExclusive(&g_lk);
-        g_clients.erase(t);
-        ReleaseSRWLockExclusive(&g_lk);
-    }
-    return r;
+// Drop per-object state when the COM object dies. The destructors receive the
+// start of the object while the app holds interface pointers inside it, so
+// forget every key that falls inside the object.
+static void ForgetObject(void* obj) {
+    char* lo = (char*)obj;
+    AcquireSRWLockExclusive(&g_lk);
+    for (auto it = g_clients.begin(); it != g_clients.end();)
+        it = (char*)it->first >= lo && (char*)it->first < lo + 0x40
+                 ? g_clients.erase(it)
+                 : std::next(it);
+    for (auto it = g_streams.begin(); it != g_streams.end();)
+        it = (char*)it->first >= lo && (char*)it->first < lo + 0x40
+                 ? g_streams.erase(it)
+                 : std::next(it);
+    ReleaseSRWLockExclusive(&g_lk);
 }
 
-static ULONG STDMETHODCALLTYPE RCRel_h(void* t) {
-    ULONG r = RCRel_o(t);
-    if (r == 0) {
-        AcquireSRWLockExclusive(&g_lk);
-        g_streams.erase(t);
-        ReleaseSRWLockExclusive(&g_lk);
-    }
-    return r;
+typedef void(STDMETHODCALLTYPE* Dtor_t)(void*);
+static Dtor_t ACDtor_o, RCDtor_o;
+
+static void STDMETHODCALLTYPE ACDtor_h(void* t) {
+    ForgetObject(t);
+    ACDtor_o(t);
 }
 
-// Build a throw-away shared-mode stream to read the vtable addresses, then
-// install the hooks. Runs only in processes that load AudioSes.dll.
-static HANDLE g_probeThread;
-static volatile LONG g_probeStarted;
-
-static DWORD WINAPI ProbeThread(LPVOID) {
-    void* vt[6] = {};
-    HRESULT hc = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    IMMDeviceEnumerator* en = nullptr;
-    IMMDevice* dev = nullptr;
-    IAudioClient* ac = nullptr;
-    IAudioRenderClient* rc = nullptr;
-    WAVEFORMATEX* wf = nullptr;
-    if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
-                                   CLSCTX_ALL, IID_PPV_ARGS(&en))) &&
-        SUCCEEDED(en->GetDefaultAudioEndpoint(eRender, eConsole, &dev)) &&
-        SUCCEEDED(dev->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr,
-                                (void**)&ac)) &&
-        SUCCEEDED(ac->GetMixFormat(&wf)) &&
-        SUCCEEDED(ac->Initialize(AUDCLNT_SHAREMODE_SHARED, 0, 10000000, 0, wf,
-                                 nullptr)) &&
-        SUCCEEDED(ac->GetService(__uuidof(IAudioRenderClient), (void**)&rc))) {
-        void** v = *(void***)ac;
-        void** r = *(void***)rc;
-        vt[0] = v[3];
-        vt[1] = v[14];
-        vt[2] = r[3];
-        vt[3] = r[4];
-        vt[4] = v[2];
-        vt[5] = r[2];
-    }
-    if (wf)
-        CoTaskMemFree(wf);
-    if (rc)
-        rc->Release();
-    if (ac)
-        ac->Release();
-    if (dev)
-        dev->Release();
-    if (en)
-        en->Release();
-    if (SUCCEEDED(hc))
-        CoUninitialize();
-    if (vt[0] && vt[1] && vt[2] && vt[3] && vt[4] && vt[5]) {
-        Wh_SetFunctionHook(vt[0], (void*)Init_h, (void**)&Init_o);
-        Wh_SetFunctionHook(vt[1], (void*)GS_h, (void**)&GS_o);
-        Wh_SetFunctionHook(vt[2], (void*)GB_h, (void**)&GB_o);
-        Wh_SetFunctionHook(vt[3], (void*)RB_h, (void**)&RB_o);
-        Wh_SetFunctionHook(vt[4], (void*)ACRel_h, (void**)&ACRel_o);
-        Wh_SetFunctionHook(vt[5], (void*)RCRel_h, (void**)&RCRel_o);
-        Wh_ApplyHookOperations();
-    }
-    return 0;
+static void STDMETHODCALLTYPE RCDtor_h(void* t) {
+    ForgetObject(t);
+    RCDtor_o(t);
 }
 
-// The probe runs on its own thread (never inside the loader hook) and is
-// joined in Wh_ModUninit.
-static void StartProbe() {
-    if (InterlockedExchange(&g_probeStarted, 1))
-        return;
-    g_probeThread = CreateThread(nullptr, 0, ProbeThread, nullptr, 0, nullptr);
+// The WASAPI implementation classes of AudioSes.dll, resolved by symbol (x64).
+// Windhawk may report the names with or without "__ptr64".
+static bool HookAudioSes(HMODULE audioSes) {
+    return WindhawkUtils::HookSymbols(
+        audioSes,
+        {
+            {{L"public: virtual long __cdecl CAudioClient::Initialize(enum "
+              L"_AUDCLNT_SHAREMODE,unsigned long,__int64,__int64,struct "
+              L"tWAVEFORMATEX const * __ptr64,struct _GUID const * __ptr64) "
+              L"__ptr64",
+              L"public: virtual long __cdecl CAudioClient::Initialize(enum "
+              L"_AUDCLNT_SHAREMODE,unsigned long,__int64,__int64,struct "
+              L"tWAVEFORMATEX const *,struct _GUID const *)"},
+             (void**)&Init_o,
+             (void*)Init_h},
+            {{L"public: virtual long __cdecl CAudioClient::GetService(struct "
+              L"_GUID const & __ptr64,void * __ptr64 * __ptr64) __ptr64",
+              L"public: virtual long __cdecl CAudioClient::GetService(struct "
+              L"_GUID const &,void * *)"},
+             (void**)&GS_o,
+             (void*)GS_h},
+            {{L"public: virtual long __cdecl "
+              L"CAudioRenderClient::GetBuffer(unsigned int,unsigned char * "
+              L"__ptr64 * __ptr64) __ptr64",
+              L"public: virtual long __cdecl "
+              L"CAudioRenderClient::GetBuffer(unsigned int,unsigned char * *)"},
+             (void**)&GB_o,
+             (void*)GB_h},
+            {{L"public: virtual long __cdecl "
+              L"CAudioRenderClient::ReleaseBuffer(unsigned int,unsigned long) "
+              L"__ptr64",
+              L"public: virtual long __cdecl "
+              L"CAudioRenderClient::ReleaseBuffer(unsigned int,unsigned long)"},
+             (void**)&RB_o,
+             (void*)RB_h},
+            {{L"protected: virtual __cdecl CAudioClient::~CAudioClient(void) "
+              L"__ptr64",
+              L"protected: virtual __cdecl CAudioClient::~CAudioClient(void)"},
+             (void**)&ACDtor_o,
+             (void*)ACDtor_h,
+             true},
+            {{L"public: virtual __cdecl "
+              L"CAudioRenderClient::~CAudioRenderClient(void) __ptr64",
+              L"public: virtual __cdecl "
+              L"CAudioRenderClient::~CAudioRenderClient(void)"},
+             (void**)&RCDtor_o,
+             (void*)RCDtor_h,
+             true},
+        });
+}
+
+// Hooks must be in place before the app's own Initialize runs, so they are
+// installed synchronously, right after AudioSes.dll is loaded. Hook calls are
+// only allowed between Wh_ModAfterInit and Wh_ModBeforeUninit.
+static SRWLOCK g_hookLock = SRWLOCK_INIT;
+static bool g_hookAllowed, g_audioHooked;
+
+static void HookAudioSesIfLoaded(bool apply) {
+    AcquireSRWLockExclusive(&g_hookLock);
+    if (g_hookAllowed && !g_audioHooked) {
+        if (HMODULE m = GetModuleHandleW(L"AudioSes.dll")) {
+            g_audioHooked = true;
+            if (!HookAudioSes(m))
+                Wh_Log(L"AudioSes.dll symbols not resolved");
+            else if (apply)
+                Wh_ApplyHookOperations();
+        }
+    }
+    ReleaseSRWLockExclusive(&g_hookLock);
 }
 
 typedef HMODULE(WINAPI* LoadLibraryExW_t)(LPCWSTR, HANDLE, DWORD);
@@ -610,10 +626,9 @@ static LoadLibraryExW_t LoadLibraryExW_o;
 
 static HMODULE WINAPI LoadLibraryExW_h(LPCWSTR name, HANDLE f, DWORD fl) {
     HMODULE m = LoadLibraryExW_o(name, f, fl);
-    if (m && !g_probeStarted &&
-        !(fl & (LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE)) &&
-        GetModuleHandleW(L"AudioSes.dll") == m)
-        StartProbe();
+    if (m && !g_audioHooked &&
+        !(fl & (LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE)))
+        HookAudioSesIfLoaded(true);
     return m;
 }
 
@@ -2908,9 +2923,11 @@ BOOL Wh_ModInit() {
     if (!OpenShared(tray))
         Wh_Log(L"shared memory failed");
 
-    // Only processes that use audio pay for the probe.
-    if (GetModuleHandleW(L"AudioSes.dll")) {
-        StartProbe();
+    // Only processes that use audio pay for the symbol lookup.
+    if (HMODULE m = GetModuleHandleW(L"AudioSes.dll")) {
+        g_audioHooked = true;
+        if (!HookAudioSes(m))
+            Wh_Log(L"AudioSes.dll symbols not resolved");
     } else if (HMODULE kb = GetModuleHandleW(L"kernelbase.dll")) {
         void* ll = (void*)GetProcAddress(kb, "LoadLibraryExW");
         if (ll)
@@ -2921,6 +2938,19 @@ BOOL Wh_ModInit() {
         g_trayThread =
             CreateThread(nullptr, 0, TrayThread, nullptr, 0, &g_trayTid);
     return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    AcquireSRWLockExclusive(&g_hookLock);
+    g_hookAllowed = true;
+    ReleaseSRWLockExclusive(&g_hookLock);
+    HookAudioSesIfLoaded(true);  // AudioSes.dll may have loaded during init
+}
+
+void Wh_ModBeforeUninit() {
+    AcquireSRWLockExclusive(&g_hookLock);
+    g_hookAllowed = false;
+    ReleaseSRWLockExclusive(&g_hookLock);
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
@@ -2941,11 +2971,6 @@ static BOOL CALLBACK CloseThreadWnd(HWND h, LPARAM) {
 }
 
 void Wh_ModUninit() {
-    if (g_probeThread) {
-        WaitForSingleObject(g_probeThread, INFINITE);
-        CloseHandle(g_probeThread);
-        g_probeThread = nullptr;
-    }
     if (g_trayThread) {
         // No mod code may run after this returns: keep asking (the window may
         // not exist yet, or a modal dialog may be open) until the thread ends.
