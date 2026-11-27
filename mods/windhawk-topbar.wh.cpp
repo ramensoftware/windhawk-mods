@@ -79,7 +79,7 @@ Pages:
   and notification popups (toggle, alignment, native toast suppression, auto-hide
   delay, and disabled-notification apps list).
 - **UI Alignment:** move any button between the Left, Center and Right panels.
-- **Start Menu & Search:** default menu replacements, Start/Search button actions,
+- **Start Menu & Search:** default menu replacements, Search button action,
   pinned apps, folder shortcuts, nine-position alignment and search quick controls.
 - **Buttons:** show or hide each button.
 - **Shortcuts:** set global hotkeys for flyouts, Start, Search and other
@@ -149,6 +149,17 @@ settings to change them back. Merely searching does not write these Windows pref
   - **Clean Temp Files** (Disk tab) permanently deletes unlocked top-level files in `%TEMP%` last modified more than 7 days ago.
   - All three actions prompt for confirmation before running (each with an optional *"Don't show this again"* checkbox).
 
+## CPU Temperature (Resource Monitor)
+
+Windows does not expose raw CPU die temperature to user-mode apps without a kernel sensor driver. On laptops whose BIOS feeds a live sensor into Windows ACPI thermal zones, CPU temperature works out of the box. On desktops (where BIOS typically exposes only a static dummy zone), TopBar automatically reads CPU temperatures from any of these free background sensor apps:
+
+- **Core Temp** (shared memory, recommended for low footprint)
+- **MSI Afterburner** (shared memory, popular GPU/CPU monitor)
+- **LibreHardwareMonitor** or **OpenHardwareMonitor** (WMI, run as Administrator)
+- **HWiNFO64** (Sensors-only mode with Shared Memory Support enabled)
+
+When **CPU Temp** shows `N/A` in the Resource Monitor flyout, click the red **`?`** button inside the CPU Temp tile to open the setup window with direct download links and **1-Click Setup** (with a confirmation summary before applying changes).
+
 ## Network requests (Weather & SpeedTest)
 
 - **Weather (`Open-Meteo`):** The weather widget uses **[Open-Meteo](https://open-meteo.com/)**, a
@@ -212,7 +223,7 @@ Run **[UWPSpy](https://github.com/m417z/UWPSpy/releases/)** on the TopBar's
 | `BleedLayer` / `BleedBlurLayer` | Title-bar bleed gradient layer and the fixed 16px blur painted over it |
 | `TopBarFocusSink` | Invisible focus-sink `Button` spanning `TopBarRoot` |
 | `StartMenuAnchorGrid` / `SearchAnchorGrid` | Anchor grids inside `BarRoot` for the Start menu and Search flyouts |
-| `LeftPanel` / `CenterPanel` / `ControlCenterPanel` / `ClockPanel` | Horizontal `StackPanel` strips holding left, center, right/control-center, and clock items |
+| `LeftPanel` / `CenterPanel` / `RightPanel` | Horizontal `StackPanel` strips holding left, center, and right items |
 | `StartButton` / `StartIcon` | Start button (`StartIcon` is named when the Windows logo icon is active) |
 | `SearchButton` / `SearchIcon` | Search button (`SearchIcon` works as a simple-name shortcut; the inner icon is unnamed in UWPSpy) |
 | `VirtualDesktopButton` / `VirtualDesktopIcon` / `VirtualDesktopBadgeText` | Virtual Desktop switcher button, its icon, and desktop number badge |
@@ -310,6 +321,9 @@ desktop are ignored.
 - monitorIndex: 0
   $name: Monitor
   $description: 0 or 1 = primary monitor. 2+ selects the corresponding secondary monitor.
+- showOnAllMonitors: false
+  $name: Show TopBar on all monitors
+  $description: Overrides the Monitor index above and shows TopBar on every connected monitor.
 - controlStyles:
   - - target: ""
       $name: Target
@@ -2202,44 +2216,182 @@ namespace resource {
             }
         }
 
+        // HWiNFO64 shared memory fallback (live CPU Package / Tctl / Tdie temp if running)
+        if (info.cpuTempC < 0.0) {
+            HANDLE hHw = OpenFileMappingW(FILE_MAP_READ, FALSE, L"Global\\HWiNFO_SENS_SM2");
+            if (hHw) {
+                struct HwInfoHeader {
+                    uint32_t signature;
+                    uint32_t version;
+                    uint32_t revision;
+                    int64_t  pollTime;
+                    uint32_t offsetOfSensorSection;
+                    uint32_t sizeOfSensorElement;
+                    uint32_t numSensorElements;
+                    uint32_t offsetOfReadingSection;
+                    uint32_t sizeOfReadingElement;
+                    uint32_t numReadingElements;
+                };
+                if (auto* hdr = static_cast<const HwInfoHeader*>(MapViewOfFile(hHw, FILE_MAP_READ, 0, 0, sizeof(HwInfoHeader)))) {
+                    size_t totalSz = static_cast<size_t>(hdr->offsetOfReadingSection) +
+                                     static_cast<size_t>(hdr->sizeOfReadingElement) * hdr->numReadingElements;
+                    uint32_t offRead = hdr->offsetOfReadingSection;
+                    uint32_t szRead = hdr->sizeOfReadingElement;
+                    uint32_t numRead = hdr->numReadingElements;
+                    UnmapViewOfFile(hdr);
+                    if (szRead >= 288 && numRead > 0 && numRead < 8192 && totalSz < (32 * 1024 * 1024)) {
+                        if (auto* base = static_cast<const uint8_t*>(MapViewOfFile(hHw, FILE_MAP_READ, 0, 0, totalSz))) {
+                            int bestPri = 0;
+                            double bestTemp = -1.0;
+                            for (uint32_t i = 0; i < numRead; ++i) {
+                                const uint8_t* rec = base + offRead + static_cast<size_t>(i) * szRead;
+                                uint32_t rType = *reinterpret_cast<const uint32_t*>(rec);
+                                if (rType != 1) continue; // SENSOR_TYPE_TEMP
+                                const char* lbl = reinterpret_cast<const char*>(rec + 12);
+                                double val = *reinterpret_cast<const double*>(rec + 12 + 128 + 128 + 16);
+                                if (val <= 15.0 || val >= 130.0) continue;
+                                std::string s(lbl, strnlen(lbl, 128));
+                                for (char& ch : s) ch = static_cast<char>(tolower(static_cast<unsigned char>(ch)));
+                                int pri = 0;
+                                if (s.find("cpu package") != std::string::npos || s.find("tctl/tdie") != std::string::npos || s.find("cpu (tctl") != std::string::npos) pri = 4;
+                                else if (s.find("tdie") != std::string::npos || s.find("tctl") != std::string::npos || s.find("core max") != std::string::npos) pri = 3;
+                                else if (s.find("cpu") != std::string::npos && s.find("gpu") == std::string::npos) pri = 2;
+                                if (pri > bestPri) {
+                                    bestPri = pri;
+                                    bestTemp = val;
+                                }
+                            }
+                            if (bestTemp > 0.0) info.cpuTempC = bestTemp;
+                            UnmapViewOfFile(base);
+                        }
+                    }
+                }
+                CloseHandle(hHw);
+            }
+        }
+
+        // MSI Afterburner shared memory fallback (MAHMSharedMemory)
+        if (info.cpuTempC < 0.0) {
+            HANDLE hAb = OpenFileMappingW(FILE_MAP_READ, FALSE, L"MAHMSharedMemory");
+            if (hAb) {
+                struct MahmHeader {
+                    uint32_t dwSignature;
+                    uint32_t dwVersion;
+                    uint32_t dwHeaderSize;
+                    uint32_t dwNumEntries;
+                    uint32_t dwEntrySize;
+                    uint32_t time;
+                    uint32_t dwNumGpuEntries;
+                    uint32_t dwGpuEntrySize;
+                };
+                if (auto* hdr = static_cast<const MahmHeader*>(
+                        MapViewOfFile(hAb, FILE_MAP_READ, 0, 0, sizeof(MahmHeader)))) {
+                    uint32_t sig = hdr->dwSignature;
+                    uint32_t hdrSz = hdr->dwHeaderSize;
+                    uint32_t numEnt = hdr->dwNumEntries;
+                    uint32_t entSz = hdr->dwEntrySize;
+                    UnmapViewOfFile(hdr);
+                    size_t totalSz = static_cast<size_t>(hdrSz) +
+                                     static_cast<size_t>(numEnt) * static_cast<size_t>(entSz);
+                    if (sig == 0x4D41484Du && hdrSz >= sizeof(MahmHeader) &&
+                        entSz >= 1324u && numEnt > 0u && numEnt < 4096u &&
+                        totalSz < (16u * 1024u * 1024u)) {
+                        if (auto* base = static_cast<const uint8_t*>(
+                                MapViewOfFile(hAb, FILE_MAP_READ, 0, 0, totalSz))) {
+                            int bestPri = 0;
+                            double bestTemp = -1.0;
+                            for (uint32_t i = 0; i < numEnt; ++i) {
+                                const uint8_t* ent = base + hdrSz + static_cast<size_t>(i) * entSz;
+                                const char* srcName = reinterpret_cast<const char*>(ent);
+                                float dataVal = 0.0f;
+                                memcpy(&dataVal, ent + 5 * 260, sizeof(float));
+                                uint32_t srcId = 0;
+                                memcpy(&srcId, ent + 5 * 260 + 20, sizeof(uint32_t));
+                                if (!std::isfinite(dataVal) || dataVal <= 15.0f || dataVal >= 130.0f) {
+                                    continue;
+                                }
+                                std::string s(srcName, strnlen(srcName, 260));
+                                for (char& ch : s) ch = static_cast<char>(tolower(static_cast<unsigned char>(ch)));
+                                int pri = 0;
+                                if (srcId == 0x80u && s == "cpu temperature") pri = 4;
+                                else if (s == "cpu temperature" || s == "cpu package") pri = 3;
+                                else if (srcId == 0x80u) pri = 2;
+                                else if (s.find("cpu") != std::string::npos &&
+                                         s.find("temp") != std::string::npos &&
+                                         s.find("gpu") == std::string::npos) pri = 1;
+                                if (pri > bestPri) {
+                                    bestPri = pri;
+                                    bestTemp = static_cast<double>(dataVal);
+                                }
+                            }
+                            if (bestTemp > 0.0) info.cpuTempC = bestTemp;
+                            UnmapViewOfFile(base);
+                        }
+                    }
+                }
+                CloseHandle(hAb);
+            }
+        }
+
         // Windows PDH Thermal Zone & Energy/Power Meter (driverless, works without admin)
+        bool usedAcpiFallback = false;
         if (info.cpuTempC < 0.0) {
             static PDH_HQUERY s_tzQuery = nullptr;
-            static std::vector<PDH_HCOUNTER> s_tzHpCounters;
-            static std::vector<PDH_HCOUNTER> s_tzCounters;
+            static std::vector<std::pair<PDH_HCOUNTER, bool>> s_tzHpCounters;
+            static std::vector<std::pair<PDH_HCOUNTER, bool>> s_tzCounters;
             static bool s_tzInit = false;
+            auto isCpuZoneName = [](const std::wstring& path) {
+                std::wstring up = path;
+                for (auto& ch : up) ch = static_cast<wchar_t>(towupper(ch));
+                return up.find(L"CPU") != std::wstring::npos ||
+                       up.find(L"PKG") != std::wstring::npos ||
+                       up.find(L"CORE") != std::wstring::npos ||
+                       up.find(L"PROC") != std::wstring::npos;
+            };
             if (!s_tzInit) {
                 s_tzInit = true;
                 if (PdhOpenQuery(nullptr, 0, &s_tzQuery) == ERROR_SUCCESS) {
                     for (const auto& p : ExpandGpuWildcard(L"\\Thermal Zone Information(*)\\High Precision Temperature")) {
                         PDH_HCOUNTER c;
-                        if (PdhAddCounter(s_tzQuery, p.c_str(), 0, &c) == ERROR_SUCCESS) s_tzHpCounters.push_back(c);
+                        if (PdhAddCounter(s_tzQuery, p.c_str(), 0, &c) == ERROR_SUCCESS)
+                            s_tzHpCounters.push_back({c, isCpuZoneName(p)});
                     }
                     for (const auto& p : ExpandGpuWildcard(L"\\Thermal Zone Information(*)\\Temperature")) {
                         PDH_HCOUNTER c;
-                        if (PdhAddCounter(s_tzQuery, p.c_str(), 0, &c) == ERROR_SUCCESS) s_tzCounters.push_back(c);
+                        if (PdhAddCounter(s_tzQuery, p.c_str(), 0, &c) == ERROR_SUCCESS)
+                            s_tzCounters.push_back({c, isCpuZoneName(p)});
                     }
                     PdhCollectQueryData(s_tzQuery);
                 }
             }
             if (s_tzQuery && PdhCollectQueryData(s_tzQuery) == ERROR_SUCCESS) {
-                double bestC = -1.0;
+                double bestCpuC = -1.0, bestAnyC = -1.0;
                 PDH_FMT_COUNTERVALUE v{};
-                for (auto c : s_tzHpCounters) {
+                for (auto& [c, isCpu] : s_tzHpCounters) {
                     if (PdhGetFormattedCounterValue(c, PDH_FMT_DOUBLE, nullptr, &v) == ERROR_SUCCESS && v.CStatus == ERROR_SUCCESS) {
                         double cels = (v.doubleValue / 10.0) - 273.15;
-                        if (cels > 15.0 && cels < 130.0 && cels > bestC) bestC = cels;
-                    }
-                }
-                if (bestC < 0.0) {
-                    for (auto c : s_tzCounters) {
-                        if (PdhGetFormattedCounterValue(c, PDH_FMT_DOUBLE, nullptr, &v) == ERROR_SUCCESS && v.CStatus == ERROR_SUCCESS) {
-                            double cels = v.doubleValue - 273.15;
-                            if (cels > 15.0 && cels < 130.0 && cels > bestC) bestC = cels;
+                        if (cels > 15.0 && cels < 130.0) {
+                            if (isCpu && cels > bestCpuC) bestCpuC = cels;
+                            if (cels > bestAnyC) bestAnyC = cels;
                         }
                     }
                 }
-                if (bestC > 0.0) info.cpuTempC = bestC;
+                if (bestCpuC < 0.0 && bestAnyC < 0.0) {
+                    for (auto& [c, isCpu] : s_tzCounters) {
+                        if (PdhGetFormattedCounterValue(c, PDH_FMT_DOUBLE, nullptr, &v) == ERROR_SUCCESS && v.CStatus == ERROR_SUCCESS) {
+                            double cels = v.doubleValue - 273.15;
+                            if (cels > 15.0 && cels < 130.0) {
+                                if (isCpu && cels > bestCpuC) bestCpuC = cels;
+                                if (cels > bestAnyC) bestAnyC = cels;
+                            }
+                        }
+                    }
+                }
+                double picked = (bestCpuC > 0.0) ? bestCpuC : bestAnyC;
+                if (picked > 0.0) {
+                    info.cpuTempC = picked;
+                    usedAcpiFallback = true;
+                }
             }
         }
 
@@ -2332,6 +2484,29 @@ namespace resource {
                 tryThermalQuery(L"root\\WMI",
                     L"SELECT CurrentTemperature FROM MSAcpi_ThermalZoneTemperature",
                     L"CurrentTemperature", 10.0);
+                if (info.cpuTempC >= 0.0) usedAcpiFallback = true;
+            }
+        }
+
+        // Many desktop motherboards expose a hardcoded dummy ACPI thermal zone
+        // (commonly 27.8°C / 29.8°C / 30.0°C) that never changes even under load.
+        // Detect a frozen stub and report -1 (--) instead of a fake stuck 30°C.
+        if (usedAcpiFallback && info.cpuTempC >= 0.0) {
+            static double s_acpiLastC = -1.0;
+            static int s_acpiStaticSamples = 0;
+            static bool s_acpiMovedEver = false;
+            if (s_acpiLastC >= 0.0 && std::abs(info.cpuTempC - s_acpiLastC) >= 0.2) {
+                s_acpiMovedEver = true;
+                s_acpiStaticSamples = 0;
+            } else {
+                s_acpiStaticSamples++;
+            }
+            s_acpiLastC = info.cpuTempC;
+            bool isCommonDummy = (std::abs(info.cpuTempC - 27.85) < 0.35 ||
+                                  std::abs(info.cpuTempC - 29.85) < 0.35 ||
+                                  std::abs(info.cpuTempC - 30.05) < 0.35);
+            if (!s_acpiMovedEver && (isCommonDummy || s_acpiStaticSamples >= 4)) {
+                info.cpuTempC = -1.0;
             }
         }
 
@@ -2765,6 +2940,17 @@ static std::atomic<TopBarBackdropMode> g_flyoutBackdropMode{TopBarBackdropMode::
 void ApplyMicaBackdrop(HWND hwnd, TopBarBackdropMode mode);
 void ReapplyBackdropIfModeChanged();
 static void ApplyTopBarMicaShape();
+static void UpdateTopBarClickableRect(bool settleFinal = false);
+static void ScheduleTopBarClickableRectUpdate();
+[[clang::no_destroy]] static DispatcherTimer g_panelRgnSettleTimer{nullptr};
+static std::atomic<bool> g_topBarHitUpdateQueued{false};
+extern std::atomic<bool> g_bleedActive;
+extern std::atomic<bool> g_topBarHideAnimating;
+static std::atomic<bool> g_topBarHasClickableRect{false};
+static std::atomic<LONG> g_topBarHitLeft{0};
+static std::atomic<LONG> g_topBarHitTop{0};
+static std::atomic<LONG> g_topBarHitRight{0};
+static std::atomic<LONG> g_topBarHitBottom{0};
 
 // The bar and the flyouts can use different materials. Windows identify their
 // surface by HWND: the wide bar popup is the TopBar, every other XAML popup is
@@ -2867,6 +3053,10 @@ void CloseTopBarSettingsWindow();
 void OpenAboutThisPcWindow();
 void DestroyAboutPcWindowNow();
 bool PreTranslateAboutPcMessage(MSG* msg);
+void OpenCpuTempSetupWindow();
+void DestroyCpuTempSetupWindowNow();
+bool PreTranslateCpuTempSetupMessage(MSG* msg);
+int g_cliMonitorIndex = 0;
 bool IsAboutPcWindow(HWND hwnd);
 void CloseNativeStartMenuIfOpen();
 void CloseNativeSearchIfOpen();
@@ -2898,6 +3088,7 @@ struct {
     std::wstring topBarBackgroundColor = L"#000000";
     int topBarBackgroundOpacity = 60;
     int monitorIndex = 0;
+    bool showOnAllMonitors = false;
     int topBarCornerRadius = 8;
     int topBarButtonsCornerRadius = 6;
     int flyoutsCornerRadius = 8;
@@ -2965,7 +3156,6 @@ struct {
     std::wstring startSearchAlignment = L"center";
     bool defaultStartMenu = false;
     bool defaultSearch    = false;
-    std::wstring startButtonAction  = L"topbar";
     std::wstring searchButtonAction = L"topbar";
     bool remapWinKey      = true;
     bool remapTaskbarStart= true;
@@ -3048,7 +3238,6 @@ inline double EffectiveControlCorner() { return static_cast<double>(g_settings.t
 
 bool g_prevDefaultStartMenu = true;
 bool g_prevDefaultSearch = true;
-std::wstring g_prevStartButtonAction = L"topbar";
 int g_prevMonitorIndex = 0;
 
 int g_topbarHeightFromStyles = -1;
@@ -3126,7 +3315,6 @@ const std::vector<std::wstring> kMovableItems = {
 
 [[clang::no_destroy]] wuxc::StackPanel g_trayPanel{nullptr};
 [[clang::no_destroy]] wuxc::StackPanel g_centerPanel{nullptr};
-[[clang::no_destroy]] wuxc::StackPanel g_clockPanel{nullptr};
 [[clang::no_destroy]] wuxc::Flyout g_clockFlyout{nullptr};
 [[clang::no_destroy]] wuxc::StackPanel g_clockFlyoutPanel{nullptr};
 [[clang::no_destroy]] wuxc::Grid g_clockCalendarGrid{nullptr};
@@ -3314,7 +3502,7 @@ const std::vector<ControlStyleRule> g_themeGreenBarStyles = {
      {L"Background=transparent"}},
     {L"Grid#TopBarRoot > StackPanel > Button#ResourceButton > ContentPresenter#ContentPresenter > Grid#ResourceGrid > Button > ContentPresenter#ContentPresenter",
      {L"Background:=#27403C"}},
-    {L"Canvas > FlyoutPresenter > Grid > Border#PART_BackgroundBorder > ContentPresenter > Viewbox#TopBarScaler > Border > Grid#BarRoot > Grid#TopBarRoot > StackPanel#ControlCenterPanel > StackPanel#PinnedTrayPanel",
+    {L"Canvas > FlyoutPresenter > Grid > Border#PART_BackgroundBorder > ContentPresenter > Viewbox#TopBarScaler > Border > Grid#BarRoot > Grid#TopBarRoot > StackPanel#RightPanel > StackPanel#PinnedTrayPanel",
      {L"Background:=#27403C"}},
     {L"Button#TaskButton", {L"Background:=#27403C"}},
     {L"AppTitleButton", {L"Background:=#27403C"}},
@@ -3331,7 +3519,7 @@ const std::vector<ControlStyleRule> g_themeNoIslandsStyles = {
     {L"Grid#TopBarRoot > StackPanel > Button", {L"Background=transparent", L"BorderBrush=transparent"}},
     {L"Grid#TopBarRoot > StackPanel > Button#ResourceButton > ContentPresenter#ContentPresenter > Grid#ResourceGrid", {L"Background=transparent"}},
     {L"Grid#TopBarRoot > StackPanel > Button#ResourceButton > ContentPresenter#ContentPresenter > Grid#ResourceGrid > Button > ContentPresenter#ContentPresenter", {L"Background=transparent", L"BorderBrush=transparent"}},
-    {L"Canvas > FlyoutPresenter > Grid > Border#PART_BackgroundBorder > ContentPresenter > Viewbox#TopBarScaler > Border > Grid#BarRoot > Grid#TopBarRoot > StackPanel#ControlCenterPanel > StackPanel#PinnedTrayPanel", {L"Background=transparent", L"BorderBrush=transparent"}},
+    {L"Canvas > FlyoutPresenter > Grid > Border#PART_BackgroundBorder > ContentPresenter > Viewbox#TopBarScaler > Border > Grid#BarRoot > Grid#TopBarRoot > StackPanel#RightPanel > StackPanel#PinnedTrayPanel", {L"Background=transparent", L"BorderBrush=transparent"}},
     {L"Button#TaskButton", {L"Background=transparent", L"BorderBrush=transparent"}},
     {L"AppTitleButton", {L"Background=transparent", L"BorderBrush=transparent"}},
 };
@@ -4239,6 +4427,25 @@ static void SyncUnifiedSlotsFromVisualChildren();
 static bool g_taskOverflowRotationWasOpen = false;
 static bool g_autoHideWeatherLabel = false;
 static bool g_autoHideResourceLabels = false;
+static bool g_taskHideWeatherLabel = false;
+static bool g_taskHideResourceLabels = false;
+static bool g_centerHideWeatherLabel = false;
+static bool g_centerHideResourceLabels = false;
+static int  g_autoMediaTextStage = 0; // 0 = 105, 1 = 68, 2 = 40 (MaxWidth only, never collapsed)
+static bool g_autoHideMediaVisualizer = false;
+static void ApplyAdaptiveMediaButton();
+static void SyncAdaptiveLabelFlags() {
+    bool wantWeather = g_taskHideWeatherLabel || g_centerHideWeatherLabel;
+    bool wantRes = g_taskHideResourceLabels || g_centerHideResourceLabels;
+    if (g_autoHideWeatherLabel != wantWeather) {
+        g_autoHideWeatherLabel = wantWeather;
+        try { ApplyAdaptiveWeatherLabel(); } catch (...) {}
+    }
+    if (g_autoHideResourceLabels != wantRes) {
+        g_autoHideResourceLabels = wantRes;
+        try { ApplyAdaptiveResourceLabels(); } catch (...) {}
+    }
+}
 bool g_autoHideTaskLabels = false;
 
 static bool ShouldShowOpenedTaskLabel() {
@@ -4367,11 +4574,10 @@ void AdjustTaskButtonWidths() {
         }
     }
     if (autoMode || !g_rootElement) {
-        if (g_autoHideWeatherLabel || g_autoHideResourceLabels) {
-            g_autoHideWeatherLabel = false;
-            g_autoHideResourceLabels = false;
-            ApplyAdaptiveWeatherLabel();
-            ApplyAdaptiveResourceLabels();
+        if (g_taskHideWeatherLabel || g_taskHideResourceLabels) {
+            g_taskHideWeatherLabel = false;
+            g_taskHideResourceLabels = false;
+            SyncAdaptiveLabelFlags();
         }
         setAllVisibleResetWidths();
         return;
@@ -4430,20 +4636,16 @@ void AdjustTaskButtonWidths() {
     bool taskInCenter = (g_centerPanel && taskParent == g_centerPanel);
 
     auto computeBudget = [&](bool hideWeather, bool hideRes) -> double {
-        if (g_autoHideWeatherLabel != hideWeather) {
-            g_autoHideWeatherLabel = hideWeather;
-            ApplyAdaptiveWeatherLabel();
-        }
-        if (g_autoHideResourceLabels != hideRes) {
-            g_autoHideResourceLabels = hideRes;
-            ApplyAdaptiveResourceLabels();
+        if (g_taskHideWeatherLabel != hideWeather || g_taskHideResourceLabels != hideRes) {
+            g_taskHideWeatherLabel = hideWeather;
+            g_taskHideResourceLabels = hideRes;
+            SyncAdaptiveLabelFlags();
         }
 
         double otherLeftW = measurePanelExcludingTask(g_leftPanel);
         double otherRightW = measurePanelExcludingTask(g_trayPanel);
         double otherCenterW = measurePanelExcludingTask(g_centerPanel);
-        double clockW = measurePanelExcludingTask(g_clockPanel);
-        double rightBlockW = otherRightW + clockW;
+        double rightBlockW = otherRightW;
 
         double rootPad = 0.0;
         if (g_rootElement) {
@@ -4473,7 +4675,7 @@ void AdjustTaskButtonWidths() {
             budget = totalCap - otherLeftW;
         } else if (taskInRight) {
             double totalCap = effectiveRootW - otherLeftW - otherCenterW - kInterPanelGap;
-            budget = totalCap - clockW - otherRightW;
+            budget = totalCap - otherRightW;
         } else {
             budget = effectiveRootW - (otherLeftW + rightBlockW + otherCenterW) - kInterPanelGap;
         }
@@ -6162,6 +6364,14 @@ void ApplySingleStyleToElement(FrameworkElement element, const std::wstring& rul
                     } catch (...) {}
                 }
             }
+            if (_wcsicmp(valuePart.c_str(), L"Collapsed") == 0 ||
+                _wcsicmp(valuePart.c_str(), L"None") == 0) {
+                auto clearBrush = MakeBrush(0, 0, 0, 0);
+                if (auto border = element.try_as<wuxc::Border>()) border.Background(clearBrush);
+                else if (auto panel = element.try_as<wuxc::Panel>()) panel.Background(clearBrush);
+                else if (auto control = element.try_as<wuxc::Control>()) control.Background(clearBrush);
+                return;
+            }
         } else if (!valuePart.starts_with(L"<WindhawkBlur") &&
                    (elementName == L"TopBarRoot" || elementName == L"FlyoutBlurHost" ||
                     elementName == L"StartMenuBlurHost" || elementName == L"SearchBlurHost" ||
@@ -7049,11 +7259,11 @@ void ApplyControlStylesToPopupRoot(FrameworkElement const& root) {
         struct TierGuard { int prev; ~TierGuard() { g_styleApplyTier = prev; } } tierGuard{prevTier};
         g_styleApplyTier = 1;
         ApplyRuleListToPopupRoot(g_themeStyleRules, root);
+        ApplyUserFlyoutCornerOverrides(root);
         g_styleApplyTier = 2;
         ApplyRuleListToPopupRoot(g_controlStyleRules, root);
     }
     ApplyShadowTree(root);
-    ApplyUserFlyoutCornerOverrides(root);
 }
 
 
@@ -7131,21 +7341,91 @@ void UpdateCenterPanelAlignment() {
         double offset = 0.0;
         if (!isAuto) {
             auto leftIt = g_namedElements.find(L"LeftPanel");
-            auto rightIt = g_namedElements.find(L"TrayPanel");
-            auto clockIt = g_namedElements.find(L"ClockPanel");
+            auto rightIt = g_namedElements.find(L"RightPanel");
             double leftW = (leftIt != g_namedElements.end()) ? leftIt->second.ActualWidth() : 0.0;
             double rightW = (rightIt != g_namedElements.end()) ? rightIt->second.ActualWidth() : 0.0;
-            double clockW = (clockIt != g_namedElements.end()) ? clockIt->second.ActualWidth() : 0.0;
-            if (leftW <= 0.0 && rightW <= 0.0 && clockW <= 0.0) {
+            if (leftW <= 0.0 && rightW <= 0.0) {
                 return;
             }
-            offset = (rightW + clockW - leftW) / 2.0;
+            offset = (rightW - leftW) / 2.0;
             if (topBarRootFE) {
                 double rootW = topBarRootFE.ActualWidth();
                 double centerW = g_centerPanel.ActualWidth();
                 if (rootW > 0.0 && centerW > 0.0) {
-                    double col1W = rootW - leftW - rightW - clockW;
+                    double col1W = rootW - leftW - rightW;
                     double slack = (col1W - centerW) * 0.5;
+                    auto isInCenterPanel = [](PCWSTR elemName) -> bool {
+                        auto it = g_namedElements.find(elemName);
+                        if (it == g_namedElements.end() || !it->second) return false;
+                        if (it->second.Visibility() != Visibility::Visible) return false;
+                        try {
+                            return wuxm::VisualTreeHelper::GetParent(it->second) == g_centerPanel;
+                        } catch (...) { return false; }
+                    };
+
+                    // Before pushing CenterPanel off-center when RightPanel or LeftPanel expands,
+                    // compress CenterPanel items in exact order (respecting Control styles):
+                    // 1) MediaButtonTitleText MaxWidth 105 -> 68 -> 40 (never collapses)
+                    // 2) WeatherStatusText Visibility=Collapsed
+                    // 3) ResourceButton labels hidden (if enabled)
+                    // 4) MediaButtonVisualizer Visibility=Collapsed
+                    constexpr double kCollisionPad = 4.0;
+                    bool wouldPushOffCenter = (std::abs(offset) > slack - kCollisionPad);
+                    bool mediaInCenter = isInCenterPanel(L"MediaButton");
+                    bool weatherInCenter = isInCenterPanel(L"WeatherButton");
+                    bool resInCenter = isInCenterPanel(L"ResourceButton");
+                    static ULONGLONG s_lastCenterCompressTick = 0;
+                    ULONGLONG nowCompressTick = GetTickCount64();
+                    bool canAdjustCompress = (nowCompressTick - s_lastCenterCompressTick >= 350);
+                    if (wouldPushOffCenter && canAdjustCompress) {
+                        s_lastCenterCompressTick = nowCompressTick;
+                        if (mediaInCenter && g_settings.mediaButtonShowName && g_autoMediaTextStage < 1) {
+                            g_autoMediaTextStage = 1;
+                            ApplyAdaptiveMediaButton();
+                        } else if (mediaInCenter && g_settings.mediaButtonShowName && g_autoMediaTextStage < 2) {
+                            g_autoMediaTextStage = 2;
+                            ApplyAdaptiveMediaButton();
+                        } else if (weatherInCenter && !g_centerHideWeatherLabel) {
+                            g_centerHideWeatherLabel = true;
+                            SyncAdaptiveLabelFlags();
+                        } else if (resInCenter && g_settings.showResourceLabels && !g_centerHideResourceLabels) {
+                            g_centerHideResourceLabels = true;
+                            SyncAdaptiveLabelFlags();
+                        } else if (mediaInCenter && g_settings.mediaButtonShowVisualizer && !g_autoHideMediaVisualizer) {
+                            g_autoHideMediaVisualizer = true;
+                            ApplyAdaptiveMediaButton();
+                        }
+                    } else if (!wouldPushOffCenter && canAdjustCompress) {
+                        double headroom = slack - std::abs(offset);
+                        bool restoredAny = false;
+                        // Restore CenterPanel items in reverse order once enough headroom
+                        // exists for that specific item (with hysteresis so it never oscillates).
+                        if (g_autoHideMediaVisualizer && headroom > 32.0) {
+                            g_autoHideMediaVisualizer = false;
+                            ApplyAdaptiveMediaButton();
+                            restoredAny = true;
+                        } else if (g_centerHideResourceLabels && headroom > 70.0) {
+                            g_centerHideResourceLabels = false;
+                            SyncAdaptiveLabelFlags();
+                            restoredAny = true;
+                        } else if (g_centerHideWeatherLabel && headroom > 65.0) {
+                            g_centerHideWeatherLabel = false;
+                            SyncAdaptiveLabelFlags();
+                            restoredAny = true;
+                        } else if (g_autoMediaTextStage > 1 && headroom > 40.0) {
+                            g_autoMediaTextStage = 1;
+                            ApplyAdaptiveMediaButton();
+                            restoredAny = true;
+                        } else if (g_autoMediaTextStage > 0 && headroom > 48.0) {
+                            g_autoMediaTextStage = 0;
+                            ApplyAdaptiveMediaButton();
+                            restoredAny = true;
+                        }
+                        if (restoredAny) {
+                            s_lastCenterCompressTick = nowCompressTick;
+                        }
+                    }
+
                     if (slack >= 0.0) {
                         offset = std::clamp(offset, -slack, slack);
                     } else {
@@ -7164,6 +7444,7 @@ void UpdateCenterPanelAlignment() {
             tt.Y(0);
             g_centerPanel.RenderTransform(tt);
         }
+        ScheduleTopBarClickableRectUpdate();
     } catch (...) {}
 }
 
@@ -7270,11 +7551,27 @@ void ApplyAllControlStyles() {
         struct TierGuard { int prev; ~TierGuard() { g_styleApplyTier = prev; } } tierGuard{prevTier};
         g_styleApplyTier = 1;
         ApplyRuleList(g_themeStyleRules);
+        ApplyUserTopBarCornerOverrides();
+        ApplyUserFlyoutCornerOverrides(nullptr);
         g_styleApplyTier = 2;
         ApplyRuleList(g_controlStyleRules);
     }
-    ApplyUserTopBarCornerOverrides();
-    ApplyUserFlyoutCornerOverrides(nullptr);
+    // If user Control styles set CornerRadius on TopBarRoot, mirror it to GlobalBlurLayer
+    // unless GlobalBlurLayer has its own explicit CornerRadius rule in Control styles.
+    try {
+        auto tbIt = g_namedElements.find(L"TopBarRoot");
+        auto gbIt = g_namedElements.find(L"GlobalBlurLayer");
+        if (tbIt != g_namedElements.end() && tbIt->second &&
+            gbIt != g_namedElements.end() && gbIt->second &&
+            UserControlStylesSetProperty(tbIt->second, L"CornerRadius") &&
+            !UserControlStylesSetProperty(gbIt->second, L"CornerRadius")) {
+            if (auto tbGrid = tbIt->second.try_as<wuxc::Grid>()) {
+                if (auto gbBorder = gbIt->second.try_as<wuxc::Border>()) {
+                    gbBorder.CornerRadius(tbGrid.CornerRadius());
+                }
+            }
+        }
+    } catch (...) {}
     // Re-apply recorded IconColor rules after all Content:= replacements have run
     // so newly created icons (e.g. StartButton custom FontIcon) inherit IconColor immediately.
     try {
@@ -10116,6 +10413,8 @@ void RestoreTopBarZOrder() {
 
 bool IsTrueFullscreen() {
     HMONITOR barMon = GetBarMonitor();
+    if (!barMon) return false;
+
     HWND fg = GetForegroundWindow();
     if (fg && (fg == g_topBarHwnd || fg == g_topBarPopupHwnd || fg == g_islandHwnd)) {
         if (g_fullScreenAppActive && g_lastForegroundHwnd &&
@@ -10123,22 +10422,90 @@ bool IsTrueFullscreen() {
             !IsIconic(g_lastForegroundHwnd)) {
             fg = g_lastForegroundHwnd;
         } else {
-            return false;
+            fg = nullptr;
         }
     }
-    if (!fg || !IsWindow(fg)) return false;
-    DWORD fgPid = 0;
-    GetWindowThreadProcessId(fg, &fgPid);
-    if (fgPid == GetCurrentProcessId()) return false;
-    if (IsShellOrOverlayWindow(fg)) return false;
-    if (barMon && MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST) != barMon) return false;
 
-    HMONITOR targetMon = barMon ? barMon : MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST);
-    if (!IsWindowFullscreenOnMonitor(fg, targetMon)) {
-        return false;
+    // Fast path: foreground window is on this TopBar's monitor and is fullscreen.
+    if (fg && IsWindow(fg)) {
+        DWORD fgPid = 0;
+        GetWindowThreadProcessId(fg, &fgPid);
+        if (fgPid != GetCurrentProcessId() && !IsShellOrOverlayWindow(fg) &&
+            MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST) == barMon &&
+            IsWindowFullscreenOnMonitor(fg, barMon)) {
+            return true;
+        }
     }
 
-    return true;
+    // Per-monitor Z-order check: even when focus moves to another monitor,
+    // keep this monitor's TopBar hidden if the topmost real window on barMon
+    // is still fullscreen.
+    MONITORINFO mi{};
+    mi.cbSize = sizeof(mi);
+    if (!GetMonitorInfo(barMon, &mi)) return false;
+    const int64_t monArea =
+        static_cast<int64_t>(mi.rcMonitor.right - mi.rcMonitor.left) *
+        static_cast<int64_t>(mi.rcMonitor.bottom - mi.rcMonitor.top);
+
+    struct MonFsEnumCtx {
+        HMONITOR mon;
+        int64_t monArea;
+        DWORD selfPid;
+        bool foundFullscreen = false;
+    } ctx{ barMon, monArea, GetCurrentProcessId(), false };
+
+    EnumWindows([](HWND hwnd, LPARAM lp) -> BOOL {
+        auto* c = reinterpret_cast<MonFsEnumCtx*>(lp);
+        if (!hwnd || !IsWindow(hwnd) || !IsWindowVisible(hwnd) || IsIconic(hwnd)) return TRUE;
+        if (hwnd == g_topBarHwnd || hwnd == g_topBarPopupHwnd || hwnd == g_islandHwnd) return TRUE;
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hwnd, &pid);
+        if (pid == c->selfPid) return TRUE;
+        BOOL cloaked = FALSE;
+        if (SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked) {
+            return TRUE;
+        }
+        if (IsShellOrOverlayWindow(hwnd)) return TRUE;
+
+        LONG_PTR ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        if ((ex & WS_EX_TRANSPARENT) &&
+            (ex & (WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_LAYERED))) {
+            return TRUE;
+        }
+        if (ex & WS_EX_LAYERED) {
+            BYTE alpha = 255;
+            DWORD flags = 0;
+            if (GetLayeredWindowAttributes(hwnd, nullptr, &alpha, &flags) &&
+                (flags & LWA_ALPHA) && alpha == 0) {
+                return TRUE;
+            }
+        }
+        if (MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) != c->mon) return TRUE;
+
+        RECT r{};
+        if (FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &r, sizeof(r)))) {
+            if (!GetWindowRect(hwnd, &r)) return TRUE;
+        }
+        int64_t w = r.right - r.left;
+        int64_t h = r.bottom - r.top;
+        if (w <= 0 || h <= 0) return TRUE;
+
+        // Ignore small floating always-on-top overlays/toolbars (including another monitor's TopBar/PiP).
+        if ((ex & WS_EX_TOPMOST) && (w * h) < (c->monArea / 2)) {
+            return TRUE;
+        }
+        if (ex & WS_EX_TOOLWINDOW) {
+            return TRUE;
+        }
+
+        if (IsWindowFullscreenOnMonitor(hwnd, c->mon)) {
+            c->foundFullscreen = true;
+        }
+        // Stop at the topmost real window on this monitor.
+        return FALSE;
+    }, reinterpret_cast<LPARAM>(&ctx));
+
+    return ctx.foundFullscreen;
 }
 
 bool IsAnyFullscreenActive() {
@@ -16570,28 +16937,13 @@ bool IsGlobalBlurSurface(FrameworkElement const& element, std::wstring_view prop
     if (name == L"GlobalBlurLayer" || name == L"TopBarRoot" || name == L"BarRoot" ||
         name == L"FlyoutBlurHost" || name == L"StartMenuBlurHost" ||
         name == L"SearchBlurHost" || name == L"PART_BackgroundBorder" ||
-        name == L"NotificationPopupRoot") {
+        name == L"NotificationPopupRoot" || name == L"NotificationPopupCardBlurHost") {
         return true;
     }
     if (element.try_as<wuxc::FlyoutPresenter>() ||
         element.try_as<wuxc::MenuFlyoutPresenter>()) {
         return true;
     }
-    try {
-        wuxm::Brush curBg{nullptr};
-        if (auto b = element.try_as<wuxc::Border>()) curBg = b.Background();
-        else if (auto p = element.try_as<wuxc::Panel>()) curBg = p.Background();
-        else if (auto c = element.try_as<wuxc::Control>()) curBg = c.Background();
-        if (auto compBase = curBg ? curBg.try_as<wuxm::XamlCompositionBrushBase>() : nullptr) {
-            void* targetAbi = winrt::get_abi(compBase);
-            std::lock_guard<std::mutex> lock(g_liveBlurBrushesMutex);
-            for (auto* b : g_liveBlurBrushes) {
-                if (!b || !b->IsRebuildable()) continue;
-                wuxm::XamlCompositionBrushBase liveBase = *b;
-                if (winrt::get_abi(liveBase) == targetAbi) return true;
-            }
-        }
-    } catch (...) {}
     return false;
 }
 
@@ -16633,10 +16985,9 @@ wuxm::XamlCompositionBrushBase CreateWindhawkBlurBrush(
     wui::Color tint = params.tintColor.value_or(wui::Color{0, 0, 0, 0});
     bool tintRequested = params.tintOpacity.has_value() || params.tintColor.has_value();
     uint8_t alpha = tintRequested ? params.tintOpacity.value_or(tint.A) : 0;
+    float sat = params.saturation.value_or(1.0f);
     return winrt::make<XamlBlurBrush>(element, blur, tint,
-        alpha, false, params.saturation.value_or(
-            static_cast<float>(g_settings.globalBlurSaturation) / 100.0f),
-        1.0f);
+        alpha, false, sat, 1.0f);
 }
 
 wuxm::XamlCompositionBrushBase CreateGlobalBlurBrush(UIElement const& element) {
@@ -21986,11 +22337,15 @@ FrameworkElement BuildMediaButtonContent(const media::Snapshot& snapshot) {
     }
 
     if (g_settings.mediaButtonShowName) {
-        auto tb = MakeText(nullptr,
+        auto tb = MakeText(L"MediaButtonTitleText",
             snapshot.title.empty() ? L"Unknown" : snapshot.title, 12);
-        tb.MaxWidth(105);
+        double mw = (g_autoMediaTextStage >= 2) ? 40.0 : (g_autoMediaTextStage == 1 ? 68.0 : 105.0);
+        if (!UserControlStylesSetProperty(tb, L"MaxWidth")) {
+            tb.MaxWidth(mw);
+        }
         tb.TextTrimming(TextTrimming::CharacterEllipsis);
         tb.VerticalAlignment(VerticalAlignment::Center);
+        RegisterNamed(L"MediaButtonTitleText", tb);
         row.Children().Append(tb);
     }
 
@@ -22071,6 +22426,7 @@ FrameworkElement BuildMediaButtonContent(const media::Snapshot& snapshot) {
 
     if (g_settings.mediaButtonShowVisualizer) {
             wuxc::StackPanel viz;
+            viz.Name(L"MediaButtonVisualizer");
             viz.Orientation(wuxc::Orientation::Horizontal);
             viz.Spacing(1);
             viz.VerticalAlignment(VerticalAlignment::Center);
@@ -22094,6 +22450,10 @@ FrameworkElement BuildMediaButtonContent(const media::Snapshot& snapshot) {
             viz.Children().Append(bar);
             g_mediaButtonBars.push_back(bar);
         }
+        if (g_autoHideMediaVisualizer && !UserControlStylesSetProperty(viz, L"Visibility")) {
+            viz.Visibility(Visibility::Collapsed);
+        }
+        RegisterNamed(L"MediaButtonVisualizer", viz);
         row.Children().Append(viz);
         if (snapshot.playing) {
             StartMediaVisualizer();
@@ -22103,6 +22463,28 @@ FrameworkElement BuildMediaButtonContent(const media::Snapshot& snapshot) {
     }
 
     return row;
+}
+
+static void ApplyAdaptiveMediaButton() {
+    if (auto it = g_namedElements.find(L"MediaButtonTitleText");
+        it != g_namedElements.end() && it->second) {
+        auto tb = it->second;
+        try {
+            if (!UserControlStylesSetProperty(tb, L"MaxWidth")) {
+                double mw = (g_autoMediaTextStage >= 2) ? 40.0 : (g_autoMediaTextStage == 1 ? 68.0 : 105.0);
+                tb.MaxWidth(mw);
+            }
+        } catch (...) {}
+    }
+    if (auto vit = g_namedElements.find(L"MediaButtonVisualizer");
+        vit != g_namedElements.end() && vit->second) {
+        auto viz = vit->second;
+        try {
+            if (!UserControlStylesSetProperty(viz, L"Visibility")) {
+                viz.Visibility(g_autoHideMediaVisualizer ? Visibility::Collapsed : Visibility::Visible);
+            }
+        } catch (...) {}
+    }
 }
 
 void ApplyMediaSnapshot(const media::Snapshot& snapshot) {
@@ -29171,6 +29553,10 @@ void ApplyResourceFlyoutContentUI(const resource::Usage& usage,
     if (auto it = g_namedElements.find(L"StatTile4"); it != g_namedElements.end()) {
         it->second.Visibility(label5.empty() ? Visibility::Collapsed : Visibility::Visible);
     }
+    if (auto it = g_namedElements.find(L"CpuTempHelpButton"); it != g_namedElements.end() && it->second) {
+        bool showHelp = (g_currentTab == 0 && detailed.cpuTempC < 0.0);
+        it->second.Visibility(showHelp ? Visibility::Visible : Visibility::Collapsed);
+    }
     if (auto it = g_namedElements.find(L"StatLabel5"); it != g_namedElements.end()) {
         if (auto tb = it->second.try_as<wuxc::TextBlock>()) tb.Text(winrt::hstring(label6));
     }
@@ -29310,6 +29696,247 @@ void UpdateResourceFlyoutContent() {
             }
         });
     });
+}
+
+
+static std::wstring FindInstalledCpuSensorExe(const std::wstring& provider) {
+    std::wstring exeName;
+    std::vector<std::wstring> candidates;
+    wchar_t progFiles[MAX_PATH]{}, progFiles86[MAX_PATH]{}, localApp[MAX_PATH]{}, userProf[MAX_PATH]{};
+    GetEnvironmentVariableW(L"ProgramFiles", progFiles, MAX_PATH);
+    GetEnvironmentVariableW(L"ProgramFiles(x86)", progFiles86, MAX_PATH);
+    GetEnvironmentVariableW(L"LOCALAPPDATA", localApp, MAX_PATH);
+    GetEnvironmentVariableW(L"USERPROFILE", userProf, MAX_PATH);
+
+    if (provider == L"coretemp") {
+        exeName = L"Core Temp.exe";
+        if (progFiles[0]) candidates.push_back(std::wstring(progFiles) + L"\\Core Temp\\Core Temp.exe");
+        if (progFiles86[0]) candidates.push_back(std::wstring(progFiles86) + L"\\Core Temp\\Core Temp.exe");
+        if (localApp[0]) candidates.push_back(std::wstring(localApp) + L"\\Core Temp\\Core Temp.exe");
+    } else if (provider == L"lhm") {
+        exeName = L"LibreHardwareMonitor.exe";
+        if (progFiles[0]) candidates.push_back(std::wstring(progFiles) + L"\\LibreHardwareMonitor\\LibreHardwareMonitor.exe");
+        if (progFiles86[0]) candidates.push_back(std::wstring(progFiles86) + L"\\LibreHardwareMonitor\\LibreHardwareMonitor.exe");
+        if (localApp[0]) candidates.push_back(std::wstring(localApp) + L"\\LibreHardwareMonitor\\LibreHardwareMonitor.exe");
+        if (userProf[0]) candidates.push_back(std::wstring(userProf) + L"\\Downloads\\LibreHardwareMonitor\\LibreHardwareMonitor.exe");
+    } else if (provider == L"afterburner") {
+        exeName = L"MSIAfterburner.exe";
+        if (progFiles86[0]) candidates.push_back(std::wstring(progFiles86) + L"\\MSI Afterburner\\MSIAfterburner.exe");
+        if (progFiles[0]) candidates.push_back(std::wstring(progFiles) + L"\\MSI Afterburner\\MSIAfterburner.exe");
+        if (localApp[0]) candidates.push_back(std::wstring(localApp) + L"\\MSI Afterburner\\MSIAfterburner.exe");
+    } else if (provider == L"hwinfo") {
+        exeName = L"HWiNFO64.exe";
+        if (progFiles[0]) candidates.push_back(std::wstring(progFiles) + L"\\HWiNFO64\\HWiNFO64.exe");
+        if (progFiles86[0]) candidates.push_back(std::wstring(progFiles86) + L"\\HWiNFO64\\HWiNFO64.exe");
+        if (localApp[0]) candidates.push_back(std::wstring(localApp) + L"\\HWiNFO64\\HWiNFO64.exe");
+    }
+
+    // 1. Check running processes first (finds portable installs anywhere on disk!)
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap != INVALID_HANDLE_VALUE) {
+        PROCESSENTRY32W pe{};
+        pe.dwSize = sizeof(pe);
+        if (Process32FirstW(snap, &pe)) {
+            do {
+                if (_wcsicmp(pe.szExeFile, exeName.c_str()) == 0) {
+                    HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pe.th32ProcessID);
+                    if (hProc) {
+                        wchar_t buf[MAX_PATH]{};
+                        DWORD sz = MAX_PATH;
+                        if (QueryFullProcessImageNameW(hProc, 0, buf, &sz) && sz > 0) {
+                            CloseHandle(hProc);
+                            CloseHandle(snap);
+                            return std::wstring(buf, sz);
+                        }
+                        CloseHandle(hProc);
+                    }
+                }
+            } while (Process32NextW(snap, &pe));
+        }
+        CloseHandle(snap);
+    }
+
+    // 2. Check standard install directories
+    for (const auto& c : candidates) {
+        if (GetFileAttributesW(c.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            return c;
+        }
+    }
+    return L"";
+}
+
+static bool RunCpuSensorOneClickSetup(const std::wstring& provider, std::wstring& outMessage) {
+    std::wstring exePath = FindInstalledCpuSensorExe(provider);
+    if (exePath.empty()) {
+        if (provider == L"coretemp") outMessage = L"Core Temp not found. Install it first, then click 1-Click Setup.";
+        else if (provider == L"afterburner") outMessage = L"MSI Afterburner not found. Install it first, then click 1-Click Setup.";
+        else if (provider == L"lhm") outMessage = L"LibreHardwareMonitor not found. Extract/run it once, then click 1-Click Setup.";
+        else outMessage = L"HWiNFO64 not found. Install it first, then click 1-Click Setup.";
+        return false;
+    }
+
+    auto psEsc = [](const std::wstring& s) {
+        std::wstring out;
+        out.reserve(s.size() + 8);
+        for (wchar_t ch : s) {
+            if (ch == L'\'') out += L"''";
+            else out.push_back(ch);
+        }
+        return out;
+    };
+
+    std::wstring dir = exePath;
+    size_t slash = dir.find_last_of(L"\\/");
+    if (slash != std::wstring::npos) dir = dir.substr(0, slash);
+
+    std::wstring ps;
+    ps += L"$ErrorActionPreference = 'SilentlyContinue'\r\n";
+    ps += L"$exe = '" + psEsc(exePath) + L"'\r\n";
+    ps += L"$dir = '" + psEsc(dir) + L"'\r\n";
+    ps += L"function Register-TopBarAutoStart($taskName, $exePath, $workDir, $argsStr) {\r\n";
+    ps += L"  $act = if ($argsStr) { New-ScheduledTaskAction -Execute $exePath -Argument $argsStr -WorkingDirectory $workDir } else { New-ScheduledTaskAction -Execute $exePath -WorkingDirectory $workDir }\r\n";
+    ps += L"  $trig = New-ScheduledTaskTrigger -AtLogOn\r\n";
+    ps += L"  $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name\r\n";
+    ps += L"  $princ = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Highest\r\n";
+    ps += L"  $set = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -StartWhenAvailable\r\n";
+    ps += L"  Register-ScheduledTask -TaskName $taskName -Action $act -Trigger $trig -Principal $princ -Settings $set -Force | Out-Null\r\n";
+    ps += L"}\r\n";
+    ps += L"function Set-IniKey($arr, $sec, $key, $val) {\r\n";
+    ps += L"  $inSec = $false; $secIdx = -1; $found = $false\r\n";
+    ps += L"  $out = New-Object System.Collections.Generic.List[string]\r\n";
+    ps += L"  for ($i=0; $i -lt $arr.Count; $i++) {\r\n";
+    ps += L"    $l = $arr[$i]\r\n";
+    ps += L"    if ($l -match '^\\s*\\[(.+)\\]\\s*$') {\r\n";
+    ps += L"      if ($inSec -and -not $found) { $out.Add(\"$key=$val\"); $found = $true }\r\n";
+    ps += L"      $inSec = ($Matches[1] -ieq $sec)\r\n";
+    ps += L"      if ($inSec) { $secIdx = $out.Count }\r\n";
+    ps += L"      $out.Add($l); continue\r\n";
+    ps += L"    }\r\n";
+    ps += L"    if ($inSec -and $l -match ('^\\s*' + [regex]::Escape($key) + '\\s*=')) {\r\n";
+    ps += L"      $out.Add(\"$key=$val\"); $found = $true; continue\r\n";
+    ps += L"    }\r\n";
+    ps += L"    $out.Add($l)\r\n";
+    ps += L"  }\r\n";
+    ps += L"  if (-not $found) {\r\n";
+    ps += L"    if ($secIdx -lt 0) { $out.Add(\"[$sec]\") }\r\n";
+    ps += L"    $out.Add(\"$key=$val\")\r\n";
+    ps += L"  }\r\n";
+    ps += L"  return $out.ToArray()\r\n";
+    ps += L"}\r\n";
+
+    if (provider == L"coretemp") {
+        ps += L"Get-Process 'Core Temp' | Stop-Process -Force\r\n";
+        ps += L"Start-Sleep -Milliseconds 500\r\n";
+        ps += L"$iniPaths = @((Join-Path $dir 'CoreTemp.ini'))\r\n";
+        ps += L"$appIni = Join-Path $env:APPDATA 'Core Temp\\CoreTemp.ini'\r\n";
+        ps += L"if (Test-Path $appIni) { $iniPaths += $appIni }\r\n";
+        ps += L"$vsIni = Join-Path $env:LOCALAPPDATA 'VirtualStore\\Program Files\\Core Temp\\CoreTemp.ini'\r\n";
+        ps += L"if (Test-Path $vsIni) { $iniPaths += $vsIni }\r\n";
+        ps += L"foreach ($ini in $iniPaths) {\r\n";
+        ps += L"  $lines = if (Test-Path $ini) { Get-Content $ini } else { @('[General]', '[Display]', '[System tray]') }\r\n";
+        ps += L"  $lines = Set-IniKey $lines 'General' 'StartWithWindows' '1;'\r\n";
+        ps += L"  $lines = Set-IniKey $lines 'General' 'SingleInstance' '1;'\r\n";
+        ps += L"  $lines = Set-IniKey $lines 'Display' 'Minimized' '1;'\r\n";
+        ps += L"  $lines = Set-IniKey $lines 'Display' 'CloseToSystray' '1;'\r\n";
+        ps += L"  $lines = Set-IniKey $lines 'Display' 'HideTaskbarButton' '1;'\r\n";
+        ps += L"  $lines = Set-IniKey $lines 'System tray' 'SystrayOption' '-1;'\r\n";
+        ps += L"  $curSec = ''\r\n";
+        ps += L"  $hasSensorLines = $false\r\n";
+        ps += L"  for ($i=0; $i -lt $lines.Count; $i++) {\r\n";
+        ps += L"    if ($lines[$i] -match '^\\s*\\[(.+)\\]\\s*$') { $curSec = $Matches[1]; continue }\r\n";
+        ps += L"    if ($curSec -ieq 'System tray' -and $lines[$i] -match '^\\s*(Sensor_[^=]+)=([^,]+),([^,]+),([^,]+),([^,]+),([^;]+);?\\s*$') {\r\n";
+        ps += L"      $hasSensorLines = $true\r\n";
+        ps += L"      $lines[$i] = \"$($Matches[1])=$($Matches[2]),$($Matches[3]),0,$($Matches[5]),$($Matches[6]);\"\r\n";
+        ps += L"    }\r\n";
+        ps += L"  }\r\n";
+        ps += L"  if (-not $hasSensorLines) {\r\n";
+        ps += L"    for ($c=0; $c -lt 32; $c++) {\r\n";
+        ps += L"      $lines = Set-IniKey $lines 'System tray' \"Sensor_Core #$c\" 'd8ff,0,0,1,0;'\r\n";
+        ps += L"    }\r\n";
+        ps += L"    $lines = Set-IniKey $lines 'System tray' 'Sensor_CPU #0' 'd8ff,0,0,1,1;'\r\n";
+        ps += L"    $lines = Set-IniKey $lines 'System tray' 'Sensor_Highest temperature' 'd8ff,0,0,1,1;'\r\n";
+        ps += L"  }\r\n";
+        ps += L"  Set-Content -Path $ini -Value $lines -Encoding ASCII\r\n";
+        ps += L"}\r\n";
+        ps += L"Register-TopBarAutoStart 'TopBar_CoreTemp_AutoStart' $exe $dir ''\r\n";
+        ps += L"Start-Process -FilePath $exe -WorkingDirectory $dir -WindowStyle Minimized\r\n";
+        outMessage = L"Core Temp configured: boot auto-start enabled, starts minimized with hidden taskbar button, and all per-core tray icons disabled.";
+    } else if (provider == L"afterburner") {
+        ps += L"Get-Process 'MSIAfterburner' | Stop-Process -Force\r\n";
+        ps += L"Start-Sleep -Milliseconds 500\r\n";
+        ps += L"$profDir = Join-Path $dir 'Profiles'\r\n";
+        ps += L"if (-not (Test-Path $profDir)) { New-Item -ItemType Directory -Path $profDir -Force | Out-Null }\r\n";
+        ps += L"$cfg = Join-Path $profDir 'MSIAfterburner.cfg'\r\n";
+        ps += L"$lines = if (Test-Path $cfg) { Get-Content $cfg } else { @('[Settings]') }\r\n";
+        ps += L"$lines = Set-IniKey $lines 'Settings' 'StartWithWindows' '1'\r\n";
+        ps += L"$lines = Set-IniKey $lines 'Settings' 'StartMinimized' '1'\r\n";
+        ps += L"Set-Content -Path $cfg -Value $lines -Encoding ASCII\r\n";
+        ps += L"Register-TopBarAutoStart 'TopBar_MSIAfterburner_AutoStart' $exe $dir '/m'\r\n";
+        ps += L"Start-Process -FilePath $exe -ArgumentList '/m' -WorkingDirectory $dir -WindowStyle Minimized\r\n";
+        outMessage = L"MSI Afterburner configured: auto-start at boot minimized. Make sure CPU temperature is enabled in Afterburner Settings > Monitoring.";
+    } else if (provider == L"lhm") {
+        ps += L"Get-Process 'LibreHardwareMonitor' | Stop-Process -Force\r\n";
+        ps += L"Start-Sleep -Milliseconds 500\r\n";
+        ps += L"$cfg = Join-Path $dir 'LibreHardwareMonitor.config'\r\n";
+        ps += L"if (-not (Test-Path $cfg)) {\r\n";
+        ps += L"  Set-Content -Path $cfg -Value '<?xml version=\"1.0\" encoding=\"utf-8\"?><configuration><appSettings></appSettings></configuration>' -Encoding UTF8\r\n";
+        ps += L"}\r\n";
+        ps += L"[xml]$xml = Get-Content $cfg\r\n";
+        ps += L"if (-not $xml.configuration.appSettings) {\r\n";
+        ps += L"  $as = $xml.CreateElement('appSettings'); $xml.configuration.AppendChild($as) | Out-Null\r\n";
+        ps += L"}\r\n";
+        ps += L"foreach ($k in @('startMinMenuItem','minTrayMenuItem','minCloseMenuItem')) {\r\n";
+        ps += L"  $node = $xml.configuration.appSettings.add | Where-Object { $_.key -eq $k }\r\n";
+        ps += L"  if ($node) { $node.value = 'true' } else {\r\n";
+        ps += L"    $el = $xml.CreateElement('add'); $el.SetAttribute('key',$k); $el.SetAttribute('value','true')\r\n";
+        ps += L"    $xml.configuration.appSettings.AppendChild($el) | Out-Null\r\n";
+        ps += L"  }\r\n";
+        ps += L"}\r\n";
+        ps += L"$xml.Save($cfg)\r\n";
+        ps += L"Register-TopBarAutoStart 'TopBar_LibreHardwareMonitor_AutoStart' $exe $dir ''\r\n";
+        ps += L"Start-Process -FilePath $exe -WorkingDirectory $dir -WindowStyle Minimized\r\n";
+        outMessage = L"LibreHardwareMonitor configured: auto-start at boot (admin) and start minimized to tray.";
+    } else {
+        ps += L"Get-Process 'HWiNFO64' | Stop-Process -Force\r\n";
+        ps += L"Start-Sleep -Milliseconds 500\r\n";
+        ps += L"$ini = Join-Path $dir 'HWiNFO64.INI'\r\n";
+        ps += L"$lines = if (Test-Path $ini) { Get-Content $ini } else { @('[Settings]') }\r\n";
+        ps += L"$lines = Set-IniKey $lines 'Settings' 'SensorsSM' '1'\r\n";
+        ps += L"$lines = Set-IniKey $lines 'Settings' 'SensorsOnly' '1'\r\n";
+        ps += L"$lines = Set-IniKey $lines 'Settings' 'MinimizeSensors' '1'\r\n";
+        ps += L"$lines = Set-IniKey $lines 'Settings' 'MinimizeOnClose' '1'\r\n";
+        ps += L"$lines = Set-IniKey $lines 'Settings' 'ShowWelcome' '0'\r\n";
+        ps += L"$lines = Set-IniKey $lines 'Settings' 'AutoStart' '1'\r\n";
+        ps += L"Set-Content -Path $ini -Value $lines -Encoding ASCII\r\n";
+        ps += L"Register-TopBarAutoStart 'TopBar_HWiNFO64_AutoStart' $exe $dir ''\r\n";
+        ps += L"Start-Process -FilePath $exe -WorkingDirectory $dir -WindowStyle Minimized\r\n";
+        outMessage = L"HWiNFO64 configured: Sensors-only, Shared Memory enabled, minimized, and auto-start at boot.";
+    }
+
+    wchar_t tempDir[MAX_PATH]{};
+    GetTempPathW(MAX_PATH, tempDir);
+    std::wstring psPath = std::wstring(tempDir) + L"topbar_cpu_sensor_setup.ps1";
+    HANDLE hf = CreateFileW(psPath.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (hf == INVALID_HANDLE_VALUE) {
+        outMessage = L"Could not write setup script to %TEMP%.";
+        return false;
+    }
+    int utf8Len = WideCharToMultiByte(CP_UTF8, 0, ps.c_str(), -1, nullptr, 0, nullptr, nullptr);
+    if (utf8Len > 1) {
+        std::string utf8(utf8Len - 1, '\0');
+        WideCharToMultiByte(CP_UTF8, 0, ps.c_str(), -1, utf8.data(), utf8Len - 1, nullptr, nullptr);
+        DWORD written = 0;
+        WriteFile(hf, utf8.data(), static_cast<DWORD>(utf8.size()), &written, nullptr);
+    }
+    CloseHandle(hf);
+
+    std::wstring params = L"-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"" + psPath + L"\"";
+    HINSTANCE res = ShellExecuteW(nullptr, L"runas", L"powershell.exe", params.c_str(), nullptr, SW_HIDE);
+    if (reinterpret_cast<INT_PTR>(res) <= 32) {
+        outMessage = L"Setup canceled or elevation was denied.";
+        return false;
+    }
+    return true;
 }
 
 void PopulateResourceFlyout() {
@@ -29762,6 +30389,78 @@ void PopulateResourceFlyout() {
     makeStatCell(1, 1, L"StatTile4", L"CPU Temp",    L"StatLabel4", L"StatValue4", dummyLbl4, dummyVal4, dummyCell4);
     makeStatCell(1, 2, L"StatTile5", L"CPU Power",   L"StatLabel5", L"StatValue5", dummyLbl5, dummyVal5, dummyCell5);
 
+    // Add '?' help button inside CPU Temp tile (visible only when CPU Temp is N/A)
+    if (dummyCell4 && dummyLbl4) {
+        dummyCell4.HorizontalAlignment(HorizontalAlignment::Stretch);
+        wuxc::Grid lblRow;
+        lblRow.HorizontalAlignment(HorizontalAlignment::Stretch);
+        wuxc::ColumnDefinition lc0; lc0.Width(GridLength{1, GridUnitType::Star});
+        wuxc::ColumnDefinition lc1; lc1.Width(GridLength{0, GridUnitType::Auto});
+        lblRow.ColumnDefinitions().Append(lc0);
+        lblRow.ColumnDefinitions().Append(lc1);
+
+        uint32_t lblIdx = 0;
+        if (dummyCell4.Children().IndexOf(dummyLbl4, lblIdx)) {
+            dummyCell4.Children().RemoveAt(lblIdx);
+        }
+        dummyLbl4.VerticalAlignment(VerticalAlignment::Center);
+        wuxc::Grid::SetColumn(dummyLbl4, 0);
+        lblRow.Children().Append(dummyLbl4);
+
+        wuxc::Button helpBtn;
+        helpBtn.Name(L"CpuTempHelpButton");
+        helpBtn.Width(16);
+        helpBtn.Height(16);
+        helpBtn.MinWidth(0);
+        helpBtn.MinHeight(0);
+        helpBtn.Padding(Thickness{0, 0, 0, 0});
+        helpBtn.Margin(Thickness{4, 0, 0, 0});
+        helpBtn.HorizontalAlignment(HorizontalAlignment::Right);
+        helpBtn.VerticalAlignment(VerticalAlignment::Center);
+        helpBtn.Background(MakeBrush(0, 0, 0, 0));
+        helpBtn.BorderThickness(Thickness{0, 0, 0, 0});
+        try {
+            helpBtn.Template(Markup::XamlReader::Load(LR"XAML(
+<ControlTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" TargetType="Button">
+  <Grid Background="Transparent">
+    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+  </Grid>
+</ControlTemplate>)XAML").as<wuxc::ControlTemplate>());
+        } catch (...) {}
+
+        wuxc::Border qRing;
+        qRing.Width(16);
+        qRing.Height(16);
+        qRing.CornerRadius(MakeCorner(8));
+        qRing.Background(MakeBrush(0x14, 0xFF, 0x4D, 0x4D));
+        qRing.BorderBrush(MakeBrush(0xD8, 0xFF, 0x5C, 0x5C));
+        qRing.BorderThickness(Thickness{1, 1, 1, 1});
+
+        wuxc::TextBlock qMark;
+        qMark.Text(L"?");
+        qMark.FontSize(10.5);
+        qMark.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+        qMark.Foreground(MakeBrush(0xFF, 0xFF, 0x6E, 0x6E));
+        qMark.HorizontalAlignment(HorizontalAlignment::Center);
+        qMark.VerticalAlignment(VerticalAlignment::Center);
+        qMark.TextAlignment(TextAlignment::Center);
+        qRing.Child(qMark);
+        helpBtn.Content(qRing);
+
+        helpBtn.Visibility(Visibility::Collapsed);
+        try {
+            wuxc::ToolTipService::SetToolTip(helpBtn, winrt::box_value(L"CPU temperature setup"));
+        } catch (...) {}
+        helpBtn.Click([](auto&&, auto&&) {
+            OpenCpuTempSetupWindow();
+        });
+        g_namedElements.insert_or_assign(L"CpuTempHelpButton", helpBtn);
+        wuxc::Grid::SetColumn(helpBtn, 1);
+        lblRow.Children().Append(helpBtn);
+
+        dummyCell4.Children().InsertAt(0, lblRow);
+    }
+
     contentGrid.Children().Append(statsGrid);
     wuxc::Grid::SetRow(statsGrid, 1);
 
@@ -29801,8 +30500,9 @@ void ApplyAdaptiveWeatherLabel() {
     if (it == g_namedElements.end()) return;
     if (auto tb = it->second.try_as<wuxc::TextBlock>()) {
         try {
-            tb.Visibility(g_autoHideWeatherLabel ? Visibility::Collapsed
-                                                 : Visibility::Visible);
+            if (!UserControlStylesSetProperty(tb, L"Visibility")) {
+                tb.Visibility(g_autoHideWeatherLabel ? Visibility::Collapsed : Visibility::Visible);
+            }
         } catch (...) {}
     }
 }
@@ -29831,8 +30531,10 @@ void RefreshWeatherButtonContent() {
                               : L"Weather";
     auto statusTb = MakeText(L"WeatherStatusText", status, 12);
     statusTb.Margin(Thickness{0, 0, 8, 0});
-    statusTb.Visibility(g_autoHideWeatherLabel ? Visibility::Collapsed
-                                               : Visibility::Visible);
+    if (!UserControlStylesSetProperty(statusTb, L"Visibility")) {
+        statusTb.Visibility(g_autoHideWeatherLabel ? Visibility::Collapsed
+                                                   : Visibility::Visible);
+    }
     RegisterNamed(L"WeatherStatusText", statusTb);
     stack.Children().Append(statusTb);
 
@@ -36606,7 +37308,6 @@ static std::atomic<DWORD> g_winVkDown{0};
 static std::atomic<ULONGLONG> g_winDownTick{0};
 static std::atomic<uint64_t> g_shortcutResetGeneration{0};
 static std::atomic<bool> g_sessionInputBlocked{false};
-static std::atomic<bool> g_startButtonUsesWindows{false};
 static std::atomic<bool> g_searchButtonUsesWindows{false};
 
 static void ReleaseStuckWinKeysIfNeeded(DWORD specificVk = 0) {
@@ -36786,7 +37487,221 @@ static void UpdateTopBarMenuButtonBounds() {
     }
 }
 
+static void ScheduleTopBarClickableRectUpdate() {
+    if (g_topBarHitUpdateQueued.exchange(true)) return;
+    RunOnUiThread([] {
+        g_topBarHitUpdateQueued.store(false);
+        UpdateTopBarClickableRect(false);
+    });
+}
+
+static void UpdateTopBarClickableRect(bool settleFinal) {
+    HWND popup = g_topBarPopupHwnd;
+    if (!popup || !IsWindow(popup)) {
+        g_topBarHasClickableRect.store(false, std::memory_order_release);
+        return;
+    }
+    try {
+        auto it = g_namedElements.find(L"TopBarRoot");
+        if (it == g_namedElements.end() || !it->second) {
+            g_topBarHasClickableRect.store(false, std::memory_order_release);
+            return;
+        }
+        FrameworkElement fe = it->second;
+        double w = fe.ActualWidth(), h = fe.ActualHeight();
+        if (w <= 0 || h <= 0) {
+            g_topBarHasClickableRect.store(false, std::memory_order_release);
+            return;
+        }
+
+        double dpi = GetBarDpiScale();
+        if (!std::isfinite(dpi) || dpi <= 0) dpi = 1;
+
+        auto t  = fe.TransformToVisual(nullptr);
+        auto tl = t.TransformPoint({0.0f, 0.0f});
+        auto br = t.TransformPoint({static_cast<float>(w), static_cast<float>(h)});
+
+        RECT win{};
+        GetClientRect(popup, &win);
+        LONG left   = std::max<LONG>(static_cast<LONG>(std::floor(tl.X * dpi)), 0);
+        LONG top    = std::max<LONG>(static_cast<LONG>(std::floor(tl.Y * dpi)), 0);
+        LONG right  = std::min<LONG>(static_cast<LONG>(std::ceil(br.X * dpi)), win.right);
+        LONG bottom = std::min<LONG>(static_cast<LONG>(std::ceil(br.Y * dpi)), win.bottom);
+
+        if (right > left && bottom > top) {
+            g_topBarHitLeft.store(left, std::memory_order_relaxed);
+            g_topBarHitTop.store(top, std::memory_order_relaxed);
+            g_topBarHitRight.store(right, std::memory_order_relaxed);
+            g_topBarHitBottom.store(bottom, std::memory_order_relaxed);
+            g_topBarHasClickableRect.store(true, std::memory_order_release);
+        } else {
+            g_topBarHasClickableRect.store(false, std::memory_order_release);
+            return;
+        }
+
+        // Apply real cross-process click-through via SetWindowRgn when the bar
+        // is visible and not mid-slide. WM_NCHITTEST HTTRANSPARENT only works
+        // within the same thread, whereas SetWindowRgn passes clicks straight
+        // through to the desktop and other applications.
+        if (g_fullScreenAppActive || ShouldKeepTopBarPopupHidden() ||
+            g_slideAnimating.load() || g_topBarHideAnimating.load() ||
+            tl.Y < -0.5f) {
+            return;
+        }
+        if (g_topBarBackdropMode.load() != TopBarBackdropMode::None) {
+            return;
+        }
+
+        auto isBrushInvisible = [](wuxm::Brush const& b) -> bool {
+            if (!b) return true;
+            if (auto scb = b.try_as<wuxm::SolidColorBrush>()) {
+                return scb.Color().A == 0 || scb.Opacity() <= 0.001;
+            }
+            return b.Opacity() <= 0.001;
+        };
+
+        bool barBgInvisible = true;
+        if (auto tbPanel = fe.try_as<wuxc::Panel>()) {
+            if (fe.Visibility() == Visibility::Visible && fe.Opacity() > 0.001) {
+                if (!isBrushInvisible(tbPanel.Background())) barBgInvisible = false;
+            }
+        }
+        if (barBgInvisible) {
+            if (auto gbIt = g_namedElements.find(L"GlobalBlurLayer");
+                gbIt != g_namedElements.end() && gbIt->second) {
+                if (auto gbBorder = gbIt->second.try_as<wuxc::Border>()) {
+                    if (gbBorder.Visibility() == Visibility::Visible &&
+                        gbBorder.Opacity() > 0.001 &&
+                        !isBrushInvisible(gbBorder.Background())) {
+                        barBgInvisible = false;
+                    }
+                }
+            }
+        }
+
+        static std::vector<RECT> s_lastAppliedRects;
+        static HWND s_lastAppliedPopup = nullptr;
+        RECT box{};
+        const bool hasRgn = GetWindowRgnBox(popup, &box) != ERROR;
+
+        if (!g_bleedActive.load() && barBgInvisible) {
+            // Transparent / collapsed bar background: only the StackPanels
+            // (LeftPanel, CenterPanel, RightPanel) capture input; all empty
+            // spaces between and around them pass clicks straight through.
+            std::vector<RECT> panelRects;
+            for (PCWSTR panelName : { L"LeftPanel", L"CenterPanel", L"RightPanel" }) {
+                auto pit = g_namedElements.find(panelName);
+                if (pit == g_namedElements.end() || !pit->second) continue;
+                FrameworkElement pfe = pit->second;
+                if (pfe.Visibility() != Visibility::Visible) continue;
+                double pw = pfe.ActualWidth(), ph = pfe.ActualHeight();
+                if (pw <= 0 || ph <= 0) continue;
+                auto pt  = pfe.TransformToVisual(nullptr);
+                auto ptl = pt.TransformPoint({0.0f, 0.0f});
+                auto pbr = pt.TransformPoint({static_cast<float>(pw), static_cast<float>(ph)});
+                RECT pr{
+                    std::max<LONG>(static_cast<LONG>(std::floor(ptl.X * dpi)) - 2, 0),
+                    std::max<LONG>(static_cast<LONG>(std::floor(ptl.Y * dpi)) - 2, 0),
+                    std::min<LONG>(static_cast<LONG>(std::ceil(pbr.X * dpi)) + 2, win.right),
+                    std::min<LONG>(static_cast<LONG>(std::ceil(pbr.Y * dpi)) + 2, win.bottom)
+                };
+                if (pr.right > pr.left && pr.bottom > pr.top) {
+                    panelRects.push_back(pr);
+                }
+            }
+
+            if (!panelRects.empty()) {
+                bool same = hasRgn && s_lastAppliedPopup == popup &&
+                            panelRects.size() == s_lastAppliedRects.size();
+                if (same) {
+                    for (size_t i = 0; i < panelRects.size(); ++i) {
+                        if (!EqualRect(&panelRects[i], &s_lastAppliedRects[i])) {
+                            same = false;
+                            break;
+                        }
+                    }
+                }
+                if (!same || settleFinal) {
+                    HRGN combined = CreateRectRgn(0, 0, 0, 0);
+                    if (combined) {
+                        for (const auto& pr : panelRects) {
+                            HRGN part = CreateRectRgn(pr.left, pr.top, pr.right, pr.bottom);
+                            if (part) {
+                                CombineRgn(combined, combined, part, RGN_OR);
+                                DeleteObject(part);
+                            }
+                        }
+                        // During a live expand/unexpand transition (300ms), also keep the
+                        // previous panel bounds in the region so animating/re-centering
+                        // panels never get clipped from either side, then snap to exact
+                        // final panel rects once the transition finishes.
+                        bool unionedPrevious = false;
+                        if (!settleFinal && s_lastAppliedPopup == popup && !s_lastAppliedRects.empty() && !same) {
+                            for (const auto& oldPr : s_lastAppliedRects) {
+                                HRGN part = CreateRectRgn(oldPr.left, oldPr.top, oldPr.right, oldPr.bottom);
+                                if (part) {
+                                    CombineRgn(combined, combined, part, RGN_OR);
+                                    DeleteObject(part);
+                                }
+                            }
+                            unionedPrevious = true;
+                        }
+                        if (SetWindowRgn(popup, combined, TRUE)) {
+                            s_lastAppliedRects = std::move(panelRects);
+                            s_lastAppliedPopup = popup;
+                            if (unionedPrevious) {
+                                if (!g_panelRgnSettleTimer) {
+                                    g_panelRgnSettleTimer = DispatcherTimer();
+                                    g_panelRgnSettleTimer.Interval(std::chrono::milliseconds(340));
+                                    g_panelRgnSettleTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
+                                        g_panelRgnSettleTimer.Stop();
+                                        UpdateTopBarClickableRect(true);
+                                    });
+                                }
+                                g_panelRgnSettleTimer.Stop();
+                                g_panelRgnSettleTimer.Start();
+                            } else if (g_panelRgnSettleTimer) {
+                                g_panelRgnSettleTimer.Stop();
+                            }
+                        } else {
+                            DeleteObject(combined);
+                        }
+                    }
+                }
+                return;
+            }
+        }
+
+        bool isInset = (left > 0 || top > 0 || right < win.right || bottom < win.bottom);
+        if (!g_bleedActive.load() && isInset) {
+            RECT desired{ left, top, right, bottom };
+            bool same = hasRgn && s_lastAppliedPopup == popup &&
+                        s_lastAppliedRects.size() == 1 &&
+                        EqualRect(&s_lastAppliedRects[0], &desired) &&
+                        EqualRect(&box, &desired);
+            if (!same) {
+                HRGN rgn = CreateRectRgn(left, top, right, bottom);
+                if (rgn) {
+                    if (SetWindowRgn(popup, rgn, TRUE)) {
+                        s_lastAppliedRects = { desired };
+                        s_lastAppliedPopup = popup;
+                    } else {
+                        DeleteObject(rgn);
+                    }
+                }
+            }
+        } else {
+            s_lastAppliedRects.clear();
+            s_lastAppliedPopup = nullptr;
+            if (hasRgn) {
+                SetWindowRgn(popup, nullptr, TRUE);
+            }
+        }
+    } catch (...) {}
+}
+
 static void ApplyTopBarMicaShape() {
+    UpdateTopBarClickableRect();
     HWND popup = g_topBarPopupHwnd;
     if (!popup || !IsWindow(popup)) return;
     if (g_settings.topBarBehaviour != L"default" || g_slideAnimating.load()) return;
@@ -36795,7 +37710,6 @@ static void ApplyTopBarMicaShape() {
     const bool hasRgn = GetWindowRgnBox(popup, &box) != ERROR;
 
     if (g_topBarBackdropMode.load() == TopBarBackdropMode::None) {
-        if (hasRgn) SetWindowRgn(popup, nullptr, TRUE);
         return;
     }
     try {
@@ -36890,35 +37804,6 @@ static void ToggleSearchFromTopBarButton() {
 static bool NativeStartMenuIsVisible();
 void ShowBarForAutoHide();
 void ShowStartMenuFlyout(bool debounce);
-
-static void TriggerNativeWindowsStartMenu() {
-    g_allowNativeStartUntil.store(GetTickCount64() + 6000);
-    CloseAnyOpenChildFlyout();
-    HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (taskbar && IsWindow(taskbar)) {
-        DWORD_PTR res = 0;
-        SendMessageTimeoutW(taskbar, g_msgAllowNativeStart, 1, 0,
-                            SMTO_ABORTIFHUNG, 350, &res);
-    }
-    RunInBackground([] {
-        Sleep(110);
-        if (NativeStartMenuIsVisible()) return;
-        if (HWND tb = FindWindowW(L"Shell_TrayWnd", nullptr)) {
-            AllowSetForegroundWindow(ASFW_ANY);
-            DWORD_PTR res2 = 0;
-            SendMessageTimeoutW(tb, g_msgAllowNativeStart, 0, 0,
-                                SMTO_ABORTIFHUNG, 250, &res2);
-        }
-        INPUT in[2]{};
-        in[0].type = in[1].type = INPUT_KEYBOARD;
-        in[0].ki.wVk = VK_LWIN;
-        in[1].ki.wVk = VK_LWIN;
-        in[1].ki.dwFlags = KEYEVENTF_KEYUP;
-        SendInput(1, &in[0], sizeof(INPUT));
-        Sleep(35);
-        SendInput(1, &in[1], sizeof(INPUT));
-    });
-}
 
 static void AnimateStartIconScale(float targetScale, int durationMs) {
     try {
@@ -37367,11 +38252,7 @@ static bool ConsumeTopBarMenuToggleMouse(WPARAM message, POINT point) {
                         HideTopBarMenu(g_startMenuFlyout);
                     } else {
                         CloseAnyOpenChildFlyout();
-                        if (g_startButtonUsesWindows.load()) {
-                            TriggerNativeWindowsStartMenu();
-                        } else {
-                            ShowStartMenuFlyout(false);
-                        }
+                        ShowStartMenuFlyout(false);
                     }
                 } else {
                     bool searchWasOpen = g_searchKeyboardActive.load() ||
@@ -39436,7 +40317,7 @@ struct StartIconDiskHeader {
     uint32_t dataBytes;
 };
 static constexpr uint32_t kStartIconDiskMagic = 0x43494254;
-static constexpr uint32_t kStartIconDiskVersion = 1;
+static constexpr uint32_t kStartIconDiskVersion = 2;
 
 static uint64_t StartIconHashBytes(uint64_t hash, const void* data, size_t size) {
     auto bytes = static_cast<const uint8_t*>(data);
@@ -39635,27 +40516,58 @@ static std::shared_ptr<StartMenuIconPixels> LoadStartMenuIconPixels(
         }
     } else {
         HICON icon = nullptr;
-        winrt::com_ptr<IShellItemImageFactory> factory;
-        if (SUCCEEDED(SHCreateItemFromParsingName(app.lnkPath.c_str(), nullptr,
-                                                 IID_PPV_ARGS(factory.put())))) {
-            HBITMAP bitmap = nullptr;
-            SIZE dimensions{static_cast<LONG>(rasterSize), static_cast<LONG>(rasterSize)};
-            if (SUCCEEDED(factory->GetImage(dimensions, SIIGBF_ICONONLY, &bitmap)) && bitmap) {
-                ICONINFO info{};
-                info.fIcon = TRUE;
-                info.hbmColor = bitmap;
-                BITMAP actual{};
-                GetObjectW(bitmap, sizeof(actual), &actual);
-                info.hbmMask = CreateBitmap(std::max(1L, actual.bmWidth),
-                                            std::max(1L, actual.bmHeight), 1, 1, nullptr);
-                icon = CreateIconIndirect(&info);
-                if (info.hbmMask) DeleteObject(info.hbmMask);
-                DeleteObject(bitmap);
+        // Prefer the shortcut's explicit icon location or resolved target path
+        // so Windows Shell doesn't bake the .lnk shortcut arrow overlay into the icon.
+        auto endsWithLnk = [](const std::wstring& p) {
+            return p.size() >= 4 && _wcsicmp(p.c_str() + p.size() - 4, L".lnk") == 0;
+        };
+        if (endsWithLnk(app.lnkPath)) {
+            winrt::com_ptr<IShellLinkW> link;
+            if (SUCCEEDED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER,
+                                           IID_PPV_ARGS(link.put())))) {
+                if (auto pf = link.try_as<IPersistFile>()) {
+                    if (SUCCEEDED(pf->Load(app.lnkPath.c_str(), STGM_READ))) {
+                        wchar_t iconLoc[MAX_PATH]{};
+                        int iconIdx = 0;
+                        if (SUCCEEDED(link->GetIconLocation(iconLoc, MAX_PATH, &iconIdx)) && iconLoc[0]) {
+                            wchar_t expanded[MAX_PATH]{};
+                            DWORD expLen = ExpandEnvironmentStringsW(iconLoc, expanded, MAX_PATH);
+                            PCWSTR srcPath = (expLen > 0 && expLen < MAX_PATH) ? expanded : iconLoc;
+                            HICON largeIcon = nullptr;
+                            if (ExtractIconExW(srcPath, iconIdx, &largeIcon, nullptr, 1) > 0 && largeIcon) {
+                                icon = largeIcon;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        std::wstring shellIconSrc = (!app.target.empty() && GetFileAttributesW(app.target.c_str()) != INVALID_FILE_ATTRIBUTES)
+                                        ? app.target
+                                        : app.lnkPath;
+        if (!icon) {
+            winrt::com_ptr<IShellItemImageFactory> factory;
+            if (SUCCEEDED(SHCreateItemFromParsingName(shellIconSrc.c_str(), nullptr,
+                                                     IID_PPV_ARGS(factory.put())))) {
+                HBITMAP bitmap = nullptr;
+                SIZE dimensions{static_cast<LONG>(rasterSize), static_cast<LONG>(rasterSize)};
+                if (SUCCEEDED(factory->GetImage(dimensions, SIIGBF_ICONONLY, &bitmap)) && bitmap) {
+                    ICONINFO info{};
+                    info.fIcon = TRUE;
+                    info.hbmColor = bitmap;
+                    BITMAP actual{};
+                    GetObjectW(bitmap, sizeof(actual), &actual);
+                    info.hbmMask = CreateBitmap(std::max(1L, actual.bmWidth),
+                                                std::max(1L, actual.bmHeight), 1, 1, nullptr);
+                    icon = CreateIconIndirect(&info);
+                    if (info.hbmMask) DeleteObject(info.hbmMask);
+                    DeleteObject(bitmap);
+                }
             }
         }
         if (!icon) {
             SHFILEINFOW info{};
-            if (SHGetFileInfoW(app.lnkPath.c_str(), 0, &info, sizeof(info),
+            if (SHGetFileInfoW(shellIconSrc.c_str(), 0, &info, sizeof(info),
                                SHGFI_ICON | SHGFI_LARGEICON)) icon = info.hIcon;
         }
         if (icon) {
@@ -40834,8 +41746,10 @@ void BuildStartMenuFlyoutContent() {
             wuxc::Grid::SetColumn(iconSlot, 0);
             rowG.Children().Append(iconSlot);
 
-            // Load real Shell icon safely (HICON on background thread -> BitmapImage on UI thread)
-            std::wstring iconPath = !item.lnkPath.empty() ? item.lnkPath : item.path;
+            // Load real Shell icon safely (prefer resolved target path over .lnk
+            // so Windows Shell doesn't add the shortcut arrow overlay)
+            std::wstring iconPath = !item.path.empty() ? item.path : item.lnkPath;
+            std::wstring fallbackLnk = item.lnkPath;
             if (!iconPath.empty()) {
                 auto weakSlot = winrt::make_weak(iconSlot);
                 bool isShellVirtual = (iconPath.rfind(L"shell:", 0) == 0);
@@ -40852,11 +41766,18 @@ void BuildStartMenuFlyoutContent() {
                         }
                     } catch (...) {}
                 } else {
-                    RunInBackground([iconPath, iconSize, weakSlot] {
+                    RunInBackground([iconPath, fallbackLnk, iconSize, weakSlot] {
                         SHFILEINFOW sfi{};
                         HICON hIcon = nullptr;
                         if (SHGetFileInfoW(iconPath.c_str(), 0, &sfi, sizeof(sfi),
                                            SHGFI_ICON | SHGFI_LARGEICON) && sfi.hIcon) {
+                            hIcon = sfi.hIcon;
+                        } else if (SHGetFileInfoW(iconPath.c_str(), FILE_ATTRIBUTE_NORMAL, &sfi, sizeof(sfi),
+                                                  SHGFI_USEFILEATTRIBUTES | SHGFI_ICON | SHGFI_LARGEICON) && sfi.hIcon) {
+                            hIcon = sfi.hIcon;
+                        } else if (!fallbackLnk.empty() && fallbackLnk != iconPath &&
+                                   SHGetFileInfoW(fallbackLnk.c_str(), 0, &sfi, sizeof(sfi),
+                                                  SHGFI_ICON | SHGFI_LARGEICON) && sfi.hIcon) {
                             hIcon = sfi.hIcon;
                         }
                         if (!hIcon) return;
@@ -43594,6 +44515,15 @@ int GetAutoTopBarScale();
 
 static void SetElementCornerAndClip(FrameworkElement const& fe, double r, bool clip = false) {
     if (!fe) return;
+    if (UserControlStylesSetProperty(fe, L"CornerRadius")) return;
+    // Also respect TopBarRoot CornerRadius style on GlobalBlurLayer
+    if (fe.Name() == L"GlobalBlurLayer") {
+        if (auto tbIt = g_namedElements.find(L"TopBarRoot");
+            tbIt != g_namedElements.end() && tbIt->second &&
+            UserControlStylesSetProperty(tbIt->second, L"CornerRadius")) {
+            return;
+        }
+    }
     auto cr = MakeCorner(r);
     try {
         if (auto b = fe.try_as<wuxc::Border>()) b.CornerRadius(cr);
@@ -43646,7 +44576,7 @@ void ApplyUserTopBarCornerOverrides() {
     if (g_settings.topBarButtonsCornerRadiusCustom) {
         double r = static_cast<double>(std::clamp(g_settings.topBarButtonsCornerRadius, 0, 30));
         // 1. All Grid#TopBarRoot > StackPanel > Button (matching GreenBar's primary button selector)
-        for (PCWSTR panelName : { L"LeftPanel", L"CenterPanel", L"ControlCenterPanel", L"ClockPanel" }) {
+        for (PCWSTR panelName : { L"LeftPanel", L"CenterPanel", L"RightPanel" }) {
             if (auto it = g_namedElements.find(panelName); it != g_namedElements.end() && it->second) {
                 if (auto sp = it->second.try_as<wuxc::StackPanel>()) {
                     for (uint32_t i = 0; i < sp.Children().Size(); ++i) {
@@ -44038,7 +44968,7 @@ static bool TryApplySettingLive(PCWSTR key) {
         g_settings.topBarBackgroundColor = GetStringSettingCopy(L"topBarBackgroundColor");
         if (g_settings.topBarBackgroundColor.empty()) g_settings.topBarBackgroundColor = L"#000000";
         g_settings.topBarBackgroundOpacity = std::clamp(ReadIntSetting(L"topBarBackgroundOpacity", 40), 0, 100);
-        g_settings.globalBlurAmount = std::clamp(ReadIntSetting(L"globalBlurAmount", 60), 1, 100);
+        g_settings.globalBlurAmount = std::clamp(ReadIntSetting(L"globalBlurAmount", 60), 0, 100);
         g_settings.globalBlurSaturation = std::clamp(ReadIntSetting(L"globalBlurSaturation", 200), 0, 400);
         ApplyTopBarBackgroundNow();
         RefreshFlyoutBackdropBrushes();
@@ -44224,6 +45154,7 @@ static bool TryApplySettingLive(PCWSTR key) {
             }
             if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
                 SetWindowRgn(g_topBarPopupHwnd, nullptr, TRUE);
+        UpdateTopBarClickableRect();
                 BOOL cloakOff = FALSE;
                 DwmSetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAK, &cloakOff, sizeof(cloakOff));
                 ShowWindow(g_topBarPopupHwnd, SW_SHOWNOACTIVATE);
@@ -44307,6 +45238,7 @@ void ScheduleReload() {
                 }
                 if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
                     SetWindowRgn(g_topBarPopupHwnd, nullptr, TRUE);
+        UpdateTopBarClickableRect();
                     BOOL cloakOff = FALSE;
                     DwmSetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAK,
                                           &cloakOff, sizeof(cloakOff));
@@ -44326,12 +45258,8 @@ void ScheduleReload() {
                 g_prevDefaultStartMenu && !g_settings.defaultStartMenu;
             bool turnedOffSearch =
                 g_prevDefaultSearch && !g_settings.defaultSearch;
-            bool startActionSwitchedToWindows =
-                g_prevStartButtonAction != L"windows" &&
-                g_settings.startButtonAction == L"windows";
             g_prevDefaultStartMenu = g_settings.defaultStartMenu;
             g_prevDefaultSearch = g_settings.defaultSearch;
-            g_prevStartButtonAction = g_settings.startButtonAction;
             g_winKeyDown = false;
             g_winOtherSeen = false;
             g_winReplayed = false;
@@ -44346,11 +45274,19 @@ void ScheduleReload() {
                 } catch (...) {}
             }
             Wh_Log(L"Reload: post-shellhost");
-            (void)startActionSwitchedToWindows; 
             {
+                if (g_cliMonitorIndex > 1 && !g_settings.showOnAllMonitors) {
+                    if (g_topBarHwnd && IsWindow(g_topBarHwnd)) {
+                        PostMessageW(g_topBarHwnd, WM_CLOSE, 0, 0);
+                    }
+                    return;
+                }
+                static bool g_prevShowOnAllMonitors = false;
                 bool monitorChanged =
-                    (g_prevMonitorIndex != g_settings.monitorIndex);
+                    (g_prevMonitorIndex != g_settings.monitorIndex) ||
+                    (g_prevShowOnAllMonitors != g_settings.showOnAllMonitors);
                 g_prevMonitorIndex = g_settings.monitorIndex;
+                g_prevShowOnAllMonitors = g_settings.showOnAllMonitors;
                 if (monitorChanged && g_topBarHwnd && IsWindow(g_topBarHwnd)) {
                     UnregisterAppBar(g_topBarHwnd);
                     RegisterAppBar(g_topBarHwnd);
@@ -45851,12 +46787,14 @@ void BuildAppearancePage(wuxc::StackPanel& p) {
                      g_settings.globalBlurSaturation = std::clamp(value, 0, 400);
                      scheduleAppearancePreview(1 | 8);
                  });
-    AddSliderRow(p, L"Global Blur Amount", L"globalBlurAmount", 1, 100,
+    AddSliderRow(p, L"Global Blur Amount", L"globalBlurAmount", 0, 100,
                  L"",
                  1, [scheduleAppearancePreview](int value) {
-                     g_settings.globalBlurAmount = std::clamp(value, 1, 100);
+                     g_settings.globalBlurAmount = std::clamp(value, 0, 100);
                      scheduleAppearancePreview(1 | 8);
                  });
+    AddBoolRow(p, L"Disable TitleBar Bleed", L"disableTitleBarBleed",
+               L"Turn off the maximized window title-bar colour reflection behind the bar.");
     AddColorRow(p,  L"Icon colour", L"iconColor");
 
     p.Children().Append(MakeHeading(L"Font")); 
@@ -46137,8 +47075,6 @@ void BuildLayoutPage(wuxc::StackPanel& p) {
     AddBoolRow(p, L"Show Close button",    L"thumbShowClose");
     AddSliderRow(p, L"Thumbnail size (%)", L"thumbPreviewScale", 50, 200, L"", 10);
 
-    p.Children().Append(MakeHeading(L"TitleBar Bleed"));
-    AddBoolRow(p, L"Disable TitleBar Bleed", L"disableTitleBarBleed");
 
     p.Children().Append(MakeHeading(L"System Tray"));
     AddComboRow(p, L"Tray flyout layout", L"trayFlyoutView", {
@@ -46584,10 +47520,6 @@ void BuildStartSearchPage(wuxc::StackPanel& p) {
                L"TopBar search flyout. When off: native Windows Search.");
 
     p.Children().Append(MakeHeading(L"TopBar Button Actions"));
-    AddComboRow(p, L"TopBar Start button function", L"startButtonAction", {
-        { L"topbar",  L"TopBar Start menu" },
-        { L"windows", L"Windows Start menu" },
-    });
     AddComboRow(p, L"TopBar Search button function", L"searchButtonAction", {
         { L"topbar",  L"TopBar Search" },
         { L"windows", L"Windows Search" },
@@ -46860,7 +47792,6 @@ static std::wstring BuildSettingsJson() {
     addInt(L"showWeatherButton");
     addInt(L"defaultStartMenu");
     addInt(L"defaultSearch");
-    addStr(L"startButtonAction");
     addStr(L"searchButtonAction");
     addInt(L"showPinnedSection"); addInt(L"showRecentAppsSection"); addStr(L"startSearchAlignment");
     for (PCWSTR key : {L"startFolderExplorer",L"startFolderDocuments",L"startFolderDownloads",L"startFolderSettings",L"startFolderPictures",L"startFolderMusic",L"startFolderVideos",L"startFolderNetwork"}) addInt(key);
@@ -47124,7 +48055,7 @@ static void ApplySettingsPairs(
         L"mediaButtonShowIcon", L"mediaButtonShowName",
         L"mediaButtonShowControls", L"mediaButtonShowVisualizer",
         L"defaultStartMenu", L"defaultSearch",
-        L"startButtonAction", L"searchButtonAction",
+        L"searchButtonAction",
         L"showPinnedSection", L"showRecentAppsSection", L"searchQuickControls", L"startSearchAlignment", L"startFolderExplorer", L"startFolderDocuments", L"startFolderDownloads", L"startFolderSettings",
         L"startFolderPictures", L"startFolderMusic", L"startFolderVideos", L"startFolderNetwork",
         L"showClock", L"timeFormat", L"showDate", L"dateFormat",
@@ -47147,7 +48078,7 @@ static void ApplySettingsPairs(
         { L"topBarButtonsCornerRadius", {   0,  30 } },
         { L"flyoutsCornerRadius",       {   0,  30 } },
         { L"topBarBackgroundOpacity",   {   0, 100 } },
-        { L"globalBlurAmount",          {   1, 100 } },
+        { L"globalBlurAmount",          {   0, 100 } },
         { L"globalBlurSaturation",      {   0, 400 } },
         { L"taskButtonWidth",           {  40, 250 } },
         { L"taskIconSize",              {  12,  40 } },
@@ -48649,7 +49580,7 @@ wuxc::Grid BuildWindowContent() {
                 L"showWeatherButton", L"showRecycleBinButton",
                 L"showTrayIconButton", L"showNotificationsButton",
                 L"defaultStartMenu", L"defaultSearch",
-                L"startButtonAction", L"searchButtonAction",
+                L"searchButtonAction",
         L"showPinnedSection", L"showRecentAppsSection", L"searchQuickControls", L"startSearchAlignment", L"startFolderExplorer", L"startFolderDocuments", L"startFolderDownloads", L"startFolderSettings",
         L"startFolderPictures", L"startFolderMusic", L"startFolderVideos", L"startFolderNetwork",
                 L"showCpuUsage", L"showRamUsage", L"showGpuUsage", L"showDiskUsage",
@@ -50533,6 +51464,432 @@ bool PreTranslateAboutPcMessage(MSG* msg) {
     return processed != FALSE;
 }
 
+namespace topbar_cpu_temp_setup_window {
+namespace wux = winrt::Windows::UI::Xaml;
+namespace wut = winrt::Windows::UI::Text;
+
+static constexpr PCWSTR kCpuSetupClassName = L"TopBarCpuTempSetupWindowClass";
+static HWND s_hwnd = nullptr;
+static HWND s_islandHwnd = nullptr;
+[[clang::no_destroy]] static wuxh::DesktopWindowXamlSource s_xamlSource{ nullptr };
+[[clang::no_destroy]] static winrt::com_ptr<IDesktopWindowXamlSourceNative2> s_native2;
+[[clang::no_destroy]] static WallpaperMicaState s_mica;
+[[clang::no_destroy]] static wuxc::Border s_shellRoot{ nullptr };
+
+static wuxm::SolidColorBrush Br(uint8_t a, uint8_t r, uint8_t g, uint8_t b) {
+    return wuxm::SolidColorBrush(wui::ColorHelper::FromArgb(a, r, g, b));
+}
+
+static bool IsDescendantOfButton(DependencyObject obj) {
+    DependencyObject cur = obj;
+    while (cur) {
+        if (cur.try_as<wuxc::Button>()) return true;
+        try { cur = wuxm::VisualTreeHelper::GetParent(cur); } catch (...) { break; }
+    }
+    return false;
+}
+
+static wuxc::Grid BuildCpuTempSetupContent() {
+    wuxc::Grid outer;
+    outer.Background(Br(0, 0, 0, 0));
+    outer.RequestedTheme(ElementTheme::Dark);
+
+    AttachWallpaperMicaLayer(outer, s_mica, s_hwnd, 430.0f, 410.0f, 198, 60.0f);
+
+    wuxc::Border shell;
+    shell.CornerRadius(CornerRadius{ 12, 12, 12, 12 });
+    shell.BorderThickness(Thickness{ 1, 1, 1, 1 });
+    shell.BorderBrush(Br(0x36, 0xFF, 0xFF, 0xFF));
+    shell.Background(Br(0x01, 0, 0, 0));
+    s_shellRoot = shell;
+
+    wuxc::Grid rootLayers;
+
+    wuxc::StackPanel main;
+    main.Spacing(10);
+    main.Padding(Thickness{ 20, 16, 20, 18 });
+
+    // Top header with title and close button
+    {
+        wuxc::Grid hdr;
+        wuxc::ColumnDefinition hc0; hc0.Width(GridLength{ 1, GridUnitType::Star });
+        wuxc::ColumnDefinition hc1; hc1.Width(GridLength{ 0, GridUnitType::Auto });
+        hdr.ColumnDefinitions().Append(hc0);
+        hdr.ColumnDefinitions().Append(hc1);
+
+        auto title = topbar_settings_window::MakeLabel(L"Enable CPU Temperature", 15.5, true, 0.98);
+        title.VerticalAlignment(VerticalAlignment::Center);
+        wuxc::Grid::SetColumn(title, 0);
+        hdr.Children().Append(title);
+
+        wuxc::Button closeBtn;
+        closeBtn.Width(26);
+        closeBtn.Height(26);
+        closeBtn.MinWidth(0);
+        closeBtn.MinHeight(0);
+        closeBtn.Padding(Thickness{ 0, 0, 0, 0 });
+        closeBtn.CornerRadius(CornerRadius{ 13, 13, 13, 13 });
+        closeBtn.Background(Br(0x20, 0xFF, 0xFF, 0xFF));
+        closeBtn.BorderThickness(Thickness{ 0, 0, 0, 0 });
+        closeBtn.HorizontalContentAlignment(HorizontalAlignment::Center);
+        closeBtn.VerticalContentAlignment(VerticalAlignment::Center);
+        wuxc::FontIcon xGlyph;
+        xGlyph.Glyph(L"\uE8BB");
+        xGlyph.FontSize(10);
+        xGlyph.Foreground(Br(0xEE, 0xFF, 0xFF, 0xFF));
+        closeBtn.Content(xGlyph);
+        closeBtn.Click([](auto&&, auto&&) {
+            if (s_hwnd && IsWindow(s_hwnd)) PostMessageW(s_hwnd, WM_CLOSE, 0, 0);
+        });
+        wuxc::Grid::SetColumn(closeBtn, 1);
+        hdr.Children().Append(closeBtn);
+        main.Children().Append(hdr);
+    }
+
+    auto desc = topbar_settings_window::MakeLabel(
+        L"Windows hides desktop CPU temps unless a hardware sensor app is running. Install any app below, then click 1-Click Setup.",
+        12.0, false, 0.78);
+    desc.TextWrapping(TextWrapping::Wrap);
+    main.Children().Append(desc);
+
+    auto statusText = topbar_settings_window::MakeLabel(L"", 11.5, false, 0.92);
+    statusText.TextWrapping(TextWrapping::Wrap);
+    statusText.Visibility(Visibility::Collapsed);
+
+    // Confirmation overlay shown when user clicks 1-Click Setup
+    wuxc::Border confirmBackdrop;
+    confirmBackdrop.Visibility(Visibility::Collapsed);
+    confirmBackdrop.Background(Br(0xC8, 0x0A, 0x0A, 0x0E));
+    confirmBackdrop.CornerRadius(CornerRadius{ 12, 12, 12, 12 });
+    confirmBackdrop.Padding(Thickness{ 20, 20, 20, 20 });
+
+    wuxc::Border confirmCard;
+    confirmCard.VerticalAlignment(VerticalAlignment::Center);
+    confirmCard.HorizontalAlignment(HorizontalAlignment::Stretch);
+    confirmCard.CornerRadius(CornerRadius{ 10, 10, 10, 10 });
+    confirmCard.Padding(Thickness{ 16, 14, 16, 14 });
+    confirmCard.BorderThickness(Thickness{ 1, 1, 1, 1 });
+    confirmCard.BorderBrush(Br(0x36, 0xFF, 0xFF, 0xFF));
+    confirmCard.Background(Br(0xF6, 0x22, 0x22, 0x26));
+
+    auto confirmTitle = topbar_settings_window::MakeLabel(L"Confirm 1-Click Setup", 14.0, true, 0.98);
+    auto confirmBody = topbar_settings_window::MakeLabel(L"", 12.0, false, 0.84);
+    confirmBody.TextWrapping(TextWrapping::Wrap);
+
+    auto pendingProvider = std::make_shared<std::wstring>();
+
+    {
+        wuxc::StackPanel csp;
+        csp.Spacing(10);
+        csp.Children().Append(confirmTitle);
+        csp.Children().Append(confirmBody);
+
+        wuxc::StackPanel btnRow;
+        btnRow.Orientation(wuxc::Orientation::Horizontal);
+        btnRow.HorizontalAlignment(HorizontalAlignment::Right);
+        btnRow.Spacing(8);
+        btnRow.Margin(Thickness{ 0, 4, 0, 0 });
+
+        wuxc::Button cancelBtn;
+        cancelBtn.CornerRadius(CornerRadius{ 6, 6, 6, 6 });
+        cancelBtn.Padding(Thickness{ 14, 6, 14, 6 });
+        cancelBtn.BorderThickness(Thickness{ 1, 1, 1, 1 });
+        cancelBtn.BorderBrush(Br(0x28, 0xFF, 0xFF, 0xFF));
+        cancelBtn.Background(Br(0x16, 0xFF, 0xFF, 0xFF));
+        cancelBtn.Content(topbar_settings_window::MakeLabel(L"Cancel", 12.0, false, 0.92));
+        cancelBtn.Click([confirmBackdrop](auto&&, auto&&) {
+            confirmBackdrop.Visibility(Visibility::Collapsed);
+        });
+
+        wuxc::Button runBtn;
+        runBtn.CornerRadius(CornerRadius{ 6, 6, 6, 6 });
+        runBtn.Padding(Thickness{ 14, 6, 14, 6 });
+        runBtn.BorderThickness(Thickness{ 0, 0, 0, 0 });
+        runBtn.Background(Br(0xE8, 0x2B, 0x86, 0xE8));
+        auto runLbl = topbar_settings_window::MakeLabel(L"Continue", 12.0, true, 1.0);
+        runLbl.Foreground(Br(0xFF, 0xFF, 0xFF, 0xFF));
+        runBtn.Content(runLbl);
+        runBtn.Click([confirmBackdrop, pendingProvider, statusText](auto&&, auto&&) {
+            std::wstring provStr = *pendingProvider;
+            confirmBackdrop.Visibility(Visibility::Collapsed);
+            statusText.Text(L"Configuring...");
+            statusText.Visibility(Visibility::Visible);
+            RunInBackground([provStr, statusText]() {
+                std::wstring msg;
+                bool ok = RunCpuSensorOneClickSetup(provStr, msg);
+                RunOnUiThread([statusText, msg, ok]() {
+                    if (s_hwnd && IsWindow(s_hwnd)) {
+                        statusText.Text(winrt::hstring(msg));
+                        statusText.Visibility(Visibility::Visible);
+                    }
+                    if (ok) {
+                        RunInBackground([]() {
+                            Sleep(2200);
+                            RunOnUiThread([]() {
+                                try { UpdateResourceFlyoutContent(); } catch (...) {}
+                            });
+                        });
+                    }
+                });
+            });
+        });
+
+        btnRow.Children().Append(cancelBtn);
+        btnRow.Children().Append(runBtn);
+        csp.Children().Append(btnRow);
+        confirmCard.Child(csp);
+    }
+    confirmBackdrop.Child(confirmCard);
+
+    auto addProviderRow = [&](PCWSTR title, PCWSTR sub, PCWSTR url, PCWSTR providerId, PCWSTR confirmDesc) {
+        wuxc::Border rowCard;
+        rowCard.Background(Br(0x16, 0xFF, 0xFF, 0xFF));
+        rowCard.BorderBrush(Br(0x1C, 0xFF, 0xFF, 0xFF));
+        rowCard.BorderThickness(Thickness{ 1, 1, 1, 1 });
+        rowCard.CornerRadius(CornerRadius{ 8, 8, 8, 8 });
+        rowCard.Padding(Thickness{ 12, 9, 12, 9 });
+
+        wuxc::Grid rg;
+        rg.ColumnSpacing(8);
+        wuxc::ColumnDefinition rc0; rc0.Width(GridLength{ 1, GridUnitType::Star });
+        wuxc::ColumnDefinition rc1; rc1.Width(GridLength{ 0, GridUnitType::Auto });
+        wuxc::ColumnDefinition rc2; rc2.Width(GridLength{ 0, GridUnitType::Auto });
+        rg.ColumnDefinitions().Append(rc0);
+        rg.ColumnDefinitions().Append(rc1);
+        rg.ColumnDefinitions().Append(rc2);
+
+        wuxc::StackPanel info;
+        info.Spacing(2);
+        info.VerticalAlignment(VerticalAlignment::Center);
+        info.Children().Append(topbar_settings_window::MakeLabel(title, 13.0, true, 0.96));
+        info.Children().Append(topbar_settings_window::MakeLabel(sub, 11.0, false, 0.66));
+        wuxc::Grid::SetColumn(info, 0);
+        rg.Children().Append(info);
+
+        std::wstring urlStr(url);
+        wuxc::Button dlBtn;
+        dlBtn.CornerRadius(CornerRadius{ 6, 6, 6, 6 });
+        dlBtn.Padding(Thickness{ 10, 5, 10, 5 });
+        dlBtn.BorderThickness(Thickness{ 1, 1, 1, 1 });
+        dlBtn.BorderBrush(Br(0x22, 0xFF, 0xFF, 0xFF));
+        dlBtn.Background(Br(0x18, 0xFF, 0xFF, 0xFF));
+        dlBtn.Content(topbar_settings_window::MakeLabel(L"Download", 11.5, false, 0.92));
+        dlBtn.Click([urlStr](auto&&, auto&&) {
+            ShellExecuteW(nullptr, L"open", urlStr.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        });
+        wuxc::Grid::SetColumn(dlBtn, 1);
+        rg.Children().Append(dlBtn);
+
+        std::wstring provStr(providerId);
+        std::wstring titleStr(title);
+        std::wstring descStr(confirmDesc);
+        wuxc::Button setupBtn;
+        setupBtn.CornerRadius(CornerRadius{ 6, 6, 6, 6 });
+        setupBtn.Padding(Thickness{ 10, 5, 10, 5 });
+        setupBtn.BorderThickness(Thickness{ 0, 0, 0, 0 });
+        setupBtn.Background(Br(0x46, 0x3B, 0xA8, 0xFF));
+        setupBtn.Content(topbar_settings_window::MakeLabel(L"1-Click Setup", 11.5, true, 0.98));
+        setupBtn.Click([provStr, titleStr, descStr, pendingProvider, confirmTitle, confirmBody, confirmBackdrop](auto&&, auto&&) {
+            *pendingProvider = provStr;
+            confirmTitle.Text(winrt::hstring(L"Setup " + titleStr));
+            confirmBody.Text(winrt::hstring(descStr));
+            confirmBackdrop.Visibility(Visibility::Visible);
+        });
+        wuxc::Grid::SetColumn(setupBtn, 2);
+        rg.Children().Append(setupBtn);
+
+        rowCard.Child(rg);
+        main.Children().Append(rowCard);
+    };
+
+    addProviderRow(
+        L"Core Temp",
+        L"Lightweight, recommended",
+        L"https://www.alcpu.com/CoreTemp/",
+        L"coretemp",
+        L"This will ask for admin permission to:\n"
+        L"- Add a Windows startup task so Core Temp launches at boot (no UAC prompt)\n"
+        L"- Set Core Temp to start minimized and close to the system tray\n"
+        L"- Turn off per-core temperature tray icons and restart Core Temp");
+
+    addProviderRow(
+        L"MSI Afterburner",
+        L"Popular GPU & CPU monitor",
+        L"https://www.msi.com/Landing/afterburner",
+        L"afterburner",
+        L"This will ask for admin permission to:\n"
+        L"- Add a Windows startup task to launch MSI Afterburner minimized at boot\n"
+        L"- Enable Start with Windows and Start minimized in Profiles\\MSIAfterburner.cfg\n"
+        L"- Restart MSI Afterburner in tray mode");
+
+    addProviderRow(
+        L"LibreHardwareMonitor",
+        L"Open-source, WMI sensors",
+        L"https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases",
+        L"lhm",
+        L"This will ask for admin permission to:\n"
+        L"- Add a Windows startup task to launch LibreHardwareMonitor at boot (admin)\n"
+        L"- Enable Start minimized and Minimize to tray in LibreHardwareMonitor.config\n"
+        L"- Restart LibreHardwareMonitor in tray mode");
+
+    addProviderRow(
+        L"HWiNFO64",
+        L"Full hardware sensors",
+        L"https://www.hwinfo.com/download/",
+        L"hwinfo",
+        L"This will ask for admin permission to:\n"
+        L"- Add a Windows startup task to launch HWiNFO64 at boot (admin)\n"
+        L"- Enable Sensors-only mode, Shared Memory, and minimized tray start in HWiNFO64.INI\n"
+        L"- Restart HWiNFO64 in tray mode");
+
+    main.Children().Append(statusText);
+
+    rootLayers.Children().Append(main);
+    rootLayers.Children().Append(confirmBackdrop);
+    shell.Child(rootLayers);
+    outer.Children().Append(shell);
+
+    AttachWindowDragHandler(outer, &s_hwnd, IsDescendantOfButton, false);
+    outer.KeyDown([confirmBackdrop](auto&&, Input::KeyRoutedEventArgs const& args) {
+        if (args.Key() == winrt::Windows::System::VirtualKey::Escape) {
+            if (confirmBackdrop.Visibility() == Visibility::Visible) {
+                confirmBackdrop.Visibility(Visibility::Collapsed);
+            } else if (s_hwnd && IsWindow(s_hwnd)) {
+                PostMessageW(s_hwnd, WM_CLOSE, 0, 0);
+            }
+            args.Handled(true);
+        }
+    });
+
+    return outer;
+}
+
+static LRESULT CALLBACK CpuTempSetupWndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
+    switch (m) {
+        case WM_MOVE:
+            SyncWallpaperMicaOffsets(s_mica, h, nullptr);
+            return 0;
+        case WM_MOVING:
+            SyncWallpaperMicaOffsets(s_mica, h, reinterpret_cast<const RECT*>(l));
+            break;
+        case WM_SIZE:
+            if (s_islandHwnd) {
+                MoveWindow(s_islandHwnd, 0, 0, LOWORD(l), HIWORD(l), TRUE);
+            }
+            SyncWallpaperMicaOffsets(s_mica, h, nullptr);
+            if (!IsWindows11OrLater()) {
+                UINT dpi = GetDpiForWindow(h);
+                if (!dpi) dpi = 96;
+                int rPx = static_cast<int>(std::lround(12.0 * (dpi / 96.0)));
+                HRGN rgn = CreateRoundRectRgn(0, 0, LOWORD(l) + 1, HIWORD(l) + 1, rPx * 2, rPx * 2);
+                if (rgn && !SetWindowRgn(h, rgn, TRUE)) DeleteObject(rgn);
+            }
+            return 0;
+        case WM_SETFOCUS:
+            if (s_islandHwnd) SetFocus(s_islandHwnd);
+            return 0;
+        case WM_CLOSE:
+            DestroyWindow(h);
+            return 0;
+        case WM_DESTROY:
+            try { if (s_xamlSource) s_xamlSource.Close(); } catch (...) {}
+            s_xamlSource = nullptr;
+            s_native2 = nullptr;
+            s_islandHwnd = nullptr;
+            s_mica = {};
+            s_shellRoot = nullptr;
+            s_hwnd = nullptr;
+            return 0;
+    }
+    return DefWindowProcW(h, m, w, l);
+}
+
+static void CreateCpuTempSetupWindowOnCurrentThread() {
+    if (s_hwnd && IsWindow(s_hwnd)) {
+        topbar_about_pc_window::ApplyAboutWindowBackdrop(s_hwnd);
+        ShowWindow(s_hwnd, SW_SHOW);
+        SetForegroundWindow(s_hwnd);
+        return;
+    }
+
+    WNDCLASSEXW wc{ sizeof(wc) };
+    wc.lpfnWndProc = CpuTempSetupWndProc;
+    wc.hInstance = g_modModule ? g_modModule : GetModuleHandleW(nullptr);
+    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    wc.lpszClassName = kCpuSetupClassName;
+    RegisterClassExW(&wc);
+
+    RECT monRect = GetBarMonitorRect();
+    HMONITOR barMon = MonitorFromRect(&monRect, MONITOR_DEFAULTTONEAREST);
+    UINT dpiX = 96, dpiY = 96;
+    if (barMon) GetDpiForMonitor(barMon, MDT_EFFECTIVE_DPI, &dpiX, &dpiY);
+    double scale = dpiX / 96.0;
+    int W = static_cast<int>(std::lround(430.0 * scale));
+    int H = static_cast<int>(std::lround(410.0 * scale));
+    int x = monRect.left + ((monRect.right - monRect.left) - W) / 2;
+    int y = monRect.top + ((monRect.bottom - monRect.top) - H) / 2;
+
+    s_hwnd = CreateWindowExW(WS_EX_TOOLWINDOW, kCpuSetupClassName, L"Enable CPU Temperature",
+                             WS_POPUP | WS_CLIPCHILDREN, x, y, W, H,
+                             nullptr, nullptr, wc.hInstance, nullptr);
+    if (!s_hwnd) {
+        Wh_Log(L"CpuTempSetup: CreateWindowEx failed: %u", GetLastError());
+        return;
+    }
+
+    topbar_about_pc_window::ApplyAboutWindowBackdrop(s_hwnd);
+
+    try {
+        s_xamlSource = wuxh::DesktopWindowXamlSource();
+        auto native = s_xamlSource.as<IDesktopWindowXamlSourceNative>();
+        winrt::check_hresult(native->AttachToWindow(s_hwnd));
+        winrt::check_hresult(native->get_WindowHandle(&s_islandHwnd));
+        RECT rc{};
+        GetClientRect(s_hwnd, &rc);
+        SetWindowPos(s_islandHwnd, nullptr, 0, 0, rc.right, rc.bottom,
+                     SWP_SHOWWINDOW | SWP_NOZORDER | SWP_NOACTIVATE);
+        s_xamlSource.Content(BuildCpuTempSetupContent());
+        s_native2 = s_xamlSource.try_as<IDesktopWindowXamlSourceNative2>();
+    } catch (...) {
+        try { if (s_xamlSource) s_xamlSource.Close(); } catch (...) {}
+        s_xamlSource = nullptr;
+        s_islandHwnd = nullptr;
+        DestroyWindow(s_hwnd);
+        s_hwnd = nullptr;
+        return;
+    }
+
+    ShowWindow(s_hwnd, SW_SHOW);
+    UpdateWindow(s_hwnd);
+    topbar_about_pc_window::ApplyAboutWindowBackdrop(s_hwnd);
+    SyncWallpaperMicaOffsets(s_mica, s_hwnd, nullptr);
+    SetForegroundWindow(s_hwnd);
+}
+
+}  // namespace topbar_cpu_temp_setup_window
+
+void OpenCpuTempSetupWindow() {
+    RunOnUiThread([] {
+        topbar_cpu_temp_setup_window::CreateCpuTempSetupWindowOnCurrentThread();
+    });
+}
+
+void DestroyCpuTempSetupWindowNow() {
+    if (topbar_cpu_temp_setup_window::s_hwnd && IsWindow(topbar_cpu_temp_setup_window::s_hwnd)) {
+        DestroyWindow(topbar_cpu_temp_setup_window::s_hwnd);
+    }
+    if (g_modModule) {
+        UnregisterClassW(topbar_cpu_temp_setup_window::kCpuSetupClassName, g_modModule);
+    }
+}
+
+bool PreTranslateCpuTempSetupMessage(MSG* msg) {
+    if (!topbar_cpu_temp_setup_window::s_native2) return false;
+    BOOL processed = FALSE;
+    try { topbar_cpu_temp_setup_window::s_native2->PreTranslateMessage(msg, &processed); } catch (...) {}
+    return processed != FALSE;
+}
+
 bool IsAboutPcWindow(HWND hwnd) {
     HWND ah = topbar_about_pc_window::s_hwnd;
     if (!ah || !IsWindow(ah) || !hwnd) return false;
@@ -51673,6 +53030,7 @@ void RefreshPinnedTrayIconsOnBar() {
     }
     g_pinnedTrayPanel.Visibility(ch.Size() > 0 ? Visibility::Visible : Visibility::Collapsed);
     try { UpdateCenterPanelAlignment(); } catch (...) {}
+    ScheduleTopBarClickableRectUpdate();
 }
 
 [[clang::no_destroy]] static DispatcherTimer g_trayDragWatchdogTimer{nullptr};
@@ -52476,6 +53834,7 @@ void SlideTopBar(bool show, bool animate) {
                 g_slideAnimating = false;
                 if (g_slideToY == GetBarMonitorRect().top) {
                     ForceXamlPopupInputRefresh();
+                    UpdateTopBarClickableRect();
                 }
             }
         });
@@ -53137,6 +54496,7 @@ void FinishShowBarForAutoHide() {
                         !ShouldKeepTopBarPopupHidden()) {
                         ForceDisableWindowsTransparency(g_topBarPopupHwnd, true);
                         DwmFlush();
+                        UpdateTopBarClickableRect();
                     }
                 } catch (...) {}
             });
@@ -53214,6 +54574,7 @@ void HideBarForAutoHide() {
                     g_topBarHideAnimating.store(false);
                     if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
                         SetWindowRgn(g_topBarPopupHwnd, nullptr, TRUE);
+                        UpdateTopBarClickableRect();
                     }
                     s_rgnTimer.Stop();
                     return;
@@ -53594,6 +54955,7 @@ void AutoHideTick() {
             }
             if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
                 SetWindowRgn(g_topBarPopupHwnd, nullptr, TRUE);
+        UpdateTopBarClickableRect();
                 ForceDisableWindowsTransparency(g_topBarPopupHwnd, true);
                 BOOL cloakOff = FALSE;
                 DwmSetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAK,
@@ -56745,6 +58107,7 @@ void BleedApply(bool active, wuxm::Brush brush, int leftPx = 0, int widthPx = 0)
             blurBorder.Visibility(Visibility::Collapsed);
         }
     }
+    UpdateTopBarClickableRect();
 }
 
 HMONITOR GetBarMonitor();
@@ -56920,6 +58283,12 @@ FrameworkElement BuildTopBarContent() {
     g_taskOverflowRotationWasOpen = false;
     g_autoHideWeatherLabel = false;
     g_autoHideResourceLabels = false;
+    g_taskHideWeatherLabel = false;
+    g_taskHideResourceLabels = false;
+    g_centerHideWeatherLabel = false;
+    g_centerHideResourceLabels = false;
+    g_autoMediaTextStage = 0;
+    g_autoHideMediaVisualizer = false;
     g_autoHideTaskLabels = false;
     g_taskDragActive = false;
     g_taskOverflowDragActive = false;
@@ -57004,7 +58373,7 @@ FrameworkElement BuildTopBarContent() {
         });
     });
 
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 3; i++) {
         wuxc::ColumnDefinition column;
         column.Width(GridLength{i == 1 ? 1.0 : 0.0,
                                 i == 1 ? GridUnitType::Star : GridUnitType::Auto});
@@ -57104,6 +58473,7 @@ FrameworkElement BuildTopBarContent() {
                         }
                         if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
                             SetWindowRgn(g_topBarPopupHwnd, nullptr, TRUE);
+                        UpdateTopBarClickableRect();
                             BOOL cloakOff = FALSE;
                             DwmSetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAK,
                                                   &cloakOff, sizeof(cloakOff));
@@ -57202,16 +58572,12 @@ FrameworkElement BuildTopBarContent() {
                 })), true);
         startButton.Click([](auto&&, auto&&) {
             PlayStartIconPressBounce();
-            if (g_settings.startButtonAction == L"windows") {
-                TriggerNativeWindowsStartMenu();
-            } else {
-                RunOnUiThread([] {
-                    if (!(g_startMenuFlyout && g_startMenuFlyout.IsOpen())) {
-                        CloseAnyOpenChildFlyout();
-                    }
-                    ShowStartMenuFlyout(false);
-                });
-            }
+            RunOnUiThread([] {
+                if (!(g_startMenuFlyout && g_startMenuFlyout.IsOpen())) {
+                    CloseAnyOpenChildFlyout();
+                }
+                ShowStartMenuFlyout(false);
+            });
         });
         startButton.RightTapped(
             [](wf::IInspectable const& sender, Input::RightTappedRoutedEventArgs const& args) {
@@ -57352,20 +58718,11 @@ g_taskListPanel.SizeChanged([](auto&&, auto&&) {
 
     centerPanel.Children().Append(taskPanel);
 
-    wuxc::StackPanel clockPanel;
-    clockPanel.Name(L"ClockPanel");
-    clockPanel.Orientation(wuxc::Orientation::Horizontal);
-    clockPanel.VerticalAlignment(VerticalAlignment::Stretch);
-    g_clockPanel = clockPanel;
-    g_clockPanel.HorizontalAlignment(HorizontalAlignment::Center);
-    wuxc::Grid::SetColumn(clockPanel, 3);
-    root.Children().Append(clockPanel);
-    RegisterNamed(L"ClockPanel", clockPanel);
-
     wuxc::StackPanel rightPanel;
-    rightPanel.Name(L"ControlCenterPanel");
+    rightPanel.Name(L"RightPanel");
     rightPanel.Orientation(wuxc::Orientation::Horizontal);
     rightPanel.VerticalAlignment(VerticalAlignment::Stretch);
+    rightPanel.HorizontalAlignment(HorizontalAlignment::Right);
 
     g_displayFlyout = MakeControlFlyout(L"DisplayFlyoutRoot", g_displayPanel);
     g_soundFlyout = MakeControlFlyout(L"SoundFlyoutRoot", g_soundPanel);
@@ -57971,7 +59328,7 @@ g_centerPanel.Children().Append(resourceButton);
 
         RegisterNamed(L"ClockText", clockText);
         RegisterNamed(L"ClockButton", clockButton);
-        g_clockPanel.Children().Append(clockButton);
+        rightPanel.Children().Append(clockButton);
     }
 
     {
@@ -58363,14 +59720,12 @@ g_centerPanel.Children().Append(resourceButton);
         };
         harvest(g_leftPanel);
         harvest(g_centerPanel);
-        harvest(g_clockPanel);
         harvest(g_trayPanel);
 
         if (g_pinnedTrayPanel) {
             uint32_t pIdx = 0;
             if (g_leftPanel && g_leftPanel.Children().IndexOf(g_pinnedTrayPanel, pIdx)) g_leftPanel.Children().RemoveAt(pIdx);
             if (g_centerPanel && g_centerPanel.Children().IndexOf(g_pinnedTrayPanel, pIdx)) g_centerPanel.Children().RemoveAt(pIdx);
-            if (g_clockPanel && g_clockPanel.Children().IndexOf(g_pinnedTrayPanel, pIdx)) g_clockPanel.Children().RemoveAt(pIdx);
             if (g_trayPanel && g_trayPanel.Children().IndexOf(g_pinnedTrayPanel, pIdx)) g_trayPanel.Children().RemoveAt(pIdx);
         }
         auto place = [&](wuxc::StackPanel panel, const std::wstring& csv) {
@@ -58415,7 +59770,6 @@ g_centerPanel.Children().Append(resourceButton);
     };
     attachMenusToPanel(g_leftPanel);
     attachMenusToPanel(g_centerPanel);
-    attachMenusToPanel(g_clockPanel);
     attachMenusToPanel(g_trayPanel);
 
     auto hookPanelForRealign = [](wuxc::StackPanel const& panel, bool triggerAdaptive) {
@@ -58431,7 +59785,6 @@ g_centerPanel.Children().Append(resourceButton);
     };
     hookPanelForRealign(g_leftPanel, true);
     hookPanelForRealign(g_centerPanel, false);
-    hookPanelForRealign(g_clockPanel, true);
     hookPanelForRealign(g_trayPanel, true);
     root.SizeChanged([](auto&&, auto&&) {
         UpdateCenterPanelAlignment();
@@ -58440,8 +59793,7 @@ g_centerPanel.Children().Append(resourceButton);
 
     wuxc::Grid::SetColumn(rightPanel, 2);
     root.Children().Append(rightPanel);
-    RegisterNamed(L"ControlCenterPanel", rightPanel);
-    RegisterNamed(L"TrayPanel", rightPanel);
+    RegisterNamed(L"RightPanel", rightPanel);
     RegisterNamed(L"TopBarRoot", root);
 
     {
@@ -58452,7 +59804,7 @@ g_centerPanel.Children().Append(resourceButton);
         startMenuAnchor.HorizontalAlignment(HorizontalAlignment::Left);
         startMenuAnchor.VerticalAlignment(VerticalAlignment::Top);
         startMenuAnchor.IsHitTestVisible(false);
-        wuxc::Grid::SetColumnSpan(startMenuAnchor, 4);
+        wuxc::Grid::SetColumnSpan(startMenuAnchor, 3);
         barRoot.Children().Append(startMenuAnchor);
         RegisterNamed(L"StartMenuAnchor", startMenuAnchor);
     }
@@ -58465,7 +59817,7 @@ g_centerPanel.Children().Append(resourceButton);
         searchAnchor.HorizontalAlignment(HorizontalAlignment::Left);
         searchAnchor.VerticalAlignment(VerticalAlignment::Top);
         searchAnchor.IsHitTestVisible(false);
-        wuxc::Grid::SetColumnSpan(searchAnchor, 4);
+        wuxc::Grid::SetColumnSpan(searchAnchor, 3);
         barRoot.Children().Append(searchAnchor);
         RegisterNamed(L"SearchAnchor", searchAnchor);
     }
@@ -58480,7 +59832,7 @@ g_centerPanel.Children().Append(resourceButton);
         focusSink.HorizontalAlignment(HorizontalAlignment::Left);
         focusSink.VerticalAlignment(VerticalAlignment::Top);
         focusSink.UseSystemFocusVisuals(false);
-        wuxc::Grid::SetColumnSpan(focusSink, 4);
+        wuxc::Grid::SetColumnSpan(focusSink, 3);
         root.Children().Append(focusSink);
         RegisterNamed(L"TopBarFocusSink", focusSink);
     }
@@ -58543,7 +59895,10 @@ BOOL CALLBACK MonitorEnumProc(HMONITOR monitor, HDC, LPRECT, LPARAM lParam) {
 }
 
 HMONITOR GetBarMonitor() {
-    if (g_settings.monitorIndex > 1) {
+    int effectiveIndex = (g_cliMonitorIndex > 0)
+        ? g_cliMonitorIndex
+        : (g_settings.showOnAllMonitors ? 1 : g_settings.monitorIndex);
+    if (effectiveIndex > 1) {
         std::vector<MonitorSortEntry> monitors;
         EnumDisplayMonitors(nullptr, nullptr, MonitorEnumProc,
                             reinterpret_cast<LPARAM>(&monitors));
@@ -58553,7 +59908,7 @@ HMONITOR GetBarMonitor() {
                       if (a.rect.left != b.rect.left) return a.rect.left < b.rect.left;
                       return a.rect.top < b.rect.top;
                   });
-        int wanted = g_settings.monitorIndex - 1;
+        int wanted = effectiveIndex - 1;
         if (wanted >= 0 && wanted < static_cast<int>(monitors.size())) {
             return monitors[wanted].handle;
         }
@@ -61140,6 +62495,24 @@ LRESULT CALLBACK TopBarPopupSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPA
             if (g_fullScreenAppActive || ShouldKeepTopBarPopupHidden()) {
                 return HTTRANSPARENT;
             }
+            if (!g_bleedActive.load() &&
+                g_topBarHasClickableRect.load(std::memory_order_acquire)) {
+                POINT pt{
+                    static_cast<LONG>(static_cast<short>(LOWORD(lParam))),
+                    static_cast<LONG>(static_cast<short>(HIWORD(lParam)))
+                };
+                if (ScreenToClient(hwnd, &pt)) {
+                    RECT cr{
+                        g_topBarHitLeft.load(std::memory_order_relaxed),
+                        g_topBarHitTop.load(std::memory_order_relaxed),
+                        g_topBarHitRight.load(std::memory_order_relaxed),
+                        g_topBarHitBottom.load(std::memory_order_relaxed)
+                    };
+                    if (cr.right > cr.left && cr.bottom > cr.top && !PtInRect(&cr, pt)) {
+                        return HTTRANSPARENT;
+                    }
+                }
+            }
             break;
         case WM_ERASEBKGND:
             return 1;
@@ -61879,6 +63252,7 @@ void EnsureTopBarPopupShown() {
             if (g_topBarBackdropMode.load() == TopBarBackdropMode::None &&
                 GetWindowRgnBox(g_topBarPopupHwnd, &rgnBox) != ERROR) {
                 SetWindowRgn(g_topBarPopupHwnd, nullptr, TRUE);
+        UpdateTopBarClickableRect();
             }
             if (!IsWindowVisible(g_topBarPopupHwnd)) {
                 ShowWindow(g_topBarPopupHwnd, SW_SHOWNOACTIVATE);
@@ -64823,6 +66197,7 @@ LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
                             }
                             if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
                                 SetWindowRgn(g_topBarPopupHwnd, nullptr, TRUE);
+                        UpdateTopBarClickableRect();
                                 BOOL cloakOff = FALSE;
                                 DwmSetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAK,
                                                       &cloakOff, sizeof(cloakOff));
@@ -65218,7 +66593,8 @@ static DWORD WINAPI StatusPollWorkerProc(LPVOID) {
                 });
             }
         }
-        if (wantBt && (g_btLastEnumTick.load() == 0 || btChanged)) {
+        bool btPeriodicRefresh = btOn && (now - lastBgBtPreloadTick >= 3000);
+        if (wantBt && (g_btLastEnumTick.load() == 0 || btChanged || btPeriodicRefresh)) {
             if (!g_bluetoothScanning.load() && !g_bluetoothSyncing.load() &&
                 g_bluetoothConnectingAddress.load() == 0 &&
                 g_pairingDeviceAddress.load() == 0 &&
@@ -65227,14 +66603,26 @@ static DWORD WINAPI StatusPollWorkerProc(LPVOID) {
                 const uint64_t startVer = g_btDevicesVersion.load();
                 auto devices = btOn ? bluetooth::Enumerate(false)
                                     : std::vector<bluetooth::Device>{};
-                RunOnUiThread([devices = std::move(devices), startVer]() mutable {
+                RunOnUiThread([devices = std::move(devices), startVer, btChanged]() mutable {
                     const bool btInCC = (g_controlCenterFlyout && g_controlCenterFlyout.IsOpen() &&
                                          g_ccNav.activeSubView == L"bluetooth");
                     if ((!g_bluetoothFlyout || !g_bluetoothFlyout.IsOpen()) && !btInCC &&
                         g_btDevicesVersion.load() == startVer) {
+                        auto firstConnectedBattery = [](const std::vector<bluetooth::Device>& list) {
+                            for (const auto& d : list) {
+                                if (d.connected && d.batteryPercent >= 0) {
+                                    return std::clamp(d.batteryPercent, 0, 100);
+                                }
+                            }
+                            return -1;
+                        };
+                        int prevBatt = firstConnectedBattery(g_bluetoothDevices);
+                        int nextBatt = firstConnectedBattery(devices);
                         g_bluetoothDevices = std::move(devices);
                         g_btLastEnumTick.store(GetTickCount64());
-                        RefreshBluetoothButtonIcon();
+                        if (btChanged || prevBatt != nextBatt) {
+                            RefreshBluetoothButtonIcon();
+                        }
                     }
                 });
             }
@@ -65278,6 +66666,7 @@ void RestartTopBarThreadForScaleChange() {
         try {
             if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
                 SetWindowRgn(g_topBarPopupHwnd, nullptr, TRUE);
+        UpdateTopBarClickableRect();
                 BOOL cloakOff = FALSE;
                 DwmSetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAK,
                                       &cloakOff, sizeof(cloakOff));
@@ -65814,6 +67203,7 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
                         RECT rgnBox{};
                         if (GetWindowRgnBox(g_topBarPopupHwnd, &rgnBox) != ERROR) {
                             SetWindowRgn(g_topBarPopupHwnd, nullptr, TRUE);
+                        UpdateTopBarClickableRect();
                         }
                     }
                     if (!keepTopBarHidden && !g_slideAnimating.load() && !g_reShowPending.load()) {
@@ -66222,6 +67612,9 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
             if (!processed && PreTranslateAboutPcMessage(&message)) {
                 processed = TRUE;
             }
+            if (!processed && PreTranslateCpuTempSetupMessage(&message)) {
+                processed = TRUE;
+            }
 
             if (!processed) {
                 TranslateMessage(&message);
@@ -66232,6 +67625,7 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
         topbar_settings_window::DestroySettingsWindowNow();
         win10_fluent_prompt::DestroyPromptWindowNow();
         DestroyAboutPcWindowNow();
+        DestroyCpuTempSetupWindowNow();
         DestroyTrayClientWindow();
         UninstallShellHook(g_topBarHwnd);
         if (g_startMenuFlyout) {
@@ -66524,6 +67918,7 @@ void LoadSettings() {
     }
     
     g_settings.monitorIndex = Wh_GetIntSetting(L"monitorIndex");
+    g_settings.showOnAllMonitors = Wh_GetIntSetting(L"showOnAllMonitors") != 0;
 
     // (Corner radii are resolved below after g_themeStyleRules is loaded)
     g_settings.topBarBackgroundColor = GetStringSettingCopy(L"topBarBackgroundColor");
@@ -66954,15 +68349,10 @@ void LoadSettings() {
     if (g_settings.startSearchAlignment.empty()) g_settings.startSearchAlignment = L"center";
     g_settings.defaultStartMenu = ReadIntSetting(L"defaultStartMenu", 0) != 0;
     g_settings.defaultSearch    = ReadIntSetting(L"defaultSearch", 0) != 0;
-    g_settings.startButtonAction = GetStringSettingCopy(L"startButtonAction");
-    if (g_settings.startButtonAction != L"windows") {
-        g_settings.startButtonAction = L"topbar";
-    }
     g_settings.searchButtonAction = GetStringSettingCopy(L"searchButtonAction");
     if (g_settings.searchButtonAction != L"windows") {
         g_settings.searchButtonAction = L"topbar";
     }
-    g_startButtonUsesWindows=g_settings.startButtonAction==L"windows";
     g_searchButtonUsesWindows=g_settings.searchButtonAction==L"windows";
     g_settings.remapWinKey        = true;
     g_settings.remapTaskbarStart  = true;
@@ -67013,7 +68403,7 @@ void LoadSettings() {
         g_settings.powerButtonAction = action;
     }
     g_settings.globalBlurAmount = ReadIntSetting(L"globalBlurAmount", 60);
-    if (g_settings.globalBlurAmount < 1) g_settings.globalBlurAmount = 1;
+    if (g_settings.globalBlurAmount < 0) g_settings.globalBlurAmount = 0;
     if (g_settings.globalBlurAmount > 100) g_settings.globalBlurAmount = 100;
     g_settings.globalBlurSaturation = ReadIntSetting(L"globalBlurSaturation", 200);
     g_settings.globalBlurSaturation =
@@ -67436,12 +68826,15 @@ DWORD WINAPI ShellTrayPushWorkerProc(LPVOID) {
 
 void ShellTrayPushToClientImpl() {
     static std::string s_lastPayloadHash;
-    HWND client = g_shellTrayClientHwnd;
-    if (!client || !IsWindow(client)) {
-        client = FindWindowW(kShellTrayClientClass, nullptr);
-        if (!client) return;
-        g_shellTrayClientHwnd = client;
+    static size_t s_lastClientCount = 0;
+    std::vector<HWND> clients;
+    for (HWND h = FindWindowExW(nullptr, nullptr, kShellTrayClientClass, nullptr);
+         h != nullptr;
+         h = FindWindowExW(nullptr, h, kShellTrayClientClass, nullptr)) {
+        if (IsWindow(h)) clients.push_back(h);
     }
+    if (clients.empty()) return;
+    g_shellTrayClientHwnd = clients[0];
 
     std::vector<BYTE> buffer;
     UINT32 pushedCount = 0;
@@ -67502,12 +68895,16 @@ void ShellTrayPushToClientImpl() {
         const bool duplicate =
             std::find(s_recentHashes.begin(), s_recentHashes.end(), hash) !=
             s_recentHashes.end();
-        if (duplicate) return;
-        if (!structChanged && s_lastPushTick != 0 && (nowTick - s_lastPushTick) < 2500) {
+        bool clientCountChanged = (clients.size() != s_lastClientCount);
+        if (duplicate && !clientCountChanged) return;
+        if (!structChanged && !clientCountChanged && s_lastPushTick != 0 && (nowTick - s_lastPushTick) < 2500) {
             return;
         }
-        s_recentHashes.push_back(hash);
-        if (s_recentHashes.size() > kRecentHashes) s_recentHashes.pop_front();
+        s_lastClientCount = clients.size();
+        if (!duplicate) {
+            s_recentHashes.push_back(hash);
+            if (s_recentHashes.size() > kRecentHashes) s_recentHashes.pop_front();
+        }
     }
     s_lastStructHash = structHash;
     s_lastPushTick = nowTick;
@@ -67516,9 +68913,11 @@ void ShellTrayPushToClientImpl() {
     cd.dwData = WM_TOPBAR_TRAY_PUSH;
     cd.cbData = (DWORD)buffer.size();
     cd.lpData = buffer.data();
-    DWORD_PTR result = 0;
-    SendMessageTimeout(client, WM_COPYDATA, (WPARAM)g_shellTrayHwnd,
-                       (LPARAM)&cd, SMTO_ABORTIFHUNG, 400, &result);
+    for (HWND cHwnd : clients) {
+        DWORD_PTR result = 0;
+        SendMessageTimeout(cHwnd, WM_COPYDATA, (WPARAM)g_shellTrayHwnd,
+                           (LPARAM)&cd, SMTO_ABORTIFHUNG, 400, &result);
+    }
     if (pushedCount != s_lastLoggedCount) {
         s_lastLoggedCount = pushedCount;
         Wh_Log(L"TopBar tray: pushed %u icons (%u bytes) to client",
@@ -68138,7 +69537,6 @@ BOOL WhTool_ModInit() {
     g_autoHideBootDelayScheduled = false;
     g_prevDefaultStartMenu = g_settings.defaultStartMenu;
     g_prevDefaultSearch = g_settings.defaultSearch;
-    g_prevStartButtonAction = g_settings.startButtonAction;
 
     RestorePersistedShellHosts();
     LoadPinnedThumbState();
@@ -68308,7 +69706,11 @@ BOOL Wh_ModInit() {
             if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
                 isCurrentToolModProcess = true;
             }
-            break;
+        } else if (wcscmp(argv[i], L"-topbar-monitor") == 0) {
+            int parsed = _wtoi(argv[i + 1]);
+            if (parsed > 0 && parsed <= 16) {
+                g_cliMonitorIndex = parsed;
+            }
         }
     }
 
@@ -68319,8 +69721,14 @@ BOOL Wh_ModInit() {
     }
 
     if (isCurrentToolModProcess) {
+        wchar_t mutexName[128]{};
+        if (g_cliMonitorIndex > 1) {
+            swprintf_s(mutexName, L"windhawk-tool-mod_%s_mon_%d", WH_MOD_ID, g_cliMonitorIndex);
+        } else {
+            swprintf_s(mutexName, L"windhawk-tool-mod_%s", WH_MOD_ID);
+        }
         g_toolModProcessMutex =
-            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+            CreateMutex(nullptr, TRUE, mutexName);
         if (!g_toolModProcessMutex) {
             Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
@@ -68381,64 +69789,117 @@ void Wh_ModAfterInit() {
         Wh_Log(L"TopBar tray: gave up looking for own Shell_TrayWnd");
     });
 
-    WCHAR currentProcessPath[MAX_PATH];
-    switch (GetModuleFileName(nullptr, currentProcessPath,
-                              ARRAYSIZE(currentProcessPath))) {
-        case 0:
-        case ARRAYSIZE(currentProcessPath):
-            Wh_Log(L"GetModuleFileName failed");
-            return;
-    }
+    auto spawnToolMod = [](int monitorIdx) {
+        WCHAR currentProcessPath[MAX_PATH];
+        switch (GetModuleFileName(nullptr, currentProcessPath,
+                                  ARRAYSIZE(currentProcessPath))) {
+            case 0:
+            case ARRAYSIZE(currentProcessPath):
+                Wh_Log(L"GetModuleFileName failed");
+                return;
+        }
 
-    WCHAR
-    commandLine[MAX_PATH + 2 +
-                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
-    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
-               WH_MOD_ID);
+        WCHAR commandLine[MAX_PATH + 128];
+        if (monitorIdx > 1) {
+            swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\" -topbar-monitor %d",
+                       currentProcessPath, WH_MOD_ID, monitorIdx);
+        } else {
+            swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"",
+                       currentProcessPath, WH_MOD_ID);
+        }
 
-    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
-    if (!kernelModule) {
-        kernelModule = GetModuleHandle(L"kernel32.dll");
+        HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
         if (!kernelModule) {
-            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            kernelModule = GetModuleHandle(L"kernel32.dll");
+            if (!kernelModule) {
+                Wh_Log(L"No kernelbase.dll/kernel32.dll");
+                return;
+            }
+        }
+
+        using CreateProcessInternalW_t = BOOL(WINAPI*)(
+            HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+            LPSECURITY_ATTRIBUTES lpProcessAttributes,
+            LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+            DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+            LPSTARTUPINFOW lpStartupInfo,
+            LPPROCESS_INFORMATION lpProcessInformation,
+            PHANDLE hRestrictedUserToken);
+        CreateProcessInternalW_t pCreateProcessInternalW =
+            (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                     "CreateProcessInternalW");
+        if (!pCreateProcessInternalW) {
+            Wh_Log(L"No CreateProcessInternalW");
             return;
         }
-    }
 
-    using CreateProcessInternalW_t = BOOL(WINAPI*)(
-        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
-        LPSECURITY_ATTRIBUTES lpProcessAttributes,
-        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
-        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
-        LPSTARTUPINFOW lpStartupInfo,
-        LPPROCESS_INFORMATION lpProcessInformation,
-        PHANDLE hRestrictedUserToken);
-    CreateProcessInternalW_t pCreateProcessInternalW =
-        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
-                                                 "CreateProcessInternalW");
-    if (!pCreateProcessInternalW) {
-        Wh_Log(L"No CreateProcessInternalW");
-        return;
-    }
+        STARTUPINFO si{
+            .cb = sizeof(STARTUPINFO),
+            .dwFlags = STARTF_FORCEOFFFEEDBACK,
+        };
+        PROCESS_INFORMATION pi{};
+        if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                     nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                     nullptr, nullptr, &si, &pi, nullptr)) {
+            Wh_Log(L"CreateProcess failed");
+            return;
+        }
 
-    STARTUPINFO si{
-        .cb = sizeof(STARTUPINFO),
-        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
     };
-    PROCESS_INFORMATION pi;
-    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
-                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
-                                 nullptr, nullptr, &si, &pi, nullptr)) {
-        Wh_Log(L"CreateProcess failed");
-        return;
-    }
 
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
+    spawnToolMod(0);
+    if (Wh_GetIntSetting(L"showOnAllMonitors") != 0) {
+        int monCount = 0;
+        EnumDisplayMonitors(nullptr, nullptr,
+            [](HMONITOR, HDC, LPRECT, LPARAM lp) -> BOOL {
+                ++(*reinterpret_cast<int*>(lp));
+                return TRUE;
+            }, reinterpret_cast<LPARAM>(&monCount));
+        for (int m = 2; m <= monCount; ++m) {
+            spawnToolMod(m);
+        }
+    }
 }
 
 void Wh_ModSettingsChanged() {
     if (g_isToolModProcessLauncher) {
+        if (Wh_GetIntSetting(L"showOnAllMonitors") != 0) {
+            int monCount = 0;
+            EnumDisplayMonitors(nullptr, nullptr,
+                [](HMONITOR, HDC, LPRECT, LPARAM lp) -> BOOL {
+                    ++(*reinterpret_cast<int*>(lp));
+                    return TRUE;
+                }, reinterpret_cast<LPARAM>(&monCount));
+            WCHAR currentProcessPath[MAX_PATH];
+            DWORD pathLen = GetModuleFileName(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath));
+            if (pathLen > 0 && pathLen < ARRAYSIZE(currentProcessPath)) {
+                HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+                if (!kernelModule) kernelModule = GetModuleHandle(L"kernel32.dll");
+                using CreateProcessInternalW_t = BOOL(WINAPI*)(
+                    HANDLE, LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES,
+                    WINBOOL, DWORD, LPVOID, LPCWSTR, LPSTARTUPINFOW, LPPROCESS_INFORMATION, PHANDLE);
+                auto pCreateProcessInternalW = kernelModule
+                    ? (CreateProcessInternalW_t)GetProcAddress(kernelModule, "CreateProcessInternalW")
+                    : nullptr;
+                if (pCreateProcessInternalW) {
+                    for (int m = 2; m <= monCount; ++m) {
+                        WCHAR cmd[MAX_PATH + 128];
+                        swprintf_s(cmd, L"\"%s\" -tool-mod \"%s\" -topbar-monitor %d",
+                                   currentProcessPath, WH_MOD_ID, m);
+                        STARTUPINFO si{ .cb = sizeof(STARTUPINFO), .dwFlags = STARTF_FORCEOFFFEEDBACK };
+                        PROCESS_INFORMATION pi{};
+                        if (pCreateProcessInternalW(nullptr, currentProcessPath, cmd,
+                                                    nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                                    nullptr, nullptr, &si, &pi, nullptr)) {
+                            CloseHandle(pi.hProcess);
+                            CloseHandle(pi.hThread);
+                        }
+                    }
+                }
+            }
+        }
         return;
     }
 
