@@ -218,10 +218,15 @@ bool ArgumentsKeepApp(std::wstring_view executable, std::wstring_view arguments)
         return singleWord(arguments.substr(source.size()));
     }
     const auto name = FileName(executable);
-    // A Squirrel app's shortcut may repeat the name of the program it starts.
+    // A Squirrel app's shortcut may repeat the name of the program it starts,
+    // with or without quotes.
     constexpr std::wstring_view processStart = L"--processStart ";
     if (arguments.starts_with(processStart)) {
-        return Equals(Trim(arguments.substr(processStart.size())), name);
+        auto target = Trim(arguments.substr(processStart.size()));
+        if (target.size() >= 2 && target.front() == L'"' && target.back() == L'"') {
+            target = target.substr(1, target.size() - 2);
+        }
+        return Equals(target, name);
     }
     // The pages of the Java Control Panel.
     constexpr std::wstring_view tab = L"-tab ";
@@ -1352,6 +1357,15 @@ bool ForwardToExplorer(const TileShortcut& tile) {
     }
     if (!pipe) {
         Wh_Log(L"Could not reach Explorer. Error %u.", GetLastError());
+        return false;
+    }
+    // Pipe names are shared by all sessions, so another signed-in user could
+    // create this one first.
+    ULONG serverSession = 0;
+    DWORD session = 0;
+    if (!GetNamedPipeServerSessionId(pipe.get(), &serverSession) ||
+        !ProcessIdToSessionId(GetCurrentProcessId(), &session) || serverSession != session) {
+        Wh_Log(L"The pipe isn't served from this session.");
         return false;
     }
     DWORD mode = PIPE_READMODE_MESSAGE;
