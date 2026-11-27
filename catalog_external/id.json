@@ -399,30 +399,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/b5ff8c1c5e3932db133fce85e2a99b34db5602f3/mods/disable-usb-scan-fix.wh.cpp"
       }
     },
-    "env-var-spoofer": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795594021868,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795594021868,
-        "users": 0
-      },
-      "metadata": {
-        "author": "loliri",
-        "description": "Spoofs environment variables such as TEMP and TMP for selected processes",
-        "github": "https://github.com/loliri",
-        "name": "Environment Variable Spoofer",
-        "version": "1.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7941",
-      "source": {
-        "sha256": "d5b825d8b8d7caf7f8f56a257a7de7de4916c3edd20534681177d635f4685ace",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/106ed48b967c0913c253cec0562760f3848e4d96/mods/env-var-spoofer.wh.cpp"
-      }
-    },
     "explorer-extras": {
       "details": {
         "defaultSorting": 0,
@@ -1439,6 +1415,40 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/1120133d3c9133749fbd6d4a312e32bc6f24a0dc/mods/wheel-context-menu.wh.cpp"
       }
     },
+    "win7-biometric-devices-restorer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795745205097,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795745205097,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "babamohammed",
+        "compilerOptions": "-lwininet -ladvapi32 -lole32 -lshell32",
+        "description": "This mod restores the Windows 7 Biometric Devices Control Panel applet on Windows 10 and Windows 11",
+        "github": "https://github.com/babamohammed2022",
+        "include": [
+          "explorer.exe",
+          "control.exe",
+          "dllhost.exe",
+          "svchost.exe"
+        ],
+        "name": "Windows 7 Biometric Devices Applet Restorer",
+        "version": "1.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/8010",
+      "source": {
+        "sha256": "dbf202ae495d7332c5c0f25177546d6a7346f9de94cd64c6dd5d58537582ce1d",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/be1c6c416f08b3a230b3e14c3703bb42b4190d0a/mods/win7-biometric-devices-restorer.wh.cpp"
+      }
+    },
     "win7-default-programs-applet-restorer": {
       "details": {
         "defaultSorting": 0,
@@ -1468,37 +1478,6 @@
       "source": {
         "sha256": "008002a10ff82266242865d442baad199ba06b77c2a721bf6e41f95bede7fbcf",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/4660826e777aa9e7752b1ae9cebd946fe0de3664/mods/win7-default-programs-applet-restorer.wh.cpp"
-      }
-    },
-    "win7-user-account-page-restorer": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795370788861,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795471852872,
-        "users": 0
-      },
-      "metadata": {
-        "architecture": [
-          "x86-64"
-        ],
-        "author": "babamohammed",
-        "compilerOptions": "-lwinhttp -lole32 -loleaut32",
-        "description": "This mod restores the Windows 7 User Accounts Control Panel page on Windows 10 and 11",
-        "github": "https://github.com/babamohammed2022",
-        "include": [
-          "explorer.exe"
-        ],
-        "name": "Windows 7 User Account Page Restorer",
-        "version": "1.0.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7751",
-      "source": {
-        "sha256": "d2be891703476323e82c83bcac24625862f27780e68080bf42cf9a311a3deda6",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/5e396031f6c3bf3854eeabfe98bfb1c521c847e0/mods/win7-user-account-page-restorer.wh.cpp"
       }
     },
     "windows-11-lock-screen-styler": {

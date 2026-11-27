@@ -2,12 +2,237 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-26T22:02:28.000Z</updated>
+    <updated>2026-11-27T02:03:55.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Live HUD 1.2.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-live-hud-radar#93b59d196aea6422f64386cef985b4dd1d567d7e</id>
+        <link href="https://windhawk.net/mods/taskbar-live-hud-radar"/>
+        <updated>2026-11-27T02:03:55.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added widget anchoring setting: dynamic (left of tray), fixed right edge, or fixed left edge.</li>
+<li>Added border thickness customization (0 to 5 px, setting to 0 disables border).</li>
+<li>Fixed GPU percentage color in automatic mode when idle (now uses normal text color instead of green).</li>
+<li>Updated author profile and repository links to @its-lemon.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Lemon</name>
+            <uri>https://github.com/its-lemon</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Environment Variable Spoofer 1.0]]></title>
+        <id>https://windhawk.net/mods/env-var-spoofer#217ffdec2390e936d7e3f3a07070bfbfb65c26f5</id>
+        <link href="https://windhawk.net/mods/env-var-spoofer"/>
+        <updated>2026-11-27T02:03:49.000Z</updated>
+        <content type="html"><![CDATA[<h1>Environment Variable Spoofer</h1>
+<p>Makes selected processes see fake values for environment variables such as <code>TEMP</code> and <code>TMP</code>. The system and other processes are not affected.</p>
+<p>By default, the mod only intercepts the Win32 APIs that read environment variables, and the real environment block of the process is left untouched.</p>
+<h2>Choosing the target program</h2>
+<p>The mod targets nothing by default, so it does nothing until you tell it which process to apply to. Open the mod in Windhawk, go to the <strong>Advanced</strong> tab, and put the executable name of your target in the <strong>Custom process inclusion list</strong>. The mod takes effect as soon as you save.</p>
+<h2>Settings</h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Spoofed variables</td>
+<td><code>TEMP=C:\FakeTemp</code>, <code>TMP=C:\FakeTemp</code></td>
+<td>The environment variables to spoof, one <code>NAME=VALUE</code> entry per item. Names are case-insensitive.</td>
+</tr>
+<tr>
+<td>Also write into the process environment block</td>
+<td>off</td>
+<td>Also write the values into the process environment block, so that CRT <code>getenv</code>, <code>GetEnvironmentStrings</code> and child processes see them too. The original values are restored when the mod is unloaded.</td>
+</tr>
+</tbody>
+</table>
+<h2>Intercepted APIs</h2>
+<ul>
+<li><code>GetEnvironmentVariableW/A</code></li>
+<li><code>ExpandEnvironmentStringsW/A</code>, i.e. the expansion of <code>%TEMP%</code> and similar</li>
+<li><code>GetTempPathW/A</code> and <code>GetTempPath2W/A</code>, which look at <code>TMP</code>, <code>TEMP</code> and <code>USERPROFILE</code> in that order</li>
+</ul>
+<p><code>GetTempPath</code> keeps the lookup order of the system: if the process has a real <code>TMP</code> and only <code>TEMP</code> is spoofed, the real <code>TMP</code> still wins. Spoof both.</p>
+<h2>Notes</h2>
+<p>Changing the settings reloads the mod automatically.</p>
+<p>With the environment block option turned off, programs that cache a copy of the environment at startup (CRT <code>getenv</code> / <code>_wgetenv</code>, Python <code>os.environ</code>) and child processes created by the target process still see the real values. Turn the option on to cover these cases.</p>
+<p>With the option turned on, the mod must be injected before the target program caches its environment. A cache made earlier cannot be changed.</p>
+<p>Programs that parse the environment block in the PEB directly, or call <code>ntdll!RtlQueryEnvironmentVariable*</code> themselves, are not affected by the API hooks. The environment block option covers them.</p>
+<h2>Implementation notes</h2>
+<p>The mod hooks the exports in <code>kernelbase.dll</code>, falling back to <code>kernel32.dll</code>. <code>GetTempPath2W/A</code> do not exist on older systems and are skipped there.</p>
+<p><code>ExpandEnvironmentStrings</code> is only taken over when the source string contains at least one spoofed variable. Everything else goes to the original function, so without a spoofed variable in the string the behavior is unchanged.</p>
+<p>The environment block option writes the values with <code>SetEnvironmentVariableW</code> before the hooks are installed, so the original values can be read back and restored when the mod is unloaded.</p>
+]]></content>
+        <author>
+            <name>loliri</name>
+            <uri>https://github.com/loliri</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 7 User Account Page Restorer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win7-user-account-page-restorer#27f3cc72c9457d7de135a22489efb2eac28d5b79</id>
+        <link href="https://windhawk.net/mods/win7-user-account-page-restorer"/>
+        <updated>2026-11-27T02:03:43.000Z</updated>
+        <content type="html"><![CDATA[<h1>Windows 7 User Account Page Restorer</h1>
+<h2>About</h2>
+<p>This mod restores the <strong>User Accounts</strong> page of Control Panel as it was in Windows 7: the user tile with its glass
+frame, &quot;Create a password for your account&quot;, &quot;Change your picture&quot;, &quot;Manage another account&quot;, &quot;Create a new
+account&quot;, the guest account pages, and the classic task list on the left.</p>
+<p>Windows 10 and 11 still have a User Accounts page, but it is a reduced one that sends most tasks to the Settings
+app. This mod puts the original Windows 7 page (NT 6.1) back in its place. The page is the real one, not a
+recreation: it is Microsoft's <code>usercpl.dll</code> 6.1.7600.16385 running on its own Windows 7 DirectUI engine.</p>
+<p>No system file is replaced or modified, and nothing is written to the registry. Disable the mod and the Windows
+10/11 page is back.</p>
+<h2>Screenshots</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/accountpage1.PNG" alt="User Accounts page, main view"></p>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/accountpage2.PNG" alt="User Accounts page, account view"></p>
+<h2>What is downloaded, from where, and when</h2>
+<p>The mod contains no Microsoft binaries and never asks you for a file. The first time it runs it downloads four
+files, 2 MB in total, from Microsoft's public symbol server (<code>https://msdl.microsoft.com/download/symbols/</code>):</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Version</th>
+<th>Used for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>usercpl.dll</code></td>
+<td>6.1.7600.16385 (Windows 7)</td>
+<td>the page</td>
+</tr>
+<tr>
+<td><code>dui70.dll</code></td>
+<td>6.1.7601.23403 (Windows 7 SP1)</td>
+<td>the DirectUI engine the page was built for</td>
+</tr>
+<tr>
+<td><code>shacct.dll</code></td>
+<td>10.0.10240.16384 (Windows 10 1507)</td>
+<td>only the picture frame bitmap; never loaded as code</td>
+</tr>
+<tr>
+<td><code>duser.dll</code></td>
+<td>6.1.7600.16385 (Windows 7)</td>
+<td>only the text of the &quot;common&quot; style sheet; never loaded as code</td>
+</tr>
+</tbody>
+</table>
+<p>The size and the SHA-256 of each file are checked against values pinned in the mod; a file that does not match is
+discarded. The originals are kept in the mod's storage folder (<code>dl</code>). From them the mod builds, in <code>bin</code>, a private
+copy of the page for the selected language (see <em>How it works</em>). Nothing is downloaded again while <code>dl</code> is present,
+so after the first run the mod works offline.</p>
+<p>The download cannot be turned off, and the mod cannot work without it. With <em>Keep downloaded files when the mod is
+disabled</em> off, the files are deleted at every unload, so the download is repeated after every disable or update. The
+only thing sent is the HTTPS request for the four fixed URLs, with the user agent <code>Microsoft-Symbol-Server/10.0.0.0</code>.</p>
+<p><strong>Offline at first run:</strong> the Windows 10/11 page simply stays, and the reason is written to the mod's log. Connect
+to the internet and restart <code>explorer.exe</code> (or toggle the mod).</p>
+<h2>How it works</h2>
+<ul>
+<li><strong>The page.</strong> Control Panel is told to read the page definition and the layouts from the mod's private copy
+instead of <code>System32\usercpl.dll</code> (one documented function, <code>PSPropertyBag_ReadStr</code>, answers differently for that
+one value). The private copy is Microsoft's file with <strong>no code byte changed</strong>; only its resources are extended:
+the strings (the symbol server has no <code>.mui</code> files, so the strings are embedded in the mod, in English, Italian,
+French, Spanish, Portuguese and German), the picture frame, and the page definition.</li>
+<li><strong>The &quot;modified page&quot;.</strong> The original Windows 7 layouts cannot load on Windows 10/11 as they are, for two reasons,
+and both are solved inside the private copy, with nothing in <code>System32</code> involved:
+<ul>
+<li>they take the picture frame from <code>shacct.dll</code>, which no longer contains it since Windows 10 1607 (this is why
+the manual method needs a patched <code>shacct.dll</code>): the frame is put into the private copy and the layouts are
+pointed to it;</li>
+<li>they use the &quot;Common&quot; style sheet, which DirectUI reads from the system's <code>DUser.dll</code>; since Windows 8 that
+sheet is stored in a binary format the Windows 7 DirectUI cannot read: the Windows 7 text of the sheet is put
+into each layout.</li>
+</ul>
+</li>
+<li><strong>The accounts.</strong> The Windows 7 page talks to the system's account objects through interfaces that changed in
+Windows 10. The mod translates between the two layouts, so the page works on the Windows 10/11 implementation
+(with the system's own elevation prompt) instead of on old code. Creating a local account also runs
+<code>net.exe user &quot;&lt;name&gt;&quot; /add</code> elevated, which can show a second UAC prompt. It creates an account without a
+password; the page then performs any further changes through its account object. If the command times out or
+the account cannot be read back, creation may already have succeeded: check the account list before retrying.</li>
+<li><strong>Scope.</strong> The mod runs only in <code>explorer.exe</code>. Until the page is opened for the first time it loads nothing.</li>
+</ul>
+<h2>Settings</h2>
+<ul>
+<li><strong>Page language</strong>: <em>Automatic</em> follows the Windows display language (English, Italian, French, Spanish, Portuguese or German;
+English if Windows uses another language). Applies to windows opened after the change; if the page was already used in this session, restart
+<code>explorer.exe</code>.</li>
+<li><strong>Show a generic user name</strong>: off by default. When on, the name of the signed-in user is shown as a generic one
+(&quot;User&quot;, &quot;Utente&quot;, &quot;Benutzer&quot;, ...) on this page only; Windows and the account keep the real name. Saving the generic name
+unchanged in &quot;Change the account name&quot; does nothing, so the account is never renamed by mistake.</li>
+<li><strong>Show legacy online ID and fingerprint links</strong>: off by default. When enabled, the page's original visibility
+checks apply; fingerprint hardware may be required. Close and reopen the page after changing the setting. These
+links can remain unavailable or nonfunctional because their Windows 7 targets are normally absent on Windows 10/11.</li>
+<li><strong>Keep downloaded files when the mod is disabled</strong>: on by default, so that enabling the mod again needs no
+download.</li>
+</ul>
+<h2>Notes and limitations</h2>
+<ul>
+<li><strong>Best effort.</strong> This mod is provided on a best-effort basis. It runs a Windows 7 page on top of Windows 10/11
+components that Microsoft can change at any time, so some features may not work, or may stop working after a
+Windows update. The translations of the page (French, Spanish, Portuguese and German in particular) were also written
+without the original Microsoft files and may differ from the official wording.</li>
+<li><strong>Account removal is disabled.</strong> Because of a limitation of the legacy provider, removing an account from the classic
+page does nothing: the page shows a localized message and opens Settings &gt; Accounts &gt; Other users, where the account
+can be removed. Back up important files first: Settings can also delete the account data. The reason is that the
+provider's remove method runs inside the elevated account server, which for about 20 seconds blocks every other call
+to it, and with it the window of the page; its profile/file handling is also unverified.</li>
+<li><strong>The Guest account is an edge case and is not supported by modern Windows.</strong>
+The Windows 7 page can turn the Guest account on and off, but the Guest account is
+not supported by Windows 10/11, and it has been reported to work correctly only
+with a custom shell such as Explorer7/Windows7ExplorerRestorer (or equivalent software). For normal
+(non-Guest) profiles the page is expected to work.</li>
+<li>The mod has been created for Windows 10 1607 or later or Windows 11; 64-bit (x64).</li>
+<li>The mod has been tested on Windows 10 21H2 and Windows 11 24H2. Other versions from Windows 10 1607 on may work, but have not been tested.</li>
+<li>This is the Windows 7 page: it does not know Microsoft accounts as such (they appear as the local accounts they
+are bound to).</li>
+<li><strong>Legacy online ID and fingerprint links are best effort.</strong> &quot;Link online IDs&quot; and &quot;Manage your fingerprint data&quot;
+are suppressed by default and can be allowed by a setting. Their original availability checks still apply, and
+functionality depends on specific legacy components or separate restorations that this mod does not provide or
+verify. The Windows 7 targets are normally absent on Windows 10/11, and even a restored component or provider may
+not be compatible or operational. In particular, this mod removes the online IDs page definition from its private
+copy: enabling the link does not restore that page, and a test produced a file-not-found error when it was clicked.
+No working restoration is guaranteed. &quot;Parental Controls&quot; remains conditional on a Family Safety applet being present.</li>
+<li>&quot;Change your picture&quot; lists the pictures of <code>ProgramData\Microsoft\User Account Pictures\Default Pictures</code>,
+which Windows 10/11 do not ship; &quot;Browse for more pictures...&quot; works.</li>
+<li>When the mod is disabled or updated, it closes the Explorer windows that currently show the User Accounts page and waits
+until they are gone (a window that has moved on to another folder is left alone). The <strong>whole window closes, including
+any other tabs in it</strong>, and so do the dialogs the page has open; save your work in those tabs first. The close request
+is repeated every second and the wait is logged every few seconds. A pending UAC prompt cannot be closed by the mod:
+answer it. The three links of the page that the mod hides come back. The page and its DirectUI file (private copies in the
+mod's storage folder) stay loaded in <code>explorer.exe</code> until it restarts, but nothing in them points into the mod.</li>
+<li>If the Windows 7 page cannot be loaded for any reason, the Windows 10/11 User Accounts page is used.</li>
+<li>After changing a setting, close open User Accounts windows.</li>
+</ul>
+<h2>Credits</h2>
+<ul>
+<li><strong>RandomGuy5747</strong> (WinClassic) for the German translation of the page.</li>
+<li><strong>RandomGuy5747</strong> (WinClassic) for pointing out that the Windows 7 page can run on Windows 10 with the Windows 7
+DirectUI, in the thread &quot;Secure restoration of Control Panel applets in Windows 10/11&quot;.</li>
+<li><strong>Brawllux</strong> (CPL Restoration Pack) for the finding that the page needs the picture frame of <code>shacct.dll</code>.</li>
+<li><strong>AdmXP8</strong> for the technique of running an older Control Panel page from Microsoft's symbol server
+(Language Applet Restorer, Family Safety Applet Restorer).</li>
+</ul>
+]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Uninstall Here 1.0.0]]></title>
         <id>https://windhawk.net/mods/uninstall-here#44e2f253e00c07eeba6ec5de7c111d1600850018</id>
@@ -745,66 +970,6 @@ Enable only one session-restoration mod at a time.</p>
         <author>
             <name>ali0zdas</name>
             <uri>https://github.com/ali0zdas</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Start Menu Groups 1.1.0]]></title>
-        <id>https://windhawk.net/mods/start-menu-groups#1b6f2dfd4cff71c795209e87a86fbf1617620f4f</id>
-        <link href="https://windhawk.net/mods/start-menu-groups"/>
-        <updated>2026-11-26T05:03:33.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Rearrange groups and apps by dragging them right in Start, with no settings window and no administrator prompt: move groups, reorder apps or move them to another group, drop an app outside the tiles to make it an app on its own, and drop an app onto another app to put both in a new folder.</li>
-<li>New folders: put any number of apps in one cell of a tile, shown as a preview of their icons, and open them like a group. Supported in the settings, the settings window and Start.</li>
-<li>Opened groups and folders are centered over Start like Start's own folders, with grow and shrink animations, rounded corners and room for at least four rows.</li>
-<li>Tiles are stretched or shrunk slightly so each row of groups fills Start's width, with new left and right spacing settings.</li>
-<li>Works alongside Windows 11 Start Menu Styler and other mods that use XAML diagnostics.</li>
-<li>The groups show in any display language.</li>
-<li>The overflow cluster opens only the apps that didn't fit in the tile.</li>
-<li>The default horizontal gap between tiles is now 25 (was 30).</li>
-<li>The default websites no longer download favicons, so the default settings don't contact any server.</li>
-<li>Saving from the settings window checks the settings file before importing it and asks before overwriting changes made in Windhawk.</li>
-<li>Launched apps come to the front, and Start hides right after a launch.</li>
-<li>Settings window pages stretch to the full window width.</li>
-<li>Cleaner unloading of the mod.</li>
-</ul>
-]]></content>
-        <author>
-            <name>DanRotaru</name>
-            <uri>https://github.com/DanRotaru</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Change More Fonts 1.1.0]]></title>
-        <id>https://windhawk.net/mods/change-more-fonts#9a71122b19fc848f4eaa6acf412ddbc396fa8f55</id>
-        <link href="https://windhawk.net/mods/change-more-fonts"/>
-        <updated>2026-11-26T05:03:28.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Set a font or weight for each executable, or turn off replacement just for that app. If the override font is unavailable, the app uses the global font.</li>
-<li>Give a source font its own replacement, including a specific monospace font. List-only mode limits replacements to the families and rules you enter.</li>
-<li>Keep the full DirectWrite fallback list if any entry is in <strong>Keep these fonts</strong>.</li>
-<li>Fix Arial Bold showing up as Arial Black in classic controls. GDI and DirectWrite preserve the weight implied by family names like Segoe UI Semibold.</li>
-<li>Keep the replacement family when apps create bold or underlined variants of it.</li>
-<li>Skip font lookup and hook setup for renderers that start disabled.</li>
-<li>Refresh DirectWrite's font list when you save settings. The mod readme now explains what to check when a font doesn't change.</li>
-</ul>
-]]></content>
-        <author>
-            <name>xh1le</name>
-            <uri>https://github.com/xh1le</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Custom CMD "ver" Command Text 1.1]]></title>
-        <id>https://windhawk.net/mods/custom-cmd-ver-command-text#6d372f22942b13c7bf1f93ef2b2ac3fa06859d58</id>
-        <link href="https://windhawk.net/mods/custom-cmd-ver-command-text"/>
-        <updated>2026-11-26T04:01:51.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Updated README</li>
-</ul>
-]]></content>
-        <author>
-            <name>RandomGuy5747</name>
-            <uri>https://github.com/RandomGuy5747</uri>
         </author>
     </entry>
 </feed>

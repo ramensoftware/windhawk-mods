@@ -1,3 +1,10 @@
+## 1.2.2 ([Nov 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/93b59d196aea6422f64386cef985b4dd1d567d7e/mods/taskbar-live-hud-radar.wh.cpp))
+
+* Added widget anchoring setting: dynamic (left of tray), fixed right edge, or fixed left edge.
+* Added border thickness customization (0 to 5 px, setting to 0 disables border).
+* Fixed GPU percentage color in automatic mode when idle (now uses normal text color instead of green).
+* Updated author profile and repository links to @its-lemon.
+
 ## 1.2.1 ([Nov 24, 2026](https://github.com/ramensoftware/windhawk-mods/blob/0000eec01a03da511c3f0e849f69495f9b8920fc/mods/taskbar-live-hud-radar.wh.cpp))
 
 * Updated author profile and repository links to @its-lemon.

@@ -2,12 +2,220 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-26T22:02:28.000Z</updated>
+    <updated>2026-11-27T02:03:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Environment Variable Spoofer 1.0]]></title>
+        <id>https://windhawk.net/mods/env-var-spoofer#217ffdec2390e936d7e3f3a07070bfbfb65c26f5</id>
+        <link href="https://windhawk.net/mods/env-var-spoofer"/>
+        <updated>2026-11-27T02:03:49.000Z</updated>
+        <content type="html"><![CDATA[<h1>Environment Variable Spoofer</h1>
+<p>Makes selected processes see fake values for environment variables such as <code>TEMP</code> and <code>TMP</code>. The system and other processes are not affected.</p>
+<p>By default, the mod only intercepts the Win32 APIs that read environment variables, and the real environment block of the process is left untouched.</p>
+<h2>Choosing the target program</h2>
+<p>The mod targets nothing by default, so it does nothing until you tell it which process to apply to. Open the mod in Windhawk, go to the <strong>Advanced</strong> tab, and put the executable name of your target in the <strong>Custom process inclusion list</strong>. The mod takes effect as soon as you save.</p>
+<h2>Settings</h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Spoofed variables</td>
+<td><code>TEMP=C:\FakeTemp</code>, <code>TMP=C:\FakeTemp</code></td>
+<td>The environment variables to spoof, one <code>NAME=VALUE</code> entry per item. Names are case-insensitive.</td>
+</tr>
+<tr>
+<td>Also write into the process environment block</td>
+<td>off</td>
+<td>Also write the values into the process environment block, so that CRT <code>getenv</code>, <code>GetEnvironmentStrings</code> and child processes see them too. The original values are restored when the mod is unloaded.</td>
+</tr>
+</tbody>
+</table>
+<h2>Intercepted APIs</h2>
+<ul>
+<li><code>GetEnvironmentVariableW/A</code></li>
+<li><code>ExpandEnvironmentStringsW/A</code>, i.e. the expansion of <code>%TEMP%</code> and similar</li>
+<li><code>GetTempPathW/A</code> and <code>GetTempPath2W/A</code>, which look at <code>TMP</code>, <code>TEMP</code> and <code>USERPROFILE</code> in that order</li>
+</ul>
+<p><code>GetTempPath</code> keeps the lookup order of the system: if the process has a real <code>TMP</code> and only <code>TEMP</code> is spoofed, the real <code>TMP</code> still wins. Spoof both.</p>
+<h2>Notes</h2>
+<p>Changing the settings reloads the mod automatically.</p>
+<p>With the environment block option turned off, programs that cache a copy of the environment at startup (CRT <code>getenv</code> / <code>_wgetenv</code>, Python <code>os.environ</code>) and child processes created by the target process still see the real values. Turn the option on to cover these cases.</p>
+<p>With the option turned on, the mod must be injected before the target program caches its environment. A cache made earlier cannot be changed.</p>
+<p>Programs that parse the environment block in the PEB directly, or call <code>ntdll!RtlQueryEnvironmentVariable*</code> themselves, are not affected by the API hooks. The environment block option covers them.</p>
+<h2>Implementation notes</h2>
+<p>The mod hooks the exports in <code>kernelbase.dll</code>, falling back to <code>kernel32.dll</code>. <code>GetTempPath2W/A</code> do not exist on older systems and are skipped there.</p>
+<p><code>ExpandEnvironmentStrings</code> is only taken over when the source string contains at least one spoofed variable. Everything else goes to the original function, so without a spoofed variable in the string the behavior is unchanged.</p>
+<p>The environment block option writes the values with <code>SetEnvironmentVariableW</code> before the hooks are installed, so the original values can be read back and restored when the mod is unloaded.</p>
+]]></content>
+        <author>
+            <name>loliri</name>
+            <uri>https://github.com/loliri</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 7 User Account Page Restorer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win7-user-account-page-restorer#27f3cc72c9457d7de135a22489efb2eac28d5b79</id>
+        <link href="https://windhawk.net/mods/win7-user-account-page-restorer"/>
+        <updated>2026-11-27T02:03:43.000Z</updated>
+        <content type="html"><![CDATA[<h1>Windows 7 User Account Page Restorer</h1>
+<h2>About</h2>
+<p>This mod restores the <strong>User Accounts</strong> page of Control Panel as it was in Windows 7: the user tile with its glass
+frame, &quot;Create a password for your account&quot;, &quot;Change your picture&quot;, &quot;Manage another account&quot;, &quot;Create a new
+account&quot;, the guest account pages, and the classic task list on the left.</p>
+<p>Windows 10 and 11 still have a User Accounts page, but it is a reduced one that sends most tasks to the Settings
+app. This mod puts the original Windows 7 page (NT 6.1) back in its place. The page is the real one, not a
+recreation: it is Microsoft's <code>usercpl.dll</code> 6.1.7600.16385 running on its own Windows 7 DirectUI engine.</p>
+<p>No system file is replaced or modified, and nothing is written to the registry. Disable the mod and the Windows
+10/11 page is back.</p>
+<h2>Screenshots</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/accountpage1.PNG" alt="User Accounts page, main view"></p>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/accountpage2.PNG" alt="User Accounts page, account view"></p>
+<h2>What is downloaded, from where, and when</h2>
+<p>The mod contains no Microsoft binaries and never asks you for a file. The first time it runs it downloads four
+files, 2 MB in total, from Microsoft's public symbol server (<code>https://msdl.microsoft.com/download/symbols/</code>):</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Version</th>
+<th>Used for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>usercpl.dll</code></td>
+<td>6.1.7600.16385 (Windows 7)</td>
+<td>the page</td>
+</tr>
+<tr>
+<td><code>dui70.dll</code></td>
+<td>6.1.7601.23403 (Windows 7 SP1)</td>
+<td>the DirectUI engine the page was built for</td>
+</tr>
+<tr>
+<td><code>shacct.dll</code></td>
+<td>10.0.10240.16384 (Windows 10 1507)</td>
+<td>only the picture frame bitmap; never loaded as code</td>
+</tr>
+<tr>
+<td><code>duser.dll</code></td>
+<td>6.1.7600.16385 (Windows 7)</td>
+<td>only the text of the &quot;common&quot; style sheet; never loaded as code</td>
+</tr>
+</tbody>
+</table>
+<p>The size and the SHA-256 of each file are checked against values pinned in the mod; a file that does not match is
+discarded. The originals are kept in the mod's storage folder (<code>dl</code>). From them the mod builds, in <code>bin</code>, a private
+copy of the page for the selected language (see <em>How it works</em>). Nothing is downloaded again while <code>dl</code> is present,
+so after the first run the mod works offline.</p>
+<p>The download cannot be turned off, and the mod cannot work without it. With <em>Keep downloaded files when the mod is
+disabled</em> off, the files are deleted at every unload, so the download is repeated after every disable or update. The
+only thing sent is the HTTPS request for the four fixed URLs, with the user agent <code>Microsoft-Symbol-Server/10.0.0.0</code>.</p>
+<p><strong>Offline at first run:</strong> the Windows 10/11 page simply stays, and the reason is written to the mod's log. Connect
+to the internet and restart <code>explorer.exe</code> (or toggle the mod).</p>
+<h2>How it works</h2>
+<ul>
+<li><strong>The page.</strong> Control Panel is told to read the page definition and the layouts from the mod's private copy
+instead of <code>System32\usercpl.dll</code> (one documented function, <code>PSPropertyBag_ReadStr</code>, answers differently for that
+one value). The private copy is Microsoft's file with <strong>no code byte changed</strong>; only its resources are extended:
+the strings (the symbol server has no <code>.mui</code> files, so the strings are embedded in the mod, in English, Italian,
+French, Spanish, Portuguese and German), the picture frame, and the page definition.</li>
+<li><strong>The &quot;modified page&quot;.</strong> The original Windows 7 layouts cannot load on Windows 10/11 as they are, for two reasons,
+and both are solved inside the private copy, with nothing in <code>System32</code> involved:
+<ul>
+<li>they take the picture frame from <code>shacct.dll</code>, which no longer contains it since Windows 10 1607 (this is why
+the manual method needs a patched <code>shacct.dll</code>): the frame is put into the private copy and the layouts are
+pointed to it;</li>
+<li>they use the &quot;Common&quot; style sheet, which DirectUI reads from the system's <code>DUser.dll</code>; since Windows 8 that
+sheet is stored in a binary format the Windows 7 DirectUI cannot read: the Windows 7 text of the sheet is put
+into each layout.</li>
+</ul>
+</li>
+<li><strong>The accounts.</strong> The Windows 7 page talks to the system's account objects through interfaces that changed in
+Windows 10. The mod translates between the two layouts, so the page works on the Windows 10/11 implementation
+(with the system's own elevation prompt) instead of on old code. Creating a local account also runs
+<code>net.exe user &quot;&lt;name&gt;&quot; /add</code> elevated, which can show a second UAC prompt. It creates an account without a
+password; the page then performs any further changes through its account object. If the command times out or
+the account cannot be read back, creation may already have succeeded: check the account list before retrying.</li>
+<li><strong>Scope.</strong> The mod runs only in <code>explorer.exe</code>. Until the page is opened for the first time it loads nothing.</li>
+</ul>
+<h2>Settings</h2>
+<ul>
+<li><strong>Page language</strong>: <em>Automatic</em> follows the Windows display language (English, Italian, French, Spanish, Portuguese or German;
+English if Windows uses another language). Applies to windows opened after the change; if the page was already used in this session, restart
+<code>explorer.exe</code>.</li>
+<li><strong>Show a generic user name</strong>: off by default. When on, the name of the signed-in user is shown as a generic one
+(&quot;User&quot;, &quot;Utente&quot;, &quot;Benutzer&quot;, ...) on this page only; Windows and the account keep the real name. Saving the generic name
+unchanged in &quot;Change the account name&quot; does nothing, so the account is never renamed by mistake.</li>
+<li><strong>Show legacy online ID and fingerprint links</strong>: off by default. When enabled, the page's original visibility
+checks apply; fingerprint hardware may be required. Close and reopen the page after changing the setting. These
+links can remain unavailable or nonfunctional because their Windows 7 targets are normally absent on Windows 10/11.</li>
+<li><strong>Keep downloaded files when the mod is disabled</strong>: on by default, so that enabling the mod again needs no
+download.</li>
+</ul>
+<h2>Notes and limitations</h2>
+<ul>
+<li><strong>Best effort.</strong> This mod is provided on a best-effort basis. It runs a Windows 7 page on top of Windows 10/11
+components that Microsoft can change at any time, so some features may not work, or may stop working after a
+Windows update. The translations of the page (French, Spanish, Portuguese and German in particular) were also written
+without the original Microsoft files and may differ from the official wording.</li>
+<li><strong>Account removal is disabled.</strong> Because of a limitation of the legacy provider, removing an account from the classic
+page does nothing: the page shows a localized message and opens Settings &gt; Accounts &gt; Other users, where the account
+can be removed. Back up important files first: Settings can also delete the account data. The reason is that the
+provider's remove method runs inside the elevated account server, which for about 20 seconds blocks every other call
+to it, and with it the window of the page; its profile/file handling is also unverified.</li>
+<li><strong>The Guest account is an edge case and is not supported by modern Windows.</strong>
+The Windows 7 page can turn the Guest account on and off, but the Guest account is
+not supported by Windows 10/11, and it has been reported to work correctly only
+with a custom shell such as Explorer7/Windows7ExplorerRestorer (or equivalent software). For normal
+(non-Guest) profiles the page is expected to work.</li>
+<li>The mod has been created for Windows 10 1607 or later or Windows 11; 64-bit (x64).</li>
+<li>The mod has been tested on Windows 10 21H2 and Windows 11 24H2. Other versions from Windows 10 1607 on may work, but have not been tested.</li>
+<li>This is the Windows 7 page: it does not know Microsoft accounts as such (they appear as the local accounts they
+are bound to).</li>
+<li><strong>Legacy online ID and fingerprint links are best effort.</strong> &quot;Link online IDs&quot; and &quot;Manage your fingerprint data&quot;
+are suppressed by default and can be allowed by a setting. Their original availability checks still apply, and
+functionality depends on specific legacy components or separate restorations that this mod does not provide or
+verify. The Windows 7 targets are normally absent on Windows 10/11, and even a restored component or provider may
+not be compatible or operational. In particular, this mod removes the online IDs page definition from its private
+copy: enabling the link does not restore that page, and a test produced a file-not-found error when it was clicked.
+No working restoration is guaranteed. &quot;Parental Controls&quot; remains conditional on a Family Safety applet being present.</li>
+<li>&quot;Change your picture&quot; lists the pictures of <code>ProgramData\Microsoft\User Account Pictures\Default Pictures</code>,
+which Windows 10/11 do not ship; &quot;Browse for more pictures...&quot; works.</li>
+<li>When the mod is disabled or updated, it closes the Explorer windows that currently show the User Accounts page and waits
+until they are gone (a window that has moved on to another folder is left alone). The <strong>whole window closes, including
+any other tabs in it</strong>, and so do the dialogs the page has open; save your work in those tabs first. The close request
+is repeated every second and the wait is logged every few seconds. A pending UAC prompt cannot be closed by the mod:
+answer it. The three links of the page that the mod hides come back. The page and its DirectUI file (private copies in the
+mod's storage folder) stay loaded in <code>explorer.exe</code> until it restarts, but nothing in them points into the mod.</li>
+<li>If the Windows 7 page cannot be loaded for any reason, the Windows 10/11 User Accounts page is used.</li>
+<li>After changing a setting, close open User Accounts windows.</li>
+</ul>
+<h2>Credits</h2>
+<ul>
+<li><strong>RandomGuy5747</strong> (WinClassic) for the German translation of the page.</li>
+<li><strong>RandomGuy5747</strong> (WinClassic) for pointing out that the Windows 7 page can run on Windows 10 with the Windows 7
+DirectUI, in the thread &quot;Secure restoration of Control Panel applets in Windows 10/11&quot;.</li>
+<li><strong>Brawllux</strong> (CPL Restoration Pack) for the finding that the page needs the picture frame of <code>shacct.dll</code>.</li>
+<li><strong>AdmXP8</strong> for the technique of running an older Control Panel page from Microsoft's symbol server
+(Language Applet Restorer, Family Safety Applet Restorer).</li>
+</ul>
+]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Uninstall Here 1.0.0]]></title>
         <id>https://windhawk.net/mods/uninstall-here#44e2f253e00c07eeba6ec5de7c111d1600850018</id>
@@ -1017,206 +1225,6 @@ the settings if you need those shortcuts.</li>
         <author>
             <name>Ashix</name>
             <uri>https://github.com/k-ashix</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[ZoomIt 1.3.0]]></title>
-        <id>https://windhawk.net/mods/zoomit#30525bf79008309b9b868eb44aa0008965f8ad42</id>
-        <link href="https://windhawk.net/mods/zoomit"/>
-        <updated>2026-11-25T07:04:58.000Z</updated>
-        <content type="html"><![CDATA[<h1>ZoomIt</h1>
-<p>Zoom into any part of your screen and draw on it, straight from a hotkey. It
-works like Sysinternals ZoomIt, without a separate app running in the tray.</p>
-<p><img src="https://raw.githubusercontent.com/DavidHiFi/davids-windhawk-mods/main/media/previews/zoomit.png" alt="ZoomIt preview"></p>
-<h2>Features</h2>
-<ul>
-<li><strong>Zoom with Ctrl+1.</strong> The screen under your mouse zooms in smoothly. Scroll
-or use the arrow keys to zoom further, and move the mouse to look around.</li>
-<li><strong>Draw with Ctrl+2.</strong> Draw on the screen as it is, or click while zoomed to
-draw on the zoomed view.</li>
-<li><strong>Shapes and highlighters.</strong> Hold Shift for a straight line, Ctrl for a box,
-Tab for a circle and Ctrl+Shift for an arrow. Shift plus a color key gives a
-see-through highlighter.</li>
-<li><strong>Text and blur.</strong> Press T to type on the screen and X to blur out private
-details.</li>
-<li><strong>Copy or save.</strong> Ctrl+C copies what you see and Ctrl+S saves it as a
-picture. Add Shift to pick an area first.</li>
-<li><strong>Works over admin windows.</strong> The hotkeys and drawing keep working while an
-app that runs as administrator is in front.</li>
-<li><strong>Your settings.</strong> Hotkeys, zoom level and speed, animation, pen color (six
-colors, system, the Windows accent color or your own hex), pen size,
-highlighter and blur strength, text font and size, save folder.</li>
-</ul>
-<h2>Keys while zoomed or drawing</h2>
-<table>
-<thead>
-<tr>
-<th>Key</th>
-<th>What it does</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Mouse wheel, Up, Down</td>
-<td>Zoom in or out</td>
-</tr>
-<tr>
-<td>Left click</td>
-<td>Start drawing while zoomed</td>
-</tr>
-<tr>
-<td>Right click</td>
-<td>Stop drawing, or leave</td>
-</tr>
-<tr>
-<td>Esc</td>
-<td>Leave</td>
-</tr>
-<tr>
-<td>R, G, B, Y, O, P</td>
-<td>Red, green, blue, yellow, orange or pink pen</td>
-</tr>
-<tr>
-<td>Shift + a color key</td>
-<td>Highlighter in that color</td>
-</tr>
-<tr>
-<td>X</td>
-<td>Blur pen</td>
-</tr>
-<tr>
-<td>Ctrl + wheel, Ctrl + Up or Down</td>
-<td>Pen size, or text size while typing</td>
-</tr>
-<tr>
-<td>Hold Shift, Ctrl, Tab or Ctrl+Shift while dragging</td>
-<td>Line, box, circle or arrow</td>
-</tr>
-<tr>
-<td>T, Shift+T</td>
-<td>Type text, lined up left or right</td>
-</tr>
-<tr>
-<td>W, K</td>
-<td>White or black board</td>
-</tr>
-<tr>
-<td>E</td>
-<td>Erase all drawings</td>
-</tr>
-<tr>
-<td>Ctrl+Z</td>
-<td>Undo the last drawing</td>
-</tr>
-<tr>
-<td>Space</td>
-<td>Move the mouse to the middle of the screen</td>
-</tr>
-<tr>
-<td>Ctrl+C, Ctrl+Shift+C</td>
-<td>Copy the screen, or an area of it</td>
-</tr>
-<tr>
-<td>Ctrl+S, Ctrl+Shift+S</td>
-<td>Save the screen, or an area of it</td>
-</tr>
-</tbody>
-</table>
-<h2>Notes</h2>
-<ul>
-<li>Turn off ZoomIt in PowerToys or the ZoomIt app first. Two apps can't use the
-same hotkey.</li>
-<li>Write hotkeys like <code>Ctrl+1</code>, <code>Ctrl+Shift+Z</code> or <code>Win+Alt+F2</code>. Leave one empty
-to turn it off.</li>
-</ul>
-<h2>How it differs from WinDraw and Taskbar Snipper</h2>
-<p><a href="https://windhawk.net/mods/windraw">WinDraw</a> and
-<a href="https://windhawk.net/mods/taskbar-snipper">Taskbar Snipper</a> mark up the screen
-at its normal size. ZoomIt is a tool for presenting: it zooms into a still
-picture of the screen first, and you draw on the zoomed view, with a blur pen
-and text, on Sysinternals ZoomIt's own keys. If you only want to mark up the
-screen, WinDraw has more drawing tools.</p>
-<h2>Credits</h2>
-<p>Works like <a href="https://learn.microsoft.com/sysinternals/downloads/zoomit">ZoomIt</a>
-by Mark Russinovich (Sysinternals). Written from scratch for Windhawk; it shares
-no code with ZoomIt. MIT.</p>
-<p>To read text bigger under the mouse, try
-<a href="https://windhawk.net/mods/hover-text-magnifier">Hover Text Magnifier</a> by Math
-Shamenson.</p>
-]]></content>
-        <author>
-            <name>DavidHiFi</name>
-            <uri>https://github.com/DavidHiFi</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Shell Font Changer Plus 1.4.2]]></title>
-        <id>https://windhawk.net/mods/shell-font-changer-plus#61f97bf4cf94b9a4ff461ffd74376088e8fc2569</id>
-        <link href="https://windhawk.net/mods/shell-font-changer-plus"/>
-        <updated>2026-11-25T07:04:52.000Z</updated>
-        <content type="html"><![CDATA[<h1>Shell Font Changer Plus</h1>
-<p>Change the text font in File Explorer to any font you have installed, and make
-the text bigger or smaller. Icons and emoji keep their own glyphs, so buttons
-never turn into empty boxes.</p>
-<p><img src="https://raw.githubusercontent.com/DavidHiFi/davids-windhawk-mods/main/media/previews/shell-font-changer-plus.png" alt="Shell Font Changer Plus preview"></p>
-<h2>Features</h2>
-<ul>
-<li><strong>File Explorer text.</strong> The file list, the navigation pane and the column
-headers follow the font you pick.</li>
-<li><strong>Icons and emoji stay intact.</strong> Symbol and icon fonts keep their own glyphs,
-so buttons never show empty boxes.</li>
-<li><strong>Text size.</strong> Scale File Explorer's text from 75% to 200%. Rows, columns
-and boxes are laid out for the new size, headings stay larger than body text,
-and each monitor keeps its own scaling. The size covers all text Explorer
-draws itself: the desktop labels, context menus, the Run, Properties and
-copy dialogs, and the Windows 10 taskbar.</li>
-<li><strong>Weight is kept.</strong> Semibold and bold text stays semibold and bold.</li>
-<li><strong>Classic, themed and modern text.</strong> GDI text, visual-style themes and
-DirectWrite layouts are all covered.</li>
-<li><strong>Text fits its controls.</strong> Text that would overflow shrinks a little, to no
-less than 85% of its height or 80% of its width. If classic text still
-overflows, the original UI font draws it.</li>
-<li><strong>Clean to remove.</strong> The mod writes nothing to the registry, so turning it off
-leaves nothing behind.</li>
-</ul>
-<h2>How to use</h2>
-<p>Type an installed font family name in the settings, such as <code>FiraCode Nerd Font</code>
-or <code>Inter</code>. The field starts empty, so nothing changes until you pick a font.
-Leave it empty, or type <code>None</code>, to keep the original font.</p>
-<p>Set <strong>Text size</strong> to make the text bigger or smaller. It is a percentage of the
-size Windows picks: 100 keeps it as it is, 125 makes it a quarter bigger. It
-works with or without a font. With the font empty and the size at 100, the mod
-does nothing.</p>
-<p>If the font is not installed, or its name is 32 characters or longer, the font
-is left as it is and the Windhawk log says why. The text size still applies.</p>
-<p>Settings apply without reloading the mod. Explorer sizes its rows and boxes
-when it creates a window's fonts, so a new text size shows in windows opened
-after the change. Restart Explorer to resize the desktop and the windows that
-were already open, and again after turning the size back to 100 or turning the
-mod off. Turning the mod off and on again, or updating it, without that
-restart can make some text grow twice, and a restart fixes it.</p>
-<p>To fit its box, text drawn by DirectWrite never shrinks below its original
-size when only the size is changed, or below 85% of it with a font set. Text
-that ends in &quot;...&quot; keeps its size and its &quot;...&quot;.</p>
-<p>The Windows 11 command bar and address bar, Start, Search and Settings are
-drawn by XAML or web views and keep their fonts. The
-<a href="https://windhawk.net/mods/windows-11-file-explorer-styler">Windows 11 File Explorer Styler</a>,
-<a href="https://windhawk.net/mods/windows-11-start-menu-styler">Start Menu Styler</a> and
-<a href="https://windhawk.net/mods/windows-11-settings-styler">Settings Styler</a> can set
-fonts there. Windows that were already open may need to be reopened.</p>
-<p>Turn off the original Explorer Font Changer before you turn this one on.
-<a href="https://windhawk.net/mods/change-more-fonts">Change More Fonts</a> also changes
-fonts as they are created. If you use it, leave this mod's font empty so only
-one of them picks the font.</p>
-<h2>Credits</h2>
-<p>Based on <a href="https://windhawk.net/mods/explorer-font-changer">Explorer Font Changer</a>
-by Gabriela Cristei. MIT. The text size scales each font in proportion when it
-is created, the approach worked out in
-<a href="https://github.com/wodenwhel">wodenwhel</a>'s Explorer Font Size Changer.</p>
-]]></content>
-        <author>
-            <name>DavidHiFi</name>
-            <uri>https://github.com/DavidHiFi</uri>
         </author>
     </entry>
 </feed>

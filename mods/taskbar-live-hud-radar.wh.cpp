@@ -2,7 +2,7 @@
 // @id              taskbar-live-hud-radar
 // @name            Taskbar Live HUD
 // @description     Compact system monitoring widget for the taskbar: CPU, RAM, GPU, temperatures, disk speed, network speed, optional ping and a working set trimmer
-// @version         1.2.1
+// @version         1.2.2
 // @author          Lemon
 // @github          https://github.com/its-lemon
 // @homepage        https://github.com/its-lemon
@@ -30,8 +30,9 @@ survives Explorer restarts.
 - **Real-time monitoring:** CPU load, RAM usage, GPU usage & temperature, CPU temperature, disk R/W/total speed, and active network speed (Mbps/Kbps).
 - **Temperature units:** Choose between Celsius (°C) and Fahrenheit (°F).
 - **Windows 10 & 11 look:** blends with the taskbar, configurable corner style, custom/auto background, border, and metric colors with full RGBA / HEX opacity support.
-- **Configurable sizes & font:** customize font size, widget min/max width, widget height, and mini-graph popup dimensions.
+- **Configurable sizes & font:** customize font size, widget min/max width, widget height, border thickness, and mini-graph popup dimensions.
 - **Customizable shortcuts & hover:** remap or disable Left/Right/Ctrl+Click actions, drag modifier, and optional mouse-hover activation with custom delay.
+- **Taskbar Anchoring:** choose whether to anchor dynamically to the system tray or stick to a fixed position from the right or left edge.
 - **Auto-hide support:** smoothly follows taskbar auto-hide animations and hides when the taskbar is retracted.
 - **Instant Fullscreen detection:** hides instantly without delay when any app goes fullscreen (e.g. F11 in browsers, video players, or games).
 - **Ping (opt-in, off by default):** measures ICMP latency to the local router (default gateway) roughly every 1.6 seconds. Nothing is sent while it is disabled.
@@ -76,6 +77,9 @@ survives Explorer restarts.
 - customBorderColor: "rgba(95, 150, 225, 0.7)"
   $name: "Custom Border Color (HEX / RGBA)"
   $description: "Supports #RRGGBB, #RRGGBBAA, rgb(r,g,b), or rgba(r,g,b,a)"
+- borderThickness: 1
+  $name: "Border Thickness (px)"
+  $description: "Thickness of the widget border in pixels (0 to 5, 0 = no border)"
 - metricsColorMode: auto
   $name: "Metrics Color Mode"
   $description: "Automatic uses dynamic load colors (normal/warn/alert); Custom lets you set each color"
@@ -106,9 +110,16 @@ survives Explorer restarts.
     - round: "Rounded (Windows 11 Default)"
     - small: "Small Rounded"
     - square: "Square"
+- anchorMode: tray
+  $name: "Widget Anchoring"
+  $description: "Choose how the horizontal position is anchored on the taskbar"
+  $options:
+    - tray: "Left of System Tray (Dynamic)"
+    - right: "Taskbar Right Edge (Fixed)"
+    - left: "Taskbar Left Edge (Fixed)"
 - offsetX: 6
   $name: "Horizontal Offset (px)"
-  $description: "Distance from the system tray (adjustable via Drag)"
+  $description: "Distance from the system tray or taskbar edge (adjustable via Drag)"
 - fontSize: 12
   $name: "Font Size (px)"
   $description: "Text size for HUD metrics (8 to 20, default 12)"
@@ -360,7 +371,6 @@ bool ParseColorString(PCWSTR str, Gdiplus::Color& outColor, BYTE defaultAlpha = 
         return false;
     }
 
-    // Check rgb(...) or rgba(...)
     std::wstring lower = s;
     for (wchar_t& ch : lower) ch = (wchar_t)towlower(ch);
     bool isRgba = (lower.rfind(L"rgba(", 0) == 0);
@@ -439,11 +449,19 @@ enum class DragModifier {
     Disabled
 };
 
+enum class AnchorMode {
+    Tray = 0,
+    Right,
+    Left
+};
+
 struct ModSettings {
     int updateInterval;
     int bgAlpha;
     int cornerPref;
     int offsetX;
+    AnchorMode anchorMode;
+    int borderThickness;
     int fontSize;
     int widgetMinWidth;
     int widgetMaxWidth;
@@ -582,7 +600,6 @@ void UpdateCachedFonts(UINT dpi, int fontSize) {
     Gdiplus::REAL fontHeight = (Gdiplus::REAL)ScaleDpi(fontSize, dpi);
     Gdiplus::REAL smallFontHeight = (Gdiplus::REAL)ScaleDpi((std::max)(8, fontSize - 2), dpi);
 
-    // Support Windows 11 (Segoe UI Variable) and Windows 10 (Segoe UI fallback)
     Gdiplus::FontFamily familyVar(L"Segoe UI Variable Text");
     Gdiplus::FontFamily familySegoe(L"Segoe UI");
 
@@ -653,6 +670,9 @@ void LoadSettings(bool fromSettingsChanged = false) {
     Wh_FreeStringSetting(borderModeStr);
     s.customBorderColor = LoadColorSetting(L"customBorderColor", Gdiplus::Color(180, 95, 150, 225), 255);
 
+    int rawBorderThick = Wh_GetIntSetting(L"borderThickness");
+    s.borderThickness = (rawBorderThick < 0) ? 1 : (std::min)(5, rawBorderThick);
+
     PCWSTR metricsModeStr = Wh_GetStringSetting(L"metricsColorMode");
     s.customMetricsEnabled = (lstrcmpiW(metricsModeStr, L"custom") == 0);
     Wh_FreeStringSetting(metricsModeStr);
@@ -670,6 +690,12 @@ void LoadSettings(bool fromSettingsChanged = false) {
     if (lstrcmpiW(cornerStr, L"square") == 0) s.cornerPref = 1;
     else if (lstrcmpiW(cornerStr, L"small") == 0) s.cornerPref = 3;
     Wh_FreeStringSetting(cornerStr);
+
+    PCWSTR anchorStr = Wh_GetStringSetting(L"anchorMode");
+    s.anchorMode = AnchorMode::Tray;
+    if (lstrcmpiW(anchorStr, L"right") == 0) s.anchorMode = AnchorMode::Right;
+    else if (lstrcmpiW(anchorStr, L"left") == 0) s.anchorMode = AnchorMode::Left;
+    Wh_FreeStringSetting(anchorStr);
 
     int rawFontSize = Wh_GetIntSetting(L"fontSize");
     if (rawFontSize <= 0) rawFontSize = 12;
@@ -903,8 +929,6 @@ public:
                         }
                         std::wstring engKey = L"default";
                         if (items[i].szName) {
-                            // Instance format: pid_XXXX_luid_0x..._phys_N_eng_M_engtype_...
-                            // Group per individual engine instance (from luid_ onward) to match Task Manager.
                             const wchar_t* p = wcsstr(items[i].szName, L"luid_");
                             engKey = p ? std::wstring(p) : std::wstring(items[i].szName);
                         }
@@ -1629,7 +1653,7 @@ void RenderGraphPopup(HWND hWnd) {
         g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
         g.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
 
-        int bgAlpha, cornerPref, interval;
+        int bgAlpha, cornerPref, interval, borderThick;
         bool customBg, customBgHasAlpha, customBorder, showGpu;
         Gdiplus::Color cBg, cBorder;
         {
@@ -1637,6 +1661,7 @@ void RenderGraphPopup(HWND hWnd) {
             bgAlpha = settings.bgAlpha;
             cornerPref = settings.cornerPref;
             interval = settings.updateInterval;
+            borderThick = settings.borderThickness;
             customBg = settings.customBgEnabled;
             customBgHasAlpha = settings.customBgHasAlpha;
             cBg = settings.customBgColor;
@@ -1670,8 +1695,10 @@ void RenderGraphPopup(HWND hWnd) {
         Gdiplus::SolidBrush bgBrush(bgColor);
         g.FillPath(&bgBrush, &bgPath);
 
-        Gdiplus::Pen borderPen(borderColor, 1.0f);
-        g.DrawPath(&borderPen, &bgPath);
+        if (borderThick > 0) {
+            Gdiplus::Pen borderPen(borderColor, (Gdiplus::REAL)ScaleDpi(borderThick, g_currentDpi));
+            g.DrawPath(&borderPen, &bgPath);
+        }
 
         // Header with dynamically calculated duration and right-to-left measured legends
         int headerY = ScaleDpi(6, g_currentDpi);
@@ -1868,22 +1895,30 @@ bool CalculateHudPosition(HWND hTray, int exactWidth, int height, int& posX, int
     int trayH = rcTray.bottom - rcTray.top;
 
     int offsetX;
+    AnchorMode anchor;
     {
         std::lock_guard<std::mutex> lock(g_settingsMutex);
         offsetX = settings.offsetX;
+        anchor = settings.anchorMode;
     }
 
-    posX = rcTray.right - exactWidth - ScaleDpi(200, dpi);
     posY = rcTray.top + (trayH - height) / 2;
 
-    HWND hNotify = FindWindowExW(hTray, NULL, L"TrayNotifyWnd", NULL);
-    if (hNotify && IsWindowVisible(hNotify)) {
-        RECT rcNotify;
-        if (GetWindowRect(hNotify, &rcNotify) && rcNotify.right > rcNotify.left) {
-            posX = rcNotify.left - exactWidth - ScaleDpi(offsetX, dpi);
-            int notifyH = rcNotify.bottom - rcNotify.top;
-            if (notifyH > 0) {
-                posY = rcNotify.top + (notifyH - height) / 2;
+    if (anchor == AnchorMode::Right) {
+        posX = rcTray.right - exactWidth - ScaleDpi(offsetX, dpi);
+    } else if (anchor == AnchorMode::Left) {
+        posX = rcTray.left + ScaleDpi(offsetX, dpi);
+    } else {
+        posX = rcTray.right - exactWidth - ScaleDpi(200, dpi);
+        HWND hNotify = FindWindowExW(hTray, NULL, L"TrayNotifyWnd", NULL);
+        if (hNotify && IsWindowVisible(hNotify)) {
+            RECT rcNotify;
+            if (GetWindowRect(hNotify, &rcNotify) && rcNotify.right > rcNotify.left) {
+                posX = rcNotify.left - exactWidth - ScaleDpi(offsetX, dpi);
+                int notifyH = rcNotify.bottom - rcNotify.top;
+                if (notifyH > 0) {
+                    posY = rcNotify.top + (notifyH - height) / 2;
+                }
             }
         }
     }
@@ -2098,8 +2133,10 @@ void SyncWindowGeometry() {
         Gdiplus::SolidBrush bgBrush(bgColor);
         g.FillPath(&bgBrush, &bgPath);
 
-        Gdiplus::Pen borderPen(borderColor, 1.0f);
-        g.DrawPath(&borderPen, &bgPath);
+        if (s.borderThickness > 0) {
+            Gdiplus::Pen borderPen(borderColor, (Gdiplus::REAL)ScaleDpi(s.borderThickness, dpi));
+            g.DrawPath(&borderPen, &bgPath);
+        }
 
         // Clip inner content so custom max width never overflows the rounded border
         g.SetClip(Gdiplus::Rect(ScaleDpi(4, dpi), 0, (std::max)(0, exactWidth - ScaleDpi(8, dpi)), height));
@@ -2127,7 +2164,7 @@ void SyncWindowGeometry() {
 
             Gdiplus::Color cpuCol = (cpu > 80) ? colAlert : (cpu > 55 ? colWarn : colNormal);
             Gdiplus::Color ramCol = (ram > 85) ? colAlert : (ram > 70 ? colWarn : colNormal);
-            Gdiplus::Color gpuCol = (gpu > 85) ? colAlert : (gpu > 60 ? colWarn : (isLight ? Gdiplus::Color(255, 30, 160, 70) : Gdiplus::Color(255, 110, 230, 145)));
+            Gdiplus::Color gpuCol = (gpu > 85) ? colAlert : (gpu > 60 ? colWarn : colNormal);
             Gdiplus::Color cpuTempCol = (cpuTemp == TEMP_UNAVAILABLE) ? colLabel : ((cpuTemp >= 85) ? colAlert : ((cpuTemp >= 70) ? colWarn : colNormal));
             Gdiplus::Color gpuTempCol = (gpuTemp == TEMP_UNAVAILABLE) ? colLabel : ((gpuTemp >= 85) ? colAlert : ((gpuTemp >= 70) ? colWarn : colNormal));
             Gdiplus::Color netCol = isLight ? Gdiplus::Color(255, 20, 140, 220) : Gdiplus::Color(255, 115, 215, 255);
@@ -2335,7 +2372,12 @@ LRESULT CALLBACK HudWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             if (g_isDragging) {
                 POINT pt;
                 GetCursorPos(&pt);
-                int deltaX = g_dragStartPt.x - pt.x;
+                AnchorMode anchor;
+                {
+                    std::lock_guard<std::mutex> lock(g_settingsMutex);
+                    anchor = settings.anchorMode;
+                }
+                int deltaX = (anchor == AnchorMode::Left) ? (pt.x - g_dragStartPt.x) : (g_dragStartPt.x - pt.x);
                 int deltaUnscaled = MulDiv(deltaX, 96, (int)g_currentDpi);
                 int newOffset = g_dragStartOffset + deltaUnscaled;
                 newOffset = (std::max)(-400, (std::min)(1500, newOffset));
@@ -2754,7 +2796,6 @@ void WhTool_ModUninit() {
         SetEvent(g_hStopEvent);
     }
 
-    // Join GUI thread first so no UI actions can spawn new clean threads
     for (HANDLE* h : { &g_hGuiThread, &g_hPingThread, &g_hStatsThread, &g_hCleanThread }) {
         if (*h) {
             WaitForSingleObject(*h, INFINITE);
