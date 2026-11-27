@@ -544,7 +544,7 @@ static constexpr PCWSTR
                 L"Épingler à la barre des tâches",
                 L"An Taskleiste anheften"},  // Integrate
                {L"Move to “{0}”", L"Sposta in «{0}»", L"Mover a «{0}»",
-                L"Déplacer vers « {0} »",
+                L"Déplacer vers «\u00A0{0}\u00A0»",
                 L"Nach „{0}“ verschieben"},  // MoveNamed
                {L"Rename folder", L"Rinomina cartella",
                 L"Cambiar nombre de carpeta", L"Renommer le dossier",
@@ -555,7 +555,7 @@ static constexpr PCWSTR
                 L"originali resteranno disponibili.",
                 L"¿Eliminar esta carpeta? Sus aplicaciones y sus accesos "
                 L"directos originales seguirán disponibles.",
-                L"Supprimer ce dossier ? Ses applications et leurs raccourcis "
+                L"Supprimer ce dossier\u00A0? Ses applications et leurs raccourcis "
                 L"d’origine resteront disponibles.",
                 L"Diesen Ordner löschen? Seine Apps und ihre ursprünglichen "
                 L"Verknüpfungen bleiben verfügbar."},  // RemovePrompt
@@ -651,7 +651,7 @@ static constexpr PCWSTR
                 L"«Desanclar de la barra de tareas» y quita la carpeta desde "
                 L"su menú de tres puntos.",
                 L"Maintenez Maj enfoncée et faites un clic droit sur l’icône. "
-                L"Choisissez « Détacher de la barre des tâches », puis "
+                L"Choisissez «\u00A0Détacher de la barre des tâches\u00A0», puis "
                 L"supprimez le dossier depuis son menu à trois points.",
                 L"Halten Sie die Umschalttaste gedrückt und klicken Sie mit "
                 L"der rechten Maustaste auf das Symbol. Wählen Sie „Von "
