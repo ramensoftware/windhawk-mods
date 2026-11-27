@@ -3,7 +3,7 @@
 // @name            Twinkle Brightness
 // @description     Brightness sliders for every display in the system tray, with hotkeys, an on-screen indicator, time-based schedules, and idle dimming
 // @description:tr-TR Sistem tepsisinde her ekran için parlaklık sürgüleri; kısayol tuşları, ekran göstergesi, zamanlama ve boşta karartma
-// @version         1.2.0
+// @version         1.3.0
 // @author          isousluer
 // @github          https://github.com/isousluer
 // @homepage        https://github.com/isousluer/twinkle-brightness
@@ -41,8 +41,9 @@ re-imagined as a lightweight Windhawk mod with no Electron runtime.
   display has its own slider and the hotkeys change the display with the
   active window.
 - **Hotkeys:** bind any key combination to increase, decrease or set the
-  brightness, turn the displays off, or open the panel. A hotkey can also
-  target a specific display.
+  brightness, cycle through a list of levels, turn the displays off, or open
+  the panel. A hotkey can also target a specific display, for example to turn
+  only that monitor off and on again.
 - **On-screen indicator:** a small overlay shows the new level when you use a
   hotkey, with one row per display when they are at different levels. It can
   be placed at the bottom or the top of the screen, in the center or a corner.
@@ -52,8 +53,12 @@ re-imagined as a lightweight Windhawk mod with no Electron runtime.
   them as soon as you touch the mouse or keyboard.
 - **Per-display options:** custom names, hiding displays, and min/max
   brightness to normalize displays that are brighter or darker than others.
-- **Tray menu:** refresh displays, turn displays off, pause automatic
-  brightness, and copy display names/IDs for use in the settings.
+- **Scroll over the tray icon (optional):** change the brightness with the
+  mouse wheel without opening the panel. Off by default, because it needs a
+  system-wide mouse hook; turn it on by setting a step in the settings.
+- **Tray menu:** refresh displays, turn all displays or a single monitor off,
+  pause automatic brightness, and copy display names/IDs for use in the
+  settings.
 - **Changes from elsewhere:** levels changed with the laptop's brightness keys
   or the Windows slider show up right away. Monitors don't report changes made
   with their own buttons, so their levels are read again before a hotkey step.
@@ -149,6 +154,11 @@ This mod is not affiliated with Twinkle Tray or its author.
   $name:tr-TR: Tepsi simgesinde parlaklık seviyesini göster
   $description: The sun's rays light up with the brightness level, like a gauge
   $description:tr-TR: Güneşin ışınları, bir gösterge gibi parlaklık seviyesine göre yanar
+- trayScrollStep: 0
+  $name: Brightness step when scrolling over the tray icon (%)
+  $name:tr-TR: Tepsi simgesinin üzerinde kaydırınca parlaklık adımı (%)
+  $description: Scroll the mouse wheel over the sun icon to change the brightness, for example 2% per notch. 0 (the default) turns this off. When it's on, the mod watches the mouse wheel system-wide with a low-level mouse hook.
+  $description:tr-TR: Parlaklığı değiştirmek için fare tekerleğini güneş simgesinin üzerinde kaydırın, örneğin her tıkta %2. 0 (varsayılan) bunu kapatır. Açıkken mod, fare tekerleğini sistem genelinde düşük seviyeli bir fare kancasıyla izler.
 - hotkeys:
   - - keys: Ctrl+Alt+Up
       $name: Key combination
@@ -162,12 +172,14 @@ This mod is not affiliated with Twinkle Tray or its author.
       - increase: Increase brightness
       - decrease: Decrease brightness
       - set: Set brightness
+      - cycle: Cycle through levels
       - turnOff: Turn off displays
       - panel: Open the brightness panel
       $options:tr-TR:
       - increase: Parlaklığı artır
       - decrease: Parlaklığı azalt
       - set: Parlaklığı ayarla
+      - cycle: Seviyeler arasında geçiş yap
       - turnOff: Ekranları kapat
       - panel: Parlaklık panelini aç
     - value: 10
@@ -175,14 +187,20 @@ This mod is not affiliated with Twinkle Tray or its author.
       $name:tr-TR: Miktar (%)
       $description: Step for increase/decrease, or the level for "Set brightness"
       $description:tr-TR: Artırma/azaltma adımı ya da "Parlaklığı ayarla" için seviye
+    - levels: ""
+      $name: Levels (%)
+      $name:tr-TR: Seviyeler (%)
+      $description: 'For "Cycle through levels": comma-separated levels, for example 20, 50, 100. Each press goes to the next level, and after the last one back to the first.'
+      $description:tr-TR: '"Seviyeler arasında geçiş yap" için virgülle ayrılmış seviyeler, örneğin 20, 50, 100. Her basışta sonraki seviyeye geçer, sonuncudan sonra ilkine döner.'
     - display: ""
       $name: Display
       $name:tr-TR: Ekran
-      $description: Part of the display's name or ID. Leave empty to follow the panel's link button, which changes all displays when it's on and the display with the active window when it's off.
-      $description:tr-TR: Ekranın adının veya kimliğinin bir kısmı. Boş bırakırsanız paneldeki bağlantı düğmesine uyar. Düğme açıkken tüm ekranlar, kapalıyken etkin pencerenin bulunduğu ekran değişir.
+      $description: Part of the display's name or ID. Leave empty to follow the panel's link button, which changes all displays when it's on and the display with the active window when it's off. With "Turn off displays", only this monitor is turned off, and the next press turns it on again (DDC/CI monitors only).
+      $description:tr-TR: Ekranın adının veya kimliğinin bir kısmı. Boş bırakırsanız paneldeki bağlantı düğmesine uyar. Düğme açıkken tüm ekranlar, kapalıyken etkin pencerenin bulunduğu ekran değişir. "Ekranları kapat" ile yalnızca bu monitör kapanır, bir sonraki basış onu yeniden açar (yalnızca DDC/CI monitörler).
   - - keys: Ctrl+Alt+Down
     - action: decrease
     - value: 10
+    - levels: ""
     - display: ""
   $name: Hotkeys
   $name:tr-TR: Kısayol tuşları
@@ -283,7 +301,9 @@ This mod is not affiliated with Twinkle Tray or its author.
 #include <cwctype>
 #include <map>
 #include <mutex>
+#include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -295,6 +315,8 @@ constexpr UINT WM_APP_SNAPSHOT = WM_APP + 2;
 constexpr UINT WM_APP_SETTINGS = WM_APP + 3;
 constexpr UINT WM_APP_SHUTDOWN = WM_APP + 4;
 constexpr UINT WM_APP_END_EDIT = WM_APP + 6;  // Panel; wParam: 1 = apply
+// The mouse wheel turned somewhere. wParam: the delta; lParam: the point.
+constexpr UINT WM_APP_WHEEL = WM_APP + 7;
 
 constexpr UINT_PTR TIMER_REENUM = 1;
 constexpr UINT_PTR TIMER_SCHEDULE = 2;
@@ -321,15 +343,17 @@ enum MenuId : UINT {
     MENU_TURN_OFF,
     MENU_PAUSE,
     MENU_COPY_INFO,
+    MENU_DISPLAY_POWER = 100,  // + the index of the display
 };
 
-enum class HotkeyAction { Increase, Decrease, Set, TurnOff, Panel };
+enum class HotkeyAction { Increase, Decrease, Set, Cycle, TurnOff, Panel };
 enum class ThemeMode { Auto, Dark, Light };
 enum class SnapshotKind {
     WmiLevels,   // Laptop screens read again after a brightness event
     AllLevels,   // All displays read again
     Enumerated,  // Displays detected again
     Probed,      // Monitors that didn't answer were tried again, in vain
+    ProbeFound,  // A monitor that didn't answer answered now (not a full read)
 };
 
 enum class OsdPosition {
@@ -363,6 +387,7 @@ enum class Str {
     BuiltInDisplay,
     Display,
     NotSupported,
+    TurnOffDisplay,
     Count
 };
 
@@ -384,6 +409,7 @@ const PCWSTR kStringsEn[] = {
     L"Built-in display",
     L"Display",
     L"not supported",
+    L"Turn off a display",
 };
 
 const PCWSTR kStringsTr[] = {
@@ -404,6 +430,7 @@ const PCWSTR kStringsTr[] = {
     L"Dahili ekran",
     L"Ekran",
     L"desteklenmiyor",
+    L"Bir ekranı kapat",
 };
 
 static_assert(ARRAYSIZE(kStringsEn) == (size_t)Str::Count);
@@ -429,6 +456,7 @@ struct HotkeyConfig {
     UINT vk = 0;
     HotkeyAction action = HotkeyAction::Increase;
     int value = 10;
+    std::vector<int> levels;  // For Cycle
     std::wstring display;
     std::wstring text;
 };
@@ -452,6 +480,7 @@ struct Settings {
     bool showOsd = true;
     OsdPosition osdPosition = OsdPosition::BottomCenter;
     bool trayIconLevel = true;
+    int trayScrollStep = 0;  // 0 = off (the default)
     std::vector<HotkeyConfig> hotkeys;
     std::vector<ScheduleEntry> schedule;
     int transitionSeconds = 30;
@@ -606,6 +635,56 @@ bool ParseHotkey(const std::wstring& text, UINT* modifiers, UINT* vk) {
     return *vk != 0;
 }
 
+// A list of levels such as "20, 50, 100". Commas, semicolons and spaces
+// separate the entries, and a trailing "%" is allowed. Invalid entries are
+// skipped, and levels are clamped to 0-100.
+std::vector<int> ParseLevelList(const std::wstring& text) {
+    std::vector<int> levels;
+    size_t i = 0;
+    while (i < text.size()) {
+        size_t end = text.find_first_of(L",; \t", i);
+        if (end == std::wstring::npos) {
+            end = text.size();
+        }
+        std::wstring token = text.substr(i, end - i);
+        i = end + 1;
+        if (!token.empty() && token.back() == L'%') {
+            token.pop_back();
+        }
+        if (token.empty()) {
+            continue;
+        }
+        WCHAR* rest = nullptr;
+        long value = wcstol(token.c_str(), &rest, 10);
+        if (rest == token.c_str() || *rest != L'\0') {
+            continue;
+        }
+        levels.push_back((int)std::clamp(value, 0L, 100L));
+    }
+    return levels;
+}
+
+// The level that a cycle hotkey goes to from the current level (-1 when it
+// isn't known): the entry after the current level when it's in the list,
+// otherwise the first entry above it, wrapping to the first entry. Returns
+// -1 for an empty list.
+int NextCycleLevel(const std::vector<int>& levels, int current) {
+    if (levels.empty()) {
+        return -1;
+    }
+    for (size_t i = 0; i < levels.size(); i++) {
+        if (levels[i] == current) {
+            return levels[(i + 1) % levels.size()];
+        }
+    }
+    for (int level : levels) {
+        if (level > current) {
+            return level;
+        }
+    }
+    return levels[0];
+}
+
 int ParseTime(const std::wstring& text) {
     int h = -1, m = -1;
     if (swscanf_s(text.c_str(), L"%d:%d", &h, &m) != 2) {
@@ -633,6 +712,7 @@ void LoadSettings() {
                     : osdPosition == L"bottomRight" ? OsdPosition::BottomRight
                                                     : OsdPosition::BottomCenter;
     s.trayIconLevel = GetIntSetting(L"trayIconLevel") != 0;
+    s.trayScrollStep = ClampPercent(GetIntSetting(L"trayScrollStep"));
 
     for (int i = 0; i < 32; i++) {
         std::wstring keys = GetStringSetting(IndexedName(L"hotkeys", i, L"keys"));
@@ -649,10 +729,13 @@ void LoadSettings() {
             GetStringSetting(IndexedName(L"hotkeys", i, L"action"));
         hk.action = action == L"decrease" ? HotkeyAction::Decrease
                     : action == L"set"     ? HotkeyAction::Set
+                    : action == L"cycle"   ? HotkeyAction::Cycle
                     : action == L"turnOff" ? HotkeyAction::TurnOff
                     : action == L"panel"   ? HotkeyAction::Panel
                                            : HotkeyAction::Increase;
         hk.value = GetIntSetting(IndexedName(L"hotkeys", i, L"value"));
+        hk.levels = ParseLevelList(
+            GetStringSetting(IndexedName(L"hotkeys", i, L"levels")));
         hk.display = GetStringSetting(IndexedName(L"hotkeys", i, L"display"));
         s.hotkeys.push_back(std::move(hk));
     }
@@ -757,6 +840,7 @@ bool g_requestStop = false;
 bool g_busy = false;
 std::condition_variable g_idleCv;
 std::map<std::wstring, int> g_pendingSet;
+std::map<std::wstring, bool> g_pendingPower;  // DDC/CI monitors: on or off
 std::vector<DisplayInfo> g_snapshot;
 
 // Worker thread only.
@@ -764,6 +848,9 @@ std::vector<HwDisplay> g_displays;
 IWbemServices* g_wmi = nullptr;
 
 constexpr BYTE VCP_BRIGHTNESS = 0x10;
+// Power mode: 1 = on, 4 = off (DPM). 4 rather than 5 ("power off"), because
+// most monitors still answer DDC/CI in that state and can be turned on again.
+constexpr BYTE VCP_POWER_MODE = 0xD6;
 
 // Some monitors miss or garble the first requests after a while without
 // DDC/CI traffic, so a read is retried with growing delays.
@@ -1277,6 +1364,29 @@ std::map<std::wstring, int> ApplyAll(const std::map<std::wstring, int>& sets) {
     return failed;
 }
 
+void ApplyPower(const std::map<std::wstring, bool>& requests) {
+    for (const auto& [key, on] : requests) {
+        for (auto& d : g_displays) {
+            if (d.info.key != key || d.info.method != Method::Ddc) {
+                continue;
+            }
+            bool ok = false;
+            for (int attempt = 0; attempt < 2 && !ok; attempt++) {
+                ok = SetVCPFeature(d.physical, VCP_POWER_MODE, on ? 1 : 4);
+                if (!ok) {
+                    Sleep(50);
+                }
+            }
+            if (!ok) {
+                Wh_Log(L"Turning %s %s failed (error 0x%08X)",
+                       d.info.name.c_str(), on ? L"on" : L"off",
+                       GetLastError());
+            }
+            break;
+        }
+    }
+}
+
 void Publish(SnapshotKind kind) {
     std::vector<DisplayInfo> infos;
     for (const auto& d : g_displays) {
@@ -1404,12 +1514,14 @@ DWORD WINAPI WorkerThread(LPVOID) {
     while (true) {
         bool enumerate, refresh, refreshWmi, probe, stop;
         std::map<std::wstring, int> sets;
+        std::map<std::wstring, bool> power;
         {
             std::unique_lock<std::mutex> lock(g_mutex);
             auto ready = [] {
                 return g_requestEnumerate || g_requestRefresh ||
                        g_requestRefreshWmi || g_requestProbe ||
-                       g_requestStop || !g_pendingSet.empty();
+                       g_requestStop || !g_pendingSet.empty() ||
+                       !g_pendingPower.empty();
             };
             while (!ready()) {
                 if (!g_wmiRecheckAt) {
@@ -1430,6 +1542,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
             probe = g_requestProbe;
             stop = g_requestStop;
             sets.swap(g_pendingSet);
+            power.swap(g_pendingPower);
             g_requestEnumerate = false;
             g_requestRefresh = false;
             g_requestRefreshWmi = false;
@@ -1438,6 +1551,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
         }
 
         std::map<std::wstring, int> failed = ApplyAll(sets);
+        ApplyPower(power);
         // A failed write usually means stale handles (after sleep or a display
         // change), so enumerate again and retry. Rate-limited, so that a
         // monitor that answers reads but rejects writes doesn't cause an
@@ -1464,7 +1578,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
         } else if (probe) {
             // A monitor that answered now has a slider: lay out the panel
             // again. Otherwise only the next try is scheduled.
-            Publish(probeChanged ? SnapshotKind::Enumerated
+            Publish(probeChanged ? SnapshotKind::ProbeFound
                                  : SnapshotKind::Probed);
         }
         if (!enumerate && (refresh || refreshWmi)) {
@@ -1523,6 +1637,12 @@ void RequestSet(const std::wstring& key, int raw) {
     g_cv.notify_one();
 }
 
+void RequestPower(const std::wstring& key, bool on) {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    g_pendingPower[key] = on;
+    g_cv.notify_one();
+}
+
 void RequestStop() {
     std::lock_guard<std::mutex> lock(g_mutex);
     g_requestStop = true;
@@ -1539,7 +1659,8 @@ std::vector<DisplayInfo> TakeSnapshot() {
 bool WaitUntilIdle(DWORD timeoutMs) {
     std::unique_lock<std::mutex> lock(g_mutex);
     return g_idleCv.wait_for(lock, std::chrono::milliseconds(timeoutMs), [] {
-        return !g_busy && g_pendingSet.empty() && !g_requestEnumerate &&
+        return !g_busy && g_pendingSet.empty() && g_pendingPower.empty() &&
+               !g_requestEnumerate &&
                !g_requestRefresh && !g_requestRefreshWmi && !g_requestProbe;
     });
 }
@@ -1600,6 +1721,11 @@ int g_autoReenumCount;  // Automatic re-detections since the last trigger
 // a few seconds. The hotkeys pressed meanwhile wait for the new levels.
 DWORD g_lastHwReadTick;
 std::vector<int> g_deferredHotkeys;
+int g_deferredWheelSteps;  // Brightness steps from the tray icon's wheel
+// DDC/CI monitors turned off on their own with the power mode command.
+// Windows still sees them as on, so they stay off until turned on again.
+std::set<std::wstring> g_displaysOff;
+HHOOK g_mouseHook;
 bool g_resumeCatchUp;
 int g_registeredHotkeys;
 std::wstring g_storagePrefix;
@@ -2712,6 +2838,38 @@ void TurnOffDisplays() {
     SetTimer(g_hwndMain, TIMER_MONITOR_OFF, 500, nullptr);
 }
 
+// The displays that can be turned off on their own: DDC/CI monitors.
+bool CanTurnOffAlone(const UiDisplay& d) {
+    return !d.hidden && d.info.method == Method::Ddc;
+}
+
+// Turns the monitors off, or on again when all of them are off already.
+// Returns false when none of them can be turned off on its own.
+bool ToggleDisplaysPower(const std::vector<UiDisplay*>& displays) {
+    std::vector<UiDisplay*> monitors;
+    for (auto* d : displays) {
+        if (CanTurnOffAlone(*d)) {
+            monitors.push_back(d);
+        }
+    }
+    if (monitors.empty()) {
+        return false;
+    }
+    bool allOff = std::all_of(monitors.begin(), monitors.end(),
+                              [](const UiDisplay* d) {
+                                  return g_displaysOff.contains(d->info.key);
+                              });
+    for (auto* d : monitors) {
+        if (allOff) {
+            g_displaysOff.erase(d->info.key);
+        } else {
+            g_displaysOff.insert(d->info.key);
+        }
+        hw::RequestPower(d->info.key, allOff);
+    }
+    return true;
+}
+
 LRESULT CALLBACK PanelWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_ACTIVATE:
@@ -3241,32 +3399,89 @@ void ChangeDisplays(const std::vector<UiDisplay*>& targets,
     }
 }
 
+// The level that a cycle hotkey sets the displays to. It starts from their
+// average level, like a linked step, so they all go to the same entry.
+int CycleTarget(const std::vector<int>& levels,
+                const std::vector<UiDisplay*>& targets) {
+    int sum = 0, count = 0;
+    for (auto* d : targets) {
+        if (d->value >= 0) {
+            sum += d->value;
+            count++;
+        }
+    }
+    int current = count ? (int)std::lround(sum / (double)count) : -1;
+    return NextCycleLevel(levels, current);
+}
+
+bool WaitingForLevels() {
+    return !g_deferredHotkeys.empty() || g_deferredWheelSteps != 0;
+}
+
+// Whether a step from the current level has to read the monitors first: they
+// don't report changes made with their own buttons. Steps taken meanwhile
+// wait too, so that they keep their order.
+bool NeedFreshLevels() {
+    if (WaitingForLevels()) {
+        return true;
+    }
+    bool anyDdc = std::any_of(
+        g_displays.begin(), g_displays.end(), [](const UiDisplay& d) {
+            return d.Controllable() && d.info.method == Method::Ddc;
+        });
+    return anyDdc && GetTickCount() - g_lastHwReadTick > 5000;
+}
+
+// Reads the levels again. RunDeferredHotkeys runs the waiting steps when they
+// arrive, or after a timeout.
+void ReadLevelsFirst() {
+    hw::RequestRefresh();
+    SetTimer(g_hwndMain, TIMER_HOTKEY_WAIT, 1500, nullptr);
+}
+
+// The mouse wheel over the tray icon: all displays, from their average while
+// linked, or each from its own level while unlinked.
+void StepFromTrayWheel(int steps, bool levelsFresh = false) {
+    if (!levelsFresh && NeedFreshLevels()) {
+        bool waiting = WaitingForLevels();
+        g_deferredWheelSteps += steps;
+        if (!waiting) {
+            ReadLevelsFirst();
+        }
+        return;
+    }
+    std::vector<UiDisplay*> targets = ControllableDisplays();
+    ChangeDisplays(targets, steps * g_settings.trayScrollStep, -1, g_linked);
+    ShowOsd(targets, nullptr);
+}
+
 void OnHotkey(int id, bool levelsFresh = false) {
     if (id < 1 || id > (int)g_settings.hotkeys.size()) {
         return;
     }
     const HotkeyConfig& hk = g_settings.hotkeys[id - 1];
 
+    // Steps and cycles start from the current level, so they need fresh
+    // monitor levels.
     bool relative = hk.action == HotkeyAction::Increase ||
-                    hk.action == HotkeyAction::Decrease;
-    if (relative && !levelsFresh) {
-        bool anyDdc = std::any_of(
-            g_displays.begin(), g_displays.end(), [](const UiDisplay& d) {
-                return d.Controllable() && d.info.method == Method::Ddc;
-            });
-        if (!g_deferredHotkeys.empty() ||
-            (anyDdc && GetTickCount() - g_lastHwReadTick > 5000)) {
-            g_deferredHotkeys.push_back(id);
-            if (g_deferredHotkeys.size() == 1) {
-                hw::RequestRefresh();
-                SetTimer(g_hwndMain, TIMER_HOTKEY_WAIT, 1500, nullptr);
-            }
-            return;
+                    hk.action == HotkeyAction::Decrease ||
+                    (hk.action == HotkeyAction::Cycle && !hk.levels.empty());
+    if (relative && !levelsFresh && NeedFreshLevels()) {
+        bool waiting = WaitingForLevels();
+        g_deferredHotkeys.push_back(id);
+        if (!waiting) {
+            ReadLevelsFirst();
         }
+        return;
     }
     switch (hk.action) {
         case HotkeyAction::TurnOff:
-            TurnOffDisplays();
+            if (hk.display.empty()) {
+                TurnOffDisplays();
+            } else if (!ToggleDisplaysPower(MatchDisplays(hk.display))) {
+                Wh_Log(L"No DDC/CI monitor matches \"%s\" to turn off",
+                       hk.display.c_str());
+            }
             return;
         case HotkeyAction::Panel:
             if (IsWindowVisible(g_hwndPanel)) {
@@ -3275,6 +3490,11 @@ void OnHotkey(int id, bool levelsFresh = false) {
                 ShowPanel();
             }
             return;
+        case HotkeyAction::Cycle:
+            if (hk.levels.empty()) {
+                return;
+            }
+            break;
         default:
             break;
     }
@@ -3286,6 +3506,9 @@ void OnHotkey(int id, bool levelsFresh = false) {
 
     if (!hk.display.empty()) {
         std::vector<UiDisplay*> targets = MatchDisplays(hk.display);
+        if (hk.action == HotkeyAction::Cycle) {
+            setValue = CycleTarget(hk.levels, targets);
+        }
         ChangeDisplays(targets, delta, setValue, false);
         ShowOsd(targets, nullptr);
         return;
@@ -3303,6 +3526,9 @@ void OnHotkey(int id, bool levelsFresh = false) {
         }
         return;
     }
+    if (hk.action == HotkeyAction::Cycle) {
+        setValue = CycleTarget(hk.levels, targets);
+    }
     ChangeDisplays(targets, delta, setValue, g_linked);
     ShowOsd(targets, g_linked ? nullptr : monitor);
 }
@@ -3313,8 +3539,64 @@ void RunDeferredHotkeys() {
     KillTimer(g_hwndMain, TIMER_HOTKEY_WAIT);
     std::vector<int> ids;
     ids.swap(g_deferredHotkeys);
+    int wheelSteps = std::exchange(g_deferredWheelSteps, 0);
     for (int id : ids) {
         OnHotkey(id, true);
+    }
+    if (wheelSteps) {
+        StepFromTrayWheel(wheelSteps, true);
+    }
+}
+
+// Tray icons don't get mouse wheel messages, so a low-level mouse hook
+// watches the wheel, and the main window checks whether it turned over the
+// icon. Nothing else is done in the hook, so that the mouse never lags.
+LRESULT CALLBACK MouseHookProc(int code, WPARAM wParam, LPARAM lParam) {
+    if (code == HC_ACTION && wParam == WM_MOUSEWHEEL) {
+        auto* info = (const MSLLHOOKSTRUCT*)lParam;
+        if (HWND hwnd = g_hwndMain) {
+            PostMessage(hwnd, WM_APP_WHEEL,
+                        (WPARAM)(INT_PTR)(short)HIWORD(info->mouseData),
+                        MAKELPARAM(info->pt.x, info->pt.y));
+        }
+    }
+    return CallNextHookEx(nullptr, code, wParam, lParam);
+}
+
+void UpdateMouseHook() {
+    bool want = g_settings.trayScrollStep > 0;
+    if (want && !g_mouseHook) {
+        g_mouseHook =
+            SetWindowsHookExW(WH_MOUSE_LL, MouseHookProc, g_module, 0);
+        if (!g_mouseHook) {
+            Wh_Log(L"SetWindowsHookEx failed (error %u)", GetLastError());
+        }
+    } else if (!want && g_mouseHook) {
+        UnhookWindowsHookEx(g_mouseHook);
+        g_mouseHook = nullptr;
+    }
+}
+
+void OnMouseWheel(POINT pt, int delta) {
+    HWND hwnd = WindowFromPoint(pt);
+    RECT icon;
+    if (!hwnd || !IsTaskbarWindow(hwnd) || !GetTrayIconRect(&icon) ||
+        !PtInRect(&icon, pt)) {
+        return;
+    }
+    // Touchpads and smooth-scrolling mice send many small deltas: step once
+    // per WHEEL_DELTA (one notch), like the panel.
+    static int accumulator;
+    static DWORD lastTick;
+    if (GetTickCount() - lastTick > 1000 || (accumulator > 0) != (delta > 0)) {
+        accumulator = 0;
+    }
+    lastTick = GetTickCount();
+    accumulator += delta;
+    int steps = accumulator / WHEEL_DELTA;
+    accumulator %= WHEEL_DELTA;
+    if (steps) {
+        StepFromTrayWheel(steps);
     }
 }
 
@@ -3651,6 +3933,26 @@ void ShowTrayMenu(POINT pt) {
     HMENU menu = CreatePopupMenu();
     AppendMenuW(menu, MF_STRING, MENU_REFRESH, Tr(Str::RefreshDisplays));
     AppendMenuW(menu, MF_STRING, MENU_TURN_OFF, Tr(Str::TurnOffDisplays));
+    // A checked monitor is off: choosing it turns it on again.
+    std::vector<std::wstring> powerKeys;
+    HMENU powerMenu = CreatePopupMenu();
+    for (const auto& d : g_displays) {
+        if (CanTurnOffAlone(d)) {
+            AppendMenuW(powerMenu,
+                        MF_STRING | (g_displaysOff.contains(d.info.key)
+                                         ? MF_CHECKED
+                                         : 0),
+                        MENU_DISPLAY_POWER + powerKeys.size(),
+                        d.label.c_str());
+            powerKeys.push_back(d.info.key);
+        }
+    }
+    if (powerKeys.empty()) {
+        DestroyMenu(powerMenu);
+    } else {
+        AppendMenuW(menu, MF_POPUP, (UINT_PTR)powerMenu,
+                    Tr(Str::TurnOffDisplay));
+    }
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING | (g_paused ? MF_CHECKED : 0), MENU_PAUSE,
                 Tr(Str::PauseAutomatic));
@@ -3688,6 +3990,15 @@ void ShowTrayMenu(POINT pt) {
         case MENU_COPY_INFO:
             CopyDisplayInfo();
             break;
+        default:
+            if (cmd >= MENU_DISPLAY_POWER &&
+                cmd < MENU_DISPLAY_POWER + powerKeys.size()) {
+                if (UiDisplay* d =
+                        FindDisplay(powerKeys[cmd - MENU_DISPLAY_POWER])) {
+                    ToggleDisplaysPower({d});
+                }
+            }
+            break;
     }
 }
 
@@ -3696,6 +4007,7 @@ void ShowTrayMenu(POINT pt) {
 
 void ApplySettings() {
     RegisterHotkeys();
+    UpdateMouseHook();
     if (g_settings.idleEnabled) {
         ArmIdleTimer(1000);
     } else {
@@ -3713,6 +4025,10 @@ void Shutdown() {
     g_fades.clear();
     KillTimer(g_hwndMain, TIMER_FADE);
     UnregisterHotkeys();
+    if (g_mouseHook) {
+        UnhookWindowsHookEx(g_mouseHook);
+        g_mouseHook = nullptr;
+    }
     RemoveTrayIcon();
     if (g_hwndPanel) {
         DestroyWindow(g_hwndPanel);
@@ -3748,9 +4064,17 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             }
             return 0;
 
+        case WM_APP_WHEEL:
+            OnMouseWheel({GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)},
+                         (int)(INT_PTR)wParam);
+            return 0;
+
         case WM_APP_SNAPSHOT: {
             auto kind = (SnapshotKind)wParam;
-            bool enumerated = kind == SnapshotKind::Enumerated;
+            // A monitor found by a probe also changes the displays, but only
+            // its own level was read.
+            bool enumerated = kind == SnapshotKind::Enumerated ||
+                              kind == SnapshotKind::ProbeFound;
             g_lastSnapshot = hw::TakeSnapshot();
             RebuildDisplays(g_lastSnapshot, true);
             if (enumerated) {
@@ -3762,7 +4086,8 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             UpdateTrayTip();
             // Only a read of all displays is fresh enough for the hotkeys
             // that wait for monitor levels.
-            if (kind != SnapshotKind::WmiLevels) {
+            if (kind == SnapshotKind::AllLevels ||
+                kind == SnapshotKind::Enumerated) {
                 g_lastHwReadTick = GetTickCount();
                 if (!g_deferredHotkeys.empty()) {
                     RunDeferredHotkeys();
@@ -3857,6 +4182,8 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
                 wParam == PBT_APMRESUMESUSPEND) {
                 g_reenumPending = true;
                 g_resumeCatchUp = true;
+                // Waking up turns the monitors on.
+                g_displaysOff.clear();
                 SetTimer(hwnd, TIMER_REENUM, 3000, nullptr);
             }
             return TRUE;
