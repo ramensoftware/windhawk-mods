@@ -71,8 +71,12 @@ up as soon as one of its windows is moved, resized or minimized.
 - Tab / Shift+Tab, the arrow keys and the mouse wheel also change the selection.
   Other keys don't reach the app while Alt+Tab is held.
 - Left click switches right away. Right click closes the selected window (or all
-  windows of a group); if a window has unsaved changes, the app asks first.
-  **Esc** cancels.
+  windows of a group) and keeps the view open, so you can close several windows
+  in a row; the wheel updates as soon as the window is gone. If a window asks a
+  question before closing, for example about unsaved changes, the view closes
+  and switches to that question. With "Force-close windows that ask before
+  closing" enabled, such an app is ended without asking instead.
+  **Esc** cancels and leaves all windows as they are.
 
 The bar, the previews and the Alt+Tab view appear instantly, without animations.
 Dragging feedback and the thumbstick are updated once per screen refresh, at the
@@ -116,6 +120,13 @@ may not pass the keyboard to this mod, and the default Alt+Tab appears instead.
   $description: Replace the Alt+Tab switcher with the radial view.
 - groupSplitWindows: true
   $name: Show split windows as one Alt+Tab item
+- forceClose: false
+  $name: Force-close windows that ask before closing
+  $description: >-
+    When a window closed with a right click asks a question, for example about
+    unsaved changes, end its app without asking. This ends the whole app: all
+    of its windows close and unsaved work is lost. File Explorer is never
+    forced. When off, the Alt+Tab view closes and switches to the question.
 - openDelay: 150
   $name: Delay before the Alt+Tab view opens (ms)
   $description: >-
@@ -874,10 +885,12 @@ constexpr UINT WM_APP_STEP = WM_APP + 2;
 constexpr UINT WM_APP_END = WM_APP + 3;
 constexpr UINT WM_APP_JOY = WM_APP + 4;
 constexpr UINT WM_APP_MOUSEHOOK = WM_APP + 5;
+constexpr UINT WM_APP_CLOSEITEM = WM_APP + 6;
 
 struct {
     std::atomic<bool> enabled;
     std::atomic<bool> group;
+    std::atomic<bool> force;
     std::atomic<int> delay;
     std::atomic<int> maxWindows;
 } settings;
@@ -1169,6 +1182,27 @@ void BuildSlots() {
     g_orderCount = n;
 }
 
+void Refresh() {
+    HWND key = g_sel < g_count ? g_items[g_sel].w[0] : nullptr;
+    int oldSel = g_sel;
+    g_rawCount = 0;
+    EnumWindows(EnumProc, 0);
+    BuildItems();
+    if (!g_count) {
+        g_session = false;
+        PostMessage(g_wnd, WM_APP_END, 0, 0);
+        return;
+    }
+    BuildSlots();
+    g_sel = oldSel < g_count ? oldSel : g_count - 1;
+    for (int i = 0; i < g_count; i++)
+        if (g_items[i].w[0] == key)
+            g_sel = i;
+    if (g_open)
+        UpdatePreview();
+    InvalidateRect(g_wnd, nullptr, FALSE);
+}
+
 void Select(int sel) {
     if (sel == g_sel)
         return;
@@ -1443,10 +1477,13 @@ LRESULT CALLBACK MouseProc(int code, WPARAM wp, LPARAM lp) {
         if (!dx && !dy)
             return CallNextHookEx(nullptr, code, wp, lp);
         PostMessage(g_wnd, WM_APP_JOY, (WPARAM)dx, (LPARAM)dy);
-    } else if (wp == WM_LBUTTONDOWN || wp == WM_RBUTTONDOWN) {
-        g_upToSwallow = wp == WM_LBUTTONDOWN ? WM_LBUTTONUP : WM_RBUTTONUP;
+    } else if (wp == WM_LBUTTONDOWN) {
+        g_upToSwallow = WM_LBUTTONUP;
         g_session = false;
-        PostMessage(g_wnd, WM_APP_END, wp == WM_LBUTTONDOWN ? 1 : 2, 0);
+        PostMessage(g_wnd, WM_APP_END, 1, 0);
+    } else if (wp == WM_RBUTTONDOWN) {
+        g_upToSwallow = WM_RBUTTONUP;
+        PostMessage(g_wnd, WM_APP_CLOSEITEM, 0, 0);
     } else if (wp == WM_MOUSEWHEEL) {
         PostMessage(g_wnd, WM_APP_STEP, (short)HIWORD(m->mouseData) > 0 ? -1 : 1, 0);
     }
@@ -1473,6 +1510,84 @@ DWORD WINAPI HookThreadProc(LPVOID) {
         UnhookWindowsHookEx(mouse);
     UnhookWindowsHookEx(kb);
     return 0;
+}
+
+struct Closing {
+    HWND w;
+    DWORD start;
+    bool forced;
+};
+
+Closing g_closing[MAXRAW];
+int g_closingCount;
+
+bool ForceClose(HWND hwnd) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (!pid || pid == GetCurrentProcessId())
+        return false;
+    HANDLE process = OpenProcess(PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!process)
+        return false;
+    WCHAR path[MAX_PATH];
+    DWORD len = MAX_PATH;
+    bool ok = false;
+    if (QueryFullProcessImageNameW(process, 0, path, &len)) {
+        PCWSTR name = wcsrchr(path, L'\\');
+        name = name ? name + 1 : path;
+        if (lstrcmpiW(name, L"explorer.exe") && lstrcmpiW(name, L"windhawk.exe"))
+            ok = TerminateProcess(process, 1);
+    }
+    CloseHandle(process);
+    return ok;
+}
+
+void PointTo(HWND hwnd) {
+    HWND popup = GetLastActivePopup(hwnd);
+    if (g_open) {
+        g_session = false;
+        KillTimer(g_wnd, 1);
+        Close();
+        g_count = 0;
+    }
+    Activate(popup ? popup : hwnd);
+}
+
+void CheckClosing() {
+    DWORD now = GetTickCount();
+    bool changed = false;
+    for (int i = 0; i < g_closingCount;) {
+        Closing& c = g_closing[i];
+        DWORD cloaked = 0;
+        if (IsWindow(c.w))
+            DwmGetWindowAttribute(c.w, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
+        bool gone = !IsWindow(c.w) || !IsWindowVisible(c.w) || cloaked;
+        bool asks = !gone && (!IsWindowEnabled(c.w) || GetLastActivePopup(c.w) != c.w);
+        DWORD age = now - c.start;
+        bool act = !c.forced && ((asks && age > 300) || (!asks && age > 5000));
+        if (act && settings.force && ForceClose(c.w)) {
+            c.forced = true;
+            c.start = now;
+            i++;
+            continue;
+        }
+        if (act && asks) {
+            HWND w = c.w;
+            g_closingCount = 0;
+            PointTo(w);
+            break;
+        }
+        if (gone || act || (c.forced && age > 3000)) {
+            g_closing[i] = g_closing[--g_closingCount];
+            changed |= gone;
+            continue;
+        }
+        i++;
+    }
+    if (changed && g_open)
+        Refresh();
+    if (!g_closingCount)
+        KillTimer(g_wnd, 4);
 }
 
 void OnFrame() {
@@ -1516,6 +1631,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 Open();
             return 0;
         case WM_TIMER:
+            if (wp == 4) {
+                CheckClosing();
+                return 0;
+            }
             if (wp == 3) {
                 if (GetForegroundWindow() != g_pendingPrimary && ++g_pendingTicks < 15)
                     return 0;
@@ -1564,14 +1683,25 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             Select(g_slot[k]);
             return 0;
         }
+        case WM_APP_CLOSEITEM:
+            if (g_open && g_sel < g_count) {
+                for (int m = 0; m < g_items[g_sel].n; m++) {
+                    HWND w = g_items[g_sel].w[m];
+                    bool known = false;
+                    for (int k = 0; k < g_closingCount; k++)
+                        known |= g_closing[k].w == w;
+                    PostMessage(w, WM_CLOSE, 0, 0);
+                    if (!known && g_closingCount < MAXRAW)
+                        g_closing[g_closingCount++] = {w, GetTickCount(), false};
+                }
+                SetTimer(hwnd, 4, 100, nullptr);
+            }
+            return 0;
         case WM_APP_END:
             KillTimer(hwnd, 1);
             Close();
-            if (wp && g_sel < g_count) {
+            if (wp && g_sel < g_count)
                 ActivateItem(g_items[g_sel]);
-                for (int m = 0; wp == 2 && m < g_items[g_sel].n; m++)
-                    PostMessage(g_items[g_sel].w[m], WM_CLOSE, 0, 0);
-            }
             g_count = 0;
             return 0;
         case WM_SETCURSOR:
@@ -1643,6 +1773,7 @@ DWORD WINAPI ThreadProc(LPVOID) {
 void LoadSettings() {
     settings.enabled = Wh_GetIntSetting(L"radialSwitcher");
     settings.group = Wh_GetIntSetting(L"groupSplitWindows");
+    settings.force = Wh_GetIntSetting(L"forceClose");
     int delay = Wh_GetIntSetting(L"openDelay");
     int maxWindows = Wh_GetIntSetting(L"maxWindows");
     settings.delay = delay < 0 ? 0 : delay;
