@@ -8,7 +8,7 @@
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lshell32 -lshlwapi -luuid -lgdi32 -ldwmapi -ladvapi32
+// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lshell32 -lshlwapi -luuid -lgdi32 -ldwmapi -ladvapi32 -lshcore
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -71,9 +71,11 @@ was and the group is deleted. This can be turned off in the settings.
 
 - **Open a group as a regular folder:** Shift+double-click it, use the
   **Open folder** button in the panel, or choose Open from its context menu.
-- **Rename a group:** rename it on the desktop like any other folder.
-- **Delete a group:** delete it like any other folder (its shortcuts go to
-  the Recycle Bin with it).
+- **Rename, delete or copy a group:** since a click opens the panel,
+  right-click the group and use **Rename**, **Delete** or **Copy** from its
+  menu, like for any other folder. You can also select it by right-clicking
+  it or by dragging a selection rectangle, then press F2, Delete or Ctrl+C.
+  Deleting a group sends its shortcuts to the Recycle Bin with it.
 
 ## The group icon
 
@@ -84,14 +86,30 @@ follows the Windows light/dark theme by default.
 
 ## How it works
 
-A group is a regular folder on your desktop. The mod marks it with a hidden
-`desktop.ini` file, which also holds the order of the shortcuts and points to
-the generated icon.
+A group is a regular folder on your desktop that holds your shortcuts. To
+make it a group, the mod adds a few things to the folder:
 
-If you disable or uninstall the mod, nothing is lost: your groups simply
-become ordinary folders with their preview icon, and they open in File
-Explorer like any other folder. When you enable the mod again, they work as
-groups again.
+- A hidden `desktop.ini` file. It marks the folder as a group, stores the
+  order of the shortcuts, and points to the group icon.
+- A hidden `groupicon-*.ico` file: the generated preview icon. It's replaced
+  by a new file whenever the icon changes (a new name makes Windows show the
+  new icon right away), and the previous file is deleted on the next change.
+- The folder's read-only (or system) attribute. Windows only uses the custom
+  icon from `desktop.ini` for folders that have it; it doesn't prevent
+  changing the folder's content.
+
+These are standard Windows folder customizations (the same mechanism as
+Properties → Customize → Change Icon). The mod updates them when a group
+changes, and when the mod loads, the theme changes or the settings change,
+only for groups whose icon is out of date.
+
+**After the mod is disabled or uninstalled**, these files stay in each group
+folder on purpose: your groups remain ordinary folders that keep their
+preview icon and the order of their shortcuts, and open in File Explorer like
+any other folder. Enabling the mod again turns them back into groups. To
+turn a group into a completely plain folder, delete its `desktop.ini` and
+`groupicon-*.ico` files (shown with "Show hidden files" in File Explorer) and
+clear its read-only attribute, or move its shortcuts out and delete it.
 
 ## Settings
 
@@ -177,6 +195,7 @@ groups again.
 #include <dwmapi.h>
 #include <exdisp.h>
 #include <shellapi.h>
+#include <shellscalingapi.h>
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <shobjidl.h>
@@ -208,6 +227,8 @@ constexpr UINT kPositionTimerIntervalMs = 150;
 constexpr int kPositionMaxAttempts = 20;
 constexpr int kInstallMaxAttempts = 30;
 constexpr DWORD kWatchIntervalMs = 1000;
+constexpr DWORD kWatchInstalledIntervalMs = 5000;
+constexpr DWORD kWatchOtherProcessIntervalMs = 30000;
 
 // Icon sizes written to each group icon file.
 constexpr int kIconSizes[] = {256, 96, 64, 48, 32, 16};
@@ -270,54 +291,47 @@ std::wstring SanitizeFileName(const std::wstring& name) {
     return result.empty() ? L"Group" : result;
 }
 
+// Whether a string setting has the given value.
+bool SettingIs(PCWSTR name, PCWSTR value) {
+    return wcscmp(WindhawkUtils::StringSetting::make(name).get(), value) == 0;
+}
+
 void LoadSettings() {
     Settings settings;
 
-    PCWSTR groupName = Wh_GetStringSetting(L"groupName");
-    settings.groupName = SanitizeFileName(groupName ? groupName : L"");
-    Wh_FreeStringSetting(groupName);
+    settings.groupName = SanitizeFileName(
+        WindhawkUtils::StringSetting::make(L"groupName").get());
 
-    PCWSTR theme = Wh_GetStringSetting(L"previewTheme");
-    if (theme && wcscmp(theme, L"light") == 0) {
+    if (SettingIs(L"previewTheme", L"light")) {
         settings.previewTheme = PreviewTheme::Light;
-    } else if (theme && wcscmp(theme, L"dark") == 0) {
+    } else if (SettingIs(L"previewTheme", L"dark")) {
         settings.previewTheme = PreviewTheme::Dark;
     } else {
         settings.previewTheme = PreviewTheme::System;
     }
-    Wh_FreeStringSetting(theme);
 
     settings.preview3x3 = Wh_GetIntSetting(L"preview3x3") != 0;
 
-    PCWSTR modifier = Wh_GetStringSetting(L"modifierKey");
-    // Anything else, including the former "alt" option, is Ctrl+Alt.
-    if (modifier && wcscmp(modifier, L"shiftAlt") == 0) {
-        settings.modifierMask = MK_SHIFT | MK_ALT;
-    } else {
-        settings.modifierMask = MK_CONTROL | MK_ALT;
-    }
-    Wh_FreeStringSetting(modifier);
+    settings.modifierMask = SettingIs(L"modifierKey", L"shiftAlt")
+                                ? MK_SHIFT | MK_ALT
+                                : MK_CONTROL | MK_ALT;
 
     settings.openInPanel = Wh_GetIntSetting(L"openInPanel") != 0;
 
-    PCWSTR openWith = Wh_GetStringSetting(L"openWith");
-    if (openWith && wcscmp(openWith, L"double") == 0) {
+    if (SettingIs(L"openWith", L"double")) {
         settings.clickMode = ClickMode::Double;
-    } else if (openWith && wcscmp(openWith, L"system") == 0) {
+    } else if (SettingIs(L"openWith", L"system")) {
         settings.clickMode = ClickMode::System;
     } else {
         settings.clickMode = ClickMode::Single;
     }
-    Wh_FreeStringSetting(openWith);
 
     settings.dissolveSingleItem =
         Wh_GetIntSetting(L"dissolveSingleItem") != 0;
 
-    PCWSTR position = Wh_GetStringSetting(L"panelPosition");
-    settings.panelPosition = position && wcscmp(position, L"near") == 0
+    settings.panelPosition = SettingIs(L"panelPosition", L"near")
                                  ? PanelPosition::Near
                                  : PanelPosition::Center;
-    Wh_FreeStringSetting(position);
 
     settings.dimming = std::clamp(Wh_GetIntSetting(L"dimming"), 0, 100);
 
@@ -381,6 +395,21 @@ std::wstring g_userDesktop;
 std::wstring g_publicDesktop;
 std::vector<PendingPosition> g_pendingPositions;
 int g_installAttempts;
+
+// Calls in progress on the desktop thread that can run a modal loop (a
+// dialog, a menu, drag and drop). The mod must not be unloaded while one is
+// running: returning into unloaded code would crash Explorer.
+std::atomic<int> g_busyCalls{0};
+// Set while unloading, so that no new such call starts.
+std::atomic<bool> g_unloading{false};
+
+class BusyScope {
+   public:
+    BusyScope() { g_busyCalls++; }
+    ~BusyScope() { g_busyCalls--; }
+    BusyScope(const BusyScope&) = delete;
+    BusyScope& operator=(const BusyScope&) = delete;
+};
 
 // Defined further below.
 void ScheduleGroupSync(const std::wstring& folder);
@@ -849,13 +878,101 @@ void FillRoundedRect(Image& image,
     }
 }
 
+// Downscales an image by area averaging (premultiplied pixels average
+// correctly).
+Image ScaleImage(const Image& src, int width, int height) {
+    Image dst;
+    dst.width = width;
+    dst.height = height;
+    dst.pixels.assign(static_cast<size_t>(width) * height, 0);
+    if (src.width <= 0 || src.height <= 0 || width <= 0 || height <= 0) {
+        return dst;
+    }
+    if (src.width == width && src.height == height) {
+        dst.pixels = src.pixels;
+        return dst;
+    }
+
+    float scaleX = static_cast<float>(src.width) / width;
+    float scaleY = static_cast<float>(src.height) / height;
+    for (int y = 0; y < height; y++) {
+        float y0 = y * scaleY;
+        float y1 = std::min<float>((y + 1) * scaleY, src.height);
+        for (int x = 0; x < width; x++) {
+            float x0 = x * scaleX;
+            float x1 = std::min<float>((x + 1) * scaleX, src.width);
+            float sum[4] = {0, 0, 0, 0};
+            float total = 0;
+            for (int sy = static_cast<int>(y0); sy < y1; sy++) {
+                float wy = std::min<float>(sy + 1, y1) - std::max<float>(sy, y0);
+                for (int sx = static_cast<int>(x0); sx < x1; sx++) {
+                    float wx =
+                        std::min<float>(sx + 1, x1) - std::max<float>(sx, x0);
+                    float w = wx * wy;
+                    uint32_t p =
+                        src.pixels[static_cast<size_t>(sy) * src.width + sx];
+                    for (int c = 0; c < 4; c++) {
+                        sum[c] += ((p >> (c * 8)) & 0xFF) * w;
+                    }
+                    total += w;
+                }
+            }
+            if (total <= 0) {
+                continue;
+            }
+            auto channel = [&](int c) {
+                return static_cast<uint32_t>(
+                    std::min(255.0f, sum[c] / total + 0.5f));
+            };
+            dst.pixels[static_cast<size_t>(y) * width + x] =
+                PackPixel(channel(0), channel(1), channel(2), channel(3));
+        }
+    }
+    return dst;
+}
+
+// Scales an image to fit a square box, keeping its aspect ratio.
+Image ScaleToFit(const Image& src, int box) {
+    if (src.width <= box && src.height <= box) {
+        return src;
+    }
+    float scale =
+        static_cast<float>(box) / std::max(src.width, src.height);
+    int width = std::max(1, static_cast<int>(std::lround(src.width * scale)));
+    int height =
+        std::max(1, static_cast<int>(std::lround(src.height * scale)));
+    return ScaleImage(src, width, height);
+}
+
+// Spacing of the group icon grid, relative to the icon size: tight, so that
+// the shortcut icons get as much room as possible.
+constexpr float kPreviewPadding = 0.065f;
+
+float PreviewGap(int size, int columns) {
+    return size * (columns >= 3 ? 0.038f : 0.044f);
+}
+
+// Size of a grid cell of a group icon of the given size.
+float PreviewCellSize(int size, int columns) {
+    return (size - 2 * size * kPreviewPadding -
+            (columns - 1) * PreviewGap(size, columns)) /
+           columns;
+}
+
+// Below this cell size, the shell's own small icons (designed for small
+// sizes) look better than scaled-down large ones.
+constexpr int kMinScaledCell = 24;
+
 // Renders the group icon: a rounded background with a grid of up to
-// columns x columns shortcut icons.
+// columns x columns shortcut icons. largeIcons holds the shown shortcuts'
+// icons at the largest cell size, scaled down for larger cells; smaller cells
+// load the shell's icon at their own size.
 Image RenderGroupPreview(int size,
                          const std::wstring& folder,
                          const std::vector<std::wstring>& names,
                          bool dark,
-                         int columns) {
+                         int columns,
+                         const std::vector<Image>& largeIcons) {
     Image image;
     image.width = size;
     image.height = size;
@@ -873,20 +990,24 @@ Image RenderGroupPreview(int size,
                         radius, 242, 242, 247, 215);
     }
 
-    // Tight spacing so that the shortcut icons get as much room as possible.
-    float padding = size * 0.065f;
-    float gap = size * (columns >= 3 ? 0.038f : 0.044f);
-    float cell = (size - 2 * padding - (columns - 1) * gap) / columns;
+    float padding = size * kPreviewPadding;
+    float gap = PreviewGap(size, columns);
+    float cell = PreviewCellSize(size, columns);
     int cellPixels = std::max(1, static_cast<int>(cell));
 
     size_t count =
         std::min<size_t>(static_cast<size_t>(columns) * columns, names.size());
     for (size_t i = 0; i < count; i++) {
         Image icon;
-        if (!LoadItemImage(folder + L"\\" + names[i], cellPixels, icon)) {
-            continue;
+        if (cellPixels >= kMinScaledCell && i < largeIcons.size() &&
+            largeIcons[i].width > 0) {
+            icon = ScaleToFit(largeIcons[i], cellPixels);
+        } else {
+            if (!LoadItemImage(folder + L"\\" + names[i], cellPixels, icon)) {
+                continue;
+            }
+            RoundSquareIcon(icon);
         }
-        RoundSquareIcon(icon);
 
         float cellX = padding + (i % columns) * (cell + gap);
         float cellY = padding + (i / columns) * (cell + gap);
@@ -1054,32 +1175,92 @@ void NotifyFolderChanged(const std::wstring& folder) {
                    folder.c_str(), nullptr);
 }
 
-bool UpdateGroupIcon(const std::wstring& folder) {
+// Identifies what a group icon shows; the icon is re-rendered only when this
+// changes. Bump the version when the rendering itself changes.
+constexpr int kIconRenderVersion = 2;
+
+std::wstring IconKeyOf(const std::vector<std::wstring>& order,
+                       bool dark,
+                       int columns) {
+    size_t shown =
+        std::min<size_t>(static_cast<size_t>(columns) * columns, order.size());
+    std::wstring key = std::to_wstring(kIconRenderVersion) + L";" +
+                       (dark ? L"dark" : L"light") + L";" +
+                       std::to_wstring(columns) + L";";
+    key += JoinOrder(
+        std::vector<std::wstring>(order.begin(), order.begin() + shown));
+    return key;
+}
+
+// The icon file named by a group's desktop.ini, without its index.
+std::wstring IconFileOf(const std::wstring& ini) {
+    std::wstring icon = ReadIniValue(ini, L".ShellClassInfo", L"IconResource");
+    size_t comma = icon.find_last_of(L',');
+    if (comma != std::wstring::npos) {
+        icon.resize(comma);
+    }
+    return FileNameOf(icon);
+}
+
+// Brings a group's desktop.ini and icon up to date. Files are only written
+// when something changed: the order is rewritten if it differs, and the icon
+// is re-rendered only if what it shows (the first shortcuts, the theme, the
+// grid) changed, its file is missing, or force is set. This keeps group
+// folders from being rewritten needlessly, e.g. on every sign-in.
+bool UpdateGroupIcon(const std::wstring& folder, bool force = false) {
     std::wstring ini = IniPathOf(folder);
     EnsureUnicodeIni(ini);
 
-    // The icon currently in use is kept until the next update: the shell may
-    // still be reading it, and a missing file makes it fall back to the
-    // default folder icon.
-    std::wstring previousIcon =
-        ReadIniValue(ini, L".ShellClassInfo", L"IconResource");
-    size_t comma = previousIcon.find_last_of(L',');
-    if (comma != std::wstring::npos) {
-        previousIcon.resize(comma);
-    }
-    previousIcon = FileNameOf(previousIcon);
-
     std::vector<std::wstring> order = BuildOrder(folder);
-    WriteIniValue(ini, kIniSection, L"IsGroup", L"1");
-    WriteIniValue(ini, kIniSection, L"Order", JoinOrder(order));
+    if (GetPrivateProfileIntW(kIniSection, L"IsGroup", 0, ini.c_str()) != 1) {
+        WriteIniValue(ini, kIniSection, L"IsGroup", L"1");
+    }
+    if (ReadOrder(ini) != order) {
+        WriteIniValue(ini, kIniSection, L"Order", JoinOrder(order));
+    }
 
     Settings settings = GetSettings();
     bool dark = IsPreviewDark(settings);
     int columns = settings.preview3x3 && order.size() > 4 ? 3 : 2;
+    std::wstring key = IconKeyOf(order, dark, columns);
+
+    // The icon currently in use. It's kept until the next update: the shell
+    // may still be reading it, and a missing file makes it fall back to the
+    // default folder icon.
+    std::wstring previousIcon = IconFileOf(ini);
+
+    if (!force && !previousIcon.empty() &&
+        PathExists(folder + L"\\" + previousIcon) &&
+        ReadIniValue(ini, kIniSection, L"IconKey") == key) {
+        // Up to date. desktop.ini is only honored for read-only or system
+        // folders, so restore the attribute if it was removed.
+        DWORD attrs = GetFileAttributesW(folder.c_str());
+        if (attrs != INVALID_FILE_ATTRIBUTES &&
+            !(attrs & (FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_SYSTEM))) {
+            PathMakeSystemFolderW(folder.c_str());
+            NotifyFolderChanged(folder);
+        }
+        return true;
+    }
+
+    // Each shown shortcut's icon is extracted once, at the largest cell
+    // size, and scaled down for the other sizes.
+    size_t shown =
+        std::min<size_t>(static_cast<size_t>(columns) * columns, order.size());
+    int largestCell =
+        std::max(1, static_cast<int>(PreviewCellSize(kIconSizes[0], columns)));
+    std::vector<Image> largeIcons(shown);
+    for (size_t i = 0; i < shown; i++) {
+        if (LoadItemImage(folder + L"\\" + order[i], largestCell,
+                          largeIcons[i])) {
+            RoundSquareIcon(largeIcons[i]);
+        }
+    }
+
     std::vector<Image> images;
     for (int size : kIconSizes) {
         images.push_back(
-            RenderGroupPreview(size, folder, order, dark, columns));
+            RenderGroupPreview(size, folder, order, dark, columns, largeIcons));
     }
 
     // A new file name for every update bypasses the shell icon cache.
@@ -1098,6 +1279,7 @@ bool UpdateGroupIcon(const std::wstring& folder) {
     }
 
     SetFolderIcon(folder, iconName);
+    WriteIniValue(ini, kIniSection, L"IconKey", key);
     DeleteOldIcons(folder, iconName, previousIcon);
     NotifyFolderChanged(folder);
 
@@ -1106,8 +1288,8 @@ bool UpdateGroupIcon(const std::wstring& folder) {
     return true;
 }
 
-// Regenerates the icons of all groups on the user's desktop, e.g. ones the
-// shell displays as plain folders after a failed refresh.
+// Brings all groups on the user's desktop up to date. Only groups whose icon
+// is out of date (e.g. after a theme or settings change) are re-rendered.
 void RefreshAllGroupIcons() {
     if (g_userDesktop.empty()) {
         return;
@@ -1458,6 +1640,10 @@ class GroupingDropTarget final : public IDropTarget {
             m_dataObject = dataObject;
             m_dataObject->AddRef();
         }
+        // Right-button drags end with Explorer's Copy/Move/Create shortcuts
+        // menu, which is kept.
+        m_rightDrag = (keyState & MK_RBUTTON) != 0;
+        BeginBusy();
 
         DWORD allowed = effect ? *effect : DROPEFFECT_NONE;
         HRESULT hr = m_inner->DragEnter(dataObject, keyState, point, effect);
@@ -1477,13 +1663,21 @@ class GroupingDropTarget final : public IDropTarget {
     STDMETHODIMP DragLeave() override {
         SetHighlight(-1);
         ResetDragState();
-        return m_inner->DragLeave();
+        HRESULT hr = m_inner->DragLeave();
+        EndBusy();
+        return hr;
     }
 
     STDMETHODIMP Drop(IDataObject* dataObject,
                       DWORD keyState,
                       POINTL point,
                       DWORD* effect) override {
+        // The drag over the desktop ends here, however this returns.
+        struct EndBusyOnExit {
+            GroupingDropTarget* target;
+            ~EndBusyOnExit() { target->EndBusy(); }
+        } endBusy{this};
+
         DWORD allowed = effect ? *effect : DROPEFFECT_NONE;
         TargetInfo target = GetGroupingTarget(keyState, point, allowed);
         SetHighlight(-1);
@@ -1540,7 +1734,24 @@ class GroupingDropTarget final : public IDropTarget {
 
     ~GroupingDropTarget() {
         ResetDragState();
+        EndBusy();
         m_inner->Release();
+    }
+
+    // A drag over the desktop runs in a modal loop on the desktop thread, so
+    // it counts as a busy call while it's over the desktop.
+    void BeginBusy() {
+        if (!m_busy) {
+            m_busy = true;
+            g_busyCalls++;
+        }
+    }
+
+    void EndBusy() {
+        if (m_busy) {
+            m_busy = false;
+            g_busyCalls--;
+        }
     }
 
     void ResetDragState() {
@@ -1678,6 +1889,9 @@ class GroupingDropTarget final : public IDropTarget {
     // group adds to it as well. Other keys (Ctrl to copy, etc.) are left to
     // Explorer.
     TargetInfo GetGroupingTarget(DWORD keyState, POINTL point, DWORD allowed) {
+        if (m_rightDrag) {
+            return TargetInfo();
+        }
         DWORD modifiers = keyState & kModifierFlags;
         bool groupingKey = modifiers == GetSettings().modifierMask;
         if ((!groupingKey && modifiers != 0) ||
@@ -1729,6 +1943,8 @@ class GroupingDropTarget final : public IDropTarget {
     int m_cachedIndex = -2;
     TargetInfo m_cachedTarget;
     int m_highlightIndex = -1;
+    bool m_rightDrag = false;
+    bool m_busy = false;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1815,9 +2031,8 @@ void SyncGroup(const std::wstring& folder, bool allowDissolve) {
         return;
     }
 
-    if (order != ReadOrder(IniPathOf(folder))) {
-        UpdateGroupIcon(folder);
-    }
+    // Writes nothing if the group is up to date.
+    UpdateGroupIcon(folder);
 }
 
 void ScheduleGroupSync(const std::wstring& folder) {
@@ -2546,9 +2761,12 @@ void RemovePanelItem(int index) {
 }
 
 void ShowItemContextMenu(int index, POINT screenPoint) {
-    if (index < 0 || index >= static_cast<int>(g_panel.items.size())) {
+    if (index < 0 || index >= static_cast<int>(g_panel.items.size()) ||
+        g_unloading) {
         return;
     }
+    // The menu and the chosen command run modal loops.
+    BusyScope busy;
 
     std::wstring path = g_panel.items[index].path;
     std::wstring folder = g_panel.folder;
@@ -2605,7 +2823,10 @@ void ShowItemContextMenu(int index, POINT screenPoint) {
 
         CMINVOKECOMMANDINFOEX invoke = {};
         invoke.cbSize = sizeof(invoke);
-        invoke.fMask = CMIC_MASK_UNICODE | CMIC_MASK_PTINVOKE;
+        // ASYNCOK: the shell may run the command (and its dialogs) on its own
+        // thread.
+        invoke.fMask =
+            CMIC_MASK_UNICODE | CMIC_MASK_PTINVOKE | CMIC_MASK_ASYNCOK;
         invoke.hwnd = g_listView;
         invoke.lpVerb = MAKEINTRESOURCEA(command - kCmdShellFirst);
         invoke.lpVerbW = MAKEINTRESOURCEW(command - kCmdShellFirst);
@@ -2627,27 +2848,39 @@ void ShowItemContextMenu(int index, POINT screenPoint) {
     }
 }
 
+// Opens a file or folder. ASYNCOK lets the shell run it (and any dialog, e.g.
+// for a shortcut whose target is gone) on its own thread; the call is still
+// tracked in case it blocks.
+void ShellExecuteAsync(PCWSTR verb, const std::wstring& path) {
+    if (g_unloading) {
+        return;
+    }
+    BusyScope busy;
+
+    SHELLEXECUTEINFOW info = {};
+    info.cbSize = sizeof(info);
+    info.fMask = SEE_MASK_ASYNCOK;
+    info.lpVerb = verb;
+    info.lpFile = path.c_str();
+    info.nShow = SW_SHOWNORMAL;
+    if (!ShellExecuteExW(&info)) {
+        Wh_Log(L"Failed to open %s: %u", path.c_str(), GetLastError());
+    }
+}
+
 void LaunchPanelItem(int index) {
     if (index < 0 || index >= static_cast<int>(g_panel.items.size())) {
         return;
     }
     std::wstring path = g_panel.items[index].path;
     ClosePanel();
-
-    SHELLEXECUTEINFOW info = {};
-    info.cbSize = sizeof(info);
-    info.lpFile = path.c_str();
-    info.nShow = SW_SHOWNORMAL;
-    if (!ShellExecuteExW(&info)) {
-        Wh_Log(L"Failed to launch %s: %u", path.c_str(), GetLastError());
-    }
+    ShellExecuteAsync(nullptr, path);
 }
 
 void OpenPanelFolder() {
     std::wstring folder = g_panel.folder;
     ClosePanel();
-    ShellExecuteW(nullptr, L"open", folder.c_str(), nullptr, nullptr,
-                  SW_SHOWNORMAL);
+    ShellExecuteAsync(L"open", folder);
 }
 
 void EnsureFocusVisible() {
@@ -3040,6 +3273,11 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd,
             if (lParam == -1) {
                 // Keyboard: Shift+F10 or the menu key.
                 index = g_panel.focus;
+                if (index < 0) {
+                    return 0;
+                }
+                EnsureFocusVisible();
+                RedrawPanel();
                 RECT cell = ItemRect(index);
                 point = {(cell.left + cell.right) / 2,
                          (cell.top + cell.bottom) / 2};
@@ -3289,8 +3527,16 @@ bool ShowGroupPanel(const std::wstring& folder,
         return false;
     }
 
-    UINT dpi = g_listView ? GetDpiForWindow(g_listView) : 96;
-    g_panel.scale = dpi ? dpi / 96.0f : 1.0f;
+    // The panel opens on the group's monitor, which may have its own scale
+    // factor (the desktop list view spans all monitors with a single DPI).
+    HMONITOR monitor = MonitorFromRect(&iconRect, MONITOR_DEFAULTTONEAREST);
+    UINT dpiX = 96;
+    UINT dpiY = 96;
+    if (FAILED(GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY)) ||
+        !dpiX) {
+        dpiX = 96;
+    }
+    g_panel.scale = dpiX / 96.0f;
     g_panel.dark = IsAppsDarkMode();
     g_panel.folder = folder;
     g_panel.title = FileNameOf(folder);
@@ -3300,7 +3546,6 @@ bool ShowGroupPanel(const std::wstring& folder,
     LoadPanelItems(order);
     ComputePanelLayout();
 
-    HMONITOR monitor = MonitorFromRect(&iconRect, MONITOR_DEFAULTTONEAREST);
     MONITORINFO monitorInfo = {sizeof(monitorInfo)};
     GetMonitorInfoW(monitor, &monitorInfo);
     const RECT& work = monitorInfo.rcWork;
@@ -3720,23 +3965,35 @@ HWND FindDesktopDefView() {
     return defView && IsOwnProcessWindow(defView) ? defView : nullptr;
 }
 
+// Whether another process owns the desktop, i.e. this is a separate File
+// Explorer process where the desktop never appears.
+bool DesktopInOtherProcess() {
+    HWND progman = FindWindowW(L"Progman", nullptr);
+    return progman && !IsOwnProcessWindow(progman);
+}
+
 DWORD WINAPI WatchThreadProc(LPVOID) {
     int attempts = 0;
     bool appsDark = IsAppsDarkMode();
 
-    do {
-        // Group icons following the Windows theme are re-rendered when the
-        // theme changes.
-        bool nowDark = IsAppsDarkMode();
-        if (nowDark != appsDark) {
-            appsDark = nowDark;
-            HWND target = g_defView.load();
-            if (target && g_installed &&
-                GetSettings().previewTheme == PreviewTheme::System) {
-                PostMessageW(target, g_msgRefreshIcons, 0, 0);
-            }
-        }
+    // Signaled by the registry when the Windows theme may have changed.
+    HKEY personalizeKey = nullptr;
+    HANDLE themeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    auto watchTheme = [&] {
+        return personalizeKey &&
+               RegNotifyChangeKeyValue(personalizeKey, FALSE,
+                                       REG_NOTIFY_CHANGE_LAST_SET, themeEvent,
+                                       TRUE) == ERROR_SUCCESS;
+    };
+    bool themeWatched =
+        themeEvent &&
+        RegOpenKeyExW(
+            HKEY_CURRENT_USER,
+            L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+            0, KEY_NOTIFY | KEY_QUERY_VALUE, &personalizeKey) == ERROR_SUCCESS &&
+        watchTheme();
 
+    while (true) {
         HWND defView = g_defView.load();
         if (defView && !IsWindow(defView)) {
             g_defView = nullptr;
@@ -3758,9 +4015,46 @@ DWORD WINAPI WatchThreadProc(LPVOID) {
             attempts++;
             PostMessageW(defView, g_msgInstall, 0, 0);
         }
-    } while (WaitForSingleObject(g_stopEvent, kWatchIntervalMs) ==
-             WAIT_TIMEOUT);
 
+        // Look for the desktop every second until it's installed; then only
+        // check now and then that it still exists. Separate File Explorer
+        // processes never get the desktop, so they check rarely.
+        DWORD timeout = kWatchIntervalMs;
+        if (g_installed) {
+            timeout = kWatchInstalledIntervalMs;
+        } else if (!defView && DesktopInOtherProcess()) {
+            timeout = kWatchOtherProcessIntervalMs;
+        }
+
+        HANDLE handles[] = {g_stopEvent, themeEvent};
+        DWORD result = WaitForMultipleObjects(themeWatched ? 2 : 1, handles,
+                                              FALSE, timeout);
+        if (result == WAIT_OBJECT_0) {
+            break;
+        }
+
+        if (result == WAIT_OBJECT_0 + 1) {
+            themeWatched = watchTheme();
+            // Group icons following the Windows theme are re-rendered when
+            // the theme changes.
+            bool nowDark = IsAppsDarkMode();
+            if (nowDark != appsDark) {
+                appsDark = nowDark;
+                HWND target = g_defView.load();
+                if (target && g_installed &&
+                    GetSettings().previewTheme == PreviewTheme::System) {
+                    PostMessageW(target, g_msgRefreshIcons, 0, 0);
+                }
+            }
+        }
+    }
+
+    if (personalizeKey) {
+        RegCloseKey(personalizeKey);
+    }
+    if (themeEvent) {
+        CloseHandle(themeEvent);
+    }
     return 0;
 }
 
@@ -3802,6 +4096,8 @@ BOOL Wh_ModInit() {
 void Wh_ModUninit() {
     Wh_Log(L">");
 
+    g_unloading = true;
+
     if (g_stopEvent) {
         SetEvent(g_stopEvent);
     }
@@ -3810,6 +4106,15 @@ void Wh_ModUninit() {
         WaitForSingleObject(g_watchThread, INFINITE);
         CloseHandle(g_watchThread);
         g_watchThread = nullptr;
+    }
+
+    // Calls that run a modal loop on the desktop thread (e.g. a dialog opened
+    // from the panel) must return before the mod is unloaded.
+    if (g_busyCalls > 0) {
+        Wh_Log(L"Waiting for %d call(s) in progress", g_busyCalls.load());
+        while (g_busyCalls > 0) {
+            Sleep(100);
+        }
     }
 
     HWND defView = g_defView.exchange(nullptr);
