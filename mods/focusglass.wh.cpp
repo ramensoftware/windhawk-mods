@@ -7,7 +7,6 @@
 // @github          https://github.com/sayon-coder
 // @homepage        https://github.com/sayon-coder/macos-focus-blur
 // @include         windhawk.exe
-// @architecture    x86
 // @compilerOptions -ld3d11 -ldxgi -ldcomp -ld3dcompiler -ldwmapi -lwindowsapp -lruntimeobject -lshell32 -lole32 -luuid -luser32
 // @license         MIT
 // ==/WindhawkMod==
@@ -52,8 +51,8 @@ capture starts immediately when Windhawk loads the mod.
 
 - Intended for Windows 10 version 2004 or later and Windows 11.
 - Validated by the author on Windows 11 with Windhawk 1.7.3 stable.
-- This release targets the x86 `windhawk.exe` host and uses Windhawk's 1.7.3
-  dedicated Tool Mod compatibility mechanism.
+- Tested by the author with the x86 `windhawk.exe` host on Windhawk 1.7.3.
+  Other host architectures have not yet been verified.
 - The blur currently captures the primary monitor only.
 - Restart the mod after changing the display topology or display resolution.
 - Requires a GPU driver supporting Direct3D 11, DirectComposition and Windows
