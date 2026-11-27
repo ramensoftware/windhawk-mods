@@ -2,12 +2,138 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-27T08:03:56.000Z</updated>
+    <updated>2026-11-27T16:03:28.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar App State Indicators 1.0.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-app-state-indicators#3736d7598a4c9bf35e3647941de86bd5b20804ac</id>
+        <link href="https://windhawk.net/mods/taskbar-app-state-indicators"/>
+        <updated>2026-11-27T16:03:28.000Z</updated>
+        <content type="html"><![CDATA[<h1>Taskbar App State Indicators</h1>
+<p>See at a glance which taskbar apps are open, maximized, minimized, busy or
+waiting for you. Small marks are drawn on an invisible rounded frame around
+each icon, and they move along that frame whenever something changes.</p>
+<p><img src="https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/taskbar-app-state-indicators/demo.gif" alt="Demo"></p>
+<h2>What the marks mean</h2>
+<ul>
+<li><strong>Open window</strong>: the two bottom corners, joined into a cup under the icon.</li>
+<li><strong>Maximized window</strong>: all four corners, with a cap over the icon too, or
+only the top corners if you prefer. With all corners connected, the sides
+join too wherever no indicator sits on them, so a maximized window can
+get the whole frame. Optionally, the corners an open or maximized app
+doesn't get are drawn dimmed, so the whole frame shows.</li>
+<li><strong>Minimized app</strong>: an underline. It's dimmed when the app's windows are
+on another virtual desktop, or suspended like some Store apps. Its length
+is measured along the frame, so on a round frame it's an arc.</li>
+<li><strong>Several windows</strong>: a grey dot on the left edge, or another shape (a
+square, a diamond, a half dot, half diamond or branch, a plus, X or
+equal sign), or the number of windows.</li>
+<li><strong>Badge</strong> (unread messages, notifications, overlay icons): a red dot on
+the right edge, in every window state, or another shape, or the badge's
+count, with the shape for badges without one. For apps that draw their
+count into an overlay icon (Telegram, Discord), the count is read from
+the description they give it (Discord's counts from 0, so 1 is added to
+it, for its PTB and Canary builds too). Without a number there
+(Outlook's, say), the shape stays.</li>
+<li><strong>Progress</strong> (downloads, copies, installs): the marks fill from left to
+right in green, yellow while paused, red on error. When the end isn't
+known, the marks pulse, scaling about the frame's center and back twice
+a cycle, the second time twice as fast (the dots, signs and counts stay
+put), or the underline sweeps across for a minimized app.</li>
+<li><strong>Attention</strong>: the marks turn orange while the app's button flashes.</li>
+<li><strong>Colors</strong>: the app in front gets your accent color, every other app
+grey. The app in front can also get thicker corner marks.</li>
+<li><strong>Pinned apps</strong> (optional, off by default): a dot or another shape at the
+top center, whether the app is running, minimized or not running. A
+pinned app's top corners then stay apart instead of forming a cap,
+leaving it its place.</li>
+<li><strong>Active app</strong> (optional, off by default): a dot or another shape at the
+bottom center of the app in front, in your accent color by default. Its
+bottom corners then stay apart instead of forming a cup.</li>
+</ul>
+<p>The half dot and half diamond keep only the half facing the icon: their
+flat side lies on the frame's line. The branch is a plus without its outer
+arm: a line along the frame's edge with one arm towards the icon. All
+three point at their own icon, never at a neighbor's. The equal sign is
+the square's two edges that cross the frame's line, so its lines run
+towards the icon whichever edge it sits on.</p>
+<p>Counts go up to 99. Counts of one digit read normally; 10 and up turn
+vertical along the edge, so they don't run into the icon.</p>
+<p>The taskbar's own running indicator and progress bar are replaced by these
+marks. Its multi-window mark and badges are replaced too while the
+matching indicator is on. Everything comes back when the mod is disabled.</p>
+<h2>Animations</h2>
+<p>A minimized app's underline splits into the corners when it's restored, a
+maximized window's top corners travel up from the top center, and the
+dots, signs and counts grow from their centers. When the mod is turned
+on, the marks animate in; when it's turned off, they animate out while the
+taskbar's own indicators fade back in. Animations are controlled by the
+mod's own setting only, whatever the Windows animation setting is.
+Progress keeps moving even with them off, like the native progress bar.</p>
+<h2>Settings</h2>
+<ul>
+<li><strong>Frame</strong>: how far the frame sits from the icon, its corner radius, its
+line thickness (which grows inwards), and how the corners join: not at
+all, into a cup and a cap, or all around where nothing sits in between.</li>
+<li><strong>Appearance</strong>: the colors and opacity of the corner marks and the
+underline, for the app in front and for every other app, and the corner
+marks' line thickness on the app in front. Empty colors mean your
+accent color; <code>#Light|#Dark</code> sets a color per theme, and
+<code>#FF0000,#00FF00</code> a gradient.</li>
+<li><strong>Open and Maximized Windows</strong>: the marks' shape (rounded, diagonal or
+straight corners), whether maximized windows keep their bottom corners,
+and the dimmed missing corners.</li>
+<li><strong>Minimized Apps</strong>: the underline's length and ends, and its dimmed
+variant for apps running off screen.</li>
+<li><strong>Apps With Several Windows</strong>, <strong>Apps With a Badge</strong>: the shape (none, a
+dot, a square, a diamond, a half dot, half diamond or branch, a plus, X
+or equal sign), whether the count shows instead, their sizes and color.</li>
+<li><strong>Pinned Apps</strong>, <strong>Active App</strong>: none, a dot, a square, a diamond, a half
+dot, half diamond or branch, a plus, an X or an equal sign, its size and
+color.</li>
+<li><strong>Progress</strong>: its colors, and the pulse's size.</li>
+<li><strong>Attention</strong>: on or off, and its color.</li>
+<li><strong>Animations</strong>: on or off, and how long a movement takes.</li>
+<li><strong>Window Rules</strong>: what counts as an open window.</li>
+</ul>
+<h2>Notes</h2>
+<ul>
+<li>Colors follow the system live: a new accent color, light and dark
+themes, high contrast and right-to-left taskbars.</li>
+<li>Taskbar Open Window Underline can also hide the running indicator. If you
+use both mods, turn that option off there: both use the same switch.</li>
+<li>Works alongside Windows 11 Taskbar Styler: when a theme is applied or
+removed, the native indicators the mod replaces are hidden again, and
+when the mod is turned off, they come back as the theme has them (a
+theme that hides them keeps them hidden).</li>
+<li>For bug reports, turn on <strong>Debug logging</strong> under Advanced and include the
+mod's log.</li>
+</ul>
+<p>How it works, in short: each button's windows are found through the
+taskbar's view models and judged with <code>IsIconic</code>, <code>IsZoomed</code>, DWM cloaking
+and the virtual desktop manager, refreshed on window events. Progress,
+attention and badges are read from the button's own XAML (an overlay
+icon's count from the button's help text, where the taskbar puts the
+icon's description). The marks are composition shapes on a Direct2D path
+around the icon (two: the corners' follows the active app's thickness, the
+dots' keeps the frame's), moved by animating their trims along it on the
+render thread. The other shapes are composition lines, rectangles and
+small paths snapped to the screen's pixels, and the counts small XAML text
+blocks, all in the same host. The only layout change is the
+icon background's right margin, set to 0 while the mod's multi-window
+indicator takes the place of the native mark (restored when it doesn't).
+On builds where the needed symbols can't be resolved, the mod stays
+inactive and the log says so.</p>
+]]></content>
+        <author>
+            <name>Deen-0x</name>
+            <uri>https://github.com/Deen-0x</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Notepad Pro 1.1.0]]></title>
         <id>https://windhawk.net/mods/notepad-pro#97851a77d9d23e0628f73d2c9b5445fe2c91b1b0</id>
@@ -1054,20 +1180,6 @@ DirectUI, in the thread &quot;Secure restoration of Control Panel applets in Win
         <author>
             <name>Marco Petrucci</name>
             <uri>https://github.com/marco00petrucci</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7/8/8.1 Parental Controls / Family Safety Applet Restorer 1.1.0]]></title>
-        <id>https://windhawk.net/mods/win8-family-safety-applet-restorer#7f94980a6764df9bf4307b84de5ac80d87e2d9d5</id>
-        <link href="https://windhawk.net/mods/win8-family-safety-applet-restorer"/>
-        <updated>2026-11-26T19:00:50.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added a Windows 7 skin (credits to RandomGuy5747 for the contribution)</li>
-</ul>
-]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>

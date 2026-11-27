@@ -152,6 +152,39 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/0a602a269829e0c5c0194daa662efa1aa8ee646e/mods/chrome-acrylic-titlebar.wh.cpp"
       }
     },
+    "chrome-pip-customizer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795795623555,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795795623555,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "DanRotaru",
+        "compilerOptions": "-lshell32 -lcomctl32 -ldwmapi",
+        "description": "Customize Chrome's video picture-in-picture window: remove the hover dimming, restyle and move the playback controls, pin the window, click the video to play/pause, double-click for full screen, and hide any button",
+        "donateUrl": "https://buymeacoffee.com/widget/page/danrotaru",
+        "github": "https://github.com/DanRotaru",
+        "homepage": "https://dan13.me/",
+        "include": [
+          "chrome.exe"
+        ],
+        "name": "Chrome PiP Customizer",
+        "version": "1.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/8028",
+      "source": {
+        "sha256": "03c21f5722e4053a8a2d01017d4c65360d89e4094c4e8fec26283261dad1565a",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/c46642032f14b2366af2d2c916bce1fc57a54027/mods/chrome-pip-customizer.wh.cpp"
+      }
+    },
     "command-palette-logo": {
       "details": {
         "defaultSorting": 0,
@@ -815,37 +848,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/66c59a7938481ba84c007c598409461218b0c6c2/mods/sysbar-taskbar-monitor.wh.cpp"
       }
     },
-    "taskbar-app-state-indicators": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795370788861,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795676797078,
-        "users": 0
-      },
-      "metadata": {
-        "architecture": [
-          "x86-64"
-        ],
-        "author": "Deen-0x",
-        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -ldwmapi -ld2d1",
-        "description": "Marks taskbar buttons by window state on a frame around the icon: corner marks for open and maximized windows, an underline for minimized apps, shapes or counts for several windows, badges and pinned apps, and progress, all animated along the frame.",
-        "github": "https://github.com/Deen-0x",
-        "include": [
-          "explorer.exe"
-        ],
-        "name": "Taskbar App State Indicators",
-        "version": "1.0.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7747",
-      "source": {
-        "sha256": "cdc0a3ce25bd5b184e3feaaa92d510a56566c50fc3253188d6ff31b0fb31a08b",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/439a065103ed2cab4ab3d6467fa5e614435967df/mods/taskbar-app-state-indicators.wh.cpp"
-      }
-    },
     "taskbar-app-volume-mixer": {
       "details": {
         "defaultSorting": 0,
@@ -968,6 +970,38 @@
       "source": {
         "sha256": "fcb2728c22132c28805b93d65dc4a6ae81288d790db3dd9b111d626fb53322ac",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/92a146a1dfa6d6d580839ce32be520fbaf7bceee/mods/taskbar-extra-scroll-actions.wh.cpp"
+      }
+    },
+    "taskbar-keyboard-layout-flag": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795795623555,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795795623555,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "akiyorm",
+        "compilerOptions": "-lgdi32 -lgdiplus -luxtheme -lcomctl32 -lole32 -loleaut32 -lruntimeobject -lversion",
+        "description": "Replaces the Windows taskbar input language and keyboard layout indicator with a country flag.",
+        "github": "https://github.com/akiyorm",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Taskbar Keyboard Layout Flag",
+        "version": "1.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7663",
+      "source": {
+        "sha256": "27e98c99be5b5a1e5db7bc99d0ee6a1ffb67ac5da7a6d0ce33abc46108f99b1d",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/8931e92915d5e19dee9fc101618ee431fc0ced61/mods/taskbar-keyboard-layout-flag.wh.cpp"
       }
     },
     "taskbar-live-hud-radar-fork": {
