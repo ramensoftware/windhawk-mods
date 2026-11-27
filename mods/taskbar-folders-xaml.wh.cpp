@@ -4864,6 +4864,8 @@ static void layoutPanelChildren(int w, int h) {
         MoveWindow(panel->next, (w + ind) / 2, y, btn, btn, FALSE);
     }
 }
+static constexpr unsigned kPanelRevealMs = 165;
+
 static int panelRevealShift(double now) {
     const int sign = panel->rest.bottom <= panel->anchor.top ? 1 : -1;
     return int(std::lround(sign * px(7) * (1 - panel->reveal.value(now))));
@@ -4873,9 +4875,7 @@ static void panelPosition(double now, bool layout = false) {
     if (IsRectEmpty(&r))
         return;
     if (panel->morph.active(now)) {
-        double t = std::clamp((now - panel->morph.since) / panel->morph.duration,
-                              0., 1.);
-        t = t * t * (3 - 2 * t);
+        const double t = panel->morph.value(now);
         auto edge = [t](LONG from, LONG to) {
             return std::lround(from + (to - from) * t);
         };
@@ -4916,8 +4916,9 @@ static void sizePanel(RECT dest, bool modeChanged) {
         if (distance) {
             panel->morphFrom = from;
             panel->morph.set(0);
-            const auto ms = static_cast<unsigned>(
-                std::clamp(120. + .38 * distance * 96. / panel->dpi, 120., 240.));
+            const double distanceDip = distance * 96. / panel->dpi;
+            const auto ms = static_cast<unsigned>(std::lround(
+                std::min(90. + .30 * distanceDip, double(kPanelRevealMs))));
             target(panel->morph, 1, ms, now);
         }
     }
@@ -4940,7 +4941,7 @@ static void revealPanel() {
         return;
     }
     layered(true);
-    target(panel->reveal, 1, 165);
+    target(panel->reveal, 1, kPanelRevealMs);
     panelPosition(motionTime());
 }
 static void dismissPanel() {
@@ -9848,6 +9849,12 @@ struct FolderGesture {
     bool moved{}, mouse{};
     double missedRelease{};
 };
+struct NativePress {
+    uint32_t pointer;
+    POINT origin;
+    UINT dpi;
+    bool mouse;
+};
 struct DividerWatch {
     X::DependencyObject object;
     X::DependencyProperty property;
@@ -9924,7 +9931,8 @@ struct StartProjection {
     F::Rect startLayout{};
     RowSpace rowSpace{};
     double watchUntil{}, invalidSince{}, releaseAfter{};
-    bool motion{}, rendering{}, pointerDown{};
+    bool motion{}, rendering{}, nativeDragging{};
+    std::optional<NativePress> nativePress;
     winrt::event_token frame{};
     FolderGesture gesture;
     wstring ignoreClick;
@@ -10400,7 +10408,7 @@ static void watchDividerProperty(X::DependencyObject const& object,
             try {
                 if (rowMotion && rebind)
                     bindRowTranslations();
-                if (rowMotion || projection->pointerDown)
+                if (rowMotion || projection->nativeDragging)
                     paintProjection(motionTime(), false);
                 else if (projection->watchedFolder)
                     alignFolderDivider(projection->watchedFolder);
@@ -10527,7 +10535,7 @@ static bool paintProjection(double now, bool bindObservers) {
         projection->rowSpace.map(layoutBoundsIn(projection->start, ui->repeater));
     double shift = actual.X - projection->startLayout.X;
     double shiftY = actual.Y - projection->startLayout.Y;
-    bool nativeDrag = projection->pointerDown || now < projection->releaseAfter;
+    bool nativeDrag = projection->nativeDragging || now < projection->releaseAfter;
     if (nativeDrag) {
         auto rendered = visibleButtonBounds(projection->start);
         shift +=
@@ -10557,8 +10565,7 @@ static bool paintProjection(double now, bool bindObservers) {
         watchDividerEdges(nearest->button);
     alignFolderDivider(nearest->button);
     bool changed = std::exchange(projection->dividerChanged, false);
-    return changed || active || projection->pointerDown ||
-           now < projection->watchUntil;
+    return changed || active || nativeDrag || now < projection->watchUntil;
 }
 static void watchPlacementMotion(double milliseconds) {
     if (!projection->start || (projection->rendering && milliseconds == 0))
@@ -10857,6 +10864,27 @@ static bool positionByStart(const std::map<wstring, FrameworkElement>& hosts) {
     return true;
 }
 static void syncOpacity(const std::vector<FrameworkElement>&);
+static void moveNativePress(uint32_t pointer, POINT screen) {
+    const auto& press = projection->nativePress;
+    if (!press || press->pointer != pointer || projection->nativeDragging ||
+        !pastDragThreshold(press->origin, screen, press->dpi))
+        return;
+    projection->nativeDragging = true;
+    watchPlacementMotion();
+    requestLayout();
+}
+static bool endNativePress(double now) {
+    projection->nativePress.reset();
+    if (!std::exchange(projection->nativeDragging, false))
+        return false;
+    projection->releaseAfter = now + 140;
+    return true;
+}
+static void releaseNativePointer(uint32_t pointer) {
+    const auto& press = projection->nativePress;
+    if (press && press->pointer == pointer && endNativePress(motionTime()))
+        requestLayout();
+}
 static bool deferPlacementScan(double now, bool down) {
     if (!projection->start || folderPlacement.load() != projection->side ||
         ui->tiles.size() != groups.size())
@@ -10876,11 +10904,20 @@ static bool deferPlacementScan(double now, bool down) {
             return true;
         endFolderGesture(false);
     }
-    if (projection->pointerDown) {
-        if (down)
+    const auto& press = projection->nativePress;
+    if (press || projection->nativeDragging) {
+        if (!press || press->mouse) {
+            if (!down)
+                endNativePress(now);
+            else if (press && !projection->nativeDragging) {
+                // Explorer can take mouse capture before the routed move arrives.
+                POINT screen{};
+                if (GetCursorPos(&screen))
+                    moveNativePress(press->pointer, screen);
+            }
+        }
+        if (projection->nativeDragging)
             return true;
-        projection->pointerDown = false;
-        projection->releaseAfter = now + 140;
     }
     return now < projection->releaseAfter;
 }
@@ -11219,18 +11256,24 @@ static void collectDrops() {
     syncPanel();
 }
 static FrameworkElement buttonOf(X::DependencyObject);
-static void trackNativePress(X::DependencyObject const& source,
-                             FrameworkElement const& button) {
-    if (!projection->start)
+static void trackNativePress(FrameworkElement const& button, uint32_t pointer,
+                             POINT screen, bool mouse) {
+    if (!projection->start || !button || projection->nativePress)
         return;
-    auto slot = repeaterChild(button ? button : source.try_as<FrameworkElement>());
-    // Start animates its glyph on press, but its slot never enters shell reorder.
-    // Switching coordinate spaces here would apply the existing Dock hover twice.
-    if (slot == projection->start || (!button && !slot))
+    auto slot = repeaterChild(button);
+    if (!slot || slot == projection->start)
         return;
-    projection->pointerDown = true;
-    watchPlacementMotion(Slide::settleMs);
-    requestLayout();
+    const UINT dpi = GetDpiForWindow(tray());
+    projection->nativePress = NativePress{pointer, screen, dpi ? dpi : 96, mouse};
+}
+static bool pointerScreenPoint(uint32_t pointer, bool mouse, POINT& screen) {
+    if (mouse)
+        return GetCursorPos(&screen) != FALSE;
+    POINTER_INFO info{};
+    if (!GetPointerInfo(pointer, &info))
+        return false;
+    screen = info.ptPixelLocation;
+    return true;
 }
 static wstring projectedFolderAt(X::DependencyObject node) {
     while (node && node != ui->root) {
@@ -11263,7 +11306,8 @@ static void watchFrame() {
     auto unload = root.Unloaded([](auto&&, auto&&) {
         ui->rootDetached = true;
         projection->gesture = {};
-        projection->pointerDown = false;
+        projection->nativePress.reset();
+        projection->nativeDragging = false;
         stopPlacementFrames();
     });
     ui->frameOff.push_back([root, unload] { root.Unloaded(unload); });
@@ -11306,9 +11350,12 @@ static void watchFrame() {
                    if (p.Properties().PointerUpdateKind() !=
                        Update::LeftButtonPressed)
                        return;
+                   releaseNativePointer(p.PointerId());
                    cancelTaskbarPreview();
                    POINT screen{};
-                   if (!GetCursorPos(&screen))
+                   const bool mouse = e.Pointer().PointerDeviceType() ==
+                                      W::Devices::Input::PointerDeviceType::Mouse;
+                   if (!pointerScreenPoint(p.PointerId(), mouse, screen))
                        return;
                    auto source =
                        e.OriginalSource().try_as<X::DependencyObject>();
@@ -11317,9 +11364,7 @@ static void watchFrame() {
                        if (!id.empty()) {
                            beginFolderGesture(
                                id, p.PointerId(),
-                               e.GetCurrentPoint(ui->overlay).Position(),
-                               e.Pointer().PointerDeviceType() ==
-                                   W::Devices::Input::PointerDeviceType::Mouse);
+                               e.GetCurrentPoint(ui->overlay).Position(), mouse);
                            requestLayout();
                            return;
                        }
@@ -11327,7 +11372,7 @@ static void watchFrame() {
                    auto button = buttonOf(source);
                    if (button)
                        ui->drag = {appKey(button), screen, p.PointerId()};
-                   trackNativePress(source, button);
+                   trackNativePress(button, p.PointerId(), screen, mouse);
                    if (ui->drag.app.empty() || prefix(ui->drag.app, kPinPrefix))
                        dismissOutside(screen);
                } catch (...) {
@@ -11338,31 +11383,30 @@ static void watchFrame() {
                try {
                    if (stopping ||
                        (ui->drag.app.empty() && projection->gesture.id.empty() &&
-                        !projection->pointerDown))
+                        !projection->nativePress))
                        return;
-                   if (projection->start) {
-                       auto p = e.GetCurrentPoint(ui->overlay);
-                       if (!projection->gesture.id.empty() &&
-                           projection->gesture.pointer == p.PointerId()) {
-                           if (p.Properties().IsLeftButtonPressed())
-                               moveFolderGesture(p.PointerId(), p.Position());
-                           return;
-                       }
-                       if (projection->pointerDown &&
-                           p.Properties().IsLeftButtonPressed())
-                           watchPlacementMotion(Slide::settleMs);
+                   auto p = e.GetCurrentPoint(nullptr);
+                   if (!projection->gesture.id.empty() &&
+                       projection->gesture.pointer == p.PointerId()) {
+                       if (p.Properties().IsLeftButtonPressed())
+                           moveFolderGesture(
+                               p.PointerId(), e.GetCurrentPoint(ui->overlay).Position());
+                       return;
                    }
-                   if (ui->drag.app.empty() || prefix(ui->drag.app, kPinPrefix) ||
-                       e.Pointer().PointerId() != ui->drag.pointerId)
-                       return;
-                   if (!e.GetCurrentPoint(nullptr)
-                            .Properties()
-                            .IsLeftButtonPressed()) {
-                       cancelTaskbarPreview();
+                   if (!p.Properties().IsLeftButtonPressed()) {
+                       if (p.PointerId() == ui->drag.pointerId)
+                           cancelTaskbarPreview();
+                       releaseNativePointer(p.PointerId());
                        return;
                    }
                    POINT screen{};
-                   if (!GetCursorPos(&screen))
+                   const bool mouse = e.Pointer().PointerDeviceType() ==
+                                      W::Devices::Input::PointerDeviceType::Mouse;
+                   if (!pointerScreenPoint(p.PointerId(), mouse, screen))
+                       return;
+                   moveNativePress(p.PointerId(), screen);
+                   if (ui->drag.app.empty() || prefix(ui->drag.app, kPinPrefix) ||
+                       p.PointerId() != ui->drag.pointerId)
                        return;
                    UINT dpi = GetDpiForWindow(tray());
                    if (pastDragThreshold(ui->drag.start, screen, dpi ? dpi : 96))
@@ -11384,22 +11428,21 @@ static void watchFrame() {
                     }
                     return;
                 }
-                if (projection->pointerDown && !primaryMouseDown()) {
-                    projection->pointerDown = false;
-                    projection->releaseAfter = motionTime() + 140;
-                    requestLayout();
-                }
+                const auto p = e.GetCurrentPoint(nullptr);
+                if (p.Properties().PointerUpdateKind() !=
+                    Update::LeftButtonReleased)
+                    return;
+                releaseNativePointer(p.PointerId());
                 if (stopping || ui->drag.app.empty())
                     return;
-                auto p = e.GetCurrentPoint(nullptr);
-                if (p.PointerId() != ui->drag.pointerId ||
-                    p.Properties().PointerUpdateKind() !=
-                        Update::LeftButtonReleased)
+                if (p.PointerId() != ui->drag.pointerId)
                     return;
                 POINT screen{};
                 HWND owner = tray();
                 UINT dpi = owner ? GetDpiForWindow(owner) : 96;
-                if (!GetCursorPos(&screen)) {
+                const bool mouse = e.Pointer().PointerDeviceType() ==
+                                   W::Devices::Input::PointerDeviceType::Mouse;
+                if (!pointerScreenPoint(p.PointerId(), mouse, screen)) {
                     cancelTaskbarPreview();
                     return;
                 }
@@ -11443,6 +11486,7 @@ static void watchFrame() {
             if (!projection->gesture.id.empty() &&
                 projection->gesture.pointer == e.Pointer().PointerId())
                 endFolderGesture(false);
+            releaseNativePointer(e.Pointer().PointerId());
             if (e.Pointer().PointerId() == ui->drag.pointerId)
                 cancelTaskbarPreview();
         } catch (...) {
@@ -11461,6 +11505,13 @@ static void watchFrame() {
                            moveFolderGesture(point.PointerId(),
                                              point.Position());
                        endFolderGesture(release);
+                   }
+                   const auto& press = projection->nativePress;
+                   if (press && press->pointer == e.Pointer().PointerId()) {
+                       if (press->mouse && primaryMouseDown())
+                           requestLayout();
+                       else
+                           releaseNativePointer(press->pointer);
                    }
                    if (e.Pointer().PointerId() == ui->drag.pointerId)
                        cancelTaskbarPreview();
