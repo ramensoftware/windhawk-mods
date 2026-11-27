@@ -43,8 +43,8 @@ The mod does **not** replace system files.
 The optional experimental input setting is disabled by default. This is a
 best-effort implementation that has not been tested on touchscreen hardware.
 It attempts one-finger horizontal panning, vertical Start/All Apps switching,
-a downward tile gesture for the command bar, and horizontal touchpad wheel
-scrolling. Behavior depends on Windows and the device driver. Long-press tile
+and a downward tile gesture for the command bar. Horizontal touchpad wheel scrolling
+is available independently of this setting. Behavior depends on Windows and the device driver. Long-press tile
 dragging, multi-selection, multi-tile dragging and vertical touchpad switching
 are not implemented by this option. Changing it reloads the mod.
 
@@ -70,9 +70,9 @@ are not implemented by this option. Changing it reloads the mod.
   Start button opens this Start screen too.
 - **Background options**: the classic petal artwork, a solid color, the accent
   color, the desktop wallpaper, or a custom image.
-- **Optional 8.1-style layout**: modern versions of the old Windows 8.1 apps
-  (Outlook, Calendar, Photos, Weather, and others) can be pinned automatically when
-  installed. Disabled by default; it can be enabled in the settings.
+- **Optional 8.1-style layout**: adds installed apps and selected web shortcuts in an
+  8.1-style arrangement. Microsoft Store is added only when installed; Edge and OneDrive
+  are not seeded. Disabled by default. Existing pinned tiles are preserved.
 - **Default layout**: a fresh installation, with no layout saved yet, starts with five
   tiles only: Windows PowerShell, Computer, Control Panel, Task Manager and File Explorer.
   Everything else on the Start screen is pinned by the user. A layout that is already
@@ -134,16 +134,25 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
   set **Compatibility with StartAllBack and ExplorerPatcher** to *Always on* and the delay to 8000 ms.
 
 ## Local tile content
-The reconstructed Metro icons are used for recognized Microsoft apps. The app search also includes
-separate Weather, Calendar and Clock tiles that can be pinned again after removal. They open the
-corresponding Microsoft web pages. Calendar can alternate between its icon and the local date;
-Clock shows the local time. Online Weather is off by default. If enabled, Open-Meteo receives
-coordinates and the public IP every 30 minutes while a Weather tile is pinned, even while Start is closed. Users can enter both
-coordinates or separately enable approximate IP location via ipwho.is, which receives the public
-IP. IP lookup retries every five minutes until successful; forecast failures retry every 30 minutes.
-Privacy mode hides only the label, not the data sent to the services. If coordinates and IP
-location are unavailable, no forecast request is made. In-flight requests are cancelled when the
-worker stops; shutdown may still wait for WinHTTP to finish closing the request. Data: Open-Meteo.com, CC BY 4.0; the free API is for non-commercial use.
+The reconstructed Metro icons are used for recognized Microsoft apps. Simulated tiles prefer an
+installed app and may use a web shortcut; some have no fallback if the app is missing. Calendar
+can alternate between its icon and the local date; Clock shows the local time. Online Weather is
+off by default. If enabled, Open-Meteo receives coordinates and the public IP every 30 minutes
+while a Weather tile is pinned, even while Start is closed. Users can enter coordinates or enable
+approximate IP location via ipwho.is, which receives the public IP. IP lookup retries every five
+minutes until successful; forecast failures retry every 30 minutes. Privacy mode hides only the
+label, not the data sent to the services. Without coordinates or IP location, no forecast request
+is made. In-flight requests are cancelled on shutdown, which may still wait for WinHTTP cleanup.
+Data: Open-Meteo.com, CC BY 4.0; the free API is for non-commercial use.
+
+News has a separate **News live tile: online headlines** option, off by default. While a News tile
+is pinned, it requests text RSS immediately and every 30 minutes, even with Start closed. Depending
+on locale it uses www.adnkronos.com, www.rainews.it, www.france24.com, feeds.elpais.com,
+g1.globo.com, www.tagesschau.de, feeds.bbci.co.uk and news.google.com. Requests disclose the public
+IP; Google also receives language and country (privacy mode uses en-US). Requests use the
+Win81StartNews/1.4 user agent, are limited to 256 KB per feed, and do not download images or
+follow redirects. Turning the News option off stops the worker; cancellation may still wait for
+WinHTTP handle cleanup. The News and Weather options are independent.
 Photos can optionally show JPG and PNG files directly from the local Pictures folder while Start
 is open and Photos is pinned. Images are not uploaded; decoding runs on a worker thread and stopping
 can wait for it. These are simulated features, not notifications read from other apps.
@@ -178,11 +187,39 @@ can wait for it. These are simulated features, not notifications read from other
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
 /*
+- improvedOpeningAnimation: true
+  $name: "Use version 1.3.0 opening animations"
+  $name:it: "Usa le animazioni di apertura della versione 1.3.0"
+  $name:es: "Usar las animaciones de apertura de la versión 1.3.0"
+  $name:fr: "Utiliser les animations d'ouverture de la version 1.3.0"
+  $name:pt: "Usar as animações de abertura da versão 1.3.0"
+  $description: "This setting uses the version 1.3.0 Start and sign-in opening timeline. Turn it off for the previous 1.4 opening behaviour."
+  $description:it: "Questa impostazione usa le animazioni di apertura Start e di accesso della versione 1.3.0. Disattivala per il comportamento di apertura precedente della 1.4."
+  $description:es: "Esta configuración usa las animaciones de apertura de Inicio y de sesión de la versión 1.3.0. Desactívala para volver al comportamiento anterior de la 1.4."
+  $description:fr: "Ce paramètre utilise les animations d'ouverture de l'écran d'accueil et de session de la version 1.3.0. Désactivez-le pour revenir au comportement précédent de la 1.4."
+  $description:pt: "Esta configuração usa as animações de abertura da Tela Inicial e de entrada da versão 1.3.0. Desative para voltar ao comportamento anterior da 1.4."
+- compactInterface: true
+  $name: "Slightly smaller interface"
+  $name:it: "Interfaccia leggermente più piccola"
+  $name:es: "Interfaz ligeramente más pequeña"
+  $name:fr: "Interface légèrement plus petite"
+  $name:pt: "Interface um pouco menor"
+  $description: "This setting reduces Start screen interface elements by about 10 percent. Turn off to use the previous size. Changing this setting reloads the mod."
+  $description:it: "Questa impostazione riduce gli elementi dello Start di circa il 10 percento. Disattiva per tornare alle dimensioni precedenti. La modifica ricarica la mod."
+  $description:es: "Esta configuración reduce los elementos de Inicio aproximadamente un 10 por ciento. Desactívala para recuperar el tamaño anterior. Los cambios recargan el mod."
+  $description:fr: "Ce paramètre réduit les éléments de l'écran d'accueil d'environ 10 pour cent. Désactivez-le pour retrouver la taille précédente. La modification recharge le mod."
+  $description:pt: "Esta configuração reduz os elementos da Tela Inicial em cerca de 10 por cento. Desative para restaurar o tamanho anterior. A alteração recarrega o mod."
 - experimentalTouch: false
   $name: "Experimental touch and touchpad input (best effort)"
   $name:it: "Input touch e touchpad sperimentale (best effort)"
-  $description: "This setting enables experimental touch panning, vertical Start/All Apps switching, a downward tile gesture for the command bar, and horizontal touchpad scrolling. Best effort; not tested on touchscreen hardware. Long-press dragging, multiple selection or dragging, and vertical touchpad switching are not implemented. Changes reload the mod."
-  $description:it: "Questa impostazione attiva lo scorrimento touch sperimentale, il cambio verticale Start/Tutte le app, il gesto verso il basso su un riquadro per la barra dei comandi e lo scorrimento orizzontale del touchpad. Best effort, non testato su hardware touch. Il trascinamento con pressione prolungata, la selezione e il trascinamento multipli e il cambio verticale tramite touchpad non sono implementati. Le modifiche ricaricano la mod."
+  $name:es: "Entrada táctil y panel táctil experimental"
+  $name:fr: "Saisie tactile et pavé tactile expérimentaux"
+  $name:pt: "Entrada experimental por toque e touchpad"
+  $description: "This setting enables experimental touch panning, vertical Start/All Apps switching, and a downward tile gesture for the command bar. Horizontal touchpad scrolling is available independently. Best effort; not tested on touchscreen hardware. Long-press dragging, multiple selection or dragging, and vertical touchpad switching are not implemented. Changes reload the mod."
+  $description:it: "Questa impostazione attiva lo scorrimento touch sperimentale, il cambio verticale Start/Tutte le app, e il gesto verso il basso su un riquadro per la barra dei comandi. Lo scorrimento orizzontale del touchpad è disponibile indipendentemente. Best effort, non testato su hardware touch. Il trascinamento con pressione prolungata, la selezione e il trascinamento multipli e il cambio verticale tramite touchpad non sono implementati. Le modifiche ricaricano la mod."
+  $description:es: "Esta configuración activa el desplazamiento táctil experimental, el cambio vertical entre Inicio y Todas las aplicaciones y el gesto hacia abajo para la barra de comandos. El desplazamiento horizontal del panel táctil funciona independientemente. No se ha probado en hardware táctil. No admite arrastrar mediante pulsación prolongada, selección o arrastre múltiple ni cambio vertical con el panel táctil. Los cambios recargan el mod."
+  $description:fr: "Ce paramètre active le défilement tactile expérimental, le passage vertical entre l'écran d'accueil et Toutes les applications et le geste vers le bas pour la barre de commandes. Le défilement horizontal du pavé tactile est disponible indépendamment. Non testé sur écran tactile. Le glisser par appui prolongé, la sélection ou le glisser multiples et le passage vertical par pavé tactile ne sont pas pris en charge. La modification recharge le mod."
+  $description:pt: "Esta configuração ativa o deslocamento experimental por toque, a troca vertical entre a Tela Inicial e Todos os aplicativos e o gesto para baixo para a barra de comandos. O deslocamento horizontal do touchpad funciona independentemente. Não foi testado em hardware de toque. Arrastar por pressão longa, seleção ou arraste múltiplo e troca vertical pelo touchpad não são implementados. A alteração recarrega o mod."
 - winKey: true
   $name: "Open with the Windows key and the Start button"
   $name:it: "Apri con il tasto Windows e il pulsante Start"
@@ -340,11 +377,11 @@ can wait for it. These are simulated features, not notifications read from other
   $name:es: "Rellenar Inicio con un diseño estilo Windows 8.1 desde las apps instaladas"
   $name:fr: "Peupler l'écran d'accueil façon Windows 8.1 depuis les applications installées"
   $name:pt: "Preencher a Tela Inicial com um layout estilo Windows 8.1 dos apps instalados"
-  $description: "This setting is optional and off by default. There are no real Metro apps left to download on Windows 10/11, so to spare you pinning dozens of apps by hand, turning this on pins the modern counterparts of the Windows 8.1 inbox apps that are actually installed (Mail/Outlook, Calendar, Weather, Photos, Edge, News, Camera, Xbox, Music, Movies, OneDrive, Maps, Settings, Calculator, Clock, Notepad, Paint) in Windows 8.1 sizes and groups - Wide Mail, Large Weather and so on. It only adds groups after your current tiles, never removes or moves anything, skips apps that are already pinned or not installed, and the added tiles are ordinary tiles you can resize, move or unpin. Turning it off again changes nothing that was added."
-  $description:it: "Questa impostazione è opzionale e disattivata in partenza. Su Windows 10/11 non restano vere app Metro da scaricare, quindi per risparmiarti di pinnare decine di app a mano, attivandola vengono pinnate le controparti moderne delle app di sistema di Windows 8.1 che sono davvero installate (Posta/Outlook, Calendario, Meteo, Foto, Edge, Notizie, Fotocamera, Xbox, Musica, Film, OneDrive, Mappe, Impostazioni, Calcolatrice, Orologio, Blocco note, Paint) con dimensioni e gruppi in stile 8.1: Posta Larga, Meteo Grande e così via. Aggiunge solo gruppi dopo le tue tile attuali, non rimuove né sposta nulla, salta le app già pinnate o non installate, e le tile aggiunte sono tile normali da ridimensionare, spostare o rimuovere. Disattivandola non cambia nulla di ciò che è stato aggiunto."
-  $description:es: "Esta configuración es opcional y viene desactivada. En Windows 10/11 ya no quedan apps Metro reales para descargar, así que, para ahorrarte fijar docenas de apps a mano, al activarla se fijan las equivalentes modernas de las apps del sistema de Windows 8.1 que estén instaladas (Correo/Outlook, Calendario, Tiempo, Fotos, Edge, Noticias, Cámara, Xbox, Música, Películas, OneDrive, Mapas, Configuración, Calculadora, Reloj, Bloc de notas, Paint) con tamaños y grupos estilo 8.1: Correo Ancho, Tiempo Grande, etc. Solo añade grupos tras tus iconos actuales, nunca quita ni mueve nada, salta las apps ya fijadas o no instaladas, y los iconos añadidos son normales: puedes redimensionarlos, moverlos o quitarlos. Desactivarla no cambia lo ya añadido."
-  $description:fr: "Ce paramètre est optionnel et désactivé par défaut. Sur Windows 10/11, il ne reste plus de vraies applications Metro à télécharger ; pour vous épargner d'épingler des dizaines d'applications à la main, l'activer épingle les équivalents modernes des applications système de Windows 8.1 réellement installées (Courrier/Outlook, Calendrier, Météo, Photos, Edge, Actualités, Caméra, Xbox, Musique, Films, OneDrive, Cartes, Paramètres, Calculatrice, Horloge, Bloc-notes, Paint) aux tailles et groupes de Windows 8.1 : Courrier Large, Météo Grand, etc. Il ajoute seulement des groupes après vos vignettes actuelles, ne retire ni ne déplace rien, ignore les applications déjà épinglées ou absentes, et les vignettes ajoutées sont ordinaires : redimensionnables, déplaçables, retirables. Le désactiver ne change rien à ce qui a été ajouté."
-  $description:pt: "Esta configuração é opcional e vem desativada. No Windows 10/11 não restam apps Metro de verdade para baixar, então, para poupar você de fixar dezenas de apps manualmente, ao ativá-la são fixados os equivalentes modernos dos apps de sistema do Windows 8.1 que estiverem instalados (Email/Outlook, Calendário, Clima, Fotos, Edge, Notícias, Câmera, Xbox, Música, Filmes, OneDrive, Mapas, Configurações, Calculadora, Relógio, Bloco de Notas, Paint) com tamanhos e grupos no estilo 8.1: Email Largo, Clima Grande e assim por diante. Ela apenas adiciona grupos depois dos seus blocos atuais, nunca remove nem move nada, pula apps já fixados ou não instalados, e os blocos adicionados são comuns: redimensionáveis, móveis e removíveis. Desativá-la não muda o que foi adicionado."
+  $description: "This setting is optional and off by default. It adds a Windows 8.1-style set of installed apps, including Store only when installed. Mail, Calendar, Weather, News, People, Sports, Finance, Games and Maps may instead use web shortcuts; Settings, Calculator, Notepad, Paint and Desktop may use built-in targets. Other unavailable apps are skipped. Existing tiles are preserved. Turning this off does not remove added tiles."
+  $description:it: "Questa impostazione è opzionale e disattivata per impostazione predefinita. Aggiunge tile in stile Windows 8.1 per le app installate, incluso Store solo se installato. Posta, Calendario, Meteo, Notizie, Persone, Sport, Finanza, Giochi e Mappe possono usare collegamenti web; Impostazioni, Calcolatrice, Blocco note, Paint e Desktop possono usare destinazioni integrate. Le altre app assenti vengono ignorate. Le tile esistenti sono conservate. Disattivare non rimuove quelle aggiunte."
+  $description:es: "Esta configuración es opcional y está desactivada por defecto. Añade aplicaciones instaladas al estilo de Windows 8.1, incluida Store solo si está instalada. Correo, Calendario, Tiempo, Noticias, Contactos, Deportes, Finanzas, Juegos y Mapas pueden usar enlaces web. Las aplicaciones no disponibles se omiten. Se conservan los mosaicos existentes."
+  $description:fr: "Ce paramètre est facultatif et désactivé par défaut. Il ajoute des applications installées dans le style Windows 8.1, dont Store seulement si installé. Courrier, Calendrier, Météo, Actualités, Contacts, Sports, Finance, Jeux et Cartes peuvent utiliser des liens web. Les applications indisponibles sont ignorées. Les vignettes existantes sont conservées."
+  $description:pt: "Esta configuração é opcional e desativada por padrão. Adiciona aplicativos instalados no estilo Windows 8.1, incluindo a Store apenas quando instalada. Email, Calendário, Clima, Notícias, Pessoas, Esportes, Finanças, Jogos e Mapas podem usar links da web. Aplicativos indisponíveis são ignorados. Os blocos existentes são preservados."
 - groupColumns: 2
   $name: "Tiles per group (horizontal)"
   $name:it: "Tile per gruppo (orizzontali)"
@@ -477,17 +514,28 @@ can wait for it. These are simulated features, not notifications read from other
   $description:es: "Esta configuración muestra archivos JPG y PNG de la carpeta local Imágenes de Windows mientras Inicio está abierto y Fotos está fijado. Las imágenes no se suben. Al detenerse puede esperar a que termine la decodificación."
   $description:fr: "Ce paramètre affiche les fichiers JPG et PNG du dossier local Images de Windows lorsque l'écran d'accueil est ouvert et Photos est épinglé. Les images ne sont pas envoyées en ligne. L'arrêt peut attendre la fin du décodage."
   $description:pt: "Esta configuração mostra arquivos JPG e PNG da pasta local Imagens do Windows enquanto a Tela Inicial está aberta e Fotos está fixado. As imagens não são enviadas. A parada pode aguardar o fim da decodificação."
+- newsOnline: false
+  $name: "News live tile: online headlines"
+  $name:it: "Tile Notizie: titoli online"
+  $name:es: "Mosaico Noticias: titulares en línea"
+  $name:fr: "Vignette Actualités : titres en ligne"
+  $name:pt: "Bloco Notícias: manchetes online"
+  $description: "This setting is off by default. When a News tile is pinned, it fetches text RSS immediately and every 30 minutes even when Start is closed. Depending on locale, connects to www.adnkronos.com, www.rainews.it, www.france24.com, feeds.elpais.com, g1.globo.com, www.tagesschau.de, feeds.bbci.co.uk and news.google.com. Each request exposes your IP; Google receives language and country. No images or redirects are downloaded. Changing this setting reloads the mod."
+  $description:it: "Questa impostazione è disattivata per impostazione predefinita. Con una tile Notizie fissata scarica titoli RSS testuali subito e ogni 30 minuti anche a Start chiuso. In base alla lingua usa www.adnkronos.com, www.rainews.it, www.france24.com, feeds.elpais.com, g1.globo.com, www.tagesschau.de, feeds.bbci.co.uk e news.google.com. Le richieste comunicano l'IP; Google riceve lingua e paese. Non scarica immagini né segue reindirizzamenti. La modifica ricarica la mod."
+  $description:es: "Esta configuración está desactivada por defecto. Con un mosaico Noticias fijado, descarga titulares RSS de texto inmediatamente y cada 30 minutos, incluso con Inicio cerrado. Según la región se conecta a www.adnkronos.com, www.rainews.it, www.france24.com, feeds.elpais.com, g1.globo.com, www.tagesschau.de, feeds.bbci.co.uk y news.google.com. Las solicitudes revelan tu IP; Google recibe idioma y país. No descarga imágenes ni sigue redirecciones. Los cambios recargan el mod."
+  $description:fr: "Ce paramètre est désactivé par défaut. Lorsqu'une vignette Actualités est épinglée, il récupère des titres RSS textuels immédiatement puis toutes les 30 minutes, même si l'écran d'accueil est fermé. Selon la région, il contacte www.adnkronos.com, www.rainews.it, www.france24.com, feeds.elpais.com, g1.globo.com, www.tagesschau.de, feeds.bbci.co.uk et news.google.com. Les requêtes révèlent votre IP ; Google reçoit la langue et le pays. Aucune image ni redirection n'est téléchargée ou suivie. La modification recharge le mod."
+  $description:pt: "Esta configuração é desativada por padrão. Quando um bloco Notícias está fixado, busca manchetes RSS em texto imediatamente e a cada 30 minutos, mesmo com a Tela Inicial fechada. Conforme a região, conecta-se a www.adnkronos.com, www.rainews.it, www.france24.com, feeds.elpais.com, g1.globo.com, www.tagesschau.de, feeds.bbci.co.uk e news.google.com. As solicitações revelam seu IP; o Google recebe idioma e país. Não baixa imagens nem segue redirecionamentos. A alteração recarrega o mod."
 - calendarSlide: true
-  $name: "Calendar live tile slide"
-  $name:it: "Animazione del riquadro Calendario"
-  $name:es: "Deslizamiento del mosaico Calendario"
-  $name:fr: "Défilement de la vignette Calendrier"
-  $name:pt: "Deslizamento do bloco Calendário"
-  $description: "This setting alternates the pinned Microsoft Calendar tile between its icon and the current local date using a downward slide. It does not read app notifications. It is also active when 'Populate Start with a Windows 8.1 style layout' is on, so the seeded 8.1 tiles animate."
-  $description:it: "Questa impostazione alterna l'icona del riquadro Calendario Microsoft fissato alla data locale con uno scorrimento verso il basso. Non legge le notifiche dell'app. È attiva anche quando 'Popola Start con un layout stile Windows 8.1' è attivo, così le tile 8.1 aggiunte si animano."
-  $description:es: "Esta configuración alterna el icono del mosaico fijado de Calendario de Microsoft con la fecha local mediante un deslizamiento hacia abajo. No lee las notificaciones de la aplicación."
-  $description:fr: "Ce paramètre alterne l'icône de la vignette Calendrier Microsoft épinglée et la date locale par un glissement vers le bas. Il ne lit pas les notifications de l'application."
-  $description:pt: "Esta configuração alterna o ícone do bloco fixado do Calendário Microsoft com a data local por meio de um deslizamento para baixo. Ela não lê as notificações do aplicativo."
+  $name: "Live tile slide animations"
+  $name:it: "Animazioni delle live tile"
+  $name:es: "Animaciones de mosaicos dinámicos"
+  $name:fr: "Animations des vignettes dynamiques"
+  $name:pt: "Animações de blocos dinâmicos"
+  $description: "This setting enables slide transitions for Calendar, Weather, Store and News tiles. Does not read app notifications."
+  $description:it: "Questa impostazione attiva le transizioni delle tile Calendario, Meteo, Store e Notizie. Non legge notifiche delle app."
+  $description:es: "Esta configuración activa las transiciones de Calendario, Tiempo, Store y Noticias. No lee notificaciones."
+  $description:fr: "Ce paramètre active les transitions des vignettes Calendrier, Météo, Store et Actualités. Ne lit pas les notifications."
+  $description:pt: "Esta configuração ativa as transições dos blocos Calendário, Clima, Store e Notícias. Não lê notificações."
 - weatherOnline: false
   $name: "Online Weather (Open-Meteo)"
   $name:it: "Meteo online (Open-Meteo)"
@@ -925,7 +973,7 @@ enum StrId {
     STR_ROW_APPS, STR_ROW_SETTINGS, STR_ROW_FILES, STR_ROW_STORE,
     STR_BAR_ADVANCED, STR_BAR_UNPIN, STR_BAR_PIN_START, STR_BAR_SMALLER, STR_BAR_LARGER,
     STR_ADV_MANAGE, STR_ADV_MAP, STR_ADV_DISCONNECT, STR_ADV_PROPERTIES, STR_ADV_RUNAS, STR_ADV_OPENFILE,
-    ERR_COMPMGMT, ERR_MAPDRIVE, ERR_DISCONNECTDRIVE, ERR_RUNAS, ERR_NOFILELOC,
+    ERR_COMPMGMT, ERR_MAPDRIVE, ERR_DISCONNECTDRIVE, ERR_RUNAS, ERR_NOFILELOC, ERR_TILE_UNAVAILABLE,
     STR_MENU_PICTURE, STR_MENU_LOCK, STR_MENU_SIGNOUT,
     STR_GENERIC_USER,
     STR_PWR_SLEEP, STR_PWR_HIBERNATE, STR_PWR_SHUTDOWN, STR_PWR_RESTART,
@@ -981,6 +1029,7 @@ static const LocRow kStrings[STR_COUNT] = {
     { { L"The Disconnect network drive dialog is unavailable on this Windows version.", L"La finestra Disconnetti unit\u00e0 di rete non \u00e8 disponibile in questa versione di Windows.", L"El cuadro Desconectar unidad de red no est\u00e1 disponible en esta versi\u00f3n de Windows.", L"La bo\u00eete de dialogue D\u00e9connecter un lecteur r\u00e9seau n'est pas disponible dans cette version de Windows.", L"A caixa Desconectar unidade de rede n\u00e3o est\u00e1 dispon\u00edvel nesta vers\u00e3o do Windows." } },
     { { L"Windows could not run this program as administrator. Open its file location and try from Explorer.", L"Windows non pu\u00f2 eseguire questo programma come amministratore. Apri il percorso file e riprova da Explorer.", L"Windows no pudo ejecutar este programa como administrador. Abra su ubicaci\u00f3n de archivo e int\u00e9ntelo desde el Explorador.", L"Windows n'a pas pu ex\u00e9cuter ce programme en tant qu'administrateur. Ouvrez son emplacement et r\u00e9essayez depuis l'Explorateur.", L"O Windows n\u00e3o p\u00f4de executar este programa como administrador. Abra o local do arquivo e tente pelo Explorer." } },
     { { L"Windows did not provide a file location for this app.", L"Windows non ha fornito un percorso file per questa app.", L"Windows no proporcion\u00f3 una ubicaci\u00f3n de archivo para esta aplicaci\u00f3n.", L"Windows n'a pas fourni d'emplacement de fichier pour cette application.", L"O Windows n\u00e3o forneceu um local de arquivo para este aplicativo." } },
+    { { L"The app or link for this tile is unavailable.", L"L'applicazione o il collegamento di questa tile non è disponibile.", L"La aplicación o el enlace de este mosaico no está disponible.", L"L'application ou le lien de cette vignette est indisponible.", L"O aplicativo ou link deste bloco não está disponível." } },
     { { L"Change account picture", L"Cambia immagine account", L"Cambiar imagen de cuenta", L"Changer l'image du compte", L"Alterar imagem da conta" } },
     { { L"Lock", L"Blocca", L"Bloquear", L"Verrouiller", L"Bloquear" } },
     { { L"Sign out", L"Disconnetti", L"Cerrar sesi\u00f3n", L"Se d\u00e9connecter", L"Sair" } },
@@ -1052,8 +1101,10 @@ static const wchar_t* T(StrId id) {
 }
 
 
-static int TILE = 120, GAP = 8, LEFT = 120, TOP = 171;
+static int TILE = 120, GAP = 8, LEFT = 120, TOP = 151;
 static const int MAX_TILES = 96;
+static volatile LONG g_compactInterface = 1;
+static volatile LONG g_improvedOpeningAnimation = 1;
 static int g_dpi = 96;
 static float g_dpiScale = 1.0f;
 static int g_userTextW = -1;
@@ -1068,33 +1119,38 @@ static int GROUP_SEPARATION = 56;
 static volatile LONG g_requestedGroupCols = 2, g_requestedGroupRows = 4;
 static const float PRESS_SCALE   = 0.95f;      
 
-static const float TILES_DELAY   = 0.03f;   
-static const float TILE_FADE     = 0.10f;
-static const float TILE_T        = 0.48f;
-static const float TILE_SCALE_T  = 0.38f;
-static const float TILE_S0       = 0.88f;
-static float TILE_PIVOT_Y = 172.0f + 2.5f * 128.0f;    
-static float TILE_SLIDE = 84.0f;
-static const float BLOCK_STAGGER = 0.035f;
-static const float LOGON_TILE_DELAY = 0.04f;
-static const float LOGON_BLOCK_STAGGER = 0.045f;
-static const float LOGON_TILE_FADE = 0.11f;
-static const float LOGON_TILE_T = 0.38f;
-static const float LOGON_SCALE_T = 0.32f;
-static const float LOGON_TILE_S0 = 0.84f;
-static float LOGON_TILE_SLIDE = 148.0f;
-static const float LOGON_ACCOUNT_DELAY = 0.03f;
-static const float LOGON_ACCOUNT_FADE = 0.16f;
-static const float LOGON_TITLE_DELAY = 0.06f;
-static const float LOGON_TITLE_FADE = 0.18f;
-static const float LOGON_ACCOUNT_SLIDE = 36.0f;
-static const float LOGON_ACCOUNT_MOVE = 0.34f;
-static const float LOGON_TITLE_SLIDE = 24.0f;
-static const float LOGON_TITLE_MOVE = 0.28f;
-static const float LOGON_GLASS_DELAY = 0.0f;
-static const float LOGON_GLASS_FADE = 0.22f;
-static const float HEADER_DELAY  = 0.02f;
-static const float HEADER_FADE   = 0.14f;
+// The enabled option restores the exact 1.3.0 opening timeline. Disabling it
+// keeps the previous 1.4 opening behaviour available for comparison.
+static float OpeningTiming(float v130, float v140) {
+    return InterlockedCompareExchange(&g_improvedOpeningAnimation, 0, 0) ? v130 : v140;
+}
+#define TILES_DELAY          OpeningTiming(0.26f, 0.03f)
+#define TILE_FADE            OpeningTiming(0.065f, 0.10f)
+#define TILE_T               OpeningTiming(0.42f, 0.48f)
+#define TILE_SCALE_T         OpeningTiming(0.23f, 0.38f)
+#define TILE_S0              OpeningTiming(0.83f, 0.88f)
+static float TILE_PIVOT_Y = 172.0f + 2.5f * 128.0f;
+static float TILE_SLIDE = 110.0f;
+#define BLOCK_STAGGER        OpeningTiming(0.033f, 0.035f)
+#define LOGON_TILE_DELAY     OpeningTiming(0.24f, 0.04f)
+#define LOGON_BLOCK_STAGGER  OpeningTiming(0.24f, 0.045f)
+#define LOGON_TILE_FADE      OpeningTiming(0.22f, 0.11f)
+#define LOGON_TILE_T         OpeningTiming(0.95f, 0.38f)
+#define LOGON_SCALE_T        OpeningTiming(0.76f, 0.32f)
+#define LOGON_TILE_S0        OpeningTiming(0.72f, 0.84f)
+static float LOGON_TILE_SLIDE = 260.0f;
+#define LOGON_ACCOUNT_DELAY  OpeningTiming(0.24f, 0.03f)
+#define LOGON_ACCOUNT_FADE   OpeningTiming(0.24f, 0.16f)
+#define LOGON_TITLE_DELAY    OpeningTiming(1.43f, 0.06f)
+#define LOGON_TITLE_FADE     OpeningTiming(0.24f, 0.18f)
+#define LOGON_ACCOUNT_SLIDE  OpeningTiming(48.0f, 36.0f)
+#define LOGON_ACCOUNT_MOVE   OpeningTiming(1.12f, 0.34f)
+#define LOGON_TITLE_SLIDE    OpeningTiming(30.0f, 24.0f)
+#define LOGON_TITLE_MOVE     OpeningTiming(0.42f, 0.28f)
+#define LOGON_GLASS_DELAY    OpeningTiming(0.67f, 0.0f)
+#define LOGON_GLASS_FADE     OpeningTiming(0.70f, 0.22f)
+#define HEADER_DELAY         OpeningTiming(0.47f, 0.02f)
+#define HEADER_FADE          OpeningTiming(0.19f, 0.14f)
 static const float CLOSE_SLIDE   = 0.32f;
 // Closing timeline measured frame by frame (30 fps) from a real Windows 8.1 recording. Times are
 // seconds at the reference duration CLOSE_SLIDE and scale linearly with the closeSlideMs setting.
@@ -1562,6 +1618,7 @@ static int g_resizeHoverRow = -1, g_resizePressedRow = -1;
 
 static HDC g_tileDC[MAX_TILES][2] = {};
 static volatile LONG g_calendarSlide = 0;
+static volatile LONG g_newsOnline = 0;
 struct CalendarSurface {
     HDC dc = NULL;
     HBITMAP bmp = NULL;
@@ -3809,7 +3866,7 @@ static bool DrawEmbeddedTileIcon(Gdiplus::Graphics& g, const unsigned char* data
     return ok;
 }
 
-// Provided Windows 8.1 Store tile icon (250x250 PNG), embedded in Base64 as requested.
+// Provided Windows 8.1 Store tile icon (250x250 PNG), embedded in Base64.
 // On first draw, the Base64 payload is decoded and its green matte RGB(0,155,0) is keyed out to
 // lossless white alpha so the glyph blends cleanly onto the horizontal Store green gradient at any size.
 static const char kIconStoreBase64[] =
@@ -4067,7 +4124,7 @@ static bool DrawStoreBase64Icon(Gdiplus::Graphics& g, float x, float y, float si
 }
 
 // Vector artwork adapted from Windows 8.1/10 Start Menu Recreation (GPL-3.0).
-// Trophy extracted from the reference supplied by the user; alpha retains its silhouette and cutout.
+// Trophy extracted from the reference artwork; alpha retains its silhouette and cutout.
 static const unsigned char kIconSportsReference[] = {
     0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x4c,
     0x00, 0x00, 0x00, 0x4c, 0x08, 0x06, 0x00, 0x00, 0x00, 0xc7, 0x97, 0x51, 0x2b, 0x00, 0x00, 0x0a, 0xfb, 0x49, 0x44, 0x41,
@@ -4702,7 +4759,7 @@ static bool DrawImportedMetroIcon(HDC dc, const wchar_t* target, int x, int y, i
         Gdiplus::PointF mountains[]={{8,36},{19,23},{25,29},{30,23},{40,36}};
         g.FillPolygon(&white,mountains,5);
     } else if (icon == Icon::Xbox) {
-        // Gamepad silhouette, matching the supplied Games reference.
+        // Gamepad silhouette, matching the Games reference.
         Gdiplus::GraphicsPath pad;
         pad.AddBezier(12,12,6,11,2,28,3,35);
         pad.AddBezier(3,35,4,42,10,39,15,34);
@@ -4793,7 +4850,7 @@ static bool DrawImportedMetroIcon(HDC dc, const wchar_t* target, int x, int y, i
         g.DrawArc(&pen,28.0f,11.0f,15.0f,19.0f,270.0f,180.0f);
         g.FillRectangle(&white,21.0f,31.0f,6.0f,8.0f);
         g.FillRectangle(&white,16.0f,39.0f,16.0f,3.0f);
-        // Star in the cup, as in the supplied Sports reference.
+        // Star in the cup, as in the Sports reference.
         Gdiplus::SolidBrush cut(Gdiplus::Color(255, 0x51, 0x33, 0xAB));
         Gdiplus::PointF star[] = {{24,12},{26.1f,16.4f},{31,17},{27.5f,20.4f},
                                   {28.4f,25.1f},{24,22.8f},{19.6f,25.1f},
@@ -4892,13 +4949,13 @@ static std::wstring ResolveLocalTileTarget(const wchar_t* id) {
 }
 static bool OpenTileTarget(const std::wstring& target) {
     if (target.empty()) {
-        MessageBoxW(NULL, L"L'applicazione associata non è installata o non è disponibile.", L"Start", MB_OK | MB_ICONWARNING);
+        MessageBoxW(NULL, T(ERR_TILE_UNAVAILABLE), L"Start", MB_OK | MB_ICONWARNING);
         return false;
     }
     HINSTANCE result = ShellExecuteW(NULL, L"open", target.c_str(), NULL, NULL, SW_SHOWNORMAL);
     if ((INT_PTR)result <= 32) {
         Wh_Log(L"Unable to open tile %s (ShellExecute error %Id)", target.c_str(), (INT_PTR)result);
-        MessageBoxW(NULL, L"Impossibile aprire questa tile: l'applicazione o il collegamento non è disponibile.", L"Start", MB_OK | MB_ICONWARNING);
+        MessageBoxW(NULL, T(ERR_TILE_UNAVAILABLE), L"Start", MB_OK | MB_ICONWARNING);
         return false;
     }
     return true;
@@ -5467,54 +5524,97 @@ class ScreenNews {
     ULONGLONG updated_ = 0;
     static constexpr int imgW_ = 320, imgH_ = 160;
 
-    static bool HttpsGetUrl(HANDLE stopEv, const std::wstring& url, size_t maxBytes, std::string& out) {
-        out.clear();
-        if (WaitForSingleObject(stopEv, 0) != WAIT_TIMEOUT) return false;
-        URL_COMPONENTS uc = {};
-        wchar_t host[256] = {}, path[2048] = {};
-        uc.dwStructSize = sizeof(uc);
-        uc.lpszHostName = host; uc.dwHostNameLength = ARRAYSIZE(host);
-        uc.lpszUrlPath = path; uc.dwUrlPathLength = ARRAYSIZE(path);
-        uc.dwExtraInfoLength = 0;
-        if (!WinHttpCrackUrl(url.c_str(), (DWORD)url.size(), 0, &uc)) return false;
-        if (uc.nScheme != INTERNET_SCHEME_HTTPS || !host[0]) return false;
-        std::wstring fullPath = path[0] ? path : L"/";
-        HINTERNET ses = WinHttpOpen(L"Mozilla/5.0 WindhawkStartScreen/1.4",
-                                    WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
-                                    WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-        if (!ses) return false;
-        WinHttpSetTimeouts(ses, 3500, 3500, 4000, 5000);
-        HINTERNET con = WinHttpConnect(ses, host, uc.nPort ? uc.nPort : INTERNET_DEFAULT_HTTPS_PORT, 0);
-        HINTERNET req = con ? WinHttpOpenRequest(con, L"GET", fullPath.c_str(), NULL,
-                                                 WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
-                                                 WINHTTP_FLAG_SECURE) : NULL;
-        bool ok = false;
+    struct AsyncRequest {
+        HANDLE done = NULL, closed = NULL;
+        DWORD status = 0, bytes = 0;
+        char buffer[4096] = {};
+    };
+    static void CALLBACK NewsCallback(HINTERNET, DWORD_PTR context, DWORD status, void*, DWORD length) {
+        auto* state = reinterpret_cast<AsyncRequest*>(context);
+        if (!state) return;
+        if (status == WINHTTP_CALLBACK_STATUS_HANDLE_CLOSING) {
+            SetEvent(state->closed);
+        } else if (status == WINHTTP_CALLBACK_STATUS_SENDREQUEST_COMPLETE ||
+                   status == WINHTTP_CALLBACK_STATUS_HEADERS_AVAILABLE ||
+                   status == WINHTTP_CALLBACK_STATUS_READ_COMPLETE ||
+                   status == WINHTTP_CALLBACK_STATUS_REQUEST_ERROR) {
+            state->status = status;
+            state->bytes = length;
+            SetEvent(state->done);
+        }
+    }
+    bool HttpGet(const wchar_t* host, INTERNET_PORT port, const std::wstring& path, size_t limit, std::string& body) {
+        AsyncRequest state;
+        state.done = CreateEventW(NULL, FALSE, FALSE, NULL);
+        state.closed = CreateEventW(NULL, TRUE, FALSE, NULL);
+        HINTERNET session = NULL, conn = NULL, req = NULL;
+        bool registered = false, ok = false;
+        if (state.done && state.closed && WaitForSingleObject(stop_, 0) == WAIT_TIMEOUT) {
+            session = WinHttpOpen(L"Win81StartNews/1.4", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+                                  WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, WINHTTP_FLAG_ASYNC);
+        }
+        if (session) {
+            WinHttpSetTimeouts(session, 3000, 3000, 3000, 3000);
+            conn = WinHttpConnect(session, host, port, 0);
+        }
+        if (conn) req = WinHttpOpenRequest(conn, L"GET", path.c_str(), NULL, WINHTTP_NO_REFERER,
+                                           WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
         if (req) {
-            DWORD redir = WINHTTP_OPTION_REDIRECT_POLICY_DISALLOW_HTTPS_TO_HTTP;
-            WinHttpSetOption(req, WINHTTP_OPTION_REDIRECT_POLICY, &redir, sizeof(redir));
-            if (WinHttpSendRequest(req, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
-                                   WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
-                WinHttpReceiveResponse(req, NULL)) {
-                DWORD status = 0, sz = sizeof(status);
-                if (WinHttpQueryHeaders(req, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
-                                        WINHTTP_HEADER_NAME_BY_INDEX, &status, &sz,
-                                        WINHTTP_NO_HEADER_INDEX) && status == 200) {
-                    char buf[8192];
-                    for (;;) {
-                        if (WaitForSingleObject(stopEv, 0) != WAIT_TIMEOUT) { ok = false; break; }
-                        DWORD got = 0;
-                        if (!WinHttpReadData(req, buf, sizeof(buf), &got)) break;
-                        if (got == 0) { ok = !out.empty(); break; }
-                        if (out.size() + got > maxBytes) break;
-                        out.append(buf, got);
+            DWORD_PTR context = reinterpret_cast<DWORD_PTR>(&state);
+            DWORD disable = WINHTTP_DISABLE_REDIRECTS;
+            if (WinHttpSetOption(req, WINHTTP_OPTION_CONTEXT_VALUE, &context, sizeof(context)) &&
+                WinHttpSetOption(req, WINHTTP_OPTION_DISABLE_FEATURE, &disable, sizeof(disable)) &&
+                WinHttpSetStatusCallback(req, NewsCallback,
+                    WINHTTP_CALLBACK_FLAG_SENDREQUEST_COMPLETE | WINHTTP_CALLBACK_FLAG_HEADERS_AVAILABLE |
+                    WINHTTP_CALLBACK_FLAG_READ_COMPLETE | WINHTTP_CALLBACK_FLAG_REQUEST_ERROR |
+                    WINHTTP_CALLBACK_FLAG_HANDLES, 0) != WINHTTP_INVALID_STATUS_CALLBACK) {
+                registered = true;
+                HANDLE waits[] = {stop_, state.done};
+                auto completed = [&](DWORD expected) {
+                    return WaitForMultipleObjects(2, waits, FALSE, INFINITE) == WAIT_OBJECT_0 + 1 &&
+                           state.status == expected;
+                };
+                if (WinHttpSendRequest(req, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA,
+                                       0, 0, context) && completed(WINHTTP_CALLBACK_STATUS_SENDREQUEST_COMPLETE) &&
+                    WinHttpReceiveResponse(req, NULL) && completed(WINHTTP_CALLBACK_STATUS_HEADERS_AVAILABLE)) {
+                    DWORD status = 0, size = sizeof(status);
+                    if (WinHttpQueryHeaders(req, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                                            WINHTTP_HEADER_NAME_BY_INDEX, &status, &size,
+                                            WINHTTP_NO_HEADER_INDEX) && status == 200) {
+                        for (;;) {
+                            if (!WinHttpReadData(req, state.buffer, sizeof(state.buffer), NULL) ||
+                                !completed(WINHTTP_CALLBACK_STATUS_READ_COMPLETE)) break;
+                            if (!state.bytes) { ok = true; break; }
+                            if (body.size() + state.bytes > limit) break;
+                            try { body.append(state.buffer, state.bytes); }
+                            catch (const std::bad_alloc&) { break; }
+                        }
                     }
                 }
             }
+            // This thread is the sole owner of the asynchronous request. A pending
+            // operation can be cancelled here; its context stays alive until the
+            // final HANDLE_CLOSING notification, including after cancellation.
             WinHttpCloseHandle(req);
+            if (registered) WaitForSingleObject(state.closed, INFINITE);
         }
-        if (con) WinHttpCloseHandle(con);
-        WinHttpCloseHandle(ses);
+        if (conn) WinHttpCloseHandle(conn);
+        if (session) WinHttpCloseHandle(session);
+        if (state.done) CloseHandle(state.done);
+        if (state.closed) CloseHandle(state.closed);
         return ok;
+    }
+    bool HttpsGetUrl(const std::wstring& url, size_t maxBytes, std::string& out) {
+        out.clear();
+        URL_COMPONENTS uc = {};
+        uc.dwStructSize = sizeof(uc);
+        uc.dwHostNameLength = (DWORD)-1; uc.dwUrlPathLength = (DWORD)-1; uc.dwExtraInfoLength = (DWORD)-1;
+        if (!WinHttpCrackUrl(url.c_str(), (DWORD)url.size(), 0, &uc) ||
+            uc.nScheme != INTERNET_SCHEME_HTTPS || !uc.dwHostNameLength) return false;
+        std::wstring host(uc.lpszHostName, uc.dwHostNameLength);
+        std::wstring path = uc.dwUrlPathLength ? std::wstring(uc.lpszUrlPath, uc.dwUrlPathLength) : L"/";
+        if (uc.dwExtraInfoLength) path.append(uc.lpszExtraInfo, uc.dwExtraInfoLength);
+        return HttpGet(host.c_str(), uc.nPort ? uc.nPort : INTERNET_DEFAULT_HTTPS_PORT, path, maxBytes, out);
     }
 
     static std::wstring Utf8ToWide(const std::string& s) {
@@ -5579,74 +5679,6 @@ class ScreenNews {
         return xml.substr(gt + 1, b - (gt + 1));
     }
 
-    static std::wstring ExtractImageUrl(const std::string& itemXml) {
-        size_t pos = 0;
-        while ((pos = itemXml.find("https://", pos)) != std::string::npos) {
-            size_t end = pos;
-            while (end < itemXml.size() && itemXml[end] != '"' && itemXml[end] != '\'' &&
-                   itemXml[end] != '<' && itemXml[end] != '>' && itemXml[end] != ' ' &&
-                   itemXml[end] != '\r' && itemXml[end] != '\n') ++end;
-            std::string cand = itemXml.substr(pos, end - pos);
-            pos = end;
-            std::string low = cand;
-            for (char& ch : low) ch = (char)tolower((unsigned char)ch);
-            if ((low.find(".jpg") != std::string::npos || low.find(".jpeg") != std::string::npos ||
-                 low.find(".png") != std::string::npos) &&
-                low.find("logo") == std::string::npos && low.find("avatar") == std::string::npos &&
-                low.find("1x1") == std::string::npos) {
-                std::wstring w = CleanXmlText(cand);
-                if (w.size() > 12 && w.size() < 1500) return w;
-            }
-        }
-        return L"";
-    }
-
-    static std::vector<BYTE> DecodeThumbnail(const std::string& bytes) {
-        std::vector<BYTE> out;
-        if (bytes.size() < 64) return out;
-        IStream* stream = SHCreateMemStream((const BYTE*)bytes.data(), (UINT)bytes.size());
-        if (!stream) return out;
-        {
-            Gdiplus::Bitmap src(stream, FALSE);
-            UINT sw = src.GetWidth(), sh = src.GetHeight();
-            if (src.GetLastStatus() == Gdiplus::Ok && sw >= 64 && sh >= 48 && sw <= 8192 && sh <= 8192) {
-                Gdiplus::Bitmap dst(imgW_, imgH_, PixelFormat32bppPARGB);
-                {
-                    Gdiplus::Graphics g(&dst);
-                    g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-                    float targetAspect = (float)imgW_ / (float)imgH_;
-                    float srcAspect = (float)sw / (float)sh;
-                    float cx = 0, cy = 0, cw = (float)sw, ch = (float)sh;
-                    if (srcAspect > targetAspect) { cw = sh * targetAspect; cx = (sw - cw) * 0.5f; }
-                    else { ch = sw / targetAspect; cy = (sh - ch) * 0.35f; }
-                    g.DrawImage(&src, Gdiplus::RectF(0, 0, (float)imgW_, (float)imgH_),
-                                cx, cy, cw, ch, Gdiplus::UnitPixel);
-                }
-                Gdiplus::Rect lockRc(0, 0, imgW_, imgH_);
-                Gdiplus::BitmapData bd = {};
-                if (dst.LockBits(&lockRc, Gdiplus::ImageLockModeRead, PixelFormat32bppPARGB, &bd) == Gdiplus::Ok) {
-                    out.resize((size_t)imgW_ * imgH_ * 4);
-                    for (int y = 0; y < imgH_; ++y) {
-                        const BYTE* sp = (const BYTE*)bd.Scan0 + (size_t)y * bd.Stride;
-                        BYTE* dp = out.data() + (size_t)y * imgW_ * 4;
-                        // Darken the lower half smoothly so white Windows 8.1 News headlines are always legible.
-                        float v = (float)y / (float)(imgH_ - 1);
-                        float mul = v < 0.25f ? 0.88f : (0.88f - 0.62f * ((v - 0.25f) / 0.75f));
-                        for (int x = 0; x < imgW_; ++x) {
-                            dp[x * 4 + 0] = (BYTE)(sp[x * 4 + 0] * mul);
-                            dp[x * 4 + 1] = (BYTE)(sp[x * 4 + 1] * mul);
-                            dp[x * 4 + 2] = (BYTE)(sp[x * 4 + 2] * mul);
-                            dp[x * 4 + 3] = 255;
-                        }
-                    }
-                    dst.UnlockBits(&bd);
-                }
-            }
-        }
-        stream->Release();
-        return out;
-    }
-
     static std::vector<std::wstring> RegionalFeeds() {
         wchar_t loc[LOCALE_NAME_MAX_LENGTH] = {};
         GetUserDefaultLocaleName(loc, ARRAYSIZE(loc));
@@ -5689,13 +5721,10 @@ class ScreenNews {
     }
 
     void FetchCycle() {
-        ULONG_PTR gdip = 0;
-        Gdiplus::GdiplusStartupInput input;
-        if (Gdiplus::GdiplusStartup(&gdip, &input, NULL) != Gdiplus::Ok) return;
         for (const std::wstring& feedUrl : RegionalFeeds()) {
             if (WaitForSingleObject(stop_, 0) != WAIT_TIMEOUT) break;
             std::string xml;
-            if (!HttpsGetUrl(stop_, feedUrl, 262144, xml)) continue;
+            if (!HttpsGetUrl(feedUrl, 262144, xml)) continue;
             std::wstring chanTitle = CleanXmlText(ExtractTag(xml, "<title", "</title>"));
             if (chanTitle.size() > 40) chanTitle.resize(40);
             std::vector<NewsHeadline> parsed;
@@ -5720,12 +5749,6 @@ class ScreenNews {
                 NewsHeadline h;
                 h.title = std::move(title);
                 h.source = std::move(src);
-                std::wstring imgUrl = ExtractImageUrl(block);
-                if (!imgUrl.empty() && WaitForSingleObject(stop_, 0) == WAIT_TIMEOUT) {
-                    std::string imgBytes;
-                    if (HttpsGetUrl(stop_, imgUrl, 1536 * 1024, imgBytes))
-                        h.pixels = DecodeThumbnail(imgBytes);
-                }
                 parsed.push_back(std::move(h));
             }
             if (!parsed.empty()) {
@@ -5738,7 +5761,6 @@ class ScreenNews {
                 break;
             }
         }
-        Gdiplus::GdiplusShutdown(gdip);
     }
 
     static DWORD WINAPI Worker(void* raw) {
@@ -5755,7 +5777,7 @@ class ScreenNews {
     }
 public:
     void Start(HWND owner) {
-        if (thread_ || !owner || !Wh_GetIntSetting(L"weatherOnline")) return;
+        if (thread_ || !owner || !Wh_GetIntSetting(L"newsOnline")) return;
         owner_ = owner;
         stop_ = CreateEventW(NULL, TRUE, FALSE, NULL);
         if (stop_) thread_ = CreateThread(NULL, 0, Worker, this, 0, NULL);
@@ -5810,7 +5832,7 @@ static bool IsClockTile(const Tile& t) {
 
 static void UpdateNewsWorker() {
     bool found = false;
-    if (g_wnd && Wh_GetIntSetting(L"weatherOnline")) {
+    if (g_wnd && Wh_GetIntSetting(L"newsOnline")) {
         for (int i = 0; i < g_tileCount; ++i)
             if (IsNewsTile(g_tiles[i])) { found = true; break; }
     }
@@ -5934,7 +5956,9 @@ static bool IsStoreLiveTile(const Tile& t) {
            t.alive && !t.customTile && t.cw != TS_SMALL && IsStoreTarget(t.target);
 }
 static bool EnsureStoreLiveFace(int i, int w, int h) {
-    DWORD slot = ((NowMs() - g_openTick) + (DWORD)(i * 650)) / 10000;
+    // Switch content when the front face starts sliding to the live face, not
+    // while the live face is already visible; match CalendarSlide's phase.
+    DWORD slot = ((NowMs() - g_openTick) + (DWORD)((i % 5) * 650) + 5000) / 10000;
     int key = -1000 - (int)(slot & 0x3FFF);
     CalendarSurface& c = g_calendarFace[i];
     if (c.dc && c.w == w && c.h == h && c.date == key) return true;
@@ -5954,64 +5978,57 @@ static bool EnsureStoreLiveFace(int i, int w, int h) {
     SetBkMode(c.dc, TRANSPARENT);
     SetTextColor(c.dc, RGB(255, 255, 255));
 
-    std::wstring appName, appTarget;
-    std::vector<BYTE> iconPx;
-    int iw = 0, ih = 0;
+    // Show local installed apps, not purported Store recommendations: the
+    // mod has no connection to the Store's recommendation service.
+    struct StoreColumn { std::wstring name; std::vector<BYTE> pixels; int w = 0, h = 0; };
+    std::vector<StoreColumn> columns;
+    const bool wide = w > h + ScI(20);
+    const int wanted = wide ? 2 : 1;
     if (InterlockedCompareExchange(&g_appsReady, 0, 0)) {
-        AcquireSRWLockShared(&g_appsLock);
-        std::vector<size_t> cands;
-        for (size_t k = 0; k < g_apps.size() && cands.size() < 64; ++k) {
-            const AppEntry& a = g_apps[k];
-            if (a.charmCat != CC_APP || a.searchOnly || a.desktop || a.name.empty()) continue;
-            if (IsStoreTarget(a.parse.c_str()) || IsLocalInfoTile(a.parse.c_str())) continue;
-            cands.push_back(k);
+        SrwGuard guard(&g_appsLock, false);
+        std::vector<size_t> candidates;
+        for (size_t k = 0; k < g_apps.size() && candidates.size() < 128; ++k) {
+            const AppEntry& app = g_apps[k];
+            if (app.charmCat != CC_APP || app.searchOnly || app.desktop || app.name.empty() ||
+                IsStoreTarget(app.parse.c_str()) || IsLocalInfoTile(app.parse.c_str())) continue;
+            candidates.push_back(k);
         }
-        if (!cands.empty()) {
-            size_t pick = cands[(slot * 7 + (size_t)i * 3) % cands.size()];
-            appName = g_apps[pick].name;
-            appTarget = AppTarget(g_apps[pick]);
+        for (int col = 0; col < wanted && col < (int)candidates.size(); ++col) {
+            size_t pick = candidates[(slot * 7 + (size_t)i * 3 + (size_t)col) % candidates.size()];
+            StoreColumn item; item.name = g_apps[pick].name;
             if (pick < g_icons.size() && InterlockedCompareExchange(&g_icons[pick].ready, 0, 0) &&
                 g_icons[pick].px && g_icons[pick].w > 0 && g_icons[pick].h > 0) {
-                iw = g_icons[pick].w; ih = g_icons[pick].h;
-                iconPx.assign(g_icons[pick].px, g_icons[pick].px + (size_t)iw * ih * 4);
+                item.w = g_icons[pick].w; item.h = g_icons[pick].h;
+                item.pixels.assign(g_icons[pick].px, g_icons[pick].px + (size_t)item.w * item.h * 4);
             }
+            columns.push_back(std::move(item));
         }
-        ReleaseSRWLockShared(&g_appsLock);
     }
-    const bool itLang = PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_ITALIAN;
-    const wchar_t* spotlight = itLang ? L"In evidenza nello Store" : L"Featured in Store";
-    if (appName.empty()) appName = itLang ? L"Esplora app e giochi" : L"Top apps & games";
-
-    const bool wide = w > h + ScI(20);
-    const int pad = ScI(14);
-    const int iconS = ScI(wide ? 44 : 36);
-    const int ix = pad, iy = ScI(14);
-    bool iconDrawn = false;
-    if (!appTarget.empty())
-        iconDrawn = DrawImportedMetroIcon(c.dc, appTarget.c_str(), ix, iy, iconS);
-    if (!iconDrawn && !iconPx.empty() && g_gdipToken) {
-        Gdiplus::Bitmap srcBmp(iw, ih, iw * 4, PixelFormat32bppPARGB, iconPx.data());
-        Gdiplus::Graphics g(c.dc);
-        g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-        iconDrawn = g.DrawImage(&srcBmp, Gdiplus::Rect(ix, iy, iconS, iconS)) == Gdiplus::Ok;
-    }
-    if (!iconDrawn && g_gdipToken) {
-        Gdiplus::Graphics g(c.dc);
-        DrawStoreBase64Icon(g, (float)ix, (float)iy, (float)iconS);
-    }
-
-    if (wide) {
-        SelectObject(c.dc, g_fLabel);
-        RECT nr = { ix + iconS + ScI(12), ScI(14), w - pad, ScI(40) };
-        DrawTextW(c.dc, appName.c_str(), -1, &nr, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
-        SelectObject(c.dc, g_fLabelMedium ? g_fLabelMedium : g_fLabel);
-        SetTextColor(c.dc, RGB(215, 245, 215));
-        RECT sr = { ix + iconS + ScI(12), ScI(40), w - pad, ScI(64) };
-        DrawTextW(c.dc, spotlight, -1, &sr, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
-    } else {
-        SelectObject(c.dc, g_fLabelMedium ? g_fLabelMedium : g_fLabel);
-        RECT nr = { pad, iy + iconS + ScI(6), w - pad, h - ScI(28) };
-        DrawTextW(c.dc, appName.c_str(), -1, &nr, DT_LEFT | DT_TOP | DT_WORDBREAK | DT_END_ELLIPSIS | DT_NOPREFIX);
+    const int pad = ScI(12), gap = ScI(8);
+    const int count = std::max(1, (int)columns.size());
+    const int colW = std::max(1, (w - pad * 2 - gap * (count - 1)) / count);
+    const int iconS = std::max(1, std::min(ScI(wide ? 34 : 38), std::min(colW, h / 3)));
+    SelectObject(c.dc, g_fLabelMedium ? g_fLabelMedium : g_fLabel);
+    for (int col = 0; col < count; ++col) {
+        int x = pad + col * (colW + gap), y = ScI(10);
+        bool drawn = false;
+        if (col < (int)columns.size() && !columns[col].pixels.empty() && g_gdipToken) {
+            const StoreColumn& item = columns[col];
+            Gdiplus::Bitmap bmp(item.w, item.h, item.w * 4, PixelFormat32bppPARGB,
+                                const_cast<BYTE*>(item.pixels.data()));
+            Gdiplus::Graphics graphics(c.dc);
+            graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+            drawn = graphics.DrawImage(&bmp, Gdiplus::Rect(x, y, iconS, iconS)) == Gdiplus::Ok;
+        }
+        if (!drawn && g_gdipToken) {
+            Gdiplus::Graphics graphics(c.dc);
+            DrawStoreBase64Icon(graphics, (float)x, (float)y, (float)iconS);
+        }
+        if (col < (int)columns.size()) {
+            RECT name = {x, y + iconS + ScI(4), x + colW, h - ScI(25)};
+            DrawTextW(c.dc, columns[col].name.c_str(), -1, &name,
+                      DT_LEFT | DT_TOP | DT_WORDBREAK | DT_END_ELLIPSIS | DT_NOPREFIX);
+        }
     }
     DrawModernTileCaption(c.dc, g_tiles[i].label, w, h);
     ForceSurfaceOpaque(c.bits, w, h);
@@ -6025,7 +6042,9 @@ static bool IsNewsLiveTile(const Tile& t) {
            t.cw != TS_SMALL && IsNewsTile(t) && g_news.HasItems();
 }
 static bool EnsureNewsLiveFace(int i, int w, int h) {
-    DWORD slot = ((NowMs() - g_openTick) + (DWORD)(i * 650)) / 10000;
+    // Switch content when the front face starts sliding to the live face, not
+    // while the live face is already visible; match CalendarSlide's phase.
+    DWORD slot = ((NowMs() - g_openTick) + (DWORD)((i % 5) * 650) + 5000) / 10000;
     int key = -20000 - (int)(slot & 0x3FFF);
     CalendarSurface& c = g_calendarFace[i];
     if (c.dc && c.w == w && c.h == h && c.date == key) return true;
@@ -6919,6 +6938,21 @@ static void BuildOneTile(int i, HDC screenDC) {
             double weatherTemperature = 0;
             int weatherCode = 0;
             if (IsWeatherTile(t) && g_weather.Current(weatherTemperature, weatherCode)) {
+                // Local approximation of the soft blue 8.1 forecast background;
+                // no remote artwork, weather request, or invented forecast data.
+                if (t.cw != TS_SMALL && g_gdipToken) {
+                    Gdiplus::Graphics sky(tdc);
+                    Gdiplus::LinearGradientBrush baseSky(Gdiplus::Point(0, 0), Gdiplus::Point(0, h),
+                        Gdiplus::Color(255, 36, 96, 160), Gdiplus::Color(255, 17, 55, 105));
+                    sky.FillRectangle(&baseSky, 0, 0, w, h);
+                    sky.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+                    for (int layer = 7; layer >= 1; --layer) {
+                        const float radius = (float)std::min(w, h) * (0.14f + layer * 0.095f);
+                        const float cx = (float)w * 0.79f, cy = (float)h * 0.17f;
+                        Gdiplus::SolidBrush glow(Gdiplus::Color(3, 218, 229, 237));
+                        sky.FillEllipse(&glow, cx - radius, cy - radius, radius * 2, radius * 2);
+                    }
+                }
                 const int pad = ScI(12);
                 wchar_t temperature[32] = {};
                 swprintf_s(temperature, ARRAYSIZE(temperature), L"%.0f\u00B0", weatherTemperature);
@@ -10263,8 +10297,8 @@ static bool SeedMatchesTarget(const MetroSeed& seed, const std::wstring& target)
     return TargetMatchesSeed(target, file.c_str());
 }
 
-static bool LayoutPath(std::wstring& out) {
-    return StorageFilePath(L"tiles", out);
+static bool LayoutPath(std::wstring& out, std::wstring* legacy = NULL) {
+    return StorageFilePath(L"tiles", out, legacy);
 }
 
 // The layout file, version 5. Version 3 carried the group of every tile and - for the simulated
@@ -10319,19 +10353,16 @@ static bool BuiltinTargetMatch(const wchar_t* target, const wchar_t* builtin) {
 }
 static bool LoadLayout() {
     std::wstring path, legacy;
-    if (!LayoutPath(path)) return false;
+    if (!LayoutPath(path, &legacy)) return false;
     std::wstring text;
     if (!ReadTextFileUtf8(path, text)) {
         // First start after the 1.2.0 update: the previous versions wrote the layout next to the
         // mod's own files. Take that file over once, so the user keeps every tile. If the import
         // cannot run, LoadLayout returns false and the default tiles are used - as before.
-        if (!legacy.empty() && ReadTextFileUtf8(legacy, text)) {
-            const std::wstring mark = ImportMark(L"tiles");
-            if (Wh_GetIntValue(mark.c_str(), 0) == 0) {
-                Wh_SetIntValue(mark.c_str(), 1);
-                Wh_Log(L"Importing the Start layout saved by the previous version");
-                WriteTextFileAtomic(path, text);
-            }
+        const std::wstring mark = ImportMark(L"tiles");
+        if (!legacy.empty() && Wh_GetIntValue(mark.c_str(), 0) == 0 && ReadTextFileUtf8(legacy, text)) {
+            Wh_Log(L"Importing the Start layout saved by the previous version");
+            if (WriteTextFileAtomic(path, text)) Wh_SetIntValue(mark.c_str(), 1);
         }
     }
     if (text.empty()) return false;
@@ -10849,7 +10880,8 @@ static void PinApp(const wchar_t* name, const std::wstring& target) {
 static bool CanPinEntry(const AppEntry& a);
 static void SeedStartLayout() {
     InterlockedExchange(&g_seedPending, 0);
-    Wh_SetIntValue(L"layoutSeededV140", 1);
+    const std::wstring seedMark = ImportMark(L"layoutSeededV140");
+    Wh_SetIntValue(seedMark.c_str(), 1);
     const bool itLang = PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_ITALIAN;
     // Seed installed apps and selected web substitutes. Store is only added when installed;
     // browser and OneDrive are deliberately excluded. Settings uses CanPinEntry.
@@ -11535,9 +11567,9 @@ static void CreateUiFonts();
 static void RecreateFonts();
 static void UpdateDpiMetrics() {
     // Windows 8.1 grid as measured on the reference Start screen (1366x768): 120 px tiles, 8 px gap,
-    // 120 px left margin, tiles from y = 171, 56 px between groups. ScI() scales these with the
+    // 120 px left margin, tiles from y = 151, 56 px between groups. ScI() scales these with the
     // screen height (see UpdateDpi), so the proportions are the same on every resolution.
-    TILE = ScI(120); GAP = ScI(8); LEFT = ScI(120); TOP = ScI(171);
+    TILE = ScI(120); GAP = ScI(8); LEFT = ScI(120); TOP = ScI(151);
     GROUP_SEPARATION = ScI(56);
     TILE_PIVOT_Y = (float)TOP + 2.875f * (float)TILE;
     TILE_SLIDE = ScF(110.0f);
@@ -11563,6 +11595,9 @@ static bool UpdateDpi(int forcedDpi = 0, int screenH = 0) {
             if (dpi > 480) dpi = 480;
         }
     }
+    // Apply the optional reduction after the existing screen-height scale. Off means
+    // exactly the previous calculation, rather than a second hard-coded size.
+    if (InterlockedCompareExchange(&g_compactInterface, 0, 0)) dpi = std::max(1, MulDiv(dpi, 90, 100));
     if (dpi == g_dpi) return false;
     g_dpi = dpi; g_dpiScale = (float)dpi / 96.0f;
     UpdateDpiMetrics();
@@ -15727,7 +15762,8 @@ static void OpenStart(bool atLogon = false) {
     InvalidateRect(g_wnd, NULL, FALSE);
     UpdateWindow(g_wnd);
     g_logonLastFrameTick = NowMs();
-    g_logonRevealGateTick = atLogon ? g_logonLastFrameTick + 16 : 0;
+    g_logonRevealGateTick = atLogon ? g_logonLastFrameTick +
+        (InterlockedCompareExchange(&g_improvedOpeningAnimation, 0, 0) ? 400 : 16) : 0;
     StartFrames();
     if (g_wallWake) SetEvent(g_wallWake);
 }
@@ -15766,7 +15802,8 @@ static void CloseStart(bool immediate) {
         return;
     }
     g_closing = true;
-    g_closeSlideSeconds = (float)CloseSlideMs() / 1000.0f;
+    // 0.3 percent longer than the configured 1.3.0 close duration.
+    g_closeSlideSeconds = (float)CloseSlideMs() * 1.003f / 1000.0f;
     if (g_launchFlipTile >= 0 && g_closeSlideSeconds < (float)LAUNCH_FLIP_MS / 1000.0f)
         g_closeSlideSeconds = (float)LAUNCH_FLIP_MS / 1000.0f;
     g_closeTick = NowMs();
@@ -15929,7 +15966,7 @@ static void Tick() {
                 HINSTANCE result = ShellExecuteW(NULL, L"open", target.c_str(), NULL, NULL, SW_SHOWNORMAL);
                 if ((INT_PTR)result <= 32) {
                     Wh_Log(L"Unable to open tile %s (ShellExecute error %Id)", target.c_str(), (INT_PTR)result);
-                    MessageBoxW(NULL, L"Impossibile aprire questa tile: l'applicazione o il collegamento non è disponibile.", L"Start", MB_OK | MB_ICONWARNING);
+                    MessageBoxW(NULL, T(ERR_TILE_UNAVAILABLE), L"Start", MB_OK | MB_ICONWARNING);
                 }
             }
             return;
@@ -16308,7 +16345,9 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         }
         return 0;
     case WM_APP_SEED_LAYOUT:
-        if (InterlockedCompareExchange(&g_appsReady, 0, 0)) SeedStartLayout();
+        if (InterlockedCompareExchange(&g_seedPending, 0, 0) &&
+            InterlockedCompareExchange(&g_seedLayout, 0, 0) &&
+            InterlockedCompareExchange(&g_appsReady, 0, 0)) SeedStartLayout();
         return 0;
     case WM_APP_APPS_READY:
         RunSearch();
@@ -17438,31 +17477,6 @@ static void UpdateTileAppColors() {
     return ok;
 }
 
-static void ApplyStartColourRevision() {
-    if (Wh_GetIntValue(L"tileColours81", 0) < 2) {
-        bool changed = false;
-        for (int i = 0; i < g_tileCount; ++i) {
-            Tile& t = g_tiles[i];
-            if (!t.alive) continue;
-            COLORREF sysL = 0, sysR = 0;
-            if (!t.customTile && Win81SystemAppColor(t.target, &sysL, &sysR)) {
-                if (t.c1 != sysL || t.c2 != sysR) {
-                    t.c1 = sysL; t.c2 = sysR;
-                    changed = true;
-                }
-                continue;
-            }
-            if (t.mg >= 0) continue;
-            if (t.style != TOP_APP && t.style != BOTTOM_CAPTION) continue;
-            if (t.c1 == kDesktopTileLeft && t.c2 == kDesktopTileRight) continue;
-            ApplyDesktopTileTheme(t);
-            changed = true;
-        }
-        if (changed) SaveLayout();
-        Wh_SetIntValue(L"tileColours81", 2);
-    }
-}
-
 // Configuration is read on each reload. The tile capacity is the natural limit,
 // even if the Windhawk array contains more entries. An empty target ends the list.
 struct CustomTileConfig { std::wstring fields[8]; };
@@ -17564,22 +17578,6 @@ static void InitTiles() {
         }
         for (int i = 0; i < defaultCount; ++i) g_tileGroup[i] = 0;
     }
-    // Remove obsolete fallback tiles once; do not repeatedly erase later manual pins.
-    if (!Wh_GetIntValue(L"obsoleteSeedCleanupV141", 0)) {
-        bool removed = false;
-        for (int i = 0; i < g_tileCount; ++i) {
-            Tile& t = g_tiles[i];
-            if (!t.alive || !t.target || t.customTile) continue;
-            std::wstring low = LowerW(t.target);
-            if (low == L"ms-windows-store:" || low == L"windhawk:edge-tile-v1" ||
-                low == L"windhawk:onedrive-tile-v1" || low.find(L"microsoft.microsoftedge") != std::wstring::npos ||
-                low.find(L"microsoft.skydrive") != std::wstring::npos || low.find(L"onedrive.exe") != std::wstring::npos) {
-                RemoveTileFromOrder(i); removed = true;
-            }
-        }
-        if (removed) SaveLayout();
-        Wh_SetIntValue(L"obsoleteSeedCleanupV141", 1);
-    }
     for (int i = 0; i < MAX_TILES; ++i) g_tileScale[i] = 1.0f;
     LoadTileIcons();
         UpdateTileAppColors();
@@ -17648,7 +17646,6 @@ static void UiRun() {
     g_userTextW = -1;
     UpdateDpi(0, GetSystemMetrics(SM_CYSCREEN));
     InitTiles();
-    RunGuarded(L"StartColourRevision", [] { ApplyStartColourRevision(); });
     LoadGroupNames();
 
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
@@ -17878,12 +17875,12 @@ static bool ParseShortcut(const wchar_t* text, LONG& mods, LONG& vk) {
 }
 
 static void LoadSettings() {
+    InterlockedExchange(&g_newsOnline, Wh_GetIntSetting(L"newsOnline") != 0);
+    InterlockedExchange(&g_improvedOpeningAnimation, Wh_GetIntSetting(L"improvedOpeningAnimation") != 0);
+    InterlockedExchange(&g_compactInterface, Wh_GetIntSetting(L"compactInterface") != 0);
     InterlockedExchange(&g_experimentalTouch, Wh_GetIntSetting(L"experimentalTouch") != 0);
     InterlockedExchange(&g_photoEnabled, Wh_GetIntSetting(L"photoSlideshow") != 0);
-    // Live Tile flips are on when calendarSlide is on, and also when the 8.1 layout is seeded,
-    // so the seeded tiles animate without an extra option.
-    InterlockedExchange(&g_calendarSlide,
-        (Wh_GetIntSetting(L"calendarSlide") != 0 || Wh_GetIntSetting(L"seedStartLayout") != 0) ? 1 : 0);
+    InterlockedExchange(&g_calendarSlide, Wh_GetIntSetting(L"calendarSlide") != 0 ? 1 : 0);
     g_useWinKey = Wh_GetIntSetting(L"winKey") != 0;
     {
         InterlockedExchange(&g_altShortcutOn, 0);   // off while the new values are being read
@@ -17952,16 +17949,25 @@ static void LoadSettings() {
         PostMessageW(g_wnd, WM_APP_GROUP_SETTINGS, 0, 0);
     {
         const LONG seed = Wh_GetIntSetting(L"seedStartLayout") != 0 ? 1 : 0;
-        // Seed at most once per user: re-seeding would re-pin apps the user removed.
-        // Turning the option off clears the flag, so off -> on seeds again on request.
-        // 1.4.0 uses layoutSeededV140 so existing layouts get the full 8.1 tile set once.
-        if (!seed) Wh_SetIntValue(L"layoutSeededV140", 0);
-        const bool alreadySeeded = Wh_GetIntValue(L"layoutSeededV140", 0) != 0;
-        if (!seed) InterlockedExchange(&g_seedLayout, 0);
-        if (seed && !alreadySeeded && InterlockedExchange(&g_seedLayout, seed) == 0) {
+        const std::wstring seedMark = ImportMark(L"layoutSeededV140");
+        // Old releases used a machine-wide marker. If this account already has a
+        // saved layout, err on the side of preserving removals rather than reseeding.
+        std::wstring current, legacy;
+        const bool hasLayout = LayoutPath(current, &legacy) &&
+            (GetFileAttributesW(current.c_str()) != INVALID_FILE_ATTRIBUTES ||
+             (!legacy.empty() && GetFileAttributesW(legacy.c_str()) != INVALID_FILE_ATTRIBUTES));
+        const bool legacySeeded = hasLayout && (Wh_GetIntValue(L"layoutSeeded", 0) != 0 ||
+                                                 Wh_GetIntValue(L"layoutSeededV140", 0) != 0);
+        if (legacySeeded && !Wh_GetIntValue(seedMark.c_str(), 0)) Wh_SetIntValue(seedMark.c_str(), 1);
+        const bool alreadySeeded = Wh_GetIntValue(seedMark.c_str(), 0) != 0;
+        if (!seed) {
+            if (InterlockedExchange(&g_seedLayout, 0) != 0) Wh_SetIntValue(seedMark.c_str(), 0);
+            InterlockedExchange(&g_seedPending, 0);
+        } else if (!alreadySeeded && InterlockedExchange(&g_seedLayout, seed) == 0) {
             InterlockedExchange(&g_seedPending, 1);
             if (g_wnd) PostMessageW(g_wnd, WM_APP_SEED_LAYOUT, 0, 0);
         }
+
     }
     LONG priv = Wh_GetIntSetting(L"privacyMode") != 0 ? 1 : 0;
     LONG appc = Wh_GetIntSetting(L"appTileColors") != 0 ? 1 : 0;
@@ -18032,6 +18038,8 @@ static void LoadSettings() {
 
 // Mod entry points
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+    const LONG oldCompactInterface = InterlockedCompareExchange(&g_compactInterface, 0, 0);
+    const LONG oldNewsOnline = InterlockedCompareExchange(&g_newsOnline, 0, 0);
     const bool oldKeyboardOnly = g_keyboardOnly;
     const LONG oldExperimentalTouch = InterlockedCompareExchange(&g_experimentalTouch, 0, 0);
     const LONG oldCalendarSlide = InterlockedCompareExchange(&g_calendarSlide, 0, 0);
@@ -18046,7 +18054,7 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
         LoadSettings();
     });
     // Recreate the UI thread to apply custom tile additions, removals and edits.
-    if (bReload && (g_keyboardOnly != oldKeyboardOnly || oldExperimentalTouch != InterlockedCompareExchange(&g_experimentalTouch, 0, 0) || customChanged || oldCalendarSlide != InterlockedCompareExchange(&g_calendarSlide, 0, 0) || oldPhotoEnabled != InterlockedCompareExchange(&g_photoEnabled, 0, 0))) *bReload = TRUE;
+    if (bReload && (oldNewsOnline != InterlockedCompareExchange(&g_newsOnline, 0, 0) || oldCompactInterface != InterlockedCompareExchange(&g_compactInterface, 0, 0) || g_keyboardOnly != oldKeyboardOnly || oldExperimentalTouch != InterlockedCompareExchange(&g_experimentalTouch, 0, 0) || customChanged || oldCalendarSlide != InterlockedCompareExchange(&g_calendarSlide, 0, 0) || oldPhotoEnabled != InterlockedCompareExchange(&g_photoEnabled, 0, 0))) *bReload = TRUE;
     return TRUE;
 }
 
