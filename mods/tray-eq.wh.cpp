@@ -18,7 +18,6 @@
 // @homepage        https://github.com/bacoinz/Windhawk-Tray-EQ
 // @license         MIT
 // @include         *
-// @architecture    x86-64
 // @exclude         audiodg.exe
 // @exclude         windhawk.exe
 // @compilerOptions -lole32 -lcomdlg32 -lshell32 -luuid -ldwmapi -ld2d1 -ldwrite -ladvapi32 -luser32 -lgdi32
@@ -39,7 +38,7 @@ Equalizer applied inside every process that plays audio through WASAPI shared mo
   `Filter 1: ON PK Fc 100 Hz Gain -3 dB Q 1.41`), toggled independently from the manual EQ.
 
 Notes: apps must (re)open their audio stream after the mod loads. Exclusive-mode streams are never touched.
-Only 64-bit apps are processed. `@include *` is needed because any app can play audio; to limit injection, narrow the process list in the mod's *Advanced* tab.
+`@include *` is needed because any app can play audio; to limit injection, narrow the process list in the mod's *Advanced* tab.
 The shared settings block is read-only for other users; only the current user's processes can change the EQ.
 */
 // ==/WindhawkModReadme==
@@ -520,68 +519,83 @@ static HRESULT STDMETHODCALLTYPE RB_h(IAudioRenderClient* t,
     return RB_o(t, n, flags);
 }
 
-// Drop per-object state when the COM object dies. The destructors receive the
-// start of the object while the app holds interface pointers inside it, so
-// forget every key that falls inside the object.
-static void ForgetObject(void* obj) {
-    char* lo = (char*)obj;
+// Drop per-object state when the COM objects die. The app holds interface
+// pointers that sit inside the implementation objects: the IAudioClient
+// subobject is the 2nd pointer-sized slot of CAudioClient and the
+// IAudioRenderClient subobject is the 3rd slot of CAudioRenderClient (read from
+// the constructors in AudioSes.dll, same layout on x86 and x64).
+static void ForgetKey(void* key) {
     AcquireSRWLockExclusive(&g_lk);
-    for (auto it = g_clients.begin(); it != g_clients.end();)
-        it = (char*)it->first >= lo && (char*)it->first < lo + 0x40
-                 ? g_clients.erase(it)
-                 : std::next(it);
-    for (auto it = g_streams.begin(); it != g_streams.end();)
-        it = (char*)it->first >= lo && (char*)it->first < lo + 0x40
-                 ? g_streams.erase(it)
-                 : std::next(it);
+    g_clients.erase(key);
+    g_streams.erase(key);
     ReleaseSRWLockExclusive(&g_lk);
 }
 
-typedef void(STDMETHODCALLTYPE* Dtor_t)(void*);
-static Dtor_t ACDtor_o, RCDtor_o;
+#ifdef _WIN64
+#define THISCALL
+#else
+#define THISCALL __thiscall
+#endif
+typedef void(THISCALL* ThisCallVoid_t)(void*);
+static ThisCallVoid_t ACDtor_o, RCCleanup_o;
 
-static void STDMETHODCALLTYPE ACDtor_h(void* t) {
-    ForgetObject(t);
-    ACDtor_o(t);
+static void THISCALL ACDtor_h(void* obj) {
+    ForgetKey((char*)obj + sizeof(void*));
+    ACDtor_o(obj);
 }
 
-static void STDMETHODCALLTYPE RCDtor_h(void* t) {
-    ForgetObject(t);
-    RCDtor_o(t);
+// CAudioRenderClient's destructor is inlined on x86; it always calls Cleanup.
+static void THISCALL RCCleanup_h(void* obj) {
+    ForgetKey((char*)obj + 2 * sizeof(void*));
+    RCCleanup_o(obj);
 }
 
-// The WASAPI implementation classes of AudioSes.dll, resolved by symbol (x64).
+// The WASAPI implementation classes of AudioSes.dll, resolved by symbol. Each
+// entry lists the x64 name and the x86 name (the one that exists is used).
 static bool HookAudioSes(HMODULE audioSes) {
     WindhawkUtils::SYMBOL_HOOK audioSesDllHooks[] = {
         {{L"public: virtual long __cdecl CAudioClient::Initialize(enum "
+          L"_AUDCLNT_SHAREMODE,unsigned long,__int64,__int64,struct "
+          L"tWAVEFORMATEX const *,struct _GUID const *)",
+          L"public: virtual long __stdcall CAudioClient::Initialize(enum "
           L"_AUDCLNT_SHAREMODE,unsigned long,__int64,__int64,struct "
           L"tWAVEFORMATEX const *,struct _GUID const *)"},
          (void**)&Init_o,
          (void*)Init_h},
         {{L"public: virtual long __cdecl CAudioClient::GetService(struct "
+          L"_GUID const &,void * *)",
+          L"public: virtual long __stdcall CAudioClient::GetService(struct "
           L"_GUID const &,void * *)"},
          (void**)&GS_o,
          (void*)GS_h},
         {{L"public: virtual long __cdecl "
+          L"CAudioRenderClient::GetBuffer(unsigned int,unsigned char * *)",
+          L"public: virtual long __stdcall "
           L"CAudioRenderClient::GetBuffer(unsigned int,unsigned char * *)"},
          (void**)&GB_o,
          (void*)GB_h},
         {{L"public: virtual long __cdecl "
+          L"CAudioRenderClient::ReleaseBuffer(unsigned int,unsigned long)",
+          L"public: virtual long __stdcall "
           L"CAudioRenderClient::ReleaseBuffer(unsigned int,unsigned long)"},
          (void**)&RB_o,
          (void*)RB_h},
-        {{L"protected: virtual __cdecl CAudioClient::~CAudioClient(void)"},
+        {{L"protected: virtual __cdecl CAudioClient::~CAudioClient(void)",
+          L"protected: virtual __thiscall CAudioClient::~CAudioClient(void)"},
          (void**)&ACDtor_o,
          (void*)ACDtor_h,
          true},
-        {{L"public: virtual __cdecl "
-          L"CAudioRenderClient::~CAudioRenderClient(void)"},
-         (void**)&RCDtor_o,
-         (void*)RCDtor_h,
+        {{L"public: void __cdecl CAudioRenderClient::Cleanup(void)",
+          L"public: void __thiscall CAudioRenderClient::Cleanup(void)"},
+         (void**)&RCCleanup_o,
+         (void*)RCCleanup_h,
          true},
     };
-    return WindhawkUtils::HookSymbols(audioSes, audioSesDllHooks,
-                                      ARRAYSIZE(audioSesDllHooks));
+    bool ok = WindhawkUtils::HookSymbols(audioSes, audioSesDllHooks,
+                                         ARRAYSIZE(audioSesDllHooks));
+    if (ok && (!ACDtor_o || !RCCleanup_o))
+        Wh_Log(L"AudioSes cleanup hooks missing: per-stream state will leak");
+    return ok;
 }
 
 // Hooks must be in place before the app's own Initialize runs, so they are
