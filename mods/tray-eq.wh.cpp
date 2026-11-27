@@ -38,25 +38,18 @@
 # Tray EQ
 A lightweight, free alternative to room/monitor-correction software.
 
-Equalizer applied inside every process that plays audio through WASAPI shared
-mode (audiodg.exe cannot be injected, so the EQ runs per app, before the Windows
-mixer).
+Equalizer applied inside every process that plays audio through WASAPI shared mode
+(audiodg.exe cannot be injected, so the EQ runs per app, before the Windows mixer).
 
 * Tray icon (shown by the tray host process, default `explorer.exe`):
-  left click = EQ flyout, right click = menu, **middle click = turn the EQ
-on/off**.
-* Manual EQ: 10-band graphic **or** parametric (drag nodes; wheel = Q; double
-click = new node; right click = remove).
+  left click = EQ flyout, right click = menu, **middle click = turn the EQ on/off**.
+* Manual EQ: 10-band graphic **or** parametric (drag nodes; wheel = Q; double click = new node; right click = remove).
 * Monitor correction file (Equalizer APO / AutoEQ / REW text: `Preamp: -6 dB`,
-  `Filter 1: ON PK Fc 100 Hz Gain -3 dB Q 1.41`), toggled independently from the
-manual EQ.
+  `Filter 1: ON PK Fc 100 Hz Gain -3 dB Q 1.41`), toggled independently from the manual EQ.
 
-Notes: apps must (re)open their audio stream after the mod loads. Exclusive-mode
-streams are never touched.
-`@include *` is needed because any app can play audio; to limit injection,
-narrow the process list in the mod's *Advanced* tab. The shared settings block
-is read-only for other users; only the current user's processes can change the
-EQ.
+Notes: apps must (re)open their audio stream after the mod loads. Exclusive-mode streams are never touched.
+`@include *` is needed because any app can play audio; to limit injection, narrow the process list in the mod's *Advanced* tab.
+The shared settings block is read-only for other users; only the current user's processes can change the EQ.
 */
 // ==/WindhawkModReadme==
 
@@ -75,20 +68,16 @@ EQ.
   $name:ko-KR: 모니터 보정 파일
   $name:zh-CN: 显示器校正文件
   $description: Full path. Optional, you can also load it from the tray flyout.
-  $description:pt-PT: Caminho completo. Opcional, também pode ser carregado a
-partir do flyout da bandeja. $description:pt-BR: Caminho completo. Opcional,
-também pode ser carregado pelo flyout da bandeja. $description:es-ES: Ruta
-completa. Opcional, también se puede cargar desde el flyout de la bandeja.
-  $description:fr-FR: Chemin complet. Facultatif, peut aussi être chargé depuis
-le flyout de la zone de notification. $description:de-DE: Vollständiger Pfad.
-Optional, kann auch über das Tray-Flyout geladen werden. $description:it-IT:
-Percorso completo. Facoltativo, può essere caricato anche dal flyout dell'area
-di notifica. $description:ru-RU: Полный путь. Необязательно, файл можно
-загрузить и из всплывающего окна в трее. $description:ja-JP:
-フルパス。省略可能で、トレイのフライアウトから読み込むこともできます。
-  $description:ko-KR: 전체 경로입니다. 선택 사항이며 트레이 플라이아웃에서도
-불러올 수 있습니다. $description:zh-CN:
-完整路径。可选，也可以从托盘弹出窗口加载。
+  $description:pt-PT: Caminho completo. Opcional, também pode ser carregado a partir do flyout da bandeja.
+  $description:pt-BR: Caminho completo. Opcional, também pode ser carregado pelo flyout da bandeja.
+  $description:es-ES: Ruta completa. Opcional, también se puede cargar desde el flyout de la bandeja.
+  $description:fr-FR: Chemin complet. Facultatif, peut aussi être chargé depuis le flyout de la zone de notification.
+  $description:de-DE: Vollständiger Pfad. Optional, kann auch über das Tray-Flyout geladen werden.
+  $description:it-IT: Percorso completo. Facoltativo, può essere caricato anche dal flyout dell'area di notifica.
+  $description:ru-RU: Полный путь. Необязательно, файл можно загрузить и из всплывающего окна в трее.
+  $description:ja-JP: フルパス。省略可能で、トレイのフライアウトから読み込むこともできます。
+  $description:ko-KR: 전체 경로입니다. 선택 사항이며 트레이 플라이아웃에서도 불러올 수 있습니다.
+  $description:zh-CN: 完整路径。可选，也可以从托盘弹出窗口加载。
 - trayHost: explorer.exe
   $name: Process that shows the tray icon
   $name:pt-PT: Processo que mostra o ícone da bandeja
