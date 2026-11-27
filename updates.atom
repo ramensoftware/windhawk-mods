@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-27T06:00:07.000Z</updated>
+    <updated>2026-11-27T08:03:56.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Notepad Pro 1.1.0]]></title>
+        <id>https://windhawk.net/mods/notepad-pro#97851a77d9d23e0628f73d2c9b5445fe2c91b1b0</id>
+        <link href="https://windhawk.net/mods/notepad-pro"/>
+        <updated>2026-11-27T08:03:56.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added indent guides, faint vertical lines inside the indentation</li>
+<li>Added a live preview pane for Markdown, RTF, CSV, TSV, JSON, XML and INI files</li>
+<li>Fixed the change markers being partly hidden when the window is maximized</li>
+<li>Improved syntax highlighting</li>
+</ul>
+]]></content>
+        <author>
+            <name>Armaninyow</name>
+            <uri>https://github.com/armaninyow</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Vision 1.2026.2511]]></title>
         <id>https://windhawk.net/mods/vision#5ce5f9a25284e88fcdd6ff5864cb8441095b0341</id>
@@ -1046,24 +1063,6 @@ DirectUI, in the thread &quot;Secure restoration of Control Panel applets in Win
         <updated>2026-11-26T19:00:50.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Added a Windows 7 skin (credits to RandomGuy5747 for the contribution)</li>
-</ul>
-]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 8.1/10 Start Menu Recreation 2.0.0]]></title>
-        <id>https://windhawk.net/mods/win10-1507-start-menu-recreation#e4c55d7f24c381f4731a3ddf66c7a0ea62623afb</id>
-        <link href="https://windhawk.net/mods/win10-1507-start-menu-recreation"/>
-        <updated>2026-11-26T19:00:45.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added a custom Windows 8.1 Update 3 skin</li>
-<li>Improved the live tiles</li>
-<li>Added custom Metro icons</li>
-<li>Added a best-effort Weather gadget</li>
-<li>Improved the documentation</li>
 </ul>
 ]]></content>
         <author>

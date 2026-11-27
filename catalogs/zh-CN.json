@@ -13805,7 +13805,7 @@
         "ratingUsers": 13,
         "reviews": 0,
         "trendingSorting": 21.7,
-        "updated": 1795593757000,
+        "updated": 1795766636000,
         "users": 217
       },
       "metadata": {
@@ -13813,14 +13813,14 @@
           "x86-64"
         ],
         "author": "Armaninyow",
-        "compilerOptions": "-lcomctl32 -lgdi32 -luser32 -ladvapi32 -ldwmapi",
+        "compilerOptions": "-lcomctl32 -lgdi32 -luser32 -ladvapi32 -ldwmapi -luxtheme -lshell32",
         "description": "A collection of useful tweaks, tools, and upgrades for Windows 11 Notepad",
         "github": "https://github.com/armaninyow",
         "include": [
           "notepad.exe"
         ],
         "name": "Notepad Pro",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "notepad-remove-launch-new-app-banner": {
