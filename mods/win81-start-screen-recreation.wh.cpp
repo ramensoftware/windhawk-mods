@@ -10,7 +10,7 @@
 // @description:es  Este mod recrea la pantalla de inicio de Windows 8.1 en Windows 10 y Windows 11
 // @description:fr  Ce mod recrée l'écran d'accueil de Windows 8.1 sur Windows 10 et Windows 11
 // @description:pt  Este mod recria a Tela Inicial do Windows 8.1 no Windows 10 e no Windows 11
-// @version         1.3.0
+// @version         1.4.0
 // @license         GPL-3.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
@@ -63,9 +63,9 @@ are not implemented by this option. Changing it reloads the mod.
   name, date installed or category.
 - **Real tile colors**: packaged apps use their own tile color and artwork; classic
   programs that declare a tile color (such as Chrome) use it as well.
-- **Windows 8/8.1 tile gradients**: tiles are shaded like on Windows 8.1, lighter at the top and
-  darker at the bottom, using each tile's own color. The strength can be changed, or the gradient
-  turned off, in the settings.
+- **Windows 8/8.1 tile gradients**: tiles are shaded horizontally left-to-right like on Windows 8.1
+  (darker on the left, lighter on the right), using each tile's own color and inner rim. The strength
+  can be changed, or the gradient turned off, in the settings.
 - **StartAllBack and ExplorerPatcher**: the mod works next to both (see below), and the StartAllBack
   Start button opens this Start screen too.
 - **Background options**: the classic petal artwork, a solid color, the accent
@@ -194,14 +194,36 @@ can wait for it. These are simulated features, not notifications read from other
   $description:es: "Esta configuración hace que, al pulsar la tecla Windows sola o hacer clic en el botón Inicio de la barra, se abra esta pantalla de inicio en lugar del menú Inicio de Windows (Win+E, Win+D y el resto de accesos siguen funcionando)."
   $description:fr: "Ce paramètre fait ouvrir cet écran d'accueil, au lieu du menu Démarrer de Windows, quand vous appuyez sur la touche Windows seule ou cliquez sur le bouton Démarrer de la barre (Win+E, Win+D et les autres raccourcis continuent de fonctionner)."
   $description:pt: "Esta configuração faz com que, ao pressionar a tecla Windows sozinha ou clicar no botão Iniciar da barra, esta Tela Inicial seja aberta em vez do menu Iniciar do Windows (Win+E, Win+D e os outros atalhos continuam funcionando)."
+- altShortcut: false
+  $name: "Open with a custom keyboard shortcut"
+  $name:it: "Apri con una scorciatoia da tastiera personalizzata"
+  $name:es: "Abrir con un atajo de teclado personalizado"
+  $name:fr: "Ouvrir avec un raccourci clavier personnalisé"
+  $name:pt: "Abrir com um atalho de teclado personalizado"
+  $description: "This setting adds a keyboard shortcut, chosen in the next setting, that opens or closes this Start screen without using the Windows key. It works independently of 'Open with the Windows key and the Start button', so it also works when that one is off. Off by default."
+  $description:it: "Questa impostazione aggiunge una scorciatoia da tastiera, scelta nell'impostazione successiva, che apre o chiude questa schermata Start senza usare il tasto Windows. Funziona indipendentemente da 'Apri con il tasto Windows e il pulsante Start', quindi anche quando quella è disattivata. Disattivata in partenza."
+  $description:es: "Esta configuración añade un atajo de teclado, elegido en la siguiente configuración, que abre o cierra esta pantalla de inicio sin usar la tecla Windows. Funciona de forma independiente de 'Abrir con la tecla Windows y el botón Inicio', así que también con esa desactivada. Desactivada por defecto."
+  $description:fr: "Ce paramètre ajoute un raccourci clavier, choisi dans le paramètre suivant, qui ouvre ou ferme cet écran d'accueil sans utiliser la touche Windows. Il fonctionne indépendamment de 'Ouvrir avec la touche Windows et le bouton Démarrer', donc aussi quand celui-ci est désactivé. Désactivé par défaut."
+  $description:pt: "Esta configuração adiciona um atalho de teclado, escolhido na configuração seguinte, que abre ou fecha esta Tela Inicial sem usar a tecla Windows. Funciona independentemente de 'Abrir com a tecla Windows e o botão Iniciar', portanto também quando essa está desativada. Desativada por padrão."
+- altShortcutKey: "Ctrl+Alt+S"
+  $name: "Custom shortcut keys"
+  $name:it: "Tasti della scorciatoia personalizzata"
+  $name:es: "Teclas del atajo personalizado"
+  $name:fr: "Touches du raccourci personnalisé"
+  $name:pt: "Teclas do atalho personalizado"
+  $description: "This setting is the key combination used when 'Open with a custom keyboard shortcut' is on, written as modifiers and one key joined by +, for example Ctrl+Alt+S, Ctrl+Shift+F1 or Alt+Space. Modifiers: Ctrl, Alt, Shift, Win. Keys: A-Z, 0-9, F1-F24, Space, Tab, Enter, Home, End, Insert, Delete, PageUp, PageDown and the arrows. A letter or digit needs at least one modifier. If the text is not valid, the shortcut stays off."
+  $description:it: "Questa impostazione è la combinazione di tasti usata quando 'Apri con una scorciatoia da tastiera personalizzata' è attiva, scritta come modificatori e un tasto uniti da +, per esempio Ctrl+Alt+S, Ctrl+Shift+F1 o Alt+Space. Modificatori: Ctrl, Alt, Shift, Win. Tasti: A-Z, 0-9, F1-F24, Space, Tab, Enter, Home, End, Insert, Delete, PageUp, PageDown e le frecce. Una lettera o una cifra richiede almeno un modificatore. Se il testo non è valido, la scorciatoia resta disattivata."
+  $description:es: "Esta configuración es la combinación de teclas usada cuando 'Abrir con un atajo de teclado personalizado' está activa, escrita como modificadores y una tecla unidos por +, por ejemplo Ctrl+Alt+S, Ctrl+Shift+F1 o Alt+Space. Modificadores: Ctrl, Alt, Shift, Win. Teclas: A-Z, 0-9, F1-F24, Space, Tab, Enter, Home, End, Insert, Delete, PageUp, PageDown y las flechas. Una letra o un dígito necesita al menos un modificador. Si el texto no es válido, el atajo queda desactivado."
+  $description:fr: "Ce paramètre est la combinaison de touches utilisée quand 'Ouvrir avec un raccourci clavier personnalisé' est activé, écrite sous forme de modificateurs et d'une touche reliés par +, par exemple Ctrl+Alt+S, Ctrl+Shift+F1 ou Alt+Space. Modificateurs : Ctrl, Alt, Shift, Win. Touches : A-Z, 0-9, F1-F24, Space, Tab, Enter, Home, End, Insert, Delete, PageUp, PageDown et les flèches. Une lettre ou un chiffre exige au moins un modificateur. Si le texte n'est pas valide, le raccourci reste désactivé."
+  $description:pt: "Esta configuração é a combinação de teclas usada quando 'Abrir com um atalho de teclado personalizado' está ativada, escrita como modificadores e uma tecla unidos por +, por exemplo Ctrl+Alt+S, Ctrl+Shift+F1 ou Alt+Space. Modificadores: Ctrl, Alt, Shift, Win. Teclas: A-Z, 0-9, F1-F24, Space, Tab, Enter, Home, End, Insert, Delete, PageUp, PageDown e as setas. Uma letra ou dígito precisa de pelo menos um modificador. Se o texto não for válido, o atalho permanece desativado."
 - openAtLogon: true
   $name: "Open Start once at sign-in"
   $name:it: "Apri Start una volta all'accesso"
   $name:es: "Abrir Inicio una vez al iniciar sesión"
   $name:fr: "Ouvrir l'écran d'accueil une fois à l'ouverture de session"
   $name:pt: "Abrir a Tela Inicial uma vez ao entrar"
-  $description: "This setting shows Start after the Explorer desktop is ready on a new sign-in, using the slower 8102-style tile reveal. Does not reopen Start when this mod is edited or Explorer is restarted later in the same sign-in. Turn off to keep the desktop at sign-in."
-  $description:it: "Questa impostazione mostra Start dopo che il desktop di Explorer è pronto a un nuovo accesso, usando la rivelazione delle tile più lenta in stile 8102. Non riapre Start se questa mod viene modificata o se Explorer viene riavviato più tardi nella stessa sessione. Disattivala per mantenere il desktop all'accesso."
+  $description: "This setting shows Start immediately once the Explorer desktop is ready on a new sign-in (including Portable Mode startup), using the authentic Windows 8.1 tile reveal. Does not reopen Start when this mod is edited or Explorer is restarted later in the same sign-in. Turn off to keep the desktop at sign-in."
+  $description:it: "Questa impostazione mostra Start subito non appena il desktop di Explorer è pronto a un nuovo accesso (incluso l'avvio in modalità Portatile), usando l'animazione delle tile di Windows 8.1. Non riapre Start se questa mod viene modificata o se Explorer viene riavviato più tardi nella stessa sessione. Disattivala per mantenere il desktop all'accesso."
   $description:es: "Esta configuración muestra Inicio cuando el escritorio de Explorer está listo tras un nuevo inicio de sesión, con la revelación de iconos más lenta al estilo 8102. No reabre Inicio si se edita esta mod o se reinicia Explorer más tarde en la misma sesión. Desactívala para mantener el escritorio al iniciar sesión."
   $description:fr: "Ce paramètre affiche l'écran d'accueil dès que le bureau d'Explorer est prêt après une nouvelle ouverture de session, avec la révélation des vignettes plus lente de style 8102. Il ne rouvre pas l'écran d'accueil si le mod est modifié ou si Explorer redémarre plus tard dans la même session. Désactivez-le pour garder le bureau à l'ouverture de session."
   $description:pt: "Esta configuração mostra a Tela Inicial quando a área de trabalho do Explorer está pronta após um novo logon, usando a revelação de blocos mais lenta no estilo 8102. Não reabre a Tela Inicial se este mod for editado ou se o Explorer reiniciar depois no mesmo logon. Desative para manter a área de trabalho ao entrar."
@@ -334,17 +356,17 @@ can wait for it. These are simulated features, not notifications read from other
   $description:es: "Esta configuración elige el número de columnas de iconos medianos de cada grupo de Inicio. Rango permitido de 2 a 8; predeterminado 2. Un icono pequeño ocupa un cuarto de hueco mediano, uno ancho dos huecos y uno grande cuatro. Los cambios se aplican al momento."
   $description:fr: "Ce paramètre choisit le nombre de colonnes de vignettes moyennes dans chaque groupe de l'écran d'accueil. Plage autorisée de 2 à 8 ; défaut 2. Une petite vignette occupe un quart d'emplacement moyen, une large deux emplacements, une grande quatre. Les changements s'appliquent immédiatement."
   $description:pt: "Esta configuração escolhe o número de colunas de blocos médios em cada grupo da Tela Inicial. Faixa permitida de 2 a 8; padrão 2. Um bloco pequeno ocupa um quarto de espaço médio, um largo dois espaços, um grande quatro. As mudanças valem na hora."
-- groupRows: 3
+- groupRows: 4
   $name: "Tiles per group (vertical)"
   $name:it: "Tile per gruppo (verticali)"
   $name:es: "Iconos por grupo (verticales)"
   $name:fr: "Vignettes par groupe (verticales)"
   $name:pt: "Blocos por grupo (verticais)"
-  $description: "This setting chooses the number of tile rows in each Start group. Allowed range 1 to 8; default 3. On shorter displays the visible row count is limited to fit above the bottom command bar. Changes apply immediately."
-  $description:it: "Questa impostazione sceglie il numero di righe di tile in ogni gruppo di Start. Intervallo consentito da 1 a 8; predefinito 3. Sugli schermi più bassi il numero di righe visibili è limitato per restare sopra la barra dei comandi. Le modifiche si applicano subito."
-  $description:es: "Esta configuración elige el número de filas de iconos de cada grupo de Inicio. Rango permitido de 1 a 8; predeterminado 3. En pantallas bajas el número de filas visibles se limita para caber sobre la barra de comandos inferior. Los cambios se aplican al momento."
-  $description:fr: "Ce paramètre choisit le nombre de rangées de vignettes dans chaque groupe de l'écran d'accueil. Plage autorisée de 1 à 8 ; défaut 3. Sur les écrans peu hauts, le nombre de rangées visibles est limité pour rester au-dessus de la barre de commandes. Les changements s'appliquent immédiatement."
-  $description:pt: "Esta configuração escolhe o número de fileiras de blocos em cada grupo da Tela Inicial. Faixa permitida de 1 a 8; padrão 3. Em telas mais baixas, o número de fileiras visíveis é limitado para caber acima da barra de comandos inferior. As mudanças valem na hora."
+  $description: "This setting chooses the number of tile rows in each Start group. Allowed range 1 to 8; default 4 (matching the 4-row Windows 8.1 grid at 768p). On shorter displays (for example 768p -> 4 rows) the visible row count is automatically limited to fit above the bottom chrome. Changes apply immediately."
+  $description:it: "Questa impostazione sceglie il numero di righe di tile in ogni gruppo di Start. Intervallo consentito da 1 a 8; predefinito 4 (come la griglia 4 righe di Windows 8.1 a 768p). Sugli schermi più bassi (es. 768p -> 4 righe) il numero di righe visibili viene limitato automaticamente per restare sopra i controlli inferiori. Le modifiche si applicano subito."
+  $description:es: "Esta configuración elige el número de filas de iconos de cada grupo de Inicio. Rango permitido de 1 a 8; predeterminado 4 (como la cuadrícula de 4 filas de Windows 8.1 a 768p). En pantallas bajas el número de filas visibles se limita para caber sobre la barra de comandos inferior. Los cambios se aplican al momento."
+  $description:fr: "Ce paramètre choisit le nombre de rangées de vignettes dans chaque groupe de l'écran d'accueil. Plage autorisée de 1 à 8 ; défaut 4 (comme la grille 4 rangées de Windows 8.1 à 768p). Sur les écrans peu hauts, le nombre de rangées visibles est limité pour rester au-dessus de la barre de commandes. Les changements s'appliquent immédiatement."
+  $description:pt: "Esta configuração escolhe o número de fileiras de blocos em cada grupo da Tela Inicial. Faixa permitida de 1 a 8; padrão 4 (como a grade de 4 fileiras do Windows 8.1 a 768p). Em telas mais baixas, o número de fileiras visíveis é limitado para caber acima da barra de comandos inferior. As mudanças valem na hora."
 - customTiles:
   - - name: ""
       $name: "Name"
@@ -455,14 +477,14 @@ can wait for it. These are simulated features, not notifications read from other
   $description:es: "Esta configuración muestra archivos JPG y PNG de la carpeta local Imágenes de Windows mientras Inicio está abierto y Fotos está fijado. Las imágenes no se suben. Al detenerse puede esperar a que termine la decodificación."
   $description:fr: "Ce paramètre affiche les fichiers JPG et PNG du dossier local Images de Windows lorsque l'écran d'accueil est ouvert et Photos est épinglé. Les images ne sont pas envoyées en ligne. L'arrêt peut attendre la fin du décodage."
   $description:pt: "Esta configuração mostra arquivos JPG e PNG da pasta local Imagens do Windows enquanto a Tela Inicial está aberta e Fotos está fixado. As imagens não são enviadas. A parada pode aguardar o fim da decodificação."
-- calendarSlide: false
+- calendarSlide: true
   $name: "Calendar live tile slide"
   $name:it: "Animazione del riquadro Calendario"
   $name:es: "Deslizamiento del mosaico Calendario"
   $name:fr: "Défilement de la vignette Calendrier"
   $name:pt: "Deslizamento do bloco Calendário"
-  $description: "This setting alternates the pinned Microsoft Calendar tile between its icon and the current local date using a downward slide. It does not read app notifications."
-  $description:it: "Questa impostazione alterna l'icona del riquadro Calendario Microsoft fissato alla data locale con uno scorrimento verso il basso. Non legge le notifiche dell'app."
+  $description: "This setting alternates the pinned Microsoft Calendar tile between its icon and the current local date using a downward slide. It does not read app notifications. It is also active when 'Populate Start with a Windows 8.1 style layout' is on, so the seeded 8.1 tiles animate."
+  $description:it: "Questa impostazione alterna l'icona del riquadro Calendario Microsoft fissato alla data locale con uno scorrimento verso il basso. Non legge le notifiche dell'app. È attiva anche quando 'Popola Start con un layout stile Windows 8.1' è attivo, così le tile 8.1 aggiunte si animano."
   $description:es: "Esta configuración alterna el icono del mosaico fijado de Calendario de Microsoft con la fecha local mediante un deslizamiento hacia abajo. No lee las notificaciones de la aplicación."
   $description:fr: "Ce paramètre alterne l'icône de la vignette Calendrier Microsoft épinglée et la date locale par un glissement vers le bas. Il ne lit pas les notifications de l'application."
   $description:pt: "Esta configuração alterna o ícone do bloco fixado do Calendário Microsoft com a data local por meio de um deslizamento para baixo. Ela não lê as notificações do aplicativo."
@@ -1030,8 +1052,8 @@ static const wchar_t* T(StrId id) {
 }
 
 
-static int TILE = 150, GAP = 10, LEFT = 120, TOP = 168;
-static const int MAX_TILES = 48;
+static int TILE = 120, GAP = 8, LEFT = 120, TOP = 171;
+static const int MAX_TILES = 96;
 static int g_dpi = 96;
 static float g_dpiScale = 1.0f;
 static int g_userTextW = -1;
@@ -1042,37 +1064,37 @@ static bool g_swallowNamingRightUp = false;   // right press that only closed th
 static DWORD g_charmSwallowTick = 0;
 static int ScI(int v) { return MulDiv(v, g_dpi, 96); }
 static float ScF(float v) { return v * g_dpiScale; }
-static int GROUP_SEPARATION = 40;  
-static volatile LONG g_requestedGroupCols = 2, g_requestedGroupRows = 3;
-static const float PRESS_SCALE   = 0.94f;      
+static int GROUP_SEPARATION = 56;  
+static volatile LONG g_requestedGroupCols = 2, g_requestedGroupRows = 4;
+static const float PRESS_SCALE   = 0.95f;      
 
-static const float TILES_DELAY   = 0.26f;   
-static const float TILE_FADE     = 0.065f;
-static const float TILE_T        = 0.42f;
-static const float TILE_SCALE_T  = 0.23f;
-static const float TILE_S0       = 0.83f;
-static float TILE_PIVOT_Y = 180.0f + 2.875f * 152.0f;    
-static float TILE_SLIDE = 110.0f;
-static const float BLOCK_STAGGER = 0.033f;
-static const float LOGON_TILE_DELAY = 0.24f;
-static const float LOGON_BLOCK_STAGGER = 0.24f;
-static const float LOGON_TILE_FADE = 0.22f;
-static const float LOGON_TILE_T = 0.95f;
-static const float LOGON_SCALE_T = 0.76f;
-static const float LOGON_TILE_S0 = 0.72f;
-static float LOGON_TILE_SLIDE = 260.0f;
-static const float LOGON_ACCOUNT_DELAY = 0.24f;
-static const float LOGON_ACCOUNT_FADE = 0.24f;
-static const float LOGON_TITLE_DELAY = 1.43f;
-static const float LOGON_TITLE_FADE = 0.24f;
-static const float LOGON_ACCOUNT_SLIDE = 48.0f;
-static const float LOGON_ACCOUNT_MOVE = 1.12f;
-static const float LOGON_TITLE_SLIDE = 30.0f;
-static const float LOGON_TITLE_MOVE = 0.42f;
-static const float LOGON_GLASS_DELAY = 0.67f;
-static const float LOGON_GLASS_FADE = 0.70f;
-static const float HEADER_DELAY  = 0.47f;
-static const float HEADER_FADE   = 0.19f;
+static const float TILES_DELAY   = 0.03f;   
+static const float TILE_FADE     = 0.10f;
+static const float TILE_T        = 0.48f;
+static const float TILE_SCALE_T  = 0.38f;
+static const float TILE_S0       = 0.88f;
+static float TILE_PIVOT_Y = 172.0f + 2.5f * 128.0f;    
+static float TILE_SLIDE = 84.0f;
+static const float BLOCK_STAGGER = 0.035f;
+static const float LOGON_TILE_DELAY = 0.04f;
+static const float LOGON_BLOCK_STAGGER = 0.045f;
+static const float LOGON_TILE_FADE = 0.11f;
+static const float LOGON_TILE_T = 0.38f;
+static const float LOGON_SCALE_T = 0.32f;
+static const float LOGON_TILE_S0 = 0.84f;
+static float LOGON_TILE_SLIDE = 148.0f;
+static const float LOGON_ACCOUNT_DELAY = 0.03f;
+static const float LOGON_ACCOUNT_FADE = 0.16f;
+static const float LOGON_TITLE_DELAY = 0.06f;
+static const float LOGON_TITLE_FADE = 0.18f;
+static const float LOGON_ACCOUNT_SLIDE = 36.0f;
+static const float LOGON_ACCOUNT_MOVE = 0.34f;
+static const float LOGON_TITLE_SLIDE = 24.0f;
+static const float LOGON_TITLE_MOVE = 0.28f;
+static const float LOGON_GLASS_DELAY = 0.0f;
+static const float LOGON_GLASS_FADE = 0.22f;
+static const float HEADER_DELAY  = 0.02f;
+static const float HEADER_FADE   = 0.14f;
 static const float CLOSE_SLIDE   = 0.32f;
 // Closing timeline measured frame by frame (30 fps) from a real Windows 8.1 recording. Times are
 // seconds at the reference duration CLOSE_SLIDE and scale linearly with the closeSlideMs setting.
@@ -1124,6 +1146,8 @@ struct Tile {
     COLORREF appC = 0;
     bool hasAppC = false;
     bool customTile = false;
+    // Optional cell position for a deliberate drop into an empty space.
+    int manualCellX = -1, manualCellY = -1;
     COLORREF customColor = RGB(70, 23, 180);
     std::wstring customIcon;
     std::wstring customLabel;
@@ -1217,6 +1241,12 @@ static HHOOK  g_mouseHook = NULL;
 static HANDLE g_hookThread = NULL, g_hookReady = NULL;
 static DWORD  g_hookTid = 0;
 static volatile bool g_useWinKey = true;
+// Custom shortcut that opens or closes Start without the Windows key (off by default).
+// Modifier bits: 1 = Ctrl, 2 = Alt, 4 = Shift, 8 = Win.
+static volatile LONG g_altShortcutOn = 0;
+static volatile LONG g_altShortcutVk = 0;
+static volatile LONG g_altShortcutMods = 0;
+static bool g_altShortcutHeld = false;
 static volatile bool g_keyboardOnly = false;
 static volatile bool g_startHooked = false;
 static HANDLE g_startHookThread = NULL, g_startHookStop = NULL;
@@ -1237,7 +1267,7 @@ static int  g_monX = 0, g_monY = 0;   // top-left of the monitor Start is shown 
 static int GroupColumns() { return (int)InterlockedCompareExchange(&g_requestedGroupCols, 0, 0); }
 static int GroupRows() {
     int requested = (int)InterlockedCompareExchange(&g_requestedGroupRows, 0, 0);
-    int fit = (g_sh - ScI(215) + GAP) / (TILE + GAP);
+    int fit = (g_sh - ScI(264) + GAP) / (TILE + GAP);
     if (fit < 1) fit = 1;
     return requested < fit ? requested : fit;
 }
@@ -1562,6 +1592,7 @@ static void* g_snapBits = NULL;
 
 static ID2D1Factory* g_d2dFactory = NULL;
 static ID2D1HwndRenderTarget* g_rt = NULL;
+static DWORD g_lastEndDrawMs = 0;
 static ID2D1Bitmap* g_bgGpu = NULL;
 static ID2D1Bitmap* g_snapGpu = NULL;
 static ID2D1Bitmap* g_tileGpu[MAX_TILES][2] = {};
@@ -1654,6 +1685,7 @@ static void UpdateTileAppColors();
 static void SetBr(COLORREF c, float a);
 static void FillRc(float l, float t, float r, float b, COLORREF c, float a = 1.0f);
 static void TextAt(const wchar_t* s, IDWriteTextFormat* f, float l, float t, float r, float b, COLORREF c, float a = 1.0f);
+static void ReleaseNameLayouts();
 static void RepaintNow();
 static void BuildOneTile(int i, HDC screenDC);
 static void CloseStart(bool immediate = false);
@@ -3102,29 +3134,127 @@ static COLORREF ShadeColor(COLORREF c, float k) {
     return RGB(toward(GetRValue(c), 0), toward(GetGValue(c), 0), toward(GetBValue(c), 0));
 }
 
-static float TileGradientAmount() {
-    const LONG strength = InterlockedCompareExchange(&g_tileGradientStrength, 0, 0);
-    if (strength <= 0) return 0.11f;
-    if (strength >= 2) return 0.32f;
-    return 0.19f;
+static COLORREF Mix(COLORREF a, COLORREF b, float k) {
+    k = Clamp01(k);
+    return RGB((int)(GetRValue(a) + (GetRValue(b) - GetRValue(a)) * k),
+               (int)(GetGValue(a) + (GetGValue(b) - GetGValue(a)) * k),
+               (int)(GetBValue(a) + (GetBValue(b) - GetBValue(a)) * k));
 }
 
-// Returns false when the gradient is off, leaving *top and *bottom equal to `base` so that the
-// flat Windows 10 style of version 1.0.0 stays available.
-static bool TileGradientPair(COLORREF base, COLORREF* top, COLORREF* bottom) {
-    if (InterlockedCompareExchange(&g_tileGradient, 0, 0) == 0) {
-        *top = *bottom = base;
+// Authentic Windows 8.1 Store green horizontal gradient pair (#008A00 -> #00A600).
+static constexpr COLORREF kStoreGreenLeft  = RGB(0x00, 0x8A, 0x00);
+static constexpr COLORREF kStoreGreenRight = RGB(0x00, 0xA6, 0x00);
+static constexpr COLORREF kStoreGreenBase  = RGB(0x00, 0x8A, 0x00);
+
+static bool IsStoreTarget(const wchar_t* target) {
+    if (!target || !*target) return false;
+    std::wstring low = target;
+    for (wchar_t& ch : low) ch = (wchar_t)towlower(ch);
+    return low.find(L"microsoft.windowsstore") != std::wstring::npos ||
+           low.find(L"ms-windows-store") != std::wstring::npos;
+}
+
+// Maps Windows 10/11 inbox & local-info app targets to their authentic Windows 8.1 RTM Start
+// horizontal left->right gradient colours so Windows 11 icons/manifests never turn Store gray/blue
+// or flatten system tiles.
+static bool Win81SystemAppColor(const wchar_t* target, COLORREF* outLeft, COLORREF* outRight,
+                                COLORREF* outBase = NULL) {
+    if (!target || !*target) return false;
+    std::wstring low = target;
+    for (wchar_t& ch : low) ch = (wchar_t)towlower(ch);
+    auto has = [&](const wchar_t* sub) { return low.find(sub) != std::wstring::npos; };
+
+    COLORREF l = 0, r = 0;
+    if (IsStoreTarget(target)) {
+        l = kStoreGreenLeft; r = kStoreGreenRight;
+    } else if (has(L"windowslive.mail") || has(L"outlookforwindows") || has(L"mail-tile")) {
+        l = RGB(0x00, 0x72, 0xC6); r = RGB(0x00, 0x86, 0xDC); // Mail Sky Blue
+    } else if (has(L"windowslive.calendar") || has(L"windhawk:calendar-tile-v1") ||
+               has(L"immersivecontrolpanel") || has(L"ms-settings") || has(L"26ee0668") ||
+               has(L"windowsmaps") || has(L"maps-tile") || has(L"bingsports") || has(L"sports-tile")) {
+        l = RGB(0x51, 0x33, 0xAB); r = RGB(0x64, 0x3E, 0xBF); // Calendar / PC Settings / Maps Purple
+    } else if (has(L"bingweather") || has(L"windhawk:weather-tile-v1")) {
+        l = RGB(0x1B, 0x5E, 0xBE); r = RGB(0x24, 0x71, 0xDF); // Weather Cerulean Blue
+    } else if (has(L"bingnews") || has(L"microsoft.start") || has(L"windhawk:news-tile-v1") ||
+               has(L"zunevideo") || has(L"video-tile")) {
+        l = RGB(0xAC, 0x19, 0x3D); r = RGB(0xBF, 0x1E, 0x4B); // News / Video Crimson Red
+    } else if (has(L"zunemusic") || has(L"music-tile") || has(L"microsoft.people") || has(L"people-tile")) {
+        l = RGB(0xD2, 0x47, 0x26); r = RGB(0xDC, 0x57, 0x2E); // Music / People Metro Orange
+    } else if (has(L"gamingapp") || has(L"xboxapp") || has(L"games-tile") || has(L"windowscalculator") ||
+               has(L"finance-tile") || has(L"microsoftsolitairecollection")) {
+        l = RGB(0x10, 0x7C, 0x10); r = RGB(0x16, 0x96, 0x16); // Games / Xbox / Calculator Green
+    } else if (has(L"windowscamera") || has(L"camera-tile")) {
+        l = RGB(0x8C, 0x00, 0x95); r = RGB(0xA7, 0x00, 0xAE); // Camera Magenta
+    } else if (has(L"windows.photos") || has(L"photos-tile") || has(L"windowsalarms") || has(L"windhawk:clock-tile-v1")) {
+        l = RGB(0x00, 0x82, 0x99); r = RGB(0x00, 0xA0, 0xB1); // Photos / Alarms Teal
+    } else if (has(L"skydrive") || has(L"onedrive")) {
+        l = RGB(0x09, 0x4A, 0xB2); r = RGB(0x0A, 0x5B, 0xC4); // SkyDrive / OneDrive Cobalt Blue
+    } else if (has(L"microsoftedge") || has(L"edge-tile") || has(L"windowssoundrecorder") || has(L"recorder-tile")) {
+        l = RGB(0x26, 0x72, 0xEC); r = RGB(0x2E, 0x8D, 0xEF); // IE / Browser / Recorder Blue
+    } else {
         return false;
     }
-    const float k = TileGradientAmount();
-    *top = ShadeColor(base, k);
-    *bottom = ShadeColor(base, -k * 0.60f);
+    if (outLeft) *outLeft = l;
+    if (outRight) *outRight = r;
+    if (outBase) *outBase = l;
     return true;
 }
 
-// Fills `dc` with a vertical veil that keeps the destination visible: white towards the top and
-// black towards the bottom, both fading out in the middle. Premultiplied, so it can be blended
-// over the opaque artwork of packaged apps.
+static float TileGradientAmount() {
+    const LONG strength = InterlockedCompareExchange(&g_tileGradientStrength, 0, 0);
+    if (strength <= 0) return 0.09f;
+    if (strength >= 2) return 0.22f;
+    return 0.14f;
+}
+
+// Windows 8.1 horizontal left->right gradient pair: slightly deeper on the left, brighter on the right.
+static bool TileGradientPair(COLORREF base, COLORREF* leftOut, COLORREF* rightOut) {
+    if (InterlockedCompareExchange(&g_tileGradient, 0, 0) == 0) {
+        *leftOut = *rightOut = base;
+        return false;
+    }
+    const float k = TileGradientAmount();
+    *leftOut  = ShadeColor(base, -k * 0.28f);
+    *rightOut = ShadeColor(base,  k * 0.85f);
+    return true;
+}
+
+// Subtle 1px inner highlight rim around every Windows 8.1 tile.
+static void PaintTileBorderRim(HDC dc, int w, int h, COLORREF leftC, COLORREF rightC) {
+    if (!dc || w < 4 || h < 4) return;
+    COLORREF rimL = Mix(leftC,  RGB(255, 255, 255), 0.14f);
+    COLORREF rimR = Mix(rightC, RGB(255, 255, 255), 0.16f);
+    COLORREF rimM = Mix(rimL, rimR, 0.5f);
+    HBRUSH bT = CreateSolidBrush(rimM);
+    HBRUSH bL = CreateSolidBrush(rimL);
+    HBRUSH bR = CreateSolidBrush(rimR);
+    RECT rTop = { 0, 0, w, 1 }, rBot = { 0, h - 1, w, h };
+    RECT rLft = { 0, 0, 1, h }, rRgt = { w - 1, 0, w, h };
+    if (bT) { FillRect(dc, &rTop, bT); FillRect(dc, &rBot, bT); DeleteObject(bT); }
+    if (bL) { FillRect(dc, &rLft, bL); DeleteObject(bL); }
+    if (bR) { FillRect(dc, &rRgt, bR); DeleteObject(bR); }
+}
+
+static void FillHorizontalTile(HDC dc, int w, int h, COLORREF leftC, COLORREF rightC, bool drawRim = true) {
+    if (!dc || w <= 0 || h <= 0) return;
+    if (InterlockedCompareExchange(&g_tileGradient, 0, 0) == 0) {
+        COLORREF flat = Mix(leftC, rightC, 0.35f);
+        HBRUSH br = CreateSolidBrush(flat);
+        RECT rc = { 0, 0, w, h };
+        if (br) { FillRect(dc, &rc, br); DeleteObject(br); }
+        return;
+    }
+    TRIVERTEX v[2] = {
+        { 0, 0, (COLOR16)(GetRValue(leftC) << 8),  (COLOR16)(GetGValue(leftC) << 8),  (COLOR16)(GetBValue(leftC) << 8),  0 },
+        { w, h, (COLOR16)(GetRValue(rightC) << 8), (COLOR16)(GetGValue(rightC) << 8), (COLOR16)(GetBValue(rightC) << 8), 0 },
+    };
+    GRADIENT_RECT gr = { 0, 1 };
+    GradientFill(dc, v, 2, &gr, 1, GRADIENT_FILL_RECT_H);
+    if (drawRim) PaintTileBorderRim(dc, w, h, leftC, rightC);
+}
+
+// Horizontal premultiplied veil (subtle darkening on the left, subtle brightening toward the right)
+// blended over opaque packaged-app tile artwork when gradientOverArt is enabled.
 static void GradientVeil(HDC dc, int w, int h, BYTE light, BYTE dark) {
     if (!dc || w <= 0 || h <= 0) return;
     void* bits = NULL;
@@ -3133,16 +3263,18 @@ static void GradientVeil(HDC dc, int w, int h, BYTE light, BYTE dark) {
         if (bmp) DeleteObject(bmp);
         return;
     }
-    DWORD* px = (DWORD*)bits;
-    for (int y = 0; y < h; ++y) {
-        const float t = h > 1 ? (float)y / (float)(h - 1) : 0.5f;
-        const bool lightRow = t < 0.5f;
-        const float k = lightRow ? (0.5f - t) * 2.0f : (t - 0.5f) * 2.0f;
-        const BYTE a = (BYTE)((lightRow ? light : dark) * k);
-        const DWORD premul = lightRow ? (((DWORD)a << 16) | ((DWORD)a << 8) | a) : 0;
-        const DWORD row = ((DWORD)a << 24) | premul;
-        for (int x = 0; x < w; ++x) px[(size_t)y * (size_t)w + (size_t)x] = row;
+    std::vector<DWORD> rowBuf((size_t)w);
+    for (int x = 0; x < w; ++x) {
+        const float t = w > 1 ? (float)x / (float)(w - 1) : 0.5f;
+        const bool lightCol = t > 0.5f;
+        const float k = lightCol ? (t - 0.5f) * 2.0f : (0.5f - t) * 2.0f;
+        const BYTE a = (BYTE)((lightCol ? light : dark) * k);
+        const DWORD premul = lightCol ? (((DWORD)a << 16) | ((DWORD)a << 8) | a) : 0;
+        rowBuf[(size_t)x] = ((DWORD)a << 24) | premul;
     }
+    DWORD* px = (DWORD*)bits;
+    for (int y = 0; y < h; ++y)
+        memcpy(px + (size_t)y * (size_t)w, rowBuf.data(), (size_t)w * sizeof(DWORD));
     GdiFlush();
     HDC mem = CreateCompatibleDC(dc);
     if (mem) {
@@ -3155,45 +3287,18 @@ static void GradientVeil(HDC dc, int w, int h, BYTE light, BYTE dark) {
     DeleteObject(bmp);
 }
 
-// Windows 10/11 packaged apps ship artwork that covers the whole tile, so the gradient behind it
-// would never show. This lays the same shading over the artwork, which is what makes those tiles
-// look like the Windows 8/8.1 ones.
-// A desktop program tile as Windows 8.1 draws it: the light blue gradient that runs across the
-// tile, with the same faint vertical veil every 8.1 tile carries on top of it.
+// Windows 8.1 desktop shortcut tile: left->right teal/slate gradient + subtle inner border rim.
 static void FillDesktopProgramTile(HDC tdc, int w, int h) {
-    // One flat square of blue, then the faint Windows 8.1 tile texture over it. Windows 8.1 did
-    // not draw a gradient across the tiles of desktop programs: their tile icon was a flat square
-    // of a single colour, which is why every such tile on the Start screen was the same blue.
-    TRIVERTEX v[2] = {
-        { 0, 0, (COLOR16)(GetRValue(kDesktopTileLeft) << 8), (COLOR16)(GetGValue(kDesktopTileLeft) << 8),
-          (COLOR16)(GetBValue(kDesktopTileLeft) << 8), 0 },
-        { w, h, (COLOR16)(GetRValue(kDesktopTileLeft) << 8), (COLOR16)(GetGValue(kDesktopTileLeft) << 8),
-          (COLOR16)(GetBValue(kDesktopTileLeft) << 8), 0 },
-    };
-    GRADIENT_RECT gr = { 0, 1 };
-    GradientFill(tdc, v, 2, &gr, 1, GRADIENT_FILL_RECT_H);
-    if (InterlockedCompareExchange(&g_tileGradient, 0, 0) == 0) return;
-    const LONG strength = InterlockedCompareExchange(&g_tileGradientStrength, 0, 0);
-    const BYTE light = strength <= 0 ? 14 : (strength >= 2 ? 44 : 28);
-    const BYTE dark = strength <= 0 ? 18 : (strength >= 2 ? 52 : 34);
-    GradientVeil(tdc, w, h, light, dark);
-    (void)kDesktopTileRight;   // the two shades stay for saved layouts and for the Store apps
+    FillHorizontalTile(tdc, w, h, kDesktopTileLeft, kDesktopTileRight, true);
 }
 
 static void ApplyTileGradientOverArt(HDC dc, int w, int h) {
     if (InterlockedCompareExchange(&g_gradientOverArt, 0, 0) == 0) return;
     if (InterlockedCompareExchange(&g_tileGradient, 0, 0) == 0) return;
     const LONG strength = InterlockedCompareExchange(&g_tileGradientStrength, 0, 0);
-    const BYTE light = strength <= 0 ? 14 : (strength >= 2 ? 44 : 28);
-    const BYTE dark = strength <= 0 ? 18 : (strength >= 2 ? 52 : 34);
+    const BYTE light = strength <= 0 ? 14 : (strength >= 2 ? 38 : 24);
+    const BYTE dark  = strength <= 0 ? 12 : (strength >= 2 ? 32 : 20);
     GradientVeil(dc, w, h, light, dark);
-}
-
-static COLORREF Mix(COLORREF a, COLORREF b, float k) {
-    k = Clamp01(k);
-    return RGB((int)(GetRValue(a) + (GetRValue(b) - GetRValue(a)) * k),
-               (int)(GetGValue(a) + (GetGValue(b) - GetGValue(a)) * k),
-               (int)(GetBValue(a) + (GetBValue(b) - GetBValue(a)) * k));
 }
 
 static void ComputePivot() {
@@ -3259,6 +3364,7 @@ static bool GetWallpaperPath(wchar_t* out, size_t capacity) {
     return out[0] != 0;
 }
 
+static void DrawModernTileCaption(HDC dc, const wchar_t* text, int w, int h, bool dark = false);
 static void DrawDesktopWallpaperTile(HDC dc, HDC screen, int w, int h) {
     RECT entire = { 0, 0, w, h };
     HBRUSH fallback = CreateSolidBrush(RGB(25, 9, 98));
@@ -3285,31 +3391,26 @@ static void DrawDesktopWallpaperTile(HDC dc, HDC screen, int w, int h) {
         SetStretchBltMode(dc, COLORONCOLOR);
         StretchBlt(dc, 0, 0, w, h, g_snapDC, 0, 0, g_sw, g_sh, SRCCOPY);
     }
-    if (h < ScI(100)) return;
-    SetBkMode(dc, TRANSPARENT);
-    SelectObject(dc, g_fLabel);
-    RECT label = { 12, h - 30, w - 8, h - 8 };
-    SetTextColor(dc, RGB(255, 255, 255));
-    DrawTextW(dc, T(STR_DESKTOP), -1, &label, DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_NOPREFIX);
+    if (h < ScI(80)) return;
+    DrawModernTileCaption(dc, T(STR_DESKTOP), w, h);
 }
 
-// Picks the caption font and the caption box for a tile of this size. The Medium tiles use the
-// smaller Windows 8.1 caption, and every caption is clipped with an ellipsis instead of running
-// outside the tile ("Pannello di controllo" used to be cut mid-word on a Medium tile).
+// Picks the caption font and the caption box for a tile of this size, matching Microsoft's
+// Windows 8.1 Start tile specifications (16 px left margin at 120x120 / 20 px at 150x150,
+// 12 px Segoe UI Regular, 7-8 px bottom baseline inset, ellipsis clipping).
 static HFONT TileCaptionFont(int w, int h) {
-    const HFONT small = g_fLabelMedium ? g_fLabelMedium : g_fLabel;
-    const bool large = w > ScI(180) || h > ScI(180);
-    return (large || !small) ? g_fLabel : small;
+    (void)w; (void)h;
+    return g_fLabelMedium ? g_fLabelMedium : g_fLabel;
 }
 static bool TileCaptionRect(int w, int h, RECT* out) {
     if (!out) return false;
-    out->left = ScI(12);
+    out->left = ScI(8);      // 1.4.0: 8px inset as on the real 8.1 tiles
     out->right = w - ScI(8);
-    out->bottom = h - ScI(8);
-    out->top = h - ScI(30);
+    out->bottom = h - ScI(6);
+    out->top = h - ScI(28);
     return out->right > out->left && out->bottom > out->top;
 }
-static void DrawModernTileCaption(HDC dc, const wchar_t* text, int w, int h, bool dark = false) {
+static void DrawModernTileCaption(HDC dc, const wchar_t* text, int w, int h, bool dark) {
     if (!text || !*text || h < ScI(100)) return;
     RECT label;
     if (!TileCaptionRect(w, h, &label)) return;
@@ -3708,36 +3809,447 @@ static bool DrawEmbeddedTileIcon(Gdiplus::Graphics& g, const unsigned char* data
     return ok;
 }
 
+// Provided Windows 8.1 Store tile icon (250x250 PNG), embedded in Base64 as requested.
+// On first draw, the Base64 payload is decoded and its green matte RGB(0,155,0) is keyed out to
+// lossless white alpha so the glyph blends cleanly onto the horizontal Store green gradient at any size.
+static const char kIconStoreBase64[] =
+    "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";
+
+static SRWLOCK g_storeIconLock = SRWLOCK_INIT;
+static Gdiplus::Bitmap* g_storeGlyphBmp = NULL;
+
+static void ReleaseStoreBase64Icon() {
+    AcquireSRWLockExclusive(&g_storeIconLock);
+    if (g_storeGlyphBmp) { delete g_storeGlyphBmp; g_storeGlyphBmp = NULL; }
+    ReleaseSRWLockExclusive(&g_storeIconLock);
+}
+
+static std::vector<BYTE> DecodeBase64Bytes(const char* src) {
+    std::vector<BYTE> out;
+    if (!src) return out;
+    size_t len = strlen(src);
+    out.reserve((len * 3) / 4 + 4);
+    unsigned val = 0;
+    int valb = -8;
+    for (size_t i = 0; i < len; ++i) {
+        unsigned char c = (unsigned char)src[i];
+        int d = -1;
+        if (c >= 'A' && c <= 'Z') d = c - 'A';
+        else if (c >= 'a' && c <= 'z') d = c - 'a' + 26;
+        else if (c >= '0' && c <= '9') d = c - '0' + 52;
+        else if (c == '+') d = 62;
+        else if (c == '/') d = 63;
+        else if (c == '=') break;
+        else continue;
+        val = (val << 6) + (unsigned)d;
+        valb += 6;
+        if (valb >= 0) {
+            out.push_back((BYTE)((val >> valb) & 0xFF));
+            valb -= 8;
+        }
+    }
+    return out;
+}
+
+static Gdiplus::Bitmap* EnsureStoreBase64Bitmap() {
+    if (!g_gdipToken) return NULL;
+    AcquireSRWLockShared(&g_storeIconLock);
+    Gdiplus::Bitmap* cached = g_storeGlyphBmp;
+    ReleaseSRWLockShared(&g_storeIconLock);
+    if (cached) return cached;
+
+    std::vector<BYTE> png = DecodeBase64Bytes(kIconStoreBase64);
+    if (png.empty()) return NULL;
+    IStream* stream = SHCreateMemStream(png.data(), (UINT)png.size());
+    if (!stream) return NULL;
+    Gdiplus::Bitmap* built = NULL;
+    {
+        Gdiplus::Bitmap src(stream, FALSE);
+        if (src.GetLastStatus() == Gdiplus::Ok && src.GetWidth() >= 224 && src.GetHeight() >= 220) {
+            // Tight square crop (200x200 at offset 24,20) around the 168x190 bag silhouette so its
+            // visual weight matches the other Windows 8.1 Metro glyphs across Small/Medium/Wide/Large.
+            const int cw = 200, ch = 200, ox = 24, oy = 20;
+            built = new Gdiplus::Bitmap(cw, ch, PixelFormat32bppARGB);
+            Gdiplus::Rect rcSrc(ox, oy, cw, ch), rcDst(0, 0, cw, ch);
+            Gdiplus::BitmapData bdSrc = {}, bdDst = {};
+            if (src.LockBits(&rcSrc, Gdiplus::ImageLockModeRead, PixelFormat32bppARGB, &bdSrc) == Gdiplus::Ok) {
+                if (built->LockBits(&rcDst, Gdiplus::ImageLockModeWrite, PixelFormat32bppARGB, &bdDst) == Gdiplus::Ok) {
+                    for (int y = 0; y < ch; ++y) {
+                        const BYTE* sp = (const BYTE*)bdSrc.Scan0 + (size_t)y * bdSrc.Stride;
+                        BYTE* dp = (BYTE*)bdDst.Scan0 + (size_t)y * bdDst.Stride;
+                        for (int x = 0; x < cw; ++x) {
+                            // Source is white (255,255,255) over pure green (0,155,0): max(B,R) is exact alpha.
+                            const BYTE b = sp[x * 4 + 0], r = sp[x * 4 + 2];
+                            const BYTE a = r > b ? r : b;
+                            dp[x * 4 + 0] = 255;
+                            dp[x * 4 + 1] = 255;
+                            dp[x * 4 + 2] = 255;
+                            dp[x * 4 + 3] = a;
+                        }
+                    }
+                    built->UnlockBits(&bdDst);
+                } else { delete built; built = NULL; }
+                src.UnlockBits(&bdSrc);
+            } else { delete built; built = NULL; }
+        }
+    }
+    stream->Release();
+    if (!built) return NULL;
+    AcquireSRWLockExclusive(&g_storeIconLock);
+    if (!g_storeGlyphBmp) g_storeGlyphBmp = built;
+    else { delete built; }
+    cached = g_storeGlyphBmp;
+    ReleaseSRWLockExclusive(&g_storeIconLock);
+    return cached;
+}
+
+static bool DrawStoreBase64Icon(Gdiplus::Graphics& g, float x, float y, float size, BYTE alpha = 255) {
+    if (!g_gdipToken || size <= 0.0f) return false;
+    Gdiplus::Bitmap* bmp = EnsureStoreBase64Bitmap();
+    if (!bmp) return false;
+    g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+    g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
+    if (alpha >= 255) {
+        return g.DrawImage(bmp, Gdiplus::RectF(x, y, size, size)) == Gdiplus::Ok;
+    }
+    Gdiplus::ImageAttributes attr;
+    Gdiplus::ColorMatrix cm = {{
+        { 1, 0, 0, 0, 0 },
+        { 0, 1, 0, 0, 0 },
+        { 0, 0, 1, 0, 0 },
+        { 0, 0, 0, (float)alpha / 255.0f, 0 },
+        { 0, 0, 0, 0, 1 }
+    }};
+    attr.SetColorMatrix(&cm, Gdiplus::ColorMatrixFlagsDefault, Gdiplus::ColorAdjustTypeBitmap);
+    return g.DrawImage(bmp, Gdiplus::RectF(x, y, size, size),
+                       0, 0, (Gdiplus::REAL)bmp->GetWidth(), (Gdiplus::REAL)bmp->GetHeight(),
+                       Gdiplus::UnitPixel, &attr) == Gdiplus::Ok;
+}
+
 // Vector artwork adapted from Windows 8.1/10 Start Menu Recreation (GPL-3.0).
+// Trophy extracted from the reference supplied by the user; alpha retains its silhouette and cutout.
+static const unsigned char kIconSportsReference[] = {
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x4c,
+    0x00, 0x00, 0x00, 0x4c, 0x08, 0x06, 0x00, 0x00, 0x00, 0xc7, 0x97, 0x51, 0x2b, 0x00, 0x00, 0x0a, 0xfb, 0x49, 0x44, 0x41,
+    0x54, 0x78, 0xda, 0xe5, 0x9c, 0x6b, 0x88, 0x5d, 0x57, 0x15, 0xc7, 0x7f, 0xe7, 0xdc, 0x33, 0x13, 0xe7, 0xd1, 0x44, 0x1b,
+    0xf3, 0xd2, 0x3c, 0x3a, 0x56, 0xab, 0x52, 0x5f, 0x68, 0x44, 0x94, 0x6a, 0x8c, 0x95, 0x50, 0x29, 0xb6, 0xb6, 0x20, 0x45,
+    0x28, 0x82, 0x0f, 0x30, 0x08, 0xf6, 0x83, 0x54, 0x2a, 0x48, 0x41, 0xa1, 0xd0, 0x0f, 0x0a, 0x7e, 0x50, 0xac, 0xf6, 0x83,
+    0x22, 0xf8, 0xa8, 0x5a, 0xf5, 0xa3, 0x60, 0x2a, 0xd5, 0x82, 0x1f, 0xac, 0x58, 0x8b, 0xd2, 0xa6, 0x4e, 0x53, 0x26, 0x13,
+    0xdb, 0xc6, 0xa6, 0x49, 0x27, 0x63, 0x33, 0x13, 0xef, 0xdc, 0x7b, 0xcf, 0xf6, 0xc3, 0xac, 0xed, 0xac, 0xac, 0xd9, 0xfb,
+    0xbc, 0xee, 0x9d, 0x99, 0x3b, 0x66, 0xc3, 0xe1, 0xde, 0x7b, 0xee, 0xbe, 0xfb, 0xac, 0xf3, 0xdf, 0x6b, 0xad, 0xbd, 0xd6,
+    0x7f, 0xaf, 0x73, 0x13, 0xe7, 0x1c, 0xc0, 0x16, 0x8a, 0x9b, 0x03, 0x12, 0xf5, 0x1e, 0xf9, 0xdc, 0x02, 0xba, 0xf2, 0x5e,
+    0x9f, 0x07, 0x48, 0x19, 0x5c, 0xcb, 0x23, 0xe7, 0x5b, 0x25, 0xf2, 0xda, 0xd7, 0xd0, 0xfd, 0x54, 0x69, 0x09, 0xb0, 0x00,
+    0x90, 0xd5, 0xf8, 0x41, 0xe8, 0x42, 0x8b, 0x6c, 0xae, 0x96, 0x8a, 0x72, 0xa4, 0x6a, 0x82, 0x6b, 0xb5, 0xac, 0x46, 0x5f,
+    0xa7, 0x2e, 0xda, 0x93, 0xd9, 0x4d, 0x0b, 0x66, 0x3f, 0x89, 0xfc, 0x1e, 0xa3, 0x91, 0x75, 0x9b, 0xd6, 0x98, 0xa2, 0x71,
+    0x12, 0xa5, 0x9d, 0x69, 0x81, 0x5c, 0x03, 0x03, 0xcc, 0x05, 0x2e, 0x92, 0x88, 0x00, 0x4b, 0xf2, 0xfe, 0x41, 0xe0, 0x03,
+    0xc0, 0x19, 0xf5, 0x1b, 0x2f, 0xa0, 0xbd, 0x99, 0xdc, 0xcc, 0x74, 0x3f, 0xa0, 0x55, 0x01, 0x3e, 0x37, 0x26, 0xfb, 0x4a,
+    0xe0, 0x49, 0xe0, 0x26, 0xb1, 0x8c, 0xf1, 0x7e, 0x00, 0x4b, 0xd5, 0x05, 0x7a, 0x05, 0xc2, 0xd8, 0x99, 0xdd, 0x0f, 0xbc,
+    0x1a, 0xd8, 0xde, 0xef, 0xcc, 0xad, 0x51, 0xb3, 0x7e, 0xb5, 0x5b, 0x60, 0x11, 0x65, 0xbe, 0x3b, 0xe8, 0x98, 0xbb, 0x81,
+    0x19, 0x4c, 0x0a, 0xd4, 0xb9, 0x33, 0x08, 0x35, 0x5f, 0xc3, 0x66, 0xe5, 0x9f, 0x57, 0x32, 0xd3, 0xc4, 0x4c, 0x3d, 0x60,
+    0x3d, 0x41, 0xb3, 0x55, 0xd1, 0xf1, 0xfb, 0xf6, 0xef, 0xc0, 0xb9, 0x7c, 0xc8, 0x34, 0x4c, 0xcb, 0xd6, 0x0b, 0xf8, 0x34,
+    0x4a, 0x5c, 0xc3, 0x25, 0x96, 0x96, 0x9a, 0x10, 0x21, 0x8f, 0xfc, 0xd8, 0x19, 0xf5, 0x4e, 0x94, 0x00, 0x16, 0xcc, 0x74,
+    0xc8, 0x34, 0x4c, 0xdf, 0xc3, 0x62, 0x45, 0x13, 0x26, 0xb6, 0x50, 0x64, 0x11, 0x9b, 0xcd, 0x0b, 0x2e, 0xaa, 0x7d, 0xde,
+    0x7c, 0x1f, 0xb1, 0xcd, 0x7a, 0x83, 0x96, 0x18, 0xc0, 0x62, 0x5a, 0xd5, 0x0b, 0xc4, 0x72, 0xa9, 0x05, 0xcc, 0x7f, 0xd9,
+    0xa9, 0xb9, 0x72, 0x9d, 0x0b, 0x38, 0x56, 0x37, 0x24, 0x7e, 0x2d, 0x14, 0xb4, 0x9e, 0x57, 0x6e, 0xe3, 0x62, 0xc5, 0x71,
+    0x26, 0x35, 0x26, 0x89, 0x44, 0xfa, 0x63, 0x6a, 0x80, 0x4f, 0x03, 0x37, 0x4a, 0xa7, 0x6e, 0x44, 0x7b, 0x9c, 0x44, 0xbe,
+    0x1f, 0x06, 0x0e, 0x88, 0x00, 0x49, 0x24, 0xaa, 0x66, 0x88, 0x80, 0x9b, 0x05, 0x1e, 0x12, 0x10, 0x6c, 0x46, 0xe2, 0x7d,
+    0x5b, 0x2a, 0xee, 0xe9, 0x11, 0xe0, 0x9b, 0x0a, 0xb4, 0x0b, 0x1a, 0xb0, 0x51, 0x89, 0xad, 0xee, 0x05, 0xee, 0x2a, 0x88,
+    0xec, 0xab, 0xa4, 0x4b, 0xc3, 0x64, 0x9e, 0xae, 0x42, 0xb6, 0x52, 0xd4, 0x7e, 0x20, 0x0a, 0xb4, 0x05, 0x68, 0x6b, 0xc0,
+    0x00, 0xf6, 0x02, 0xd3, 0xa2, 0x6d, 0xa1, 0x38, 0xa6, 0xec, 0x42, 0xae, 0x0f, 0xc0, 0x62, 0xfd, 0xed, 0x98, 0x1b, 0xb1,
+    0xa8, 0xbc, 0x07, 0x78, 0x34, 0xb4, 0x12, 0x5c, 0x01, 0xbc, 0x22, 0x12, 0xc7, 0x38, 0x93, 0x6a, 0xd8, 0xd9, 0x73, 0x91,
+    0x04, 0xbc, 0xee, 0xec, 0xfb, 0xf3, 0xc7, 0xc4, 0x41, 0xdb, 0x18, 0x30, 0xed, 0x43, 0xd3, 0xf4, 0x91, 0x57, 0x0c, 0x29,
+    0x56, 0x11, 0x13, 0x5a, 0x80, 0x7f, 0x01, 0x67, 0x03, 0x03, 0xe4, 0x91, 0x19, 0xb6, 0xe6, 0xd8, 0x84, 0x01, 0x08, 0xb5,
+    0x27, 0x81, 0x23, 0xc0, 0x1f, 0x22, 0x00, 0x37, 0x49, 0xa7, 0x12, 0xa3, 0x00, 0x69, 0x60, 0xcc, 0x50, 0xfc, 0xd8, 0x06,
+    0x9e, 0x8f, 0xe5, 0x92, 0x73, 0xc0, 0xd3, 0xc0, 0x0e, 0x23, 0x64, 0x0f, 0x78, 0x56, 0x1c, 0x61, 0xa6, 0xce, 0x75, 0x80,
+    0x2b, 0x81, 0x57, 0xd5, 0x30, 0xb1, 0x22, 0x4d, 0xf3, 0x93, 0xf1, 0x5d, 0xe5, 0x3f, 0x3e, 0x12, 0xb9, 0xe9, 0xa6, 0xe1,
+    0xc5, 0x05, 0xe0, 0x05, 0xd1, 0x1a, 0x6d, 0x11, 0x1d, 0x60, 0x97, 0xe4, 0x97, 0x5a, 0xf6, 0x53, 0x72, 0x28, 0x69, 0x9d,
+    0xc3, 0x39, 0xb7, 0x45, 0x5e, 0x1f, 0x70, 0xab, 0xdb, 0x59, 0xe7, 0xdc, 0x1e, 0xf9, 0x7e, 0xc2, 0x39, 0x37, 0x29, 0xaf,
+    0x38, 0xe7, 0xbe, 0xe0, 0xfa, 0x6b, 0xb9, 0x1c, 0xbe, 0xcd, 0xc8, 0xb8, 0xfe, 0x78, 0xdc, 0xf5, 0xdf, 0xfc, 0xf8, 0x3d,
+    0xe7, 0xdc, 0xdd, 0x32, 0xee, 0x56, 0xe7, 0xdc, 0x36, 0x39, 0x32, 0xe7, 0xdc, 0xb8, 0x73, 0x6e, 0x5a, 0xfa, 0xe8, 0xdf,
+    0x3d, 0x2c, 0xfd, 0xc7, 0xbc, 0x4c, 0x56, 0x35, 0x67, 0x02, 0xbe, 0xe9, 0x4a, 0x95, 0xd9, 0x2f, 0xc8, 0x2c, 0x2d, 0xc8,
+    0xe7, 0x7f, 0x46, 0x7c, 0x81, 0xab, 0x31, 0xeb, 0x7a, 0xa6, 0xef, 0x55, 0xcc, 0x02, 0xc0, 0x3d, 0x05, 0x69, 0x4e, 0x13,
+    0x2e, 0xec, 0x8c, 0x4a, 0xe9, 0xe6, 0xe5, 0xe8, 0xca, 0x42, 0xb7, 0xcb, 0xf0, 0x64, 0x09, 0xf0, 0x8c, 0x4d, 0xf7, 0x52,
+    0xc3, 0x5c, 0x9e, 0x88, 0xac, 0x74, 0xd7, 0x2a, 0x07, 0x38, 0xaa, 0x1c, 0xe1, 0x48, 0xc4, 0xd1, 0x27, 0x0d, 0xcc, 0x65,
+    0x06, 0xb8, 0x5f, 0xf9, 0x0e, 0x84, 0x3e, 0x7a, 0x2c, 0x92, 0x48, 0x37, 0xa1, 0x80, 0xfc, 0xfd, 0x8e, 0x0b, 0x48, 0x5e,
+    0x11, 0xde, 0x22, 0x8b, 0x9e, 0x9d, 0xf0, 0x67, 0xac, 0xeb, 0x4a, 0x4d, 0x3a, 0x30, 0x1b, 0xf1, 0x19, 0x57, 0x47, 0xc0,
+    0xb8, 0x10, 0x49, 0xca, 0xeb, 0xf8, 0xae, 0x33, 0xe2, 0x58, 0xef, 0x92, 0xcf, 0x5b, 0x65, 0x46, 0x27, 0xe4, 0xf3, 0x97,
+    0x81, 0x93, 0xc0, 0xe9, 0x86, 0x8e, 0xdf, 0x19, 0xb6, 0x22, 0x04, 0xe4, 0xfe, 0xc8, 0x84, 0x3f, 0x17, 0xe3, 0xc3, 0xbc,
+    0x86, 0x9d, 0x14, 0x07, 0x38, 0x62, 0xfa, 0x1d, 0x88, 0x08, 0xba, 0x58, 0x53, 0xab, 0x7e, 0x07, 0xfc, 0x52, 0xae, 0xf7,
+    0x94, 0x00, 0xf5, 0xac, 0x62, 0x3d, 0xc6, 0xc5, 0x44, 0x52, 0x05, 0xda, 0x31, 0x60, 0x4a, 0x34, 0x62, 0x9f, 0xc8, 0xf2,
+    0x06, 0x99, 0xe4, 0x23, 0xc0, 0x2d, 0x15, 0xae, 0x9d, 0x94, 0xc4, 0x95, 0xaf, 0x8f, 0x58, 0xca, 0x74, 0x0c, 0xb0, 0x9e,
+    0x09, 0x2d, 0xf6, 0x98, 0x7e, 0x57, 0x2b, 0xbe, 0x2c, 0x0b, 0xf0, 0x61, 0x55, 0x57, 0xc5, 0xd7, 0x02, 0xf7, 0x45, 0xbe,
+    0x1b, 0x33, 0xb2, 0xb4, 0x64, 0xdc, 0x51, 0x95, 0xfb, 0x4d, 0xcb, 0x71, 0x4c, 0xfa, 0x7c, 0x22, 0xe2, 0x42, 0x5c, 0x60,
+    0x55, 0x75, 0xc0, 0xcb, 0xc6, 0x1f, 0xfa, 0xef, 0xae, 0x0a, 0x10, 0xa6, 0x6d, 0xd1, 0xea, 0x20, 0x1f, 0x96, 0x28, 0x13,
+    0x9b, 0x09, 0xdc, 0xcc, 0x5e, 0xe5, 0xfc, 0x34, 0x30, 0x2f, 0x57, 0xcc, 0x00, 0x7c, 0x7b, 0xa3, 0x98, 0xa0, 0x9f, 0x90,
+    0x09, 0x01, 0x64, 0x5c, 0x51, 0x4b, 0xa9, 0x09, 0x69, 0x32, 0xd1, 0xf8, 0x31, 0xc9, 0xe9, 0x7c, 0x2a, 0x77, 0x1c, 0x38,
+    0x64, 0x6e, 0xde, 0x45, 0x52, 0x36, 0x7f, 0xee, 0x3f, 0xe6, 0xde, 0x3b, 0xca, 0x24, 0xad, 0xf5, 0x9c, 0x12, 0x0b, 0x08,
+    0x32, 0xae, 0x4e, 0x99, 0xe1, 0x6c, 0xe0, 0xa6, 0xaf, 0x02, 0x76, 0x46, 0xa8, 0x90, 0x32, 0x6e, 0xde, 0x0a, 0xbf, 0x03,
+    0xf8, 0xbb, 0x68, 0xdb, 0x82, 0x00, 0xe2, 0x93, 0xde, 0x5e, 0x64, 0x31, 0xf2, 0x9b, 0x2e, 0x17, 0x24, 0xee, 0x9b, 0x11,
+    0xf0, 0xcb, 0x58, 0x61, 0x6b, 0x7a, 0x4b, 0x66, 0x22, 0x3b, 0x32, 0x69, 0x53, 0x81, 0x71, 0x4e, 0xc9, 0xf7, 0x99, 0x3e,
+    0x9f, 0x06, 0xc0, 0x3b, 0x19, 0x00, 0x60, 0x1b, 0xf0, 0x9a, 0x80, 0x50, 0x8b, 0xac, 0x6c, 0x88, 0x50, 0x40, 0x3e, 0xda,
+    0x1b, 0xdb, 0x2e, 0x2b, 0xd0, 0xb5, 0xca, 0x0f, 0xfa, 0x3d, 0x85, 0x24, 0x10, 0x38, 0x8f, 0x08, 0x58, 0x3b, 0x81, 0x27,
+    0x44, 0x96, 0xaa, 0x8b, 0x4d, 0x62, 0x00, 0xb2, 0x6d, 0x87, 0x09, 0xd6, 0x31, 0x8a, 0x93, 0x15, 0x99, 0xa4, 0x0d, 0x2d,
+    0xac, 0x96, 0x85, 0xa2, 0x73, 0x57, 0x62, 0x8a, 0x49, 0x84, 0xbe, 0xde, 0x22, 0x49, 0xed, 0xdb, 0x05, 0x8c, 0x34, 0xc0,
+    0xf8, 0xfa, 0x34, 0x66, 0x41, 0xae, 0xff, 0x68, 0xc0, 0xbf, 0x26, 0x05, 0xe4, 0xa7, 0x95, 0x63, 0x31, 0x00, 0xf2, 0xeb,
+    0x08, 0xef, 0x20, 0x4d, 0x17, 0x51, 0xd4, 0xda, 0x77, 0xcc, 0x46, 0x66, 0x69, 0x2a, 0xe0, 0x50, 0x2f, 0x28, 0x3f, 0x16,
+    0x12, 0xde, 0x45, 0x7c, 0x26, 0x6a, 0x55, 0xdc, 0xaf, 0x3e, 0xb7, 0x02, 0xe3, 0x78, 0x00, 0xf6, 0x99, 0xbe, 0x31, 0x4d,
+    0x4a, 0x23, 0xe7, 0xbb, 0x2a, 0xbe, 0x4b, 0x4a, 0x14, 0x41, 0x07, 0xe5, 0x2e, 0xa6, 0x61, 0xde, 0x7f, 0x9c, 0x8e, 0x08,
+    0x74, 0x45, 0x00, 0xf1, 0x5e, 0x60, 0x21, 0x88, 0xad, 0x50, 0x31, 0x2d, 0x3c, 0x6e, 0x64, 0xc8, 0x0d, 0x50, 0x2d, 0x95,
+    0x94, 0xbf, 0xd4, 0x47, 0x02, 0x9e, 0x1b, 0x93, 0x4c, 0xd4, 0xc2, 0x13, 0xf2, 0x7f, 0xcf, 0x17, 0x69, 0x98, 0x16, 0x6c,
+    0xce, 0xb3, 0x8b, 0x46, 0xb8, 0x7d, 0x01, 0x21, 0x2e, 0xaa, 0x34, 0xa9, 0x28, 0xbc, 0x88, 0xad, 0xa2, 0x4f, 0xa9, 0x68,
+    0xda, 0x2f, 0x3c, 0x6d, 0x19, 0xb7, 0x6d, 0x84, 0x3d, 0x27, 0xfd, 0x9b, 0xb6, 0x05, 0x15, 0xef, 0x69, 0x99, 0xf6, 0x44,
+    0xfa, 0xbf, 0x14, 0xcb, 0xaf, 0xec, 0x8c, 0xbd, 0x28, 0x87, 0x35, 0xb3, 0xc3, 0x2a, 0x3e, 0x69, 0xa9, 0x55, 0xa7, 0x1d,
+    0x58, 0xce, 0xab, 0xb6, 0x59, 0x15, 0x6b, 0x5d, 0x94, 0x89, 0xda, 0x0e, 0x7c, 0x51, 0x56, 0xd1, 0x45, 0x39, 0x3f, 0x66,
+    0x52, 0x95, 0xba, 0xe4, 0xa4, 0x5e, 0xd1, 0x7d, 0xf3, 0x21, 0xc6, 0xa1, 0xc0, 0x6f, 0xe6, 0x24, 0x26, 0x5d, 0xa5, 0x04,
+    0xda, 0x24, 0x73, 0x99, 0xe1, 0xae, 0x66, 0x18, 0x55, 0x9b, 0x02, 0x6e, 0x0e, 0x00, 0xdd, 0x6e, 0x98, 0x1e, 0xe5, 0x62,
+    0x66, 0x7a, 0xb9, 0xbf, 0x43, 0xb4, 0xe8, 0x1b, 0xc0, 0x3f, 0x80, 0xaf, 0x28, 0x4d, 0x46, 0xf5, 0xaf, 0x73, 0x9d, 0x44,
+    0xc5, 0x8c, 0x73, 0x4a, 0xfe, 0xae, 0x80, 0xf5, 0xde, 0xc0, 0x42, 0xf6, 0x37, 0x89, 0x17, 0x47, 0x57, 0x4d, 0x8e, 0xa2,
+    0x77, 0x46, 0x15, 0xcd, 0xf3, 0x29, 0x43, 0x8d, 0xf8, 0xf7, 0x67, 0x55, 0x9f, 0x11, 0x79, 0xfd, 0xa3, 0xe9, 0x57, 0xa7,
+    0x1d, 0x92, 0x31, 0x3e, 0xe9, 0x9c, 0x7b, 0x2e, 0x40, 0xc9, 0x38, 0xe7, 0xdc, 0x0b, 0xce, 0xb9, 0xcf, 0x4b, 0xbf, 0x6b,
+    0x1a, 0x5c, 0xcb, 0xf7, 0x3f, 0x21, 0x54, 0x4e, 0xaa, 0xe8, 0xa3, 0xe9, 0xc8, 0x78, 0x77, 0xca, 0xf7, 0xe3, 0x42, 0x65,
+    0x4d, 0x84, 0xe8, 0x1d, 0xcd, 0x44, 0x3e, 0x20, 0x81, 0x5b, 0x62, 0x42, 0x87, 0xed, 0xc0, 0x5f, 0x25, 0x41, 0xf6, 0x0e,
+    0xf4, 0x7c, 0x41, 0xe8, 0x50, 0x66, 0x2a, 0xef, 0x97, 0x34, 0xe7, 0x87, 0xca, 0x97, 0x38, 0x73, 0xcd, 0x9d, 0xc0, 0xb7,
+    0x80, 0x3f, 0x01, 0xb7, 0x8a, 0xb6, 0xb9, 0x1a, 0xd7, 0x48, 0x54, 0x92, 0xef, 0x6b, 0x2b, 0x32, 0xe0, 0xcf, 0x92, 0x93,
+    0xda, 0x36, 0x0f, 0xfc, 0x38, 0x4a, 0x55, 0x05, 0x34, 0x6c, 0x5c, 0x91, 0x83, 0x79, 0x64, 0xd6, 0xe7, 0x9c, 0x73, 0x47,
+    0xa5, 0xdf, 0x57, 0xe5, 0xbb, 0x5e, 0xc3, 0x99, 0x2f, 0xfa, 0x5c, 0xe5, 0x5c, 0xd1, 0xf8, 0x5a, 0xa6, 0xef, 0x88, 0xbc,
+    0xb7, 0x3b, 0xe7, 0x4e, 0x17, 0xfc, 0xee, 0x6b, 0x8a, 0x34, 0x9c, 0x10, 0x3c, 0x26, 0xbd, 0x86, 0x25, 0xaa, 0x02, 0x31,
+    0x55, 0xb9, 0x9b, 0x0f, 0xf0, 0x1e, 0x11, 0x2d, 0x08, 0x39, 0x74, 0x27, 0x4e, 0xb8, 0x03, 0xbc, 0xa9, 0xe1, 0x8e, 0x51,
+    0xac, 0xce, 0x21, 0x29, 0x09, 0x82, 0x9b, 0xec, 0x4a, 0x9d, 0x90, 0xd7, 0x6b, 0x0a, 0x34, 0xf1, 0xb8, 0x70, 0x63, 0x9e,
+    0x29, 0xd1, 0x3c, 0xda, 0xaa, 0x7d, 0xc9, 0x56, 0x20, 0xed, 0xf1, 0x29, 0xcc, 0xb6, 0x86, 0x37, 0xdf, 0xa4, 0x15, 0x8d,
+    0x53, 0x77, 0x57, 0xaa, 0x0c, 0x60, 0xdb, 0xe7, 0xad, 0x92, 0x7a, 0x6d, 0xe5, 0xd2, 0x4a, 0xa6, 0xff, 0x01, 0x66, 0x57,
+    0xc9, 0x5c, 0xb4, 0xac, 0x27, 0x08, 0x9f, 0x03, 0xde, 0x6d, 0xe2, 0xb2, 0x98, 0x70, 0x83, 0xda, 0x2f, 0x4c, 0x2b, 0x50,
+    0xda, 0x75, 0x77, 0xa5, 0x92, 0x40, 0x3a, 0x67, 0xb7, 0x0e, 0x0f, 0x0a, 0x58, 0x93, 0x2a, 0x88, 0x5f, 0xe5, 0xc7, 0xd2,
+    0x12, 0x10, 0xc6, 0x65, 0x27, 0x69, 0x37, 0xf0, 0x97, 0x3e, 0x67, 0x7c, 0xa3, 0x9b, 0xdd, 0x6a, 0x4b, 0x54, 0xf0, 0x7c,
+    0x40, 0xa8, 0xf0, 0xf1, 0xb2, 0x05, 0xa5, 0x08, 0xb0, 0xae, 0x1c, 0x93, 0x12, 0x25, 0x1f, 0x04, 0x3e, 0x67, 0xf6, 0xe9,
+    0x5c, 0x64, 0xf3, 0xc3, 0x0d, 0x09, 0x48, 0x45, 0x24, 0xc1, 0x39, 0xe0, 0x4b, 0xc0, 0x9b, 0x85, 0xf5, 0xdd, 0x16, 0xc8,
+    0x5f, 0x57, 0xa3, 0x5e, 0x50, 0x76, 0xae, 0xcb, 0x37, 0x33, 0x93, 0x02, 0xdd, 0xcc, 0x72, 0xad, 0xe8, 0x3b, 0x44, 0xfb,
+    0x52, 0x01, 0x76, 0x92, 0xe1, 0x2b, 0x46, 0x59, 0x90, 0x23, 0x17, 0x60, 0x9e, 0x00, 0x7e, 0x0b, 0xfc, 0x5c, 0xf9, 0x29,
+    0x1f, 0x26, 0x25, 0xa1, 0xfc, 0x11, 0x55, 0x76, 0x9e, 0x94, 0xd4, 0xe9, 0x3b, 0xc3, 0x02, 0xd8, 0x1a, 0x2b, 0x9f, 0xbc,
+    0x2e, 0x00, 0x1f, 0x04, 0x1e, 0x1e, 0x22, 0xa0, 0xfc, 0x0d, 0xdf, 0x06, 0xfc, 0x42, 0x34, 0x68, 0xde, 0xf4, 0x99, 0x54,
+    0x1a, 0x65, 0xf9, 0xb8, 0x20, 0x60, 0x69, 0xc9, 0x6a, 0xd5, 0x32, 0x2a, 0xda, 0x93, 0xbc, 0x6e, 0x4c, 0x85, 0x22, 0x5e,
+    0xf3, 0x7e, 0x0f, 0x7c, 0x7b, 0xc8, 0x7c, 0xd6, 0xcf, 0x04, 0x2c, 0x1f, 0x90, 0x7a, 0xaa, 0x7b, 0x42, 0x0e, 0xcd, 0xb6,
+    0x64, 0x84, 0x6b, 0x2f, 0x2a, 0x9b, 0xa4, 0x35, 0x4f, 0xfd, 0xc4, 0x47, 0xcb, 0x2c, 0xff, 0x5a, 0xf3, 0x66, 0x0c, 0xc7,
+    0xb4, 0x51, 0x6d, 0x4e, 0xc8, 0xc1, 0xf3, 0xa2, 0x49, 0xb9, 0xa2, 0xba, 0x13, 0x23, 0xbf, 0xdd, 0x17, 0x48, 0x9b, 0x68,
+    0x98, 0x2d, 0xa6, 0xb5, 0x99, 0xbf, 0xe6, 0xc3, 0x7a, 0x6a, 0x83, 0xe2, 0x96, 0x21, 0xd1, 0xb0, 0xdb, 0x04, 0xac, 0x09,
+    0xa5, 0x45, 0xad, 0xc0, 0x62, 0x90, 0x9b, 0x55, 0xb3, 0x70, 0x8f, 0xa2, 0x2c, 0xe6, 0x09, 0xc5, 0x40, 0xb1, 0xc1, 0x3b,
+    0xa2, 0xee, 0x8f, 0x03, 0x1f, 0x2f, 0x99, 0x80, 0x2a, 0xe7, 0xab, 0xae, 0xb6, 0xa1, 0x67, 0x09, 0xee, 0x90, 0x1c, 0x75,
+    0x4b, 0x24, 0xee, 0xa2, 0x2a, 0x40, 0x75, 0x00, 0xab, 0x9b, 0xdc, 0xea, 0x34, 0xe2, 0x41, 0xe0, 0xb3, 0xc4, 0x6b, 0xc0,
+    0xca, 0x62, 0xb8, 0x58, 0xdd, 0xac, 0x2b, 0x00, 0xc9, 0xb7, 0xbb, 0x25, 0x59, 0x87, 0x4b, 0x4b, 0x19, 0x06, 0x12, 0xf6,
+    0x54, 0xf5, 0x61, 0x31, 0xb0, 0xf3, 0x00, 0x87, 0xdf, 0x12, 0x8e, 0x2c, 0x07, 0x3e, 0x06, 0xfc, 0x8a, 0x6a, 0x65, 0x9f,
+    0x4d, 0xbe, 0xb7, 0xd7, 0x3e, 0xca, 0x72, 0x7d, 0x46, 0xa2, 0x4c, 0xd1, 0x05, 0x34, 0xa9, 0x49, 0xed, 0xc7, 0x42, 0xbf,
+    0x80, 0x85, 0x80, 0xc3, 0x10, 0x74, 0x1d, 0xa1, 0x50, 0x7e, 0xc3, 0xf2, 0xee, 0x79, 0x95, 0x9c, 0x2e, 0x76, 0xae, 0xe8,
+    0xb7, 0x67, 0x81, 0x1b, 0x24, 0x5a, 0x1f, 0x91, 0xfb, 0xd1, 0x60, 0xd9, 0xe7, 0x8e, 0x1a, 0x3f, 0xfe, 0x37, 0xa8, 0x64,
+    0x59, 0x8f, 0xe5, 0x9d, 0xe8, 0x88, 0x2c, 0x04, 0x4f, 0xb3, 0x5c, 0xbb, 0x70, 0x0f, 0xab, 0xcb, 0x3e, 0x29, 0xf0, 0x23,
+    0x49, 0xc9, 0x67, 0xdf, 0xff, 0x7e, 0xe1, 0xcc, 0x1e, 0x63, 0x65, 0x27, 0xbd, 0x57, 0x00, 0x56, 0x5f, 0x41, 0xf5, 0x20,
+    0x00, 0x73, 0x86, 0x65, 0x48, 0x95, 0xc0, 0x3d, 0x89, 0xa2, 0xbd, 0x6f, 0xd9, 0x0b, 0x7c, 0x4f, 0xb4, 0xcf, 0x55, 0x00,
+    0x2d, 0x76, 0xbd, 0x0e, 0xf0, 0x53, 0x96, 0x77, 0xbf, 0x8f, 0x46, 0x82, 0x50, 0x1d, 0x12, 0xf5, 0xf3, 0x70, 0xe9, 0xc0,
+    0x7c, 0x18, 0x5c, 0xfa, 0xec, 0xa4, 0x2e, 0x1b, 0xc8, 0xe4, 0xb3, 0xff, 0x7e, 0x84, 0x95, 0x92, 0x49, 0x58, 0x7e, 0x02,
+    0xee, 0x26, 0xe0, 0xce, 0x9a, 0x5c, 0xda, 0x29, 0xe0, 0xeb, 0xc0, 0xaf, 0x59, 0x29, 0x45, 0x9a, 0x60, 0xf5, 0x3e, 0xa8,
+    0xfd, 0x9c, 0x9b, 0x90, 0xa2, 0xb1, 0x0f, 0xcb, 0xfa, 0xd4, 0xae, 0x10, 0x58, 0x28, 0xe7, 0xaf, 0x83, 0x5c, 0x58, 0xd9,
+    0xfd, 0x39, 0x0b, 0x7c, 0x5f, 0x80, 0xbc, 0xaf, 0xa2, 0xb9, 0x38, 0xe0, 0x27, 0x2a, 0x9b, 0x18, 0x0b, 0x04, 0x9d, 0x04,
+    0x68, 0x75, 0x6b, 0x49, 0x1b, 0x6a, 0x92, 0x09, 0xab, 0x37, 0x72, 0x93, 0x0a, 0x59, 0xff, 0x98, 0xd2, 0xb4, 0x2a, 0xab,
+    0xa0, 0x07, 0xc4, 0x9b, 0xf7, 0xa8, 0xb9, 0x6e, 0xb2, 0x5e, 0x4c, 0xc9, 0x46, 0x3f, 0x79, 0xd6, 0x2b, 0xb9, 0x51, 0xfb,
+    0x40, 0xeb, 0x86, 0xb3, 0x20, 0xc3, 0xf0, 0xa8, 0x5e, 0x51, 0x39, 0xb9, 0xd5, 0xdc, 0xee, 0xe5, 0x0e, 0x58, 0x8b, 0x7a,
+    0x5b, 0x66, 0xd9, 0xe5, 0x0e, 0x58, 0x95, 0x82, 0xbc, 0xba, 0x61, 0xc7, 0xff, 0xbd, 0x86, 0x35, 0x09, 0x92, 0x2f, 0x7b,
+    0xc0, 0x62, 0x85, 0x70, 0xce, 0x00, 0x35, 0xda, 0x10, 0xe8, 0x81, 0xb5, 0x8d, 0xf6, 0x09, 0x73, 0x02, 0xca, 0x8b, 0xc4,
+    0x1f, 0x66, 0xf5, 0x80, 0xee, 0x62, 0xa5, 0x98, 0xa4, 0xb7, 0x51, 0x2b, 0xe6, 0x20, 0x92, 0xef, 0x50, 0x18, 0xe0, 0xf9,
+    0x7f, 0x5b, 0x42, 0x6e, 0x69, 0xef, 0x8c, 0x95, 0xa2, 0x5b, 0x57, 0xf0, 0xaa, 0x57, 0xc9, 0x8e, 0x99, 0x70, 0x47, 0xb5,
+    0x7f, 0x5d, 0xe9, 0x07, 0xe0, 0x81, 0x45, 0xfa, 0x55, 0x62, 0x2c, 0xff, 0x97, 0x33, 0x1d, 0x39, 0x7c, 0x79, 0x94, 0xdd,
+    0x89, 0xaa, 0x23, 0xbc, 0x07, 0xa4, 0x2d, 0x93, 0x3d, 0xb2, 0x5e, 0xfe, 0x2d, 0x5b, 0x07, 0xff, 0xe4, 0x93, 0xf0, 0x76,
+    0x20, 0x81, 0xee, 0x27, 0xd9, 0x47, 0x81, 0x96, 0x11, 0xfe, 0xf7, 0x83, 0x4d, 0x05, 0x98, 0xce, 0x33, 0x97, 0x80, 0x0f,
+    0x01, 0x3f, 0x62, 0xb9, 0x14, 0xb2, 0x17, 0xd1, 0x98, 0x50, 0x1e, 0x48, 0x00, 0x0c, 0xbf, 0x51, 0x71, 0x00, 0xf8, 0x0c,
+    0xcb, 0x8f, 0xe3, 0x4c, 0x04, 0x98, 0x93, 0x4d, 0xe7, 0xf4, 0x7d, 0x35, 0xd0, 0x92, 0xb0, 0x13, 0xbb, 0x89, 0xd7, 0x94,
+    0x56, 0xf5, 0x8f, 0xf6, 0xfd, 0xad, 0x02, 0x58, 0x57, 0xf9, 0xb4, 0xd6, 0x5a, 0x69, 0xd9, 0x5a, 0x87, 0x15, 0x2d, 0x56,
+    0xb6, 0xdf, 0x0e, 0x9b, 0xf0, 0xc1, 0x35, 0xf4, 0x5d, 0x76, 0x15, 0x3d, 0x2c, 0x5c, 0x58, 0x7b, 0x3d, 0x02, 0xdb, 0x74,
+    0x8d, 0xc7, 0xf6, 0xa6, 0xf7, 0x2e, 0xe0, 0x6d, 0xe6, 0x9a, 0x49, 0x03, 0x7f, 0x95, 0x04, 0xcc, 0x73, 0x37, 0x70, 0x5d,
+    0xc9, 0xef, 0x36, 0x05, 0x60, 0x9a, 0xb4, 0x3b, 0xdc, 0xf0, 0x66, 0xaa, 0x3e, 0xd6, 0x77, 0x64, 0xbd, 0x32, 0x82, 0x41,
+    0x51, 0xd4, 0x76, 0x37, 0xc6, 0x83, 0xe5, 0x4b, 0xbb, 0x6f, 0x1c, 0x50, 0x3c, 0x14, 0xf3, 0x6b, 0x1e, 0xb0, 0xc5, 0xb5,
+    0x56, 0x84, 0xb5, 0xd4, 0x30, 0xbf, 0x2b, 0x3e, 0x05, 0xbc, 0xcf, 0x68, 0xd7, 0xa0, 0x4c, 0x46, 0x3f, 0x62, 0x7d, 0x70,
+    0xb3, 0xe7, 0x92, 0xde, 0x1c, 0xaf, 0x57, 0x39, 0x60, 0x32, 0x40, 0x2d, 0xb3, 0x1b, 0xb4, 0x37, 0x14, 0xa4, 0x56, 0x9b,
+    0x02, 0x30, 0x9f, 0x1b, 0x7e, 0x74, 0xad, 0xd2, 0x3a, 0x03, 0xdc, 0x11, 0x15, 0xc8, 0x6e, 0x4a, 0x0d, 0x5b, 0x92, 0xc0,
+    0xf2, 0xfa, 0x35, 0x32, 0x47, 0x3b, 0xce, 0x75, 0xc0, 0x3b, 0x89, 0xff, 0x69, 0xdc, 0xa6, 0x08, 0x5c, 0x97, 0x80, 0xdb,
+    0x03, 0x31, 0xd2, 0x20, 0x4a, 0x04, 0x32, 0x56, 0x4a, 0xb0, 0x90, 0x58, 0xec, 0x5c, 0x49, 0x02, 0x3e, 0x14, 0x6c, 0x45,
+    0xac, 0x5e, 0x21, 0x13, 0xa0, 0xd6, 0x93, 0x87, 0xcf, 0x58, 0xfe, 0xc3, 0xa5, 0x9c, 0xf2, 0x9d, 0xf4, 0xa1, 0x63, 0x2b,
+    0xfc, 0x53, 0x6a, 0x23, 0x26, 0x36, 0x1a, 0x51, 0x89, 0x77, 0x59, 0x05, 0x64, 0x91, 0xe6, 0xf9, 0x5d, 0xf6, 0x5c, 0xbd,
+    0xea, 0x67, 0x2e, 0xd7, 0xc4, 0xdd, 0xfc, 0x17, 0x18, 0xdb, 0xdc, 0x32, 0x1d, 0xc1, 0x9c, 0xb1, 0x00, 0x00, 0x00, 0x00,
+    0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+};
+
 static bool DrawImportedMetroIcon(HDC dc, const wchar_t* target, int x, int y, int size) {
-    enum class Icon { None, Weather, Calculator, Mail, Calendar, Settings, Photos, Xbox, Cloud, Solitaire, Store, Camera, Clock, Maps, Music, Video, Recorder } icon = Icon::None;
+    enum class Icon { None, Weather, Calculator, Mail, Calendar, Settings, Photos, Xbox, Cloud, Solitaire, Store, Camera, Clock, Maps, Music, Video, Recorder, News, People, Browser, Finance, Sports } icon = Icon::None;
     if (!target) return false;
     const wchar_t* id = target;
     const wchar_t* prefix = L"shell:AppsFolder\\";
     if (!_wcsnicmp(id, prefix, wcslen(prefix))) id += wcslen(prefix);
-    if (_wcsicmp(id,L"windhawk:weather-tile-v1")==0) icon=Icon::Weather;
-    else if (_wcsicmp(id,L"windhawk:calendar-tile-v1")==0) icon=Icon::Calendar;
-    else if (_wcsicmp(id, L"windows.immersivecontrolpanel_cw5n1h2txyewy!microsoft.windows.immersivecontrolpanel") == 0) icon = Icon::Settings;
-    else if (_wcsicmp(id, L"Microsoft.BingWeather_8wekyb3d8bbwe!App") == 0) icon = Icon::Weather;
-    else if (_wcsicmp(id, L"Microsoft.WindowsCalculator_8wekyb3d8bbwe!App") == 0) icon = Icon::Calculator;
-    else if (_wcsicmp(id, L"microsoft.windowscommunicationsapps_8wekyb3d8bbwe!microsoft.windowslive.mail") == 0 ||
-             _wcsicmp(id, L"Microsoft.OutlookForWindows_8wekyb3d8bbwe!Microsoft.OutlookforWindows") == 0) icon = Icon::Mail;
-    else if (_wcsicmp(id, L"microsoft.windowscommunicationsapps_8wekyb3d8bbwe!microsoft.windowslive.calendar") == 0) icon = Icon::Calendar;
-    else if (_wcsicmp(id,L"Microsoft.WindowsStore_8wekyb3d8bbwe!App")==0) icon=Icon::Store;
-    else if (_wcsicmp(id,L"Microsoft.WindowsCamera_8wekyb3d8bbwe!App")==0) icon=Icon::Camera;
-    else if (_wcsicmp(id,L"Microsoft.WindowsAlarms_8wekyb3d8bbwe!App")==0 || _wcsicmp(id,L"windhawk:clock-tile-v1")==0) icon=Icon::Clock;
-    else if (_wcsicmp(id,L"Microsoft.WindowsMaps_8wekyb3d8bbwe!App")==0) icon=Icon::Maps;
-    else if (_wcsicmp(id,L"Microsoft.ZuneMusic_8wekyb3d8bbwe!Microsoft.ZuneMusic")==0) icon=Icon::Music;
-    else if (_wcsicmp(id,L"Microsoft.ZuneVideo_8wekyb3d8bbwe!Microsoft.ZuneVideo")==0) icon=Icon::Video;
-    else if (_wcsicmp(id,L"Microsoft.WindowsSoundRecorder_8wekyb3d8bbwe!App")==0) icon=Icon::Recorder;
-    else if (_wcsicmp(id,L"Microsoft.Windows.Photos_8wekyb3d8bbwe!App")==0) icon=Icon::Photos;
-    else if (_wcsicmp(id,L"Microsoft.GamingApp_8wekyb3d8bbwe!Microsoft.Xbox.App")==0 ||
-             _wcsicmp(id,L"Microsoft.XboxApp_8wekyb3d8bbwe!Microsoft.XboxApp")==0) icon=Icon::Xbox;
-    else if (_wcsicmp(id,L"Microsoft.MicrosoftSolitaireCollection_8wekyb3d8bbwe!App")==0) icon=Icon::Solitaire;
-    else if (!_wcsicmp(id,L"Microsoft.SkyDrive.Desktop")) icon=Icon::Cloud;
+    std::wstring low = id;
+    for (wchar_t& ch : low) ch = (wchar_t)towlower(ch);
+    auto has = [&](const wchar_t* sub) { return low.find(sub) != std::wstring::npos; };
+
+    if (IsStoreTarget(target)) icon = Icon::Store;
+    else if (_wcsicmp(id,L"windhawk:weather-tile-v1")==0 || has(L"microsoft.bingweather")) icon=Icon::Weather;
+    else if (_wcsicmp(id,L"windhawk:calendar-tile-v1")==0 || has(L"windowslive.calendar")) icon=Icon::Calendar;
+    else if (_wcsicmp(id,L"windhawk:news-tile-v1")==0 || has(L"microsoft.bingnews") || has(L"microsoft.start")) icon=Icon::News;
+    else if (has(L"sports-tile") || has(L"microsoft.bingsports")) icon=Icon::Sports;
+    else if (has(L"finance-tile") || has(L"microsoft.bingfinance")) icon=Icon::Finance;
+    else if (has(L"immersivecontrolpanel") || has(L"ms-settings") || has(L"26ee0668")) icon = Icon::Settings;
+    else if (has(L"windowscalculator")) icon = Icon::Calculator;
+    else if (has(L"windowslive.mail") || has(L"outlookforwindows") || has(L"mail-tile")) icon = Icon::Mail;
+    else if (has(L"windowscamera") || has(L"camera-tile")) icon=Icon::Camera;
+    else if (has(L"windowsalarms") || _wcsicmp(id,L"windhawk:clock-tile-v1")==0) icon=Icon::Clock;
+    else if (has(L"windowsmaps") || has(L"maps-tile")) icon=Icon::Maps;
+    else if (has(L"zunemusic") || has(L"music-tile")) icon=Icon::Music;
+    else if (has(L"zunevideo") || has(L"video-tile")) icon=Icon::Video;
+    else if (has(L"windowssoundrecorder") || has(L"recorder-tile")) icon=Icon::Recorder;
+    else if (has(L"windows.photos") || has(L"photos-tile")) icon=Icon::Photos;
+    else if (has(L"gamingapp") || has(L"xboxapp") || has(L"games-tile")) icon=Icon::Xbox;
+    else if (has(L"microsoftsolitairecollection")) icon=Icon::Solitaire;
+    else if (!_wcsicmp(id,L"Microsoft.SkyDrive.Desktop") || has(L"skydrive") || has(L"onedrive")) icon=Icon::Cloud;
+    else if (has(L"microsoft.people") || has(L"people-tile")) icon=Icon::People;
+    else if (has(L"microsoft.microsoftedge") || has(L"edge-tile")) icon=Icon::Browser;
     if (icon == Icon::None || !g_gdipToken || size <= 0) return false;
     Gdiplus::Graphics g(dc);
     if (g.GetLastStatus() != Gdiplus::Ok) return false;
+    if (icon == Icon::Store && DrawStoreBase64Icon(g, (float)x, (float)y, (float)size)) return true;
     const unsigned char* embedded = nullptr;
     size_t embeddedSize = 0;
     switch (icon) {
@@ -3745,6 +4257,7 @@ static bool DrawImportedMetroIcon(HDC dc, const wchar_t* target, int x, int y, i
     case Icon::Calendar: embedded = kIconCalendar; embeddedSize = sizeof(kIconCalendar); break;
     case Icon::Weather: embedded = kIconWeather; embeddedSize = sizeof(kIconWeather); break;
     case Icon::Calculator: embedded = kIconCalculator; embeddedSize = sizeof(kIconCalculator); break;
+    case Icon::Sports: embedded = kIconSportsReference; embeddedSize = sizeof(kIconSportsReference); break;
     default: break;
     }
     if (embedded && DrawEmbeddedTileIcon(g, embedded, embeddedSize,
@@ -4189,10 +4702,19 @@ static bool DrawImportedMetroIcon(HDC dc, const wchar_t* target, int x, int y, i
         Gdiplus::PointF mountains[]={{8,36},{19,23},{25,29},{30,23},{40,36}};
         g.FillPolygon(&white,mountains,5);
     } else if (icon == Icon::Xbox) {
-        g.DrawEllipse(&pen,5.0f,5.0f,38.0f,38.0f);
-        Gdiplus::Pen cross(Gdiplus::Color(255,255,255,255),4.0f);
-        g.DrawBezier(&cross,11.0f,35.0f,16.0f,20.0f,30.0f,10.0f,36.0f,12.0f);
-        g.DrawBezier(&cross,12.0f,12.0f,19.0f,11.0f,33.0f,21.0f,37.0f,35.0f);
+        // Gamepad silhouette, matching the supplied Games reference.
+        Gdiplus::GraphicsPath pad;
+        pad.AddBezier(12,12,6,11,2,28,3,35);
+        pad.AddBezier(3,35,4,42,10,39,15,34);
+        pad.AddBezier(15,34,20,30,28,30,33,34);
+        pad.AddBezier(33,34,40,40,45,41,45,34);
+        pad.AddBezier(45,34,43,17,38,12,34,12);
+        pad.AddBezier(34,12,29,11,27,15,21,15);
+        pad.AddBezier(21,15,17,15,16,11,12,12);
+        pad.CloseFigure(); g.FillPath(&white, &pad);
+        Gdiplus::SolidBrush cut(Gdiplus::Color(255,16,124,16));
+        g.FillRectangle(&cut,10.0f,19.0f,9.0f,3.0f); g.FillRectangle(&cut,13.0f,16.0f,3.0f,9.0f);
+        g.FillEllipse(&cut,31.0f,18.0f,4.0f,4.0f);
     } else if (icon == Icon::Cloud) {
         g.FillEllipse(&white,5.0f,23.0f,17.0f,13.0f);
         g.FillEllipse(&white,15.0f,13.0f,20.0f,23.0f);
@@ -4218,6 +4740,74 @@ static bool DrawImportedMetroIcon(HDC dc, const wchar_t* target, int x, int y, i
                                        {39.4f,35.4f},{8.6f,35.4f}};
         g.FillPolygon(&white, flap, 5);
         g.FillPolygon(&white, body, 7);
+    } else if (icon == Icon::News) {
+        // Authentic Windows 8.1 Metro News folded newspaper glyph.
+        g.DrawRectangle(&pen, 6.0f, 9.0f, 29.0f, 30.0f);
+        g.DrawLine(&pen, 35.0f, 15.0f, 41.0f, 15.0f);
+        g.DrawLine(&pen, 41.0f, 15.0f, 41.0f, 37.0f);
+        g.DrawLine(&pen, 35.0f, 39.0f, 41.0f, 37.0f);
+        g.FillRectangle(&white, 10.5f, 13.5f, 10.0f, 10.0f);
+        g.FillRectangle(&white, 23.0f, 14.0f, 8.0f, 2.5f);
+        g.FillRectangle(&white, 23.0f, 19.5f, 8.0f, 2.5f);
+        g.FillRectangle(&white, 10.5f, 27.0f, 20.5f, 2.5f);
+        g.FillRectangle(&white, 10.5f, 32.5f, 20.5f, 2.5f);
+    } else if (icon == Icon::People) {
+        // Windows 8/8.1 People silhouette, adapted from https://logos.fandom.com/wiki/Microsoft_People (2012–2015).
+        auto X = [](float n) { return 1.0f + (n-221.0f)*0.0836f; };
+        auto Y = [](float n) { return 5.0f + (n-304.0f)*0.095f; };
+        Gdiplus::GraphicsPath back;
+        back.AddBezier(X(569),Y(648),X(566),Y(562),X(557),Y(509),X(491),Y(496));
+        back.AddBezier(X(491),Y(496),X(505),Y(478),X(524),Y(467),X(554),Y(474));
+        back.AddBezier(X(554),Y(474),X(599),Y(510),X(643),Y(518),X(683),Y(471));
+        back.AddBezier(X(683),Y(471),X(768),Y(476),X(770),Y(562),X(771),Y(648));
+        back.CloseFigure(); g.FillPath(&white,&back);
+        Gdiplus::GraphicsPath head2;
+        head2.AddBezier(X(694),Y(388),X(695),Y(337),X(663),Y(302),X(620),Y(305));
+        head2.AddBezier(X(620),Y(305),X(575),Y(308),X(549),Y(342),X(547),Y(388));
+        head2.AddBezier(X(547),Y(388),X(545),Y(438),X(571),Y(472),X(620),Y(471));
+        head2.AddBezier(X(620),Y(471),X(663),Y(470),X(693),Y(437),X(694),Y(388));
+        head2.CloseFigure(); g.FillPath(&white,&head2);
+        Gdiplus::GraphicsPath body;
+        body.AddLine(X(221),Y(691),X(547),Y(691));
+        body.AddBezier(X(547),Y(691),X(548),Y(598),X(542),Y(512),X(457),Y(506));
+        body.AddBezier(X(457),Y(506),X(412),Y(560),X(365),Y(555),X(316),Y(506));
+        body.AddBezier(X(316),Y(506),X(248),Y(505),X(226),Y(583),X(221),Y(691));
+        body.CloseFigure(); g.FillPath(&white,&body);
+        Gdiplus::GraphicsPath head;
+        head.AddBezier(X(461),Y(413),X(453),Y(363),X(418),Y(329),X(374),Y(328));
+        head.AddBezier(X(374),Y(328),X(328),Y(327),X(296),Y(372),X(303),Y(427));
+        head.AddBezier(X(303),Y(427),X(309),Y(478),X(346),Y(514),X(390),Y(512));
+        head.AddBezier(X(390),Y(512),X(437),Y(511),X(469),Y(466),X(461),Y(413));
+        head.CloseFigure(); g.FillPath(&white,&head);
+    } else if (icon == Icon::Finance) {
+        for (int j = 0; j < 5; ++j) g.FillRectangle(&white, 7.0f + j*7.0f, 34.0f-j*3.2f, 4.5f, 9.0f+j*3.2f);
+        Gdiplus::PointF line[] = {{6,27},{17,18},{23,23},{35,10},{39,14}};
+        Gdiplus::Pen thick(Gdiplus::Color(255,255,255,255),3.0f);
+        g.DrawLines(&thick,line,5);
+        Gdiplus::PointF arrow[] = {{31,8},{42,7},{41,19}}; g.FillPolygon(&white,arrow,3);
+    } else if (icon == Icon::Sports) {
+        Gdiplus::GraphicsPath cup;
+        cup.AddBezier(12,8,12,28,17,32,24,33); cup.AddBezier(24,33,31,32,36,28,36,8);
+        cup.AddLine(36,8,12,8); cup.CloseFigure(); g.FillPath(&white,&cup);
+        g.DrawArc(&pen,5.0f,11.0f,15.0f,19.0f,90.0f,180.0f);
+        g.DrawArc(&pen,28.0f,11.0f,15.0f,19.0f,270.0f,180.0f);
+        g.FillRectangle(&white,21.0f,31.0f,6.0f,8.0f);
+        g.FillRectangle(&white,16.0f,39.0f,16.0f,3.0f);
+        // Star in the cup, as in the supplied Sports reference.
+        Gdiplus::SolidBrush cut(Gdiplus::Color(255, 0x51, 0x33, 0xAB));
+        Gdiplus::PointF star[] = {{24,12},{26.1f,16.4f},{31,17},{27.5f,20.4f},
+                                  {28.4f,25.1f},{24,22.8f},{19.6f,25.1f},
+                                  {20.5f,20.4f},{17,17},{21.9f,16.4f}};
+        g.FillPolygon(&cut, star, ARRAYSIZE(star));
+    } else if (icon == Icon::Browser) {
+        // Windows 8.1 Internet Explorer Metro 'e' + orbital swoosh.
+        Gdiplus::Pen thick(Gdiplus::Color(255, 255, 255, 255), 4.6f);
+        g.DrawArc(&thick, 10.0f, 10.0f, 28.0f, 28.0f, 35.0f, 295.0f);
+        g.FillRectangle(&white, 10.0f, 22.0f, 29.0f, 4.4f);
+        Gdiplus::Pen orbit(Gdiplus::Color(255, 255, 255, 255), 2.2f);
+        g.TranslateTransform(24.0f, 24.0f);
+        g.RotateTransform(-32.0f);
+        g.DrawArc(&orbit, -22.0f, -9.0f, 44.0f, 18.0f, 160.0f, 220.0f);
     } else {
         g.DrawRectangle(&pen, 7.0f, 9.0f, 34.0f, 32.0f);
         g.DrawLine(&pen, 7.0f, 18.0f, 41.0f, 18.0f);
@@ -4231,14 +4821,87 @@ static bool DrawImportedMetroIcon(HDC dc, const wchar_t* target, int x, int y, i
 
 
 static bool IsLocalInfoTile(const wchar_t* id) {
-    return id && (!_wcsicmp(id,L"windhawk:weather-tile-v1") || !_wcsicmp(id,L"windhawk:calendar-tile-v1") || !_wcsicmp(id,L"windhawk:clock-tile-v1"));
+    if (!id) return false;
+    if (!_wcsicmp(id,L"windhawk:weather-tile-v1") ||
+        !_wcsicmp(id,L"windhawk:calendar-tile-v1") ||
+        !_wcsicmp(id,L"windhawk:clock-tile-v1") ||
+        !_wcsicmp(id,L"windhawk:news-tile-v1")) return true;
+    // 1.4.0: every windhawk:*-tile-v1 fallback (Mail, Photos, People, Sports, Finance, Maps,
+    // Camera, Games, Music, Video, Recorder, Edge, OneDrive) is a local-info tile too, so the
+    // seeded 8.1 layout always has a tile even when the UWP app is not installed.
+    const size_t len = wcslen(id);
+    const wchar_t* suffix = L"-tile-v1";
+    const size_t suffixLen = wcslen(suffix);
+    return len > 9 + suffixLen && _wcsnicmp(id, L"windhawk:", 9) == 0 &&
+           _wcsicmp(id + len - suffixLen, suffix) == 0;
 }
 static const wchar_t* LocalInfoUrl(const wchar_t* id) {
     if (!id) return NULL;
     if (!_wcsicmp(id,L"windhawk:weather-tile-v1")) return L"https://www.msn.com/weather";
     if (!_wcsicmp(id,L"windhawk:calendar-tile-v1")) return L"https://outlook.live.com/calendar/";
-    if (!_wcsicmp(id,L"windhawk:clock-tile-v1")) return L"https://apps.microsoft.com/detail/9wzdncrfj3pr";
+    if (!_wcsicmp(id,L"windhawk:news-tile-v1")) return L"https://www.msn.com/news";
+    if (!_wcsicmp(id,L"windhawk:mail-tile-v1")) return L"https://outlook.live.com/mail/";
+    if (!_wcsicmp(id,L"windhawk:people-tile-v1")) return L"https://outlook.live.com/people/";
+    if (!_wcsicmp(id,L"windhawk:sports-tile-v1")) return L"https://www.msn.com/sports";
+    if (!_wcsicmp(id,L"windhawk:finance-tile-v1")) return L"https://www.msn.com/money";
+    if (!_wcsicmp(id,L"windhawk:maps-tile-v1")) return L"https://www.bing.com/maps";
+    if (!_wcsicmp(id,L"windhawk:games-tile-v1")) return L"https://www.xbox.com/";
+    if (!_wcsicmp(id,L"windhawk:edge-tile-v1")) return L"https://www.microsoft.com/edge";
+    if (!_wcsicmp(id,L"windhawk:onedrive-tile-v1")) return L"https://onedrive.live.com/";
     return NULL;
+}
+// A simulated tile is a visual shortcut, not an installed app. Prefer an actual
+// installed AppsFolder entry, including for tiles saved by older releases. Only
+// use a meaningful web service if there is no installed counterpart.
+static std::wstring ResolveLocalTileTarget(const wchar_t* id) {
+    struct Match { const wchar_t* id; const wchar_t* a; const wchar_t* b; };
+    static const Match matches[] = {
+        {L"windhawk:mail-tile-v1", L"microsoft.outlookforwindows", L"microsoft.windowslive.mail"},
+        {L"windhawk:people-tile-v1", L"microsoft.people", NULL},
+        {L"windhawk:photos-tile-v1", L"microsoft.windows.photos", NULL},
+        {L"windhawk:sports-tile-v1", L"microsoft.bingsports", NULL},
+        {L"windhawk:finance-tile-v1", L"microsoft.bingfinance", NULL},
+        {L"windhawk:maps-tile-v1", L"microsoft.windowsmaps", NULL},
+        {L"windhawk:camera-tile-v1", L"microsoft.windowscamera", NULL},
+        {L"windhawk:games-tile-v1", L"microsoft.gamingapp", L"microsoft.xboxapp"},
+        {L"windhawk:music-tile-v1", L"microsoft.zunemusic", NULL},
+        {L"windhawk:video-tile-v1", L"microsoft.zunevideo", NULL},
+        {L"windhawk:recorder-tile-v1", L"microsoft.windowssoundrecorder", L"microsoft.windows.voicerecorder"},
+        {L"windhawk:clock-tile-v1", L"microsoft.windowsalarms", NULL},
+        {L"windhawk:news-tile-v1", L"microsoft.bingnews", NULL},
+    };
+    if (!id) return {};
+    for (const auto& m : matches) if (!_wcsicmp(id, m.id)) {
+        if (InterlockedCompareExchange(&g_appsReady, 0, 0)) {
+            AcquireSRWLockShared(&g_appsLock);
+            std::wstring found;
+            for (const auto& a : g_apps) {
+                if (a.searchOnly || a.exe || a.charmCat != CC_APP) continue;
+                std::wstring low = a.parse;
+                for (auto& c : low) c = (wchar_t)towlower(c);
+                if ((m.a && low.find(m.a) != std::wstring::npos) ||
+                    (m.b && low.find(m.b) != std::wstring::npos)) { found = AppTarget(a); break; }
+            }
+            ReleaseSRWLockShared(&g_appsLock);
+            if (!found.empty()) return found;
+        }
+        break;
+    }
+    const wchar_t* url = LocalInfoUrl(id);
+    return url ? std::wstring(url) : std::wstring();
+}
+static bool OpenTileTarget(const std::wstring& target) {
+    if (target.empty()) {
+        MessageBoxW(NULL, L"L'applicazione associata non è installata o non è disponibile.", L"Start", MB_OK | MB_ICONWARNING);
+        return false;
+    }
+    HINSTANCE result = ShellExecuteW(NULL, L"open", target.c_str(), NULL, NULL, SW_SHOWNORMAL);
+    if ((INT_PTR)result <= 32) {
+        Wh_Log(L"Unable to open tile %s (ShellExecute error %Id)", target.c_str(), (INT_PTR)result);
+        MessageBoxW(NULL, L"Impossibile aprire questa tile: l'applicazione o il collegamento non è disponibile.", L"Start", MB_OK | MB_ICONWARNING);
+        return false;
+    }
+    return true;
 }
 // Local slideshow adapted from Windows 8.1/10 Start Menu Recreation (GPL-3.0).
 class LocalPhotoSlideshow {
@@ -4736,7 +5399,7 @@ static const wchar_t* WeatherDescription(int code) {
     return names[WeatherKind(code)][GetUiLanguageIndex()];
 }
 // Original vector sun, based on the shape and proportions in the reference.
-static void DrawWeatherLogo(HDC dc, const RECT& rc) {
+[[maybe_unused]] static void DrawWeatherLogo(HDC dc, const RECT& rc) {
     if (!g_gdipToken || rc.right<=rc.left || rc.bottom<=rc.top) return;
     Gdiplus::Graphics g(dc); if (g.GetLastStatus()!=Gdiplus::Ok) return;
     g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
@@ -4788,6 +5451,373 @@ static void DrawWeatherPicture(HDC dc, int code, const RECT& rc) {
     if (k==16) { g.DrawEllipse(&pen,15.0f,10.0f,18.0f,18.0f); g.DrawLine(&pen,24.0f,28.0f,24.0f,35.0f); }
 }
 
+// Regional News live tile worker (fetches country/language RSS headlines and article thumbnails
+// over HTTPS when online live tiles are enabled).
+struct NewsHeadline {
+    std::wstring title;
+    std::wstring source;
+    std::vector<BYTE> pixels; // 320 x 160 premultiplied BGRA, empty when text-only
+};
+
+class ScreenNews {
+    HANDLE stop_ = NULL, thread_ = NULL;
+    HWND owner_ = NULL;
+    std::mutex mutex_;
+    std::vector<NewsHeadline> items_;
+    ULONGLONG updated_ = 0;
+    static constexpr int imgW_ = 320, imgH_ = 160;
+
+    static bool HttpsGetUrl(HANDLE stopEv, const std::wstring& url, size_t maxBytes, std::string& out) {
+        out.clear();
+        if (WaitForSingleObject(stopEv, 0) != WAIT_TIMEOUT) return false;
+        URL_COMPONENTS uc = {};
+        wchar_t host[256] = {}, path[2048] = {};
+        uc.dwStructSize = sizeof(uc);
+        uc.lpszHostName = host; uc.dwHostNameLength = ARRAYSIZE(host);
+        uc.lpszUrlPath = path; uc.dwUrlPathLength = ARRAYSIZE(path);
+        uc.dwExtraInfoLength = 0;
+        if (!WinHttpCrackUrl(url.c_str(), (DWORD)url.size(), 0, &uc)) return false;
+        if (uc.nScheme != INTERNET_SCHEME_HTTPS || !host[0]) return false;
+        std::wstring fullPath = path[0] ? path : L"/";
+        HINTERNET ses = WinHttpOpen(L"Mozilla/5.0 WindhawkStartScreen/1.4",
+                                    WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+                                    WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+        if (!ses) return false;
+        WinHttpSetTimeouts(ses, 3500, 3500, 4000, 5000);
+        HINTERNET con = WinHttpConnect(ses, host, uc.nPort ? uc.nPort : INTERNET_DEFAULT_HTTPS_PORT, 0);
+        HINTERNET req = con ? WinHttpOpenRequest(con, L"GET", fullPath.c_str(), NULL,
+                                                 WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
+                                                 WINHTTP_FLAG_SECURE) : NULL;
+        bool ok = false;
+        if (req) {
+            DWORD redir = WINHTTP_OPTION_REDIRECT_POLICY_DISALLOW_HTTPS_TO_HTTP;
+            WinHttpSetOption(req, WINHTTP_OPTION_REDIRECT_POLICY, &redir, sizeof(redir));
+            if (WinHttpSendRequest(req, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
+                                   WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
+                WinHttpReceiveResponse(req, NULL)) {
+                DWORD status = 0, sz = sizeof(status);
+                if (WinHttpQueryHeaders(req, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                                        WINHTTP_HEADER_NAME_BY_INDEX, &status, &sz,
+                                        WINHTTP_NO_HEADER_INDEX) && status == 200) {
+                    char buf[8192];
+                    for (;;) {
+                        if (WaitForSingleObject(stopEv, 0) != WAIT_TIMEOUT) { ok = false; break; }
+                        DWORD got = 0;
+                        if (!WinHttpReadData(req, buf, sizeof(buf), &got)) break;
+                        if (got == 0) { ok = !out.empty(); break; }
+                        if (out.size() + got > maxBytes) break;
+                        out.append(buf, got);
+                    }
+                }
+            }
+            WinHttpCloseHandle(req);
+        }
+        if (con) WinHttpCloseHandle(con);
+        WinHttpCloseHandle(ses);
+        return ok;
+    }
+
+    static std::wstring Utf8ToWide(const std::string& s) {
+        if (s.empty()) return L"";
+        int n = MultiByteToWideChar(CP_UTF8, 0, s.data(), (int)s.size(), NULL, 0);
+        if (n <= 0) return L"";
+        std::wstring w((size_t)n, L'\0');
+        MultiByteToWideChar(CP_UTF8, 0, s.data(), (int)s.size(), &w[0], n);
+        return w;
+    }
+
+    static std::wstring CleanXmlText(std::string raw) {
+        const size_t cd = raw.find("<![CDATA[");
+        if (cd != std::string::npos) {
+            const size_t ce = raw.find("]]>", cd + 9);
+            if (ce != std::string::npos) raw = raw.substr(cd + 9, ce - (cd + 9));
+        }
+        std::wstring w = Utf8ToWide(raw);
+        std::wstring out;
+        out.reserve(w.size());
+        bool inTag = false;
+        for (size_t i = 0; i < w.size(); ++i) {
+            if (w[i] == L'<') { inTag = true; continue; }
+            if (w[i] == L'>') { inTag = false; continue; }
+            if (inTag) continue;
+            if (w[i] == L'&') {
+                size_t semi = w.find(L';', i + 1);
+                if (semi != std::wstring::npos && semi - i <= 10) {
+                    std::wstring ent = w.substr(i + 1, semi - i - 1);
+                    wchar_t rep = 0;
+                    if (ent == L"amp") rep = L'&';
+                    else if (ent == L"quot") rep = L'"';
+                    else if (ent == L"apos" || ent == L"#39" || ent == L"#039") rep = L'\'';
+                    else if (ent == L"lt") rep = L'<';
+                    else if (ent == L"gt") rep = L'>';
+                    else if (ent == L"nbsp") rep = L' ';
+                    else if (!ent.empty() && ent[0] == L'#') {
+                        unsigned long cp = (ent.size() > 1 && (ent[1] == L'x' || ent[1] == L'X'))
+                            ? wcstoul(ent.c_str() + 2, NULL, 16)
+                            : wcstoul(ent.c_str() + 1, NULL, 10);
+                        if (cp >= 32 && cp <= 0xFFFF) rep = (wchar_t)cp;
+                    }
+                    if (rep) { out.push_back(rep); i = semi; continue; }
+                }
+            }
+            if (w[i] == L'\r' || w[i] == L'\n' || w[i] == L'\t') {
+                if (!out.empty() && out.back() != L' ') out.push_back(L' ');
+            } else out.push_back(w[i]);
+        }
+        while (!out.empty() && out.front() == L' ') out.erase(out.begin());
+        while (!out.empty() && out.back() == L' ') out.pop_back();
+        return out;
+    }
+
+    static std::string ExtractTag(const std::string& xml, const char* openTag, const char* closeTag) {
+        size_t a = xml.find(openTag);
+        if (a == std::string::npos) return "";
+        size_t gt = xml.find('>', a);
+        if (gt == std::string::npos) return "";
+        size_t b = xml.find(closeTag, gt + 1);
+        if (b == std::string::npos || b <= gt + 1) return "";
+        return xml.substr(gt + 1, b - (gt + 1));
+    }
+
+    static std::wstring ExtractImageUrl(const std::string& itemXml) {
+        size_t pos = 0;
+        while ((pos = itemXml.find("https://", pos)) != std::string::npos) {
+            size_t end = pos;
+            while (end < itemXml.size() && itemXml[end] != '"' && itemXml[end] != '\'' &&
+                   itemXml[end] != '<' && itemXml[end] != '>' && itemXml[end] != ' ' &&
+                   itemXml[end] != '\r' && itemXml[end] != '\n') ++end;
+            std::string cand = itemXml.substr(pos, end - pos);
+            pos = end;
+            std::string low = cand;
+            for (char& ch : low) ch = (char)tolower((unsigned char)ch);
+            if ((low.find(".jpg") != std::string::npos || low.find(".jpeg") != std::string::npos ||
+                 low.find(".png") != std::string::npos) &&
+                low.find("logo") == std::string::npos && low.find("avatar") == std::string::npos &&
+                low.find("1x1") == std::string::npos) {
+                std::wstring w = CleanXmlText(cand);
+                if (w.size() > 12 && w.size() < 1500) return w;
+            }
+        }
+        return L"";
+    }
+
+    static std::vector<BYTE> DecodeThumbnail(const std::string& bytes) {
+        std::vector<BYTE> out;
+        if (bytes.size() < 64) return out;
+        IStream* stream = SHCreateMemStream((const BYTE*)bytes.data(), (UINT)bytes.size());
+        if (!stream) return out;
+        {
+            Gdiplus::Bitmap src(stream, FALSE);
+            UINT sw = src.GetWidth(), sh = src.GetHeight();
+            if (src.GetLastStatus() == Gdiplus::Ok && sw >= 64 && sh >= 48 && sw <= 8192 && sh <= 8192) {
+                Gdiplus::Bitmap dst(imgW_, imgH_, PixelFormat32bppPARGB);
+                {
+                    Gdiplus::Graphics g(&dst);
+                    g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+                    float targetAspect = (float)imgW_ / (float)imgH_;
+                    float srcAspect = (float)sw / (float)sh;
+                    float cx = 0, cy = 0, cw = (float)sw, ch = (float)sh;
+                    if (srcAspect > targetAspect) { cw = sh * targetAspect; cx = (sw - cw) * 0.5f; }
+                    else { ch = sw / targetAspect; cy = (sh - ch) * 0.35f; }
+                    g.DrawImage(&src, Gdiplus::RectF(0, 0, (float)imgW_, (float)imgH_),
+                                cx, cy, cw, ch, Gdiplus::UnitPixel);
+                }
+                Gdiplus::Rect lockRc(0, 0, imgW_, imgH_);
+                Gdiplus::BitmapData bd = {};
+                if (dst.LockBits(&lockRc, Gdiplus::ImageLockModeRead, PixelFormat32bppPARGB, &bd) == Gdiplus::Ok) {
+                    out.resize((size_t)imgW_ * imgH_ * 4);
+                    for (int y = 0; y < imgH_; ++y) {
+                        const BYTE* sp = (const BYTE*)bd.Scan0 + (size_t)y * bd.Stride;
+                        BYTE* dp = out.data() + (size_t)y * imgW_ * 4;
+                        // Darken the lower half smoothly so white Windows 8.1 News headlines are always legible.
+                        float v = (float)y / (float)(imgH_ - 1);
+                        float mul = v < 0.25f ? 0.88f : (0.88f - 0.62f * ((v - 0.25f) / 0.75f));
+                        for (int x = 0; x < imgW_; ++x) {
+                            dp[x * 4 + 0] = (BYTE)(sp[x * 4 + 0] * mul);
+                            dp[x * 4 + 1] = (BYTE)(sp[x * 4 + 1] * mul);
+                            dp[x * 4 + 2] = (BYTE)(sp[x * 4 + 2] * mul);
+                            dp[x * 4 + 3] = 255;
+                        }
+                    }
+                    dst.UnlockBits(&bd);
+                }
+            }
+        }
+        stream->Release();
+        return out;
+    }
+
+    static std::vector<std::wstring> RegionalFeeds() {
+        wchar_t loc[LOCALE_NAME_MAX_LENGTH] = {};
+        GetUserDefaultLocaleName(loc, ARRAYSIZE(loc));
+        std::wstring lang = L"en", cc = L"US";
+        if (loc[0]) {
+            std::wstring s = loc;
+            size_t dash = s.find(L'-');
+            if (dash != std::wstring::npos) {
+                lang = s.substr(0, dash);
+                std::wstring rest = s.substr(dash + 1);
+                size_t d2 = rest.find(L'-');
+                cc = d2 != std::wstring::npos ? rest.substr(0, d2) : rest;
+            } else lang = s;
+        }
+        for (wchar_t& ch : lang) ch = (wchar_t)towlower(ch);
+        for (wchar_t& ch : cc) ch = (wchar_t)towupper(ch);
+        if (InterlockedCompareExchange(&g_privacyMode, 0, 0)) { lang = L"en"; cc = L"US"; }
+
+        std::vector<std::wstring> urls;
+        if (lang == L"it" || cc == L"IT") {
+            urls.push_back(L"https://www.adnkronos.com/RSS_PrimaPagina.xml");
+            urls.push_back(L"https://www.rainews.it/rss/tutti");
+        } else if (lang == L"es" || cc == L"ES" || cc == L"MX" || cc == L"AR") {
+            urls.push_back(L"https://www.france24.com/es/rss");
+            urls.push_back(L"https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/portada");
+        } else if (lang == L"fr" || cc == L"FR" || cc == L"BE") {
+            urls.push_back(L"https://www.france24.com/fr/rss");
+        } else if (lang == L"pt" || cc == L"BR" || cc == L"PT") {
+            urls.push_back(L"https://g1.globo.com/rss/g1/");
+        } else if (lang == L"de" || cc == L"DE" || cc == L"AT" || cc == L"CH") {
+            urls.push_back(L"https://www.tagesschau.de/infoservices/alle-meldungen-100~rss2.xml");
+        } else if (lang == L"en") {
+            urls.push_back(L"https://feeds.bbci.co.uk/news/world/rss.xml");
+            urls.push_back(L"https://www.france24.com/en/rss");
+        }
+        if (cc.size() == 2 && lang.size() >= 2 && lang.size() <= 3)
+            urls.push_back(L"https://news.google.com/rss?hl=" + lang + L"&gl=" + cc + L"&ceid=" + cc + L":" + lang);
+        urls.push_back(L"https://feeds.bbci.co.uk/news/world/rss.xml");
+        return urls;
+    }
+
+    void FetchCycle() {
+        ULONG_PTR gdip = 0;
+        Gdiplus::GdiplusStartupInput input;
+        if (Gdiplus::GdiplusStartup(&gdip, &input, NULL) != Gdiplus::Ok) return;
+        for (const std::wstring& feedUrl : RegionalFeeds()) {
+            if (WaitForSingleObject(stop_, 0) != WAIT_TIMEOUT) break;
+            std::string xml;
+            if (!HttpsGetUrl(stop_, feedUrl, 262144, xml)) continue;
+            std::wstring chanTitle = CleanXmlText(ExtractTag(xml, "<title", "</title>"));
+            if (chanTitle.size() > 40) chanTitle.resize(40);
+            std::vector<NewsHeadline> parsed;
+            size_t pos = 0;
+            while (parsed.size() < 5 && (pos = xml.find("<item", pos)) != std::string::npos) {
+                if (WaitForSingleObject(stop_, 0) != WAIT_TIMEOUT) break;
+                size_t end = xml.find("</item>", pos);
+                if (end == std::string::npos) break;
+                std::string block = xml.substr(pos, end + 7 - pos);
+                pos = end + 7;
+                std::wstring title = CleanXmlText(ExtractTag(block, "<title", "</title>"));
+                if (title.size() < 8) continue;
+                if (title.size() > 140) title = title.substr(0, 137) + L"...";
+                std::wstring src = CleanXmlText(ExtractTag(block, "<source", "</source>"));
+                if (src.empty()) {
+                    size_t dash = title.rfind(L" - ");
+                    if (dash != std::wstring::npos && dash > 18 && title.size() - dash <= 32) {
+                        src = title.substr(dash + 3);
+                        title = title.substr(0, dash);
+                    } else src = chanTitle;
+                }
+                NewsHeadline h;
+                h.title = std::move(title);
+                h.source = std::move(src);
+                std::wstring imgUrl = ExtractImageUrl(block);
+                if (!imgUrl.empty() && WaitForSingleObject(stop_, 0) == WAIT_TIMEOUT) {
+                    std::string imgBytes;
+                    if (HttpsGetUrl(stop_, imgUrl, 1536 * 1024, imgBytes))
+                        h.pixels = DecodeThumbnail(imgBytes);
+                }
+                parsed.push_back(std::move(h));
+            }
+            if (!parsed.empty()) {
+                {
+                    std::lock_guard<std::mutex> lock(mutex_);
+                    items_ = std::move(parsed);
+                    updated_ = GetTickCount64();
+                }
+                if (owner_) PostMessageW(owner_, WM_APP + 23, 0, 0);
+                break;
+            }
+        }
+        Gdiplus::GdiplusShutdown(gdip);
+    }
+
+    static DWORD WINAPI Worker(void* raw) {
+        auto* self = static_cast<ScreenNews*>(raw);
+        try {
+            while (WaitForSingleObject(self->stop_, 0) == WAIT_TIMEOUT) {
+                self->FetchCycle();
+                if (WaitForSingleObject(self->stop_, 30 * 60 * 1000) != WAIT_TIMEOUT) break;
+            }
+        } catch (...) {
+            Wh_Log(L"[News] worker failed");
+        }
+        return 0;
+    }
+public:
+    void Start(HWND owner) {
+        if (thread_ || !owner || !Wh_GetIntSetting(L"weatherOnline")) return;
+        owner_ = owner;
+        stop_ = CreateEventW(NULL, TRUE, FALSE, NULL);
+        if (stop_) thread_ = CreateThread(NULL, 0, Worker, this, 0, NULL);
+        if (stop_ && !thread_) { CloseHandle(stop_); stop_ = NULL; }
+    }
+    void Stop() {
+        if (stop_) SetEvent(stop_);
+        if (thread_) { WaitForSingleObject(thread_, INFINITE); CloseHandle(thread_); thread_ = NULL; }
+        if (stop_) { CloseHandle(stop_); stop_ = NULL; }
+        std::lock_guard<std::mutex> lock(mutex_);
+        items_.clear();
+        updated_ = 0;
+        owner_ = NULL;
+    }
+    // Check readiness without copying an entire image on every animation frame.
+    bool HasItems() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return !items_.empty() && updated_ != 0;
+    }
+    bool GetItem(size_t index, NewsHeadline& out, size_t* countOut = NULL) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (items_.empty() || !updated_) return false;
+        if (countOut) *countOut = items_.size();
+        out = items_[index % items_.size()];
+        return true;
+    }
+};
+static ScreenNews g_news;
+
+static bool IsNewsTile(const Tile& t) {
+    if (!t.alive || t.customTile || !t.target) return false;
+    const wchar_t* id = t.target;
+    const wchar_t* prefix = L"shell:AppsFolder\\";
+    if (!_wcsnicmp(id, prefix, wcslen(prefix))) id += wcslen(prefix);
+    std::wstring low = id;
+    for (wchar_t& ch : low) ch = (wchar_t)towlower(ch);
+    return !_wcsicmp(id, L"windhawk:news-tile-v1") ||
+           low.find(L"microsoft.bingnews") != std::wstring::npos ||
+           low.find(L"microsoft.start") != std::wstring::npos;
+}
+
+static bool IsClockTile(const Tile& t) {
+    if (!t.alive || t.customTile || !t.target) return false;
+    const wchar_t* id = t.target;
+    const wchar_t* prefix = L"shell:AppsFolder\\";
+    if (!_wcsnicmp(id, prefix, wcslen(prefix))) id += wcslen(prefix);
+    std::wstring low = id;
+    for (wchar_t& ch : low) ch = (wchar_t)towlower(ch);
+    return !_wcsicmp(id, L"windhawk:clock-tile-v1") ||
+           low.find(L"microsoft.windowsalarms") != std::wstring::npos;
+}
+
+static void UpdateNewsWorker() {
+    bool found = false;
+    if (g_wnd && Wh_GetIntSetting(L"weatherOnline")) {
+        for (int i = 0; i < g_tileCount; ++i)
+            if (IsNewsTile(g_tiles[i])) { found = true; break; }
+    }
+    if (found) g_news.Start(g_wnd);
+    else g_news.Stop();
+}
+
 static bool IsCalendarLiveTile(const Tile& t) {
     if (!InterlockedCompareExchange(&g_calendarSlide, 0, 0) || !t.alive || t.customTile ||
         t.cw == TS_SMALL || !t.target) return false;
@@ -4798,12 +5828,18 @@ static bool IsCalendarLiveTile(const Tile& t) {
            !_wcsicmp(id, L"windhawk:calendar-tile-v1");
 }
 static float CalendarSlide(int i, bool* oldBack) {
-    DWORD elapsed = NowMs() - g_openTick;
-    DWORD cycle = elapsed / 4000, inCycle = elapsed % 4000;
+    DWORD elapsed = (NowMs() - g_openTick) + (DWORD)((i % 5) * 650);
+    DWORD cycle = elapsed / 5000, inCycle = elapsed % 5000;
     *oldBack = cycle > 0 && (cycle & 1) == 0;
     if (!cycle) { *oldBack = false; return 0.0f; }
-    float p = std::min(1.0f, inCycle / 400.0f);
+    float p = std::min(1.0f, inCycle / 420.0f);
     return p * p * (3.0f - 2.0f * p);
+}
+static void ForceSurfaceOpaque(void* bits, int w, int h) {
+    if (!bits || w <= 0 || h <= 0) return;
+    BYTE* px = (BYTE*)bits;
+    const int n = w * h;
+    for (int k = 0; k < n; ++k) px[k * 4 + 3] = 0xFF;
 }
 static bool EnsureCalendarFace(int i, int w, int h) {
     SYSTEMTIME st; GetLocalTime(&st);
@@ -4822,34 +5858,45 @@ static bool EnsureCalendarFace(int i, int w, int h) {
     if (!c.old || c.old == HGDI_ERROR) { c.old = NULL; FreeCalendarFace(i); return false; }
     c.w = w; c.h = h; c.date = date;
     const Tile& t = g_tiles[i];
-    COLORREF color = IsLocalInfoTile(t.target) ? RGB(0,114,198) : (t.hasAppC ? t.appC : t.c1);
-    HBRUSH brush = CreateSolidBrush(color);
-    RECT full = {0,0,w,h};
-    if (!brush) { FreeCalendarFace(i); return false; }
-    FillRect(c.dc, &full, brush); DeleteObject(brush);
+    COLORREF cL = RGB(0x51, 0x33, 0xAB), cR = RGB(0x64, 0x3E, 0xBF);
+    Win81SystemAppColor(t.target, &cL, &cR);
+    FillHorizontalTile(c.dc, w, h, cL, cR, true);
     SetBkMode(c.dc, TRANSPARENT); SetTextColor(c.dc, RGB(255,255,255));
     wchar_t day[16] = {}, weekday[64] = {}, month[64] = {};
     GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, NULL, L"d", day, ARRAYSIZE(day), NULL);
     GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, NULL, L"dddd", weekday, ARRAYSIZE(weekday), NULL);
-    GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, NULL, L"MMMM yyyy", month, ARRAYSIZE(month), NULL);
-    HFONT dayFont = CreateFontW(-ScI(34),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI Light");
+    GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, NULL, L"MMMM", month, ARRAYSIZE(month), NULL);
+    const bool wide = w > h + ScI(20);
+    HFONT dayFont = CreateFontW(-ScI(wide ? 54 : 42),0,0,0,FW_LIGHT,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI Light");
     HGDIOBJ previous = SelectObject(c.dc, dayFont ? dayFont : g_fTitle);
-    RECT dr = {ScI(8),ScI(6),w-ScI(8),ScI(46)};
-    DrawTextW(c.dc, day, -1, &dr, DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
-    SelectObject(c.dc, g_fLabel);
-    RECT wr = {ScI(8),ScI(46),w-ScI(8),ScI(66)};
-    DrawTextW(c.dc, weekday, -1, &wr, DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
-    RECT mr = {ScI(8),h-ScI(25),w-ScI(8),h-ScI(4)};
-    DrawTextW(c.dc, month, -1, &mr, DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
+    if (wide) {
+        RECT dr = { w - ScI(100), ScI(4), w - ScI(14), ScI(78) };
+        DrawTextW(c.dc, day, -1, &dr, DT_RIGHT|DT_TOP|DT_SINGLELINE|DT_NOPREFIX);
+        SelectObject(c.dc, g_fLabel);
+        RECT wr = { ScI(16), ScI(14), w - ScI(104), ScI(38) };
+        DrawTextW(c.dc, weekday, -1, &wr, DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
+        SelectObject(c.dc, g_fLabelMedium ? g_fLabelMedium : g_fLabel);
+        RECT mr = { ScI(16), ScI(38), w - ScI(104), ScI(60) };
+        DrawTextW(c.dc, month, -1, &mr, DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
+    } else {
+        RECT dr = { ScI(14), ScI(4), w - ScI(10), ScI(52) };
+        DrawTextW(c.dc, day, -1, &dr, DT_LEFT|DT_TOP|DT_SINGLELINE|DT_NOPREFIX);
+        SelectObject(c.dc, g_fLabelMedium ? g_fLabelMedium : g_fLabel);
+        RECT wr = { ScI(16), ScI(52), w - ScI(10), ScI(72) };
+        DrawTextW(c.dc, weekday, -1, &wr, DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
+    }
     SelectObject(c.dc, previous); if (dayFont) DeleteObject(dayFont);
+    DrawModernTileCaption(c.dc, t.label, w, h);
+    ForceSurfaceOpaque(c.bits, w, h);
     GdiFlush();
     return true;
 }
 
-// The medium Weather tile alternates between the real forecast and a logo face.
+// The Weather tile alternates between the live forecast and the Windows 8.1 Weather logo face.
 static bool IsWeatherLiveTile(const Tile& t) {
     double temperature = 0; int code = 0;
-    return t.cw == TS_MEDIUM && IsWeatherTile(t) && g_weather.Current(temperature, code);
+    return InterlockedCompareExchange(&g_calendarSlide, 0, 0) &&
+           t.cw != TS_SMALL && IsWeatherTile(t) && g_weather.Current(temperature, code);
 }
 static bool EnsureWeatherFace(int i, int w, int h) {
     CalendarSurface& c = g_calendarFace[i];
@@ -4866,18 +5913,174 @@ static bool EnsureWeatherFace(int i, int w, int h) {
     if (!c.old || c.old == HGDI_ERROR) { c.old = NULL; FreeCalendarFace(i); return false; }
     c.w = w; c.h = h; c.date = -1;
     const Tile& tile = g_tiles[i];
-    COLORREF color = tile.hasAppC ? tile.appC : tile.c1;
-    HBRUSH brush = CreateSolidBrush(color);
-    if (!brush) { FreeCalendarFace(i); return false; }
-    RECT area = {0, 0, w, h}; FillRect(c.dc, &area, brush); DeleteObject(brush);
-    int side = std::max(1, std::min(ScI(64), std::min(w-ScI(12), h-ScI(30))));
-    int x = (w-side)/2, y = (h-side)/2-ScI(7);
+    COLORREF cL = RGB(0x1B, 0x5E, 0xBE), cR = RGB(0x24, 0x71, 0xDF);
+    Win81SystemAppColor(tile.target, &cL, &cR);
+    FillHorizontalTile(c.dc, w, h, cL, cR, true);
+    int side = std::max(1, std::min(ScI(tile.cw == TS_LARGE ? 76 : 50), std::min(w-ScI(16), h-ScI(32))));
+    int x = (w-side)/2, y = (h-side)/2-ScI(8);
     if (!DrawImportedMetroIcon(c.dc, tile.target, x, y, side)) {
         RECT icon = {x, y, x+side, y+side}; DrawWeatherPicture(c.dc, 0, icon);
     }
     DrawModernTileCaption(c.dc, tile.label, w, h);
+    ForceSurfaceOpaque(c.bits, w, h);
     GdiFlush();
     return true;
+}
+
+// Store live tile: alternates between the green Windows 8.1 Store bag face and a featured random
+// app spotlight drawn from installed apps (always on Store green).
+static bool IsStoreLiveTile(const Tile& t) {
+    return InterlockedCompareExchange(&g_calendarSlide, 0, 0) &&
+           t.alive && !t.customTile && t.cw != TS_SMALL && IsStoreTarget(t.target);
+}
+static bool EnsureStoreLiveFace(int i, int w, int h) {
+    DWORD slot = ((NowMs() - g_openTick) + (DWORD)(i * 650)) / 10000;
+    int key = -1000 - (int)(slot & 0x3FFF);
+    CalendarSurface& c = g_calendarFace[i];
+    if (c.dc && c.w == w && c.h == h && c.date == key) return true;
+    FreeCalendarFace(i);
+    if (w <= 0 || h <= 0 || w > 4096 || h > 4096) return false;
+    HDC screen = GetDC(NULL);
+    if (!screen) return false;
+    c.dc = CreateCompatibleDC(screen);
+    c.bmp = c.dc ? MakeDib(screen, w, h, &c.bits) : NULL;
+    ReleaseDC(NULL, screen);
+    if (!c.dc || !c.bmp || !c.bits) { FreeCalendarFace(i); return false; }
+    c.old = SelectObject(c.dc, c.bmp);
+    if (!c.old || c.old == HGDI_ERROR) { c.old = NULL; FreeCalendarFace(i); return false; }
+    c.w = w; c.h = h; c.date = key;
+
+    FillHorizontalTile(c.dc, w, h, kStoreGreenLeft, kStoreGreenRight, true);
+    SetBkMode(c.dc, TRANSPARENT);
+    SetTextColor(c.dc, RGB(255, 255, 255));
+
+    std::wstring appName, appTarget;
+    std::vector<BYTE> iconPx;
+    int iw = 0, ih = 0;
+    if (InterlockedCompareExchange(&g_appsReady, 0, 0)) {
+        AcquireSRWLockShared(&g_appsLock);
+        std::vector<size_t> cands;
+        for (size_t k = 0; k < g_apps.size() && cands.size() < 64; ++k) {
+            const AppEntry& a = g_apps[k];
+            if (a.charmCat != CC_APP || a.searchOnly || a.desktop || a.name.empty()) continue;
+            if (IsStoreTarget(a.parse.c_str()) || IsLocalInfoTile(a.parse.c_str())) continue;
+            cands.push_back(k);
+        }
+        if (!cands.empty()) {
+            size_t pick = cands[(slot * 7 + (size_t)i * 3) % cands.size()];
+            appName = g_apps[pick].name;
+            appTarget = AppTarget(g_apps[pick]);
+            if (pick < g_icons.size() && InterlockedCompareExchange(&g_icons[pick].ready, 0, 0) &&
+                g_icons[pick].px && g_icons[pick].w > 0 && g_icons[pick].h > 0) {
+                iw = g_icons[pick].w; ih = g_icons[pick].h;
+                iconPx.assign(g_icons[pick].px, g_icons[pick].px + (size_t)iw * ih * 4);
+            }
+        }
+        ReleaseSRWLockShared(&g_appsLock);
+    }
+    const bool itLang = PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_ITALIAN;
+    const wchar_t* spotlight = itLang ? L"In evidenza nello Store" : L"Featured in Store";
+    if (appName.empty()) appName = itLang ? L"Esplora app e giochi" : L"Top apps & games";
+
+    const bool wide = w > h + ScI(20);
+    const int pad = ScI(14);
+    const int iconS = ScI(wide ? 44 : 36);
+    const int ix = pad, iy = ScI(14);
+    bool iconDrawn = false;
+    if (!appTarget.empty())
+        iconDrawn = DrawImportedMetroIcon(c.dc, appTarget.c_str(), ix, iy, iconS);
+    if (!iconDrawn && !iconPx.empty() && g_gdipToken) {
+        Gdiplus::Bitmap srcBmp(iw, ih, iw * 4, PixelFormat32bppPARGB, iconPx.data());
+        Gdiplus::Graphics g(c.dc);
+        g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+        iconDrawn = g.DrawImage(&srcBmp, Gdiplus::Rect(ix, iy, iconS, iconS)) == Gdiplus::Ok;
+    }
+    if (!iconDrawn && g_gdipToken) {
+        Gdiplus::Graphics g(c.dc);
+        DrawStoreBase64Icon(g, (float)ix, (float)iy, (float)iconS);
+    }
+
+    if (wide) {
+        SelectObject(c.dc, g_fLabel);
+        RECT nr = { ix + iconS + ScI(12), ScI(14), w - pad, ScI(40) };
+        DrawTextW(c.dc, appName.c_str(), -1, &nr, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+        SelectObject(c.dc, g_fLabelMedium ? g_fLabelMedium : g_fLabel);
+        SetTextColor(c.dc, RGB(215, 245, 215));
+        RECT sr = { ix + iconS + ScI(12), ScI(40), w - pad, ScI(64) };
+        DrawTextW(c.dc, spotlight, -1, &sr, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+    } else {
+        SelectObject(c.dc, g_fLabelMedium ? g_fLabelMedium : g_fLabel);
+        RECT nr = { pad, iy + iconS + ScI(6), w - pad, h - ScI(28) };
+        DrawTextW(c.dc, appName.c_str(), -1, &nr, DT_LEFT | DT_TOP | DT_WORDBREAK | DT_END_ELLIPSIS | DT_NOPREFIX);
+    }
+    DrawModernTileCaption(c.dc, g_tiles[i].label, w, h);
+    ForceSurfaceOpaque(c.bits, w, h);
+    GdiFlush();
+    return true;
+}
+
+// News live tile: cycles regional headlines with full-bleed article photographs and bottom scrim.
+static bool IsNewsLiveTile(const Tile& t) {
+    return InterlockedCompareExchange(&g_calendarSlide, 0, 0) &&
+           t.cw != TS_SMALL && IsNewsTile(t) && g_news.HasItems();
+}
+static bool EnsureNewsLiveFace(int i, int w, int h) {
+    DWORD slot = ((NowMs() - g_openTick) + (DWORD)(i * 650)) / 10000;
+    int key = -20000 - (int)(slot & 0x3FFF);
+    CalendarSurface& c = g_calendarFace[i];
+    if (c.dc && c.w == w && c.h == h && c.date == key) return true;
+    NewsHeadline item;
+    if (!g_news.GetItem((size_t)slot, item)) return false;
+    FreeCalendarFace(i);
+    if (w <= 0 || h <= 0 || w > 4096 || h > 4096) return false;
+    HDC screen = GetDC(NULL);
+    if (!screen) return false;
+    c.dc = CreateCompatibleDC(screen);
+    c.bmp = c.dc ? MakeDib(screen, w, h, &c.bits) : NULL;
+    ReleaseDC(NULL, screen);
+    if (!c.dc || !c.bmp || !c.bits) { FreeCalendarFace(i); return false; }
+    c.old = SelectObject(c.dc, c.bmp);
+    if (!c.old || c.old == HGDI_ERROR) { c.old = NULL; FreeCalendarFace(i); return false; }
+    c.w = w; c.h = h; c.date = key;
+
+    COLORREF cL = RGB(0xAC, 0x19, 0x3D), cR = RGB(0xBF, 0x1E, 0x4B);
+    Win81SystemAppColor(g_tiles[i].target, &cL, &cR);
+    FillHorizontalTile(c.dc, w, h, cL, cR, true);
+
+    if (!item.pixels.empty() && g_gdipToken) {
+        Gdiplus::Bitmap art(320, 160, 320 * 4, PixelFormat32bppPARGB, item.pixels.data());
+        Gdiplus::Graphics g(c.dc);
+        g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+        float ta = (float)w / (float)h, sa = 320.0f / 160.0f;
+        float sx = 0, sy = 0, sw = 320.0f, sh = 160.0f;
+        if (sa > ta) { sw = 160.0f * ta; sx = (320.0f - sw) * 0.5f; }
+        else { sh = 320.0f / ta; sy = (160.0f - sh) * 0.5f; }
+        g.DrawImage(&art, Gdiplus::RectF(0, 0, (float)w, (float)h), sx, sy, sw, sh, Gdiplus::UnitPixel);
+    }
+
+    SetBkMode(c.dc, TRANSPARENT);
+    SetTextColor(c.dc, RGB(255, 255, 255));
+    const int pad = ScI(14);
+    const bool hasImg = !item.pixels.empty();
+    SelectObject(c.dc, g_fLabel);
+    RECT tr = { pad, hasImg ? std::max(ScI(10), h - ScI(76)) : ScI(12), w - pad, h - ScI(27) };
+    DrawTextW(c.dc, item.title.c_str(), -1, &tr, DT_LEFT | DT_TOP | DT_WORDBREAK | DT_END_ELLIPSIS | DT_NOPREFIX);
+    DrawModernTileCaption(c.dc, g_tiles[i].label, w, h);
+    ForceSurfaceOpaque(c.bits, w, h);
+    GdiFlush();
+    return true;
+}
+
+static bool IsLiveFlipTile(const Tile& t) {
+    return IsCalendarLiveTile(t) || IsWeatherLiveTile(t) || IsStoreLiveTile(t) || IsNewsLiveTile(t);
+}
+static bool EnsureLiveFlipFace(int i, int w, int h) {
+    const Tile& t = g_tiles[i];
+    if (IsCalendarLiveTile(t)) return EnsureCalendarFace(i, w, h);
+    if (IsWeatherLiveTile(t)) return EnsureWeatherFace(i, w, h);
+    if (IsStoreLiveTile(t)) return EnsureStoreLiveFace(i, w, h);
+    if (IsNewsLiveTile(t)) return EnsureNewsLiveFace(i, w, h);
+    return false;
 }
 
 static void DrawTileHover(HDC dc, int w, int h) {
@@ -5053,16 +6256,16 @@ static const wchar_t* MetroTileCaption(int glyph, const wchar_t* seedLabel) {
 // Universal apps of Windows 10/11. These are drawn with the Windows 8 Metro skin too, so that a
 // program that exists only as a modern app still has a place on the Start screen.
 static const MetroSeed kMetroUniversal[] = {
-    { MG_MAIL,     L"microsoft.windowslive.mail",    L"Mail",        L"microsoft.windowslive.mail",     RGB(0, 120, 215) },
-    { MG_CALENDAR, L"microsoft.windowslive.calendar", L"Calendar",   L"microsoft.windowslive.calendar", RGB(0, 114, 198) },
-    { MG_PHOTOS,   L"microsoft.windows.photos",      L"Photos",      L"microsoft.windows.photos",       RGB(0, 108, 184) },
-    { MG_WEATHER,  L"microsoft.bingweather",         L"Weather",     L"microsoft.bingweather",          RGB(0, 137, 179) },
-    { MG_NEWS,     L"microsoft.bingnews",            L"News",        L"microsoft.bingnews",             RGB(26, 188, 156) },
-    { MG_MAPS,     L"microsoft.windowsmaps",         L"Maps",        L"microsoft.windowsmaps",          RGB(0, 137, 132) },
-    { MG_MUSIC,    L"microsoft.zunemusic",           L"Music",       L"microsoft.zunemusic",            RGB(200, 30, 60) },
-    { MG_VIDEO,    L"microsoft.zunevideo",           L"Movies & TV", L"microsoft.zunevideo",            RGB(180, 40, 45) },
-    { MG_CAMERA,   L"microsoft.windowscamera",       L"Camera",      L"microsoft.windowscamera",        RGB(80, 82, 88) },
-    { MG_STORE,    L"microsoft.windowsstore",        L"Store",       L"microsoft.windowsstore",         RGB(118, 96, 138) },
+    { MG_MAIL,     L"microsoft.windowslive.mail",    L"Mail",        L"microsoft.windowslive.mail",     RGB(0x00, 0x72, 0xC6) },
+    { MG_CALENDAR, L"microsoft.windowslive.calendar", L"Calendar",   L"microsoft.windowslive.calendar", RGB(0x51, 0x33, 0xAB) },
+    { MG_PHOTOS,   L"microsoft.windows.photos",      L"Photos",      L"microsoft.windows.photos",       RGB(0x00, 0x82, 0x99) },
+    { MG_WEATHER,  L"microsoft.bingweather",         L"Weather",     L"microsoft.bingweather",          RGB(0x1B, 0x5E, 0xBE) },
+    { MG_NEWS,     L"microsoft.bingnews",            L"News",        L"microsoft.bingnews",             RGB(0xAC, 0x19, 0x3D) },
+    { MG_MAPS,     L"microsoft.windowsmaps",         L"Maps",        L"microsoft.windowsmaps",          RGB(0x51, 0x33, 0xAB) },
+    { MG_MUSIC,    L"microsoft.zunemusic",           L"Music",       L"microsoft.zunemusic",            RGB(0xD2, 0x47, 0x26) },
+    { MG_VIDEO,    L"microsoft.zunevideo",           L"Movies & TV", L"microsoft.zunevideo",            RGB(0xAC, 0x19, 0x3D) },
+    { MG_CAMERA,   L"microsoft.windowscamera",       L"Camera",      L"microsoft.windowscamera",        RGB(0x8C, 0x00, 0x95) },
+    { MG_STORE,    L"microsoft.windowsstore",        L"Store",       L"microsoft.windowsstore",         kStoreGreenBase },
 };
 
 // Where the icon of a classic program really lives. On Windows 10 Notepad, Paint, Calculator and
@@ -5374,6 +6577,9 @@ static void MetroGlyph(Gdiplus::Graphics& g, int kind, float x, float y, float s
         break;
     }
     case MG_STORE: {
+        g.ResetTransform();
+        if (DrawStoreBase64Icon(g, x, y, s, alpha)) return;
+        g.TranslateTransform(x, y);
         GP::GraphicsPath bag;
         bag.AddRectangle(GP::RectF(16.0f * u, 32.0f * u, 68.0f * u, 54.0f * u));
         g.FillPath(&br, &bag);
@@ -5433,9 +6639,13 @@ static void DrawSimulatedTile(HDC dc, Tile& t, int w, int h, bool hover);
 // glyph of the same program on the colour of its tile (Mail, Photos, Weather...), exactly as the
 // Metro apps of Windows 8 did.
 static void DrawSimulatedTile(HDC dc, Tile& t, int w, int h, bool hover) {
-    const bool small = (t.cw == TS_SMALL) || h < ScI(100);
-    const int bs = small ? ScI(38) : (t.cw == TS_LARGE ? ScI(96) : ScI(64));
+    const bool small = (t.cw == TS_SMALL) || h < ScI(80);
+    const int bs = small ? ScI(30) : (t.cw == TS_LARGE ? ScI(76) : ScI(50));
     auto drawIcon = [&](int x, int y) {
+        if (!t.customTile && (t.mg == MG_STORE || IsStoreTarget(t.target))) {
+            Gdiplus::Graphics g(dc);
+            if (DrawStoreBase64Icon(g, (float)x, (float)y, (float)bs)) return;
+        }
         const unsigned char* data = nullptr;
         size_t bytes = 0;
         if (!t.customTile) {
@@ -5463,21 +6673,19 @@ static void DrawSimulatedTile(HDC dc, Tile& t, int w, int h, bool hover) {
         } else if (t.icon) {
             DrawAppIconOrFallback(dc, t.icon, x, y, bs);
         } else {
-            // Nothing to load on this PC: the drawn Metro glyph, so the tile is never empty.
             Gdiplus::Graphics g(dc);
             g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
             MetroGlyph(g, t.mg, (float)x, (float)y, (float)bs, 255);
         }
     };
-    drawIcon((w - bs) / 2, small ? (h - bs) / 2 : (h - bs) / 2 - ScI(10));
-    // Windows 8.1 Update style: the name in the bottom left corner. With the "classic" style the
-    // tile stays the Windows 8 one, the icon alone, exactly as that release drew it.
+    drawIcon((w - bs) / 2, small ? (h - bs) / 2 : (h - bs) / 2 - ScI(8));
     if (!small && InterlockedCompareExchange(&g_metroTileStyle, 0, 0) != 0)
         DrawModernTileCaption(dc, t.caption[0] ? t.caption : t.label, w, h);
     if (hover) DrawTileHover(dc, w, h);
 }
 
 static void GlyphStoreBagV(Gdiplus::Graphics& gp, float x, float y, float s) {
+    if (DrawStoreBase64Icon(gp, x, y, s)) return;
     Gdiplus::SolidBrush bw(Gdiplus::Color(255, 255, 255, 255));
     Gdiplus::Pen pw(Gdiplus::Color(255, 255, 255, 255), s * 0.08f);
     gp.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
@@ -5543,23 +6751,24 @@ static Gdiplus::Bitmap* IconToGpBitmap(HICON ico) {
     return out;
 }
 
-// The Windows 8.1 shortcut tile: the flat blue square, the program's own icon centred on it and the
-// name in the bottom left corner. Drawn with GDI+ so the icon keeps its transparency, then the
-// caption goes on with the same font the other tiles use.
+// The Windows 8.1 shortcut tile: horizontal tile gradient, the program's own icon centred on it
+// and the name in the bottom left corner.
 static void DrawProgramShortcutTile(HDC tdc, const Tile& t, int w, int h, bool hover) {
-    if (InterlockedCompareExchange(&g_appTileColors, 0, 0) && t.hasAppC && t.mg < 0) {
-        HBRUSH brush = CreateSolidBrush(t.appC);
-        RECT rect = {0, 0, w, h};
-        if (brush) { FillRect(tdc, &rect, brush); DeleteObject(brush); }
-        else FillDesktopProgramTile(tdc, w, h);
-    } else FillDesktopProgramTile(tdc, w, h);
+    COLORREF sysL = 0, sysR = 0;
+    if (Win81SystemAppColor(t.target, &sysL, &sysR)) {
+        FillHorizontalTile(tdc, w, h, sysL, sysR, true);
+    } else if (InterlockedCompareExchange(&g_appTileColors, 0, 0) && t.hasAppC && t.mg < 0) {
+        COLORREF cL = t.appC, cR = t.appC;
+        TileGradientPair(t.appC, &cL, &cR);
+        FillHorizontalTile(tdc, w, h, cL, cR, true);
+    } else {
+        FillDesktopProgramTile(tdc, w, h);
+    }
     HICON icon = t.icon;
     if (icon) {
-        // Measured on the Windows 8.1 tiles of the desktop programs: the icon takes about 36% of
-        // the tile and sits a little above the middle, with the name in the bottom left corner.
-        const int side = std::max(ScI(28), (int)((float)std::min(w, h) * 0.36f));
+        const int side = (t.cw == TS_SMALL || h < ScI(80)) ? ScI(28) : ScI(40);
         const int ix = (w - side) / 2;
-        const int iy = (h - side) / 2 - (int)((float)h * 0.06f);
+        const int iy = (t.cw == TS_SMALL || h < ScI(80)) ? (h - side) / 2 : ((h - side) / 2 - ScI(7));
         Gdiplus::Graphics g(tdc);
         g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
         g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
@@ -5591,187 +6800,200 @@ static void BuildOneTile(int i, HDC screenDC) {
         g_tileBits[i][variant] = bits;
         g_tileOld[i][variant] = old;
         bool hover = variant != 0;
-        std::vector<BYTE> art;
-        int aw = 0, ah = 0;
-        COLORREF c1 = t.c1, c2 = t.c2;
-        // Base colour the Windows 8/8.1 gradient is derived from: the palette colour of the
-        // tile, the colour sampled from the icon, or the BackgroundColor declared by the app
-        // (Windows 10/11 packages and 8.x VisualElements manifests alike).
-        COLORREF base = (c1 != c2) ? Mix(c1, c2, 0.5f) : c1;
-        // A simulated Metro tile is left out: its Windows 8/8.1 gradient is the one of its own c1/c2
-        // (two shades of the program colour, see MetroTileSecond), the "Windows 8/8.1 tile
-        // gradients" setting is not applied on top of it a second time.
-        if (t.mg < 0 && t.hasAppC &&
-            (t.style == PINNED_APP || InterlockedCompareExchange(&g_appTileColors, 0, 0))) base = t.appC;
-        if (t.style == PINNED_APP && t.target && t.mg < 0) {
-            AcquireSRWLockShared(&g_artLock);
-            for (const auto& entry : g_packageArts) if (!_wcsicmp(entry.target.c_str(), t.target)) {
-                if (t.cw == TS_WIDE) { art = entry.wide; aw = entry.wideW; ah = entry.wideH; }
-                else { art = entry.square; aw = entry.squareW; ah = entry.squareH; }
-                if (entry.hasBackground) base = entry.background;
-                break;
-            }
-            ReleaseSRWLockShared(&g_artLock);
-        }
-        if (t.customTile) {
-            HBRUSH br = CreateSolidBrush(t.customColor);
-            RECT r = {0, 0, w, h};
-            if (br) { FillRect(tdc, &r, br); DeleteObject(br); }
-            auto drawLocal = [&](const std::wstring& path, bool full) -> bool {
-                if (path.empty() || PathIsRelativeW(path.c_str()) || PathIsUNCW(path.c_str())) return false;
-                WIN32_FILE_ATTRIBUTE_DATA attr = {};
-                if (!GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &attr) ||
-                    (attr.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) ||
-                    attr.nFileSizeHigh || attr.nFileSizeLow > 8 * 1024 * 1024) return false;
-                Gdiplus::Image img(path.c_str(), FALSE);
-                if (img.GetLastStatus() != Gdiplus::Ok || !img.GetWidth() || !img.GetHeight() ||
-                    img.GetWidth() > 8192 || img.GetHeight() > 8192) return false;
-                Gdiplus::Graphics g(tdc);
-                g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-                int dw = full ? w : std::max(1, (int)(std::min(w, h) * .44f));
-                int dh = full ? h : dw;
-                return g.DrawImage(&img, (w-dw)/2, (h-dh)/2, dw, dh) == Gdiplus::Ok;
-            };
-            bool artDrawn = t.cw >= 0 && t.cw < 4 && drawLocal(t.customImage[t.cw], true);
-            bool iconDrawn = false;
-            if (!artDrawn && !t.customIcon.empty() && !PathIsRelativeW(t.customIcon.c_str()) &&
-                !PathIsUNCW(t.customIcon.c_str())) {
-                WIN32_FILE_ATTRIBUTE_DATA attr = {};
-                if (GetFileAttributesExW(t.customIcon.c_str(), GetFileExInfoStandard, &attr) &&
-                    !(attr.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) &&
-                    !attr.nFileSizeHigh && attr.nFileSizeLow <= 8 * 1024 * 1024) {
-                    int side = std::max(1, (int)(std::min(w, h) * .44f));
-                    HICON ico = (HICON)LoadImageW(NULL, t.customIcon.c_str(), IMAGE_ICON, side, side, LR_LOADFROMFILE);
-                    if (ico) { iconDrawn = DrawIconEx(tdc, (w-side)/2, (h-side)/2, ico, side, side, 0, NULL, DI_NORMAL) != FALSE; DestroyIcon(ico); }
+
+        auto paintFace = [&]() {
+            std::vector<BYTE> art;
+            int aw = 0, ah = 0;
+            COLORREF c1 = t.c1, c2 = t.c2;
+            COLORREF base = (c1 != c2) ? Mix(c1, c2, 0.5f) : c1;
+            const bool isStore = IsStoreTarget(t.target) || t.mg == MG_STORE || t.style == STORE_CAPTION;
+            COLORREF sysL = 0, sysR = 0, sysBase = 0;
+            const bool hasSysColor = !t.customTile && Win81SystemAppColor(t.target, &sysL, &sysR, &sysBase);
+
+            if (isStore && !t.customTile) {
+                c1 = kStoreGreenLeft; c2 = kStoreGreenRight; base = kStoreGreenBase;
+            } else if (hasSysColor) {
+                c1 = sysL; c2 = sysR; base = sysBase;
+            } else {
+                if (t.mg < 0 && t.hasAppC &&
+                    (t.style == PINNED_APP || InterlockedCompareExchange(&g_appTileColors, 0, 0))) base = t.appC;
+                if (t.style == PINNED_APP && t.target && t.mg < 0) {
+                    AcquireSRWLockShared(&g_artLock);
+                    for (const auto& entry : g_packageArts) if (!_wcsicmp(entry.target.c_str(), t.target)) {
+                        if (t.cw == TS_WIDE) { art = entry.wide; aw = entry.wideW; ah = entry.wideH; }
+                        else { art = entry.square; aw = entry.squareW; ah = entry.squareH; }
+                        if (entry.hasBackground) base = entry.background;
+                        break;
+                    }
+                    ReleaseSRWLockShared(&g_artLock);
                 }
-                if (!iconDrawn) iconDrawn = drawLocal(t.customIcon, false);
             }
-            if (!artDrawn && !iconDrawn) {
-                if (t.icon) {
-                    int side = std::max(1, (int)(std::min(w, h) * .44f));
+
+            if (t.customTile) {
+                COLORREF ccL = t.customColor, ccR = t.customColor;
+                TileGradientPair(t.customColor, &ccL, &ccR);
+                FillHorizontalTile(tdc, w, h, ccL, ccR, true);
+                auto drawLocal = [&](const std::wstring& path, bool full) -> bool {
+                    if (path.empty() || PathIsRelativeW(path.c_str()) || PathIsUNCW(path.c_str())) return false;
+                    WIN32_FILE_ATTRIBUTE_DATA attr = {};
+                    if (!GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &attr) ||
+                        (attr.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) ||
+                        attr.nFileSizeHigh || attr.nFileSizeLow > 8 * 1024 * 1024) return false;
+                    Gdiplus::Image img(path.c_str(), FALSE);
+                    if (img.GetLastStatus() != Gdiplus::Ok || !img.GetWidth() || !img.GetHeight() ||
+                        img.GetWidth() > 8192 || img.GetHeight() > 8192) return false;
+                    Gdiplus::Graphics g(tdc);
+                    g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+                    int dw = full ? w : std::max(1, (int)(std::min(w, h) * .42f));
+                    int dh = full ? h : dw;
+                    return g.DrawImage(&img, (w-dw)/2, (h-dh)/2, dw, dh) == Gdiplus::Ok;
+                };
+                bool artDrawn = t.cw >= 0 && t.cw < 4 && drawLocal(t.customImage[t.cw], true);
+                bool iconDrawn = false;
+                if (!artDrawn && !t.customIcon.empty() && !PathIsRelativeW(t.customIcon.c_str()) &&
+                    !PathIsUNCW(t.customIcon.c_str())) {
+                    WIN32_FILE_ATTRIBUTE_DATA attr = {};
+                    if (GetFileAttributesExW(t.customIcon.c_str(), GetFileExInfoStandard, &attr) &&
+                        !(attr.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) &&
+                        !attr.nFileSizeHigh && attr.nFileSizeLow <= 8 * 1024 * 1024) {
+                        int side = std::max(1, (int)(std::min(w, h) * .42f));
+                        HICON ico = (HICON)LoadImageW(NULL, t.customIcon.c_str(), IMAGE_ICON, side, side, LR_LOADFROMFILE);
+                        if (ico) { iconDrawn = DrawIconEx(tdc, (w-side)/2, (h-side)/2, ico, side, side, 0, NULL, DI_NORMAL) != FALSE; DestroyIcon(ico); }
+                    }
+                    if (!iconDrawn) iconDrawn = drawLocal(t.customIcon, false);
+                }
+                if (!artDrawn && !iconDrawn && t.icon) {
+                    int side = std::max(1, (int)(std::min(w, h) * .42f));
                     DrawIconEx(tdc, (w-side)/2, (h-side)/2, t.icon, side, side, 0, NULL, DI_NORMAL);
                 }
+                if (t.cw != TS_SMALL) DrawModernTileCaption(tdc, t.customLabel.c_str(), w, h);
+                if (hover) DrawTileHover(tdc, w, h);
+                return;
             }
-            if (t.cw != TS_SMALL) DrawModernTileCaption(tdc, t.customLabel.c_str(), w, h);
-            if (hover) DrawTileHover(tdc, w, h);
-            continue;
-        }
-        // A desktop program: the Windows 8.1 shortcut tile, and nothing else to paint.
-        if (t.mpShortcut) {
-            DrawProgramShortcutTile(tdc, t, w, h, variant != 0);
-            continue;
-        }
-        COLORREF topColor = base, bottomColor = base;
-        // The Windows 8.1 tile texture: even the simulated tiles and the ones with a fixed
-        // horizontal gradient get the same faint light-to-dark veil, which is what the real Start
-        // screen lays over every tile.
-        const bool shaded = TileGradientPair(base, &topColor, &bottomColor);
-        // A tile of a desktop program keeps the Windows 8.1 blue: its light gradient is drawn
-        // across the tile, not shaded top to bottom like the other tiles.
-        const bool sampledDesktop = t.mg < 0 && t.style != PINNED_APP &&
-                                    t.style != DESKTOP_REFERENCE && t.hasAppC &&
-                                    InterlockedCompareExchange(&g_appTileColors, 0, 0);
-        if (IsLocalInfoTile(t.target)) {
-            c1 = c2 = base = !_wcsicmp(t.target,L"windhawk:weather-tile-v1") ? RGB(0,137,179) :
-                   !_wcsicmp(t.target,L"windhawk:calendar-tile-v1") ? RGB(0,114,198) : RGB(70,80,145);
-            topColor = bottomColor = base;
-        }
-        if (sampledDesktop) c1 = c2 = base;
-        const bool desktopTheme = !IsLocalInfoTile(t.target) && !sampledDesktop && t.mg < 0 && t.style != PINNED_APP &&
-                                  t.c1 == kDesktopTileLeft && t.c2 == kDesktopTileRight;
-        if (shaded && t.style == DESKTOP_REFERENCE) {
-            // The desktop tile is a live wallpaper preview: keep its own dark-to-light shading.
-            topColor = ShadeColor(c1, TileGradientAmount() * 0.5f);
-            bottomColor = c2;
-        }
-        if (desktopTheme) {
-            FillDesktopProgramTile(tdc, w, h);
-        } else if (shaded) {
-            TRIVERTEX v[2] = {
-                { 0, 0, (COLOR16)(GetRValue(topColor) << 8), (COLOR16)(GetGValue(topColor) << 8), (COLOR16)(GetBValue(topColor) << 8), 0 },
-                { w, h, (COLOR16)(GetRValue(bottomColor) << 8), (COLOR16)(GetGValue(bottomColor) << 8), (COLOR16)(GetBValue(bottomColor) << 8), 0 },
-            };
-            GRADIENT_RECT gr = { 0, 1 };
-            GradientFill(tdc, v, 2, &gr, 1, GRADIENT_FILL_RECT_V);
-        } else if (c1 == c2) {
-            HBRUSH br = CreateSolidBrush(c1);   // a simulated tile always has two shades, so not here
-            RECT fr = { 0, 0, w, h };
-            FillRect(tdc, &fr, br);
-            DeleteObject(br);
-        } else {
-            TRIVERTEX v[2] = {
-                { 0, 0, (COLOR16)(GetRValue(c1) << 8), (COLOR16)(GetGValue(c1) << 8), (COLOR16)(GetBValue(c1) << 8), 0 },
-                { w, h, (COLOR16)(GetRValue(c2) << 8), (COLOR16)(GetGValue(c2) << 8), (COLOR16)(GetBValue(c2) << 8), 0 },
-            };
-            GRADIENT_RECT gr = { 0, 1 };
-            GradientFill(tdc, v, 2, &gr, 1,
-                         t.style == DESKTOP_REFERENCE ? GRADIENT_FILL_RECT_V : GRADIENT_FILL_RECT_H);
-        }
 
-        SetBkMode(tdc, TRANSPARENT);
-        if (IsPhotoTile(t) && InterlockedCompareExchange(&g_photoEnabled,0,0) && g_open) {
-            RECT photoRect = {0,0,w,h};
-            if (g_photoSlideshow.Draw(tdc,photoRect,true,t.hasAppC ? t.appC : t.c1)) {
-                if (t.cw != TS_SMALL) DrawModernTileCaption(tdc,t.label,w,h);
-                if (hover) DrawTileHover(tdc,w,h);
-                continue;
+            if (t.mpShortcut) {
+                DrawProgramShortcutTile(tdc, t, w, h, hover);
+                return;
             }
-        }
-        double weatherTemperature = 0;
-        int weatherCode = 0;
-        if (IsWeatherTile(t) && g_weather.Current(weatherTemperature, weatherCode)) {
-            const int pad = ScI(8);
-            wchar_t temperature[32] = {};
-            swprintf_s(temperature, ARRAYSIZE(temperature), L"%.0f°", weatherTemperature);
-            SetBkMode(tdc, TRANSPARENT);
-            SetTextColor(tdc, RGB(255,255,255));
-            if (t.cw == TS_SMALL) {
-                SelectObject(tdc, g_fLabel);
-                RECT temp = {pad, pad, w-pad, h-pad};
-                DrawTextW(tdc, temperature, -1, &temp, DT_LEFT|DT_TOP|DT_SINGLELINE|DT_END_ELLIPSIS);
+
+            if (t.style == DESKTOP_REFERENCE) {
+                DrawDesktopWallpaperTile(tdc, screenDC, w, h);
+                if (hover) DrawTileHover(tdc, w, h);
+                return;
+            }
+
+            COLORREF leftColor = c1, rightColor = c2;
+            const bool shaded = TileGradientPair(base, &leftColor, &rightColor);
+            const bool sampledDesktop = !isStore && !hasSysColor && t.mg < 0 && t.style != PINNED_APP &&
+                                        t.style != DESKTOP_REFERENCE && t.hasAppC &&
+                                        InterlockedCompareExchange(&g_appTileColors, 0, 0);
+            if (isStore) {
+                leftColor = kStoreGreenLeft;
+                rightColor = kStoreGreenRight;
+            } else if (hasSysColor) {
+                leftColor = sysL;
+                rightColor = sysR;
+                if (!shaded) leftColor = rightColor = sysBase;
+            }
+            const bool desktopTheme = !isStore && !hasSysColor && !IsLocalInfoTile(t.target) && !sampledDesktop &&
+                                      t.mg < 0 && t.style != PINNED_APP &&
+                                      t.c1 == kDesktopTileLeft && t.c2 == kDesktopTileRight;
+
+            if (desktopTheme) {
+                FillDesktopProgramTile(tdc, w, h);
+            } else if (shaded) {
+                FillHorizontalTile(tdc, w, h, leftColor, rightColor, true);
             } else {
-                const bool wide = t.cw == TS_WIDE;
-                const int side = std::min(ScI(wide ? 64 : 48), std::max(1, std::min(w/2-pad*2, h-ScI(42))));
-                RECT icon = wide ? RECT{pad,pad,pad+side,pad+side} : RECT{w-pad-side,pad,w-pad,pad+side};
-                DrawWeatherPicture(tdc, weatherCode, icon);
-                RECT text = wide ? RECT{icon.right+pad,pad,w-pad,h-ScI(27)} : RECT{pad,pad,icon.left-2,h-ScI(27)};
-                HFONT font = CreateFontW(-ScI(30),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI Light");
-                HGDIOBJ oldFont = SelectObject(tdc, font ? font : g_fLabel);
-                DrawTextW(tdc,temperature,-1,&text,DT_LEFT|DT_TOP|DT_SINGLELINE|DT_END_ELLIPSIS);
-                SelectObject(tdc, g_fLabelMedium ? g_fLabelMedium : g_fLabel);
-                text.top += ScI(wide ? 34 : 48);
-                if (!wide) text.right = w-pad;
-                const wchar_t* label = g_weather.Label();
-                if (label && *label && text.top < text.bottom) {
-                    DrawTextW(tdc,label,-1,&text,DT_LEFT|DT_TOP|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
-                    text.top += ScI(16);
-                }
-                if (text.top < text.bottom)
-                    DrawTextW(tdc,WeatherDescription(weatherCode),-1,&text,DT_LEFT|DT_TOP|DT_WORDBREAK|DT_END_ELLIPSIS);
-                SelectObject(tdc, oldFont);
-                if (font) DeleteObject(font);
-                DrawModernTileCaption(tdc,t.label,w,h);
+                FillHorizontalTile(tdc, w, h, c1, c2, false);
             }
-            if (hover) DrawTileHover(tdc,w,h);
-            continue;
-        }
-        if (!t.customTile && t.target && (t.style == PINNED_APP || IsLocalInfoTile(t.target))) {
-            const bool small = t.cw == TS_SMALL;
-            int size = ScI(small ? 32 : 48), x = (w-size)/2, y = (h-size)/2 - (small ? 0 : ScI(13));
-            if (DrawImportedMetroIcon(tdc, t.target, x, y, size)) {
-                if (IsLocalInfoTile(t.target) && !_wcsicmp(t.target,L"windhawk:clock-tile-v1") && !small) {
-                    wchar_t timeText[64] = {};
-                    GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, TIME_NOSECONDS, NULL, NULL, timeText, ARRAYSIZE(timeText));
-                    RECT clockRect = {ScI(8),ScI(8),w-ScI(8),ScI(40)};
-                    SetTextColor(tdc, RGB(255,255,255)); SelectObject(tdc, g_fLabel);
-                    DrawTextW(tdc, timeText, -1, &clockRect, DT_LEFT|DT_TOP|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
+
+            SetBkMode(tdc, TRANSPARENT);
+            if (IsPhotoTile(t) && InterlockedCompareExchange(&g_photoEnabled,0,0) && g_open) {
+                RECT photoRect = {0,0,w,h};
+                if (g_photoSlideshow.Draw(tdc,photoRect,true,base)) {
+                    if (t.cw != TS_SMALL) DrawModernTileCaption(tdc,t.label,w,h);
+                    if (hover) DrawTileHover(tdc,w,h);
+                    return;
                 }
+            }
+            double weatherTemperature = 0;
+            int weatherCode = 0;
+            if (IsWeatherTile(t) && g_weather.Current(weatherTemperature, weatherCode)) {
+                const int pad = ScI(12);
+                wchar_t temperature[32] = {};
+                swprintf_s(temperature, ARRAYSIZE(temperature), L"%.0f\u00B0", weatherTemperature);
+                SetBkMode(tdc, TRANSPARENT);
+                SetTextColor(tdc, RGB(255,255,255));
+                if (t.cw == TS_SMALL) {
+                    SelectObject(tdc, g_fLabel);
+                    RECT temp = {ScI(6), ScI(6), w-ScI(6), h-ScI(6)};
+                    DrawTextW(tdc, temperature, -1, &temp, DT_CENTER|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
+                } else {
+                    const bool wide = t.cw == TS_WIDE || t.cw == TS_LARGE;
+                    const int side = std::min(ScI(wide ? 58 : 42), std::max(1, std::min(w/2-pad, h-ScI(42))));
+                    RECT icon = wide ? RECT{pad,ScI(12),pad+side,ScI(12)+side} : RECT{w-pad-side,ScI(10),w-pad,ScI(10)+side};
+                    DrawWeatherPicture(tdc, weatherCode, icon);
+                    RECT text = wide ? RECT{icon.right+ScI(10),ScI(8),w-pad,h-ScI(27)} : RECT{pad,ScI(8),icon.left-2,h-ScI(27)};
+                    HFONT font = CreateFontW(-ScI(wide ? 34 : 28),0,0,0,FW_LIGHT,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI Light");
+                    HGDIOBJ oldFont = SelectObject(tdc, font ? font : g_fLabel);
+                    DrawTextW(tdc,temperature,-1,&text,DT_LEFT|DT_TOP|DT_SINGLELINE|DT_END_ELLIPSIS);
+                    SelectObject(tdc, g_fLabelMedium ? g_fLabelMedium : g_fLabel);
+                    text.top += ScI(wide ? 38 : 34);
+                    if (!wide) text.right = w-pad;
+                    const wchar_t* label = g_weather.Label();
+                    if (label && *label && text.top < text.bottom) {
+                        DrawTextW(tdc,label,-1,&text,DT_LEFT|DT_TOP|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
+                        text.top += ScI(16);
+                    }
+                    if (text.top < text.bottom)
+                        DrawTextW(tdc,WeatherDescription(weatherCode),-1,&text,DT_LEFT|DT_TOP|DT_WORDBREAK|DT_END_ELLIPSIS);
+                    SelectObject(tdc, oldFont);
+                    if (font) DeleteObject(font);
+                    DrawModernTileCaption(tdc,t.label,w,h);
+                }
+                if (hover) DrawTileHover(tdc,w,h);
+                return;
+            }
+            if (isStore) {
+                const bool small = t.cw == TS_SMALL || h < ScI(80);
+                const int size = small ? ScI(30) : (t.cw == TS_LARGE ? ScI(76) : ScI(50));
+                const int x = (w - size) / 2, y = (h - size) / 2 - (small ? 0 : ScI(8));
+                Gdiplus::Graphics gp(tdc);
+                GlyphStoreBagV(gp, (float)x, (float)y, (float)size);
                 if (!small) DrawModernTileCaption(tdc, t.label, w, h);
                 if (hover) DrawTileHover(tdc, w, h);
-                continue;
+                return;
             }
-        }
-        if (t.mg < 0 && t.style == PINNED_APP && aw > 0 && ah > 0 && art.size() == (size_t)aw * (size_t)ah * 4) {
+            if (IsClockTile(t) && t.cw != TS_SMALL) {
+                wchar_t timeText[64] = {}, dateText[64] = {};
+                GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, TIME_NOSECONDS, NULL, NULL, timeText, ARRAYSIZE(timeText));
+                GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, NULL, L"ddd d MMM", dateText, ARRAYSIZE(dateText), NULL);
+                SetTextColor(tdc, RGB(255,255,255));
+                const bool wide = w > h + ScI(20);
+                HFONT tf = CreateFontW(-ScI(wide ? 42 : 30),0,0,0,FW_LIGHT,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI Light");
+                HGDIOBJ of = SelectObject(tdc, tf ? tf : g_fTitle);
+                RECT cr = { ScI(14), ScI(12), w - ScI(12), ScI(62) };
+                DrawTextW(tdc, timeText, -1, &cr, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+                SelectObject(tdc, g_fLabelMedium ? g_fLabelMedium : g_fLabel);
+                RECT dr = { ScI(16), ScI(wide ? 60 : 48), w - ScI(12), h - ScI(28) };
+                DrawTextW(tdc, dateText, -1, &dr, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+                SelectObject(tdc, of);
+                if (tf) DeleteObject(tf);
+                DrawModernTileCaption(tdc, t.label, w, h);
+                if (hover) DrawTileHover(tdc, w, h);
+                return;
+            }
+            if (!t.customTile && t.target && (t.style == PINNED_APP || IsLocalInfoTile(t.target) || hasSysColor)) {
+                const bool small = t.cw == TS_SMALL || h < ScI(80);
+                int size = small ? ScI(30) : (t.cw == TS_LARGE ? ScI(76) : ScI(50));
+                int x = (w - size) / 2, y = (h - size) / 2 - (small ? 0 : ScI(8));
+                if (DrawImportedMetroIcon(tdc, t.target, x, y, size)) {
+                    if (!small) DrawModernTileCaption(tdc, t.label, w, h);
+                    if (hover) DrawTileHover(tdc, w, h);
+                    return;
+                }
+            }
+            if (t.mg < 0 && t.style == PINNED_APP && aw > 0 && ah > 0 && art.size() == (size_t)aw * (size_t)ah * 4) {
                 HDC src = CreateCompatibleDC(tdc);
                 void* artBits = NULL;
                 HBITMAP bmp = src ? MakeDib(screenDC, aw, ah, &artBits) : NULL;
@@ -5786,161 +7008,134 @@ static void BuildOneTile(int i, HDC screenDC) {
                     if (hover) DrawTileHover(tdc, w, h);
                     DeleteObject(bmp);
                     DeleteDC(src);
-                    continue;
+                    return;
                 }
                 if (bmp) DeleteObject(bmp);
                 if (src) DeleteDC(src);
-        }
-        if (t.mg < 0 && t.style == TOP_APP && !t.veArt.empty() && t.veW > 0) {
-            const bool smallVe = (t.cw == TS_SMALL && !t.veArtSmall.empty());
-            const std::vector<BYTE>& img = smallVe ? t.veArtSmall : t.veArt;
-            const int iw = smallVe ? t.veSmallW : t.veW, ih = smallVe ? t.veSmallH : t.veH;
-            HDC src = CreateCompatibleDC(tdc);
-            void* bits = NULL;
-            HBITMAP bmp = src ? MakeDib(screenDC, iw, ih, &bits) : NULL;
-            if (bmp && bits && img.size() == (size_t)iw * (size_t)ih * 4) {
-                memcpy(bits, img.data(), img.size());
-                HGDIOBJ prev = SelectObject(src, bmp);
-                BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
-                SetStretchBltMode(tdc, HALFTONE); SetBrushOrgEx(tdc, 0, 0, NULL);
-                if (t.cw == TS_WIDE) AlphaBlend(tdc, (w - h) / 2, 0, h, h, src, 0, 0, iw, ih, blend);
-                else AlphaBlend(tdc, 0, 0, w, h, src, 0, 0, iw, ih, blend);
-                SelectObject(src, prev);
-                ApplyTileGradientOverArt(tdc, w, h);
-                if (!t.veHideName) DrawModernTileCaption(tdc, t.label, w, h, t.veDarkText);
+            }
+            if (t.mg < 0 && t.style == TOP_APP && !t.veArt.empty() && t.veW > 0) {
+                const bool smallVe = (t.cw == TS_SMALL && !t.veArtSmall.empty());
+                const std::vector<BYTE>& img = smallVe ? t.veArtSmall : t.veArt;
+                const int iw = smallVe ? t.veSmallW : t.veW, ih = smallVe ? t.veSmallH : t.veH;
+                HDC src = CreateCompatibleDC(tdc);
+                void* veBits = NULL;
+                HBITMAP bmp = src ? MakeDib(screenDC, iw, ih, &veBits) : NULL;
+                if (bmp && veBits && img.size() == (size_t)iw * (size_t)ih * 4) {
+                    memcpy(veBits, img.data(), img.size());
+                    HGDIOBJ prev = SelectObject(src, bmp);
+                    BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
+                    SetStretchBltMode(tdc, HALFTONE); SetBrushOrgEx(tdc, 0, 0, NULL);
+                    if (t.cw == TS_WIDE) AlphaBlend(tdc, (w - h) / 2, 0, h, h, src, 0, 0, iw, ih, blend);
+                    else AlphaBlend(tdc, 0, 0, w, h, src, 0, 0, iw, ih, blend);
+                    SelectObject(src, prev);
+                    ApplyTileGradientOverArt(tdc, w, h);
+                    if (!t.veHideName) DrawModernTileCaption(tdc, t.label, w, h, t.veDarkText);
+                    if (hover) DrawTileHover(tdc, w, h);
+                    DeleteObject(bmp);
+                    DeleteDC(src);
+                    return;
+                }
+                if (bmp) DeleteObject(bmp);
+                if (src) DeleteDC(src);
+            }
+            if (t.cw == TS_SMALL && t.mg >= 0) {
+                DrawSimulatedTile(tdc, g_tiles[i], w, h, hover);
+                return;
+            }
+            if (t.cw == TS_SMALL && t.style != DESKTOP_REFERENCE) {
+                const int bs = ScI(30);
+                if (t.pinBmp) {
+                    HDC src = CreateCompatibleDC(tdc);
+                    if (src) {
+                        HGDIOBJ so = SelectObject(src, t.pinBmp);
+                        BLENDFUNCTION bf = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
+                        AlphaBlend(tdc, (w - bs) / 2, (h - bs) / 2, bs, bs, src, 0, 0, t.pinW, t.pinH, bf);
+                        SelectObject(src, so);
+                        DeleteDC(src);
+                    }
+                } else if (t.icon) {
+                    Gdiplus::Bitmap* gpb = IconToGpBitmap(t.icon);
+                    if (gpb) {
+                        {   Gdiplus::Graphics gp(tdc);
+                            gp.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+                            gp.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
+                            gp.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
+                            gp.DrawImage(gpb, Gdiplus::Rect((w - bs) / 2, (h - bs) / 2, bs, bs),
+                                         0, 0, gpb->GetWidth(), gpb->GetHeight(), Gdiplus::UnitPixel);
+                        }
+                        delete gpb;
+                    } else DrawAppIconOrFallback(tdc, t.icon, (w - bs) / 2, (h - bs) / 2, bs);
+                } else DrawAppIconOrFallback(tdc, NULL, (w - bs) / 2, (h - bs) / 2, bs);
                 if (hover) DrawTileHover(tdc, w, h);
-                DeleteObject(bmp);
-                DeleteDC(src);
-                continue;
+                return;
             }
-            if (bmp) DeleteObject(bmp);
-            if (src) DeleteDC(src);
-        }
-        if (t.cw == TS_SMALL && t.mg >= 0) {
-            // Windows 8 small tile: the real icon at 38 px, no name.
-            DrawSimulatedTile(tdc, g_tiles[i], w, h, hover);
-            continue;
-        }
-        if (t.cw == TS_SMALL && t.style != DESKTOP_REFERENCE) {
-            const int bs = ScI(38);
-            if (t.pinBmp) {
-                HDC src = CreateCompatibleDC(tdc);
-                if (src) {
-                    HGDIOBJ so = SelectObject(src, t.pinBmp);
-                    BLENDFUNCTION bf = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
-                    AlphaBlend(tdc, (w - bs) / 2, (h - bs) / 2, bs, bs, src, 0, 0, t.pinW, t.pinH, bf);
-                    SelectObject(src, so);
-                    DeleteDC(src);
-                }
-            } else if (t.icon) {
-                Gdiplus::Bitmap* gpb = IconToGpBitmap(t.icon);
-                if (gpb) {
-                    {   Gdiplus::Graphics gp(tdc);
-                        gp.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-                        gp.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
-                        gp.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
-                        gp.DrawImage(gpb, Gdiplus::Rect((w - bs) / 2, (h - bs) / 2, bs, bs),
-                                     0, 0, gpb->GetWidth(), gpb->GetHeight(), Gdiplus::UnitPixel);
-                    }
-                    delete gpb;
-                } else DrawAppIconOrFallback(tdc, t.icon, (w - bs) / 2, (h - bs) / 2, bs);
-            } else if (t.target && wcsstr(t.target, L"ms-windows-store")) {
-                Gdiplus::Graphics gp(tdc);
-                GlyphStoreBagV(gp, (w - bs) * 0.5f, (h - bs) * 0.5f, (float)bs);
-            } else DrawAppIconOrFallback(tdc, NULL, (w - bs) / 2, (h - bs) / 2, bs);
-            if (hover) DrawTileHover(tdc, w, h);
-            continue;
-        }
-        if (t.kind == 0 && t.style != DESKTOP_REFERENCE) {
-            const int gs = t.cw == TS_LARGE ? ScI(96) : ScI(56);
-            if (t.icon) {
-                Gdiplus::Bitmap* gpb = IconToGpBitmap(t.icon);
-                if (gpb) {
-                    {   Gdiplus::Graphics gp(tdc);
-                        gp.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-                        gp.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
-                        gp.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
-                        gp.DrawImage(gpb, Gdiplus::Rect((w - gs) / 2, (h - gs) / 2 - ScI(10), gs, gs),
-                                     0, 0, gpb->GetWidth(), gpb->GetHeight(), Gdiplus::UnitPixel);
-                    }
-                    delete gpb;
-                } else DrawAppIconOrFallback(tdc, t.icon, (w - gs) / 2, (h - gs) / 2 - ScI(10), gs);
-            }
-            else if (t.target && wcsstr(t.target, L"ms-windows-store")) {
-                Gdiplus::Graphics gp(tdc);
-                GlyphStoreBagV(gp, (w - gs) * 0.5f, (h - gs) * 0.5f - ScF(10.0f), (float)gs);
-            }
-            else DrawAppIconOrFallback(tdc, NULL, (w - gs) / 2, (h - gs) / 2 - ScI(10), gs);
-            DrawModernTileCaption(tdc, t.label, w, h);
-            if (hover) DrawTileHover(tdc, w, h);
-            continue;
-        }
-        if (t.mg >= 0) {
-            // Simulated Metro tile: flat Windows 8 tile colour plus the real icon of the program.
-            DrawSimulatedTile(tdc, g_tiles[i], w, h, hover);
-            continue;
-        } else if (t.style == DESKTOP_REFERENCE) {
-            DrawDesktopWallpaperTile(tdc, screenDC, w, h);
-        } else if (t.style == TOP_APP) {
-            const int bs = t.cw == TS_LARGE ? ScI(96) : ScI(64);
-            if (t.pinBmp) {
-                HDC src = CreateCompatibleDC(tdc);
-                if (src) {
-                    HGDIOBJ old = SelectObject(src, t.pinBmp);
-                    BLENDFUNCTION bf = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
-                    AlphaBlend(tdc, (w - bs) / 2, (h - bs) / 2 - ScI(10), bs, bs, src, 0, 0, t.pinW, t.pinH, bf);
-                    SelectObject(src, old);
-                    DeleteDC(src);
-                }
-            } else if (t.icon) {
-                Gdiplus::Bitmap* gpb = IconToGpBitmap(t.icon);
-                if (gpb) {
-                    {   Gdiplus::Graphics gp(tdc);
-                        gp.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-                        gp.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
-                        gp.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
-                        gp.DrawImage(gpb, Gdiplus::Rect((w - bs) / 2, (h - bs) / 2 - ScI(10), bs, bs),
-                                     0, 0, gpb->GetWidth(), gpb->GetHeight(), Gdiplus::UnitPixel);
-                    }
-                    delete gpb;
-                } else DrawAppIconOrFallback(tdc, t.icon, (w - bs) / 2, (h - bs) / 2 - ScI(10), bs);
-            } else DrawAppIconOrFallback(tdc, NULL, (w - bs) / 2, (h - bs) / 2 - ScI(10), bs);
-            if (!t.veHideName) DrawModernTileCaption(tdc, t.label, w, h, t.veDarkText);
-        } else {
-            if (t.style == PINNED_APP && t.pinBmp) {
-                HDC src = CreateCompatibleDC(tdc);
-                if (src) {
-                    HGDIOBJ so = SelectObject(src, t.pinBmp);
-                    BLENDFUNCTION pf = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
-                    const int bs = t.cw == TS_LARGE ? ScI(96) : ScI(64);
-                    AlphaBlend(tdc, (w - bs) / 2, (h - bs) / 2 - ScI(10), bs, bs, src, 0, 0, t.pinW, t.pinH, pf);
-                    SelectObject(src, so);
-                    DeleteDC(src);
-                }
-            }
-            if (t.style == PINNED_APP) {
+            if (t.kind == 0 && t.style != DESKTOP_REFERENCE) {
+                const int gs = t.cw == TS_LARGE ? ScI(76) : ScI(44);
+                if (t.icon) {
+                    Gdiplus::Bitmap* gpb = IconToGpBitmap(t.icon);
+                    if (gpb) {
+                        {   Gdiplus::Graphics gp(tdc);
+                            gp.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+                            gp.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
+                            gp.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
+                            gp.DrawImage(gpb, Gdiplus::Rect((w - gs) / 2, (h - gs) / 2 - ScI(8), gs, gs),
+                                         0, 0, gpb->GetWidth(), gpb->GetHeight(), Gdiplus::UnitPixel);
+                        }
+                        delete gpb;
+                    } else DrawAppIconOrFallback(tdc, t.icon, (w - gs) / 2, (h - gs) / 2 - ScI(8), gs);
+                } else DrawAppIconOrFallback(tdc, NULL, (w - gs) / 2, (h - gs) / 2 - ScI(8), gs);
                 DrawModernTileCaption(tdc, t.label, w, h);
-            } else {
-                SetTextColor(tdc, t.style == STORE_CAPTION ? RGB(195, 65, 21) : RGB(255, 255, 255));
-                SelectObject(tdc, TileCaptionFont(w, h));
-                RECT lr;
-                if (TileCaptionRect(w, h, &lr))
-                    DrawTextW(tdc, t.label, -1, &lr,
-                              DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
+                if (hover) DrawTileHover(tdc, w, h);
+                return;
             }
-        }
+            if (t.mg >= 0) {
+                DrawSimulatedTile(tdc, g_tiles[i], w, h, hover);
+                return;
+            } else if (t.style == TOP_APP) {
+                const int bs = t.cw == TS_LARGE ? ScI(76) : ScI(50);
+                if (t.pinBmp) {
+                    HDC src = CreateCompatibleDC(tdc);
+                    if (src) {
+                        HGDIOBJ oldObj = SelectObject(src, t.pinBmp);
+                        BLENDFUNCTION bf = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
+                        AlphaBlend(tdc, (w - bs) / 2, (h - bs) / 2 - ScI(8), bs, bs, src, 0, 0, t.pinW, t.pinH, bf);
+                        SelectObject(src, oldObj);
+                        DeleteDC(src);
+                    }
+                } else if (t.icon) {
+                    Gdiplus::Bitmap* gpb = IconToGpBitmap(t.icon);
+                    if (gpb) {
+                        {   Gdiplus::Graphics gp(tdc);
+                            gp.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+                            gp.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
+                            gp.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
+                            gp.DrawImage(gpb, Gdiplus::Rect((w - bs) / 2, (h - bs) / 2 - ScI(8), bs, bs),
+                                         0, 0, gpb->GetWidth(), gpb->GetHeight(), Gdiplus::UnitPixel);
+                        }
+                        delete gpb;
+                    } else DrawAppIconOrFallback(tdc, t.icon, (w - bs) / 2, (h - bs) / 2 - ScI(8), bs);
+                } else DrawAppIconOrFallback(tdc, NULL, (w - bs) / 2, (h - bs) / 2 - ScI(8), bs);
+                if (!t.veHideName) DrawModernTileCaption(tdc, t.label, w, h, t.veDarkText);
+            } else {
+                if (t.style == PINNED_APP && t.pinBmp) {
+                    HDC src = CreateCompatibleDC(tdc);
+                    if (src) {
+                        HGDIOBJ so = SelectObject(src, t.pinBmp);
+                        BLENDFUNCTION pf = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
+                        const int bs = t.cw == TS_LARGE ? ScI(76) : ScI(50);
+                        AlphaBlend(tdc, (w - bs) / 2, (h - bs) / 2 - ScI(8), bs, bs, src, 0, 0, t.pinW, t.pinH, pf);
+                        SelectObject(src, so);
+                        DeleteDC(src);
+                    }
+                }
+                DrawModernTileCaption(tdc, t.label, w, h);
+            }
+            if (hover) DrawTileHover(tdc, w, h);
+        };
 
-        if (hover) DrawTileHover(tdc, w, h);
-
-        // The tiles of Windows 8.1 are opaque sheets: the alpha channel of the 32-bit DIB is
-        // never written by the GDI fills, and whatever it holds must not leak into the
-        // composition, or a tile that travels over the header or a group name while dragged
-        // shows them through. Force every pixel of the tile rectangle to opaque.
-        {
-            BYTE* px = (BYTE*)bits;
-            for (int n = 0; n < w * h; ++n) px[n * 4 + 3] = 0xFF;
-        }
-
+        paintFace();
+        ForceSurfaceOpaque(bits, w, h);
+        GdiFlush();
     }
 }
 
@@ -5958,6 +7153,7 @@ static void RefreshDesktopTile() {
             if (!g_tileDC[i][v] || !g_tileBits[i][v]) continue;
             DrawDesktopWallpaperTile(g_tileDC[i][v], screen, w, h);
             if (v) DrawTileHover(g_tileDC[i][v], w, h);
+            ForceSurfaceOpaque(g_tileBits[i][v], w, h);
             GdiFlush();
             if (g_rt && g_tileGpu[i][v]) {
                 HRESULT hr = g_tileGpu[i][v]->CopyFromMemory(NULL, g_tileBits[i][v], (UINT32)w * 4);
@@ -6005,16 +7201,31 @@ static float LogonHeaderShift(bool account, float to) {
 
 static int g_resizeFadeTile = -1;
 static DWORD g_resizeFadeTick = 0;
-static float ResizeFadeOpacity(int i) {
-    if (i != g_resizeFadeTile) return 1.0f;
-    DWORD elapsed = NowMs() - g_resizeFadeTick;
-    if (elapsed >= 200) return 1.0f;
-    return 0.70f + 0.30f * ((float)elapsed / 200.0f);
+static int g_resizeOldW = 0, g_resizeOldH = 0;
+static std::vector<BYTE> g_resizeOldPx;
+static ID2D1Bitmap* g_resizeOldGpu = NULL;
+static constexpr DWORD RESIZE_MORPH_MS = 240;
+
+static int g_launchFlipTile = -1;
+static DWORD g_launchFlipTick = 0;
+static constexpr DWORD LAUNCH_FLIP_MS = 230;
+static std::wstring g_pendingLaunch;
+
+static void ReleaseResizeOldGpu() {
+    if (g_resizeOldGpu) { g_resizeOldGpu->Release(); g_resizeOldGpu = NULL; }
+}
+
+// Windows 8.1 selection border & top-right check corner follow the Start theme colour (lightened
+// for visibility on dark Start themes, darkened on bright themes).
+static COLORREF SelectionBorderColor() {
+    const int r = GetRValue(g_bgColor), g = GetGValue(g_bgColor), b = GetBValue(g_bgColor);
+    const int luma = (r * 299 + g * 587 + b * 114) / 1000;
+    if (luma > 165) return ShadeColor(g_bgColor, -0.32f);
+    return Mix(g_bgColor, RGB(255, 255, 255), 0.34f);
 }
 
 static void DrawTile(int i, float a, float slide, float gs) {
-    a *= ResizeFadeOpacity(i);
-    if (a <= 0.0f) return;
+    if (a <= 0.0f || !g_tiles[i].alive) return;
     const Tile& t = g_tiles[i];
     RECT r; TileRect(t, &r);
     int w = r.right - r.left, h = r.bottom - r.top;
@@ -6030,6 +7241,28 @@ static void DrawTile(int i, float a, float slide, float gs) {
     float ncx = px + (cx - px) * gs + slide;
     float ncy = py + (cy - py) * gs;
     int dx = (int)(ncx - (float)dw * 0.5f), dy = (int)(ncy - (float)dh * 0.5f);
+
+    if (g_closing && i == g_launchFlipTile) {
+        float u = Clamp01((float)(NowMs() - g_launchFlipTick) / (float)LAUNCH_FLIP_MS);
+        float e = EaseMetroOut(u);
+        float zoom = 1.0f + 0.22f * e;
+        float cosT = std::max(0.04f, cosf(e * 1.48f));
+        ncx += ((float)g_sw * 0.5f - ncx) * (0.20f * e);
+        ncy += ((float)g_sh * 0.5f - ncy) * (0.20f * e);
+        dw = std::max(2, (int)(w * zoom * cosT));
+        dh = std::max(2, (int)(h * zoom));
+        dx = (int)(ncx - dw * 0.5f);
+        dy = (int)(ncy - dh * 0.5f);
+        a = 1.0f - Clamp01((u - 0.72f) / 0.28f);
+    } else if (i == g_resizeFadeTile) {
+        DWORD el = NowMs() - g_resizeFadeTick;
+        if (el < RESIZE_MORPH_MS && g_resizeOldW > 0 && g_resizeOldH > 0) {
+            float u = EaseMetroOut((float)el / (float)RESIZE_MORPH_MS);
+            dw = std::max(1, (int)((g_resizeOldW + (w - g_resizeOldW) * u) * sc));
+            dh = std::max(1, (int)((g_resizeOldH + (h - g_resizeOldH) * u) * sc));
+        }
+    }
+
     {
         DWORD znow = NowMs();
         float zk = ZoomPresence(znow);
@@ -6040,8 +7273,7 @@ static void DrawTile(int i, float a, float slide, float gs) {
         }
     }
     BLENDFUNCTION bf = { AC_SRC_OVER, 0, (BYTE)(255.0f * Clamp01(a)), 0 };
-    if ((IsCalendarLiveTile(t) && EnsureCalendarFace(i, w, h)) ||
-        (IsWeatherLiveTile(t) && EnsureWeatherFace(i, w, h))) {
+    if (IsLiveFlipTile(t) && EnsureLiveFlipFace(i, w, h)) {
         bool oldBack; float p = CalendarSlide(i, &oldBack);
         int cut = std::max(0, std::min(h, (int)(h * p)));
         HDC oldFace = oldBack ? g_calendarFace[i].dc : tdc;
@@ -6050,6 +7282,37 @@ static void DrawTile(int i, float a, float slide, float gs) {
         if (dh-dcut > 0) AlphaBlend(g_bbDC, dx, dy+dcut, dw, dh-dcut, oldFace, 0, 0, w, h-cut, bf);
         if (dcut > 0) AlphaBlend(g_bbDC, dx, dy, dw, dcut, nextFace, 0, h-cut, w, cut, bf);
     } else AlphaBlend(g_bbDC, dx, dy, dw, dh, tdc, 0, 0, w, h, bf);
+
+    if (g_barVisible && g_barMode == 1 && g_barIdx == i) {
+        COLORREF selC = SelectionBorderColor();
+        HBRUSH sb = CreateSolidBrush(selC);
+        if (sb) {
+            int bw = std::max(3, ScI(4));
+            RECT b1 = { dx, dy, dx + dw, dy + bw };
+            RECT b2 = { dx, dy + dh - bw, dx + dw, dy + dh };
+            RECT b3 = { dx, dy, dx + bw, dy + dh };
+            RECT b4 = { dx + dw - bw, dy, dx + dw, dy + dh };
+            FillRect(g_bbDC, &b1, sb); FillRect(g_bbDC, &b2, sb);
+            FillRect(g_bbDC, &b3, sb); FillRect(g_bbDC, &b4, sb);
+            DeleteObject(sb);
+        }
+        if (g_gdipToken) {
+            Gdiplus::Graphics gp(g_bbDC);
+            gp.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+            Gdiplus::SolidBrush cb(Gdiplus::Color(255, GetRValue(selC), GetGValue(selC), GetBValue(selC)));
+            float cs = ScF(34.0f);
+            Gdiplus::PointF tri[3] = {
+                Gdiplus::PointF((float)(dx + dw) - cs, (float)dy),
+                Gdiplus::PointF((float)(dx + dw), (float)dy),
+                Gdiplus::PointF((float)(dx + dw), (float)dy + cs)
+            };
+            gp.FillPolygon(&cb, tri, 3);
+        }
+        SetTextColor(g_bbDC, RGB(255, 255, 255));
+        SelectObject(g_bbDC, g_fHdrGlyph ? g_fHdrGlyph : g_fLabel);
+        RECT ck = { dx + dw - ScI(24), dy + ScI(1), dx + dw - ScI(1), dy + ScI(22) };
+        DrawTextW(g_bbDC, L"\xE10B", -1, &ck, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    }
 }
 
 static void DrawHeader(float a, HDC sdc, float userA = -1.0f) {
@@ -6060,21 +7323,18 @@ static void DrawHeader(float a, HDC sdc, float userA = -1.0f) {
     if (a > 0.0f) {
         SetTextColor(g_bbDC, Mix(RGB(34, 14, 52), RGB(255, 255, 255), a));
         SelectObject(g_bbDC, g_fTitle);
-        RECT tr = { LEFT + titleShift, ScI(40), LEFT + ScI(400) + titleShift, ScI(140) };
+        RECT tr = { LEFT - ScI(3) + titleShift, ScI(42), LEFT + ScI(400) + titleShift, ScI(140) };
         DrawTextW(g_bbDC, T(STR_START), -1, &tr, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX);
     }
     if (userA <= 0.0f || g_view != VIEW_START) return;
     SetTextColor(g_bbDC, Mix(RGB(34, 14, 52), RGB(255, 255, 255), userA));
     SelectObject(g_bbDC, g_fUser);
-    // The name is centred on the same vertical span as the avatar (34..78): DT_VCENTER with
-    // DT_SINGLELINE is the vertical centring DrawText documents, so the baseline no longer sits
-    // high like a top-aligned line but in the middle of the tile, as on the real Start screen.
-    RECT ur = { g_sw - ScI(700) + accountShift, ScI(34),
-                HeaderAvatarRight() - ScI(54) + accountShift, ScI(78) };
+    RECT ur = { g_sw - ScI(700) + accountShift, ScI(60),
+                HeaderAvatarRight() - ScI(53) + accountShift, ScI(100) };
     DrawTextW(g_bbDC, DisplayName(), -1, &ur, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
-    const int S = ScI(44);
-    const int avL = HeaderAvatarRight() - S + accountShift, avT = ScI(34);
+    const int S = ScI(40);
+    const int avL = HeaderAvatarRight() - S + accountShift, avT = ScI(60);
     if (EnsureAvatarPicture() && g_avatarPicBmp) {
         HDC pdc = CreateCompatibleDC(sdc);
         HGDIOBJ op = SelectObject(pdc, g_avatarPicBmp);
@@ -6115,6 +7375,7 @@ static void DrawHeader(float a, HDC sdc, float userA = -1.0f) {
 }
 
 static void ReleaseGpuTarget() {
+    ReleaseResizeOldGpu();
     for (int i = 0; i < MAX_TILES; ++i) if (g_calendarFace[i].gpu) { g_calendarFace[i].gpu->Release(); g_calendarFace[i].gpu = NULL; }
     for (int i = 0; i < g_tileCount; ++i) for (int v = 0; v < 2; ++v) {
         if (g_tileGpu[i][v]) { g_tileGpu[i][v]->Release(); g_tileGpu[i][v] = NULL; }
@@ -6215,9 +7476,6 @@ static void CreateUiFonts() {
 }
 
 static void RecreateFonts() {
-    // The panel of the search charm keeps its own fonts and its own copies of the icons of the
-    // results, both of which depend on the DPI: they are released here and made again on the next
-    // redraw, exactly like the fonts of the Start screen.
     ReleaseCharmFonts();
     ReleaseCharmIcons();
     if (g_fTitle) { DeleteObject(g_fTitle); g_fTitle = NULL; }
@@ -6230,12 +7488,12 @@ static void RecreateFonts() {
     CreateUiFonts();
     g_userTextW = -1;
     if (g_writeFactory) {
-        // Release through pointers so the globals are nulled, never left dangling.
         IDWriteTextFormat** all[] = { &g_titleFormat, &g_userFormat, &g_subFormat, &g_itemFormat,
                                       &g_sbTitleFormat, &g_boldFormat, &g_rowFormat, &g_countFormat,
                                       &g_queryFormat, &g_glyphFormat, &g_glyphSmall, &g_barLabel,
                                       &g_flyFormat, &g_hdrGlyphFmt, &g_zoomFormat };
         for (IDWriteTextFormat** f : all) if (*f) { (*f)->Release(); *f = NULL; }
+        ReleaseNameLayouts();
         if (g_rt) {
             g_writeFactory->CreateTextFormat(L"Segoe UI", NULL, DWRITE_FONT_WEIGHT_LIGHT,
                 DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, ScF(56.0f), L"en-US", &g_titleFormat);
@@ -6298,8 +7556,12 @@ static bool InitGpu() {
         96.0f, 96.0f);
     RECT client = {};
     if (!GetClientRect(g_wnd, &client) || client.right <= 0 || client.bottom <= 0) return false;
+    // FrameThread already paces drawing against the display refresh. The default
+    // HWND target also waits for refresh at presentation, blocking the UI thread
+    // in EndDraw and delaying input. Request immediate presentation instead;
+    // the compositor/driver can still impose its own scheduling or backpressure.
     D2D1_HWND_RENDER_TARGET_PROPERTIES hp = D2D1::HwndRenderTargetProperties(
-        g_wnd, D2D1::SizeU((UINT32)client.right, (UINT32)client.bottom), D2D1_PRESENT_OPTIONS_NONE);
+        g_wnd, D2D1::SizeU((UINT32)client.right, (UINT32)client.bottom), D2D1_PRESENT_OPTIONS_IMMEDIATELY);
     HRESULT hr = g_d2dFactory->CreateHwndRenderTarget(p, hp, &g_rt);
     if (FAILED(hr)) { ReleaseGpuTarget(); return false; }
     g_rt->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_CLEARTYPE);
@@ -6327,8 +7589,11 @@ static bool InitGpu() {
     if (SUCCEEDED(hr) && !g_subFormat) hr = MakeSearchFormats();
     if (FAILED(hr)) { ReleaseGpuTarget(); return false; }
     g_userFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
+    g_userFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    g_userFormat->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+    ApplyEllipsisTrimming(g_userFormat);
     UploadTileTexturesGpu();
-    Wh_Log(L"Start screen: Direct2D hardware rendering / DWM composition enabled");
+    Wh_Log(L"Start screen: Direct2D hardware rendering / DWM composition enabled; immediate presentation requested");
     return true;
 }
 
@@ -6352,7 +7617,7 @@ static void DrawHeaderGpu(float a, float userA = -1.0f) {
     if (a > 0.0f) {
         g_whiteGpu->SetOpacity(Clamp01(a));
         g_rt->DrawText(T(STR_START), (UINT32)wcslen(T(STR_START)), g_titleFormat,
-                       D2D1::RectF((float)LEFT + titleShift, ScF(40.0f),
+                       D2D1::RectF((float)LEFT - ScI(3) + titleShift, ScF(42.0f),
                                    (float)LEFT + ScI(400) + titleShift, ScF(140.0f)), g_whiteGpu);
     }
     if (userA <= 0.0f || g_view != VIEW_START) return;
@@ -6364,10 +7629,10 @@ static void DrawHeaderGpu(float a, float userA = -1.0f) {
     }
     g_whiteGpu->SetOpacity(Clamp01(userA));
     g_rt->DrawText(DisplayName(), (UINT32)wcslen(DisplayName()), g_userFormat,
-                   D2D1::RectF((float)g_sw - ScI(700) + accountShift, ScF(34.0f),
-                               (float)HeaderAvatarRight() - ScI(54) + accountShift, ScF(78.0f)), g_whiteGpu);
-    float x = (float)HeaderAvatarRight() - ScI(44) + accountShift, y = ScF(34.0f);
-    const float AV = ScF(44.0f);
+                   D2D1::RectF((float)g_sw - ScI(700) + accountShift, ScF(60.0f),
+                               (float)HeaderAvatarRight() - ScI(53) + accountShift, ScF(100.0f)), g_whiteGpu);
+    const float AV = ScF(40.0f);
+    float x = (float)HeaderAvatarRight() - AV + accountShift, y = ScF(60.0f);
     if (!g_avatarPicGpu) EnsureAvatarPicture();
     if (g_avatarPicGpu) {
         g_rt->DrawBitmap(g_avatarPicGpu, D2D1::RectF(x, y, x + AV, y + AV), Clamp01(userA),
@@ -6377,8 +7642,8 @@ static void DrawHeaderGpu(float a, float userA = -1.0f) {
     g_avatarFg->SetOpacity(Clamp01(userA));
     g_rt->FillRectangle(D2D1::RectF(x, y, x + AV, y + AV), g_avatarBg);
     g_rt->PushAxisAlignedClip(D2D1::RectF(x, y, x + AV, y + AV), D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
-    g_rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x + AV * 0.5f, y + ScF(14.0f)), ScF(8.0f), ScF(8.0f)), g_avatarFg);
-    g_rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x + AV * 0.5f, y + ScF(40.0f)), ScF(14.0f), ScF(16.0f)), g_avatarFg);
+    g_rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x + AV * 0.5f, y + ScF(13.0f)), ScF(7.2f), ScF(7.2f)), g_avatarFg);
+    g_rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x + AV * 0.5f, y + ScF(36.0f)), ScF(12.8f), ScF(14.5f)), g_avatarFg);
     g_rt->PopAxisAlignedClip();
     }
     if (EnsureUiIcons()) {
@@ -6404,8 +7669,7 @@ static void DrawHeaderGpu(float a, float userA = -1.0f) {
 }
 
 static void DrawTileGpu(int i, float a, float slide, float gs) {
-    a *= ResizeFadeOpacity(i);
-    if (!g_tiles[i].alive) return;
+    if (!g_tiles[i].alive || a <= 0.0f) return;
     const Tile& t = g_tiles[i];
     RECT r; TileRect(t, &r);
     float w = (float)(r.right - r.left), h = (float)(r.bottom - r.top);
@@ -6417,18 +7681,77 @@ static void DrawTileGpu(int i, float a, float slide, float gs) {
     float px = g_blockPivotX[g_tileBlock[i]] - g_scrollCur, py = TILE_PIVOT_Y;
     float ncx = px + (cx - px) * gs + slide;
     float ncy = py + (cy - py) * gs;
+    // Cull before texture upload and live-tile preparation. Semantic zoom transforms the
+    // whole page, so leave those frames untouched; in normal scrolling coordinates are pixels.
+    if (!g_closing && g_view == VIEW_START && ZoomPresence(NowMs()) <= 0.0f &&
+        (ncx + dw * 0.5f < -2.0f || ncx - dw * 0.5f > (float)g_sw + 2.0f)) return;
     int variant = (i == g_hover) ? 1 : 0;
     ID2D1Bitmap*& bitmap = g_tileGpu[i][variant];
     if (!bitmap && g_tileBits[i][variant]) {
         D2D1_BITMAP_PROPERTIES bp = GpuBitmapProperties();
         g_rt->CreateBitmap(D2D1::SizeU((UINT32)w, (UINT32)h), g_tileBits[i][variant], (UINT32)w * 4, &bp, &bitmap);
     }
+
+    // 3D Windows 8.1 app-launch tile flip: rotates around vertical Y axis with perspective keystone.
+    if (g_closing && i == g_launchFlipTile && bitmap) {
+        float u = Clamp01((float)(NowMs() - g_launchFlipTick) / (float)LAUNCH_FLIP_MS);
+        float e = EaseMetroOut(u);
+        float theta = e * 1.48f; // 0 -> ~85 degrees
+        float cosT = std::max(0.03f, cosf(theta));
+        float sinT = sinf(theta);
+        float zoom = 1.0f + 0.24f * e;
+        float fcx = ncx + ((float)g_sw * 0.5f - ncx) * (0.22f * e);
+        float fcy = ncy + ((float)g_sh * 0.5f - ncy) * (0.22f * e);
+        float fw = w * zoom * cosT;
+        float fh = h * zoom;
+        float alpha = Clamp01(1.0f - Clamp01((u - 0.76f) / 0.24f));
+        const int kStrips = 12;
+        for (int s = 0; s < kStrips; ++s) {
+            float u0 = (float)s / (float)kStrips;
+            float u1 = (float)(s + 1) / (float)kStrips;
+            float um = (u0 + u1) * 0.5f - 0.5f; // -0.5 .. +0.5
+            // Perspective foreshortening: right edge recedes, left edge comes forward (like Win8.1).
+            float persp = 1.0f - 0.22f * sinT * (um * 2.0f);
+            float sh = fh * persp;
+            D2D1_RECT_F d = D2D1::RectF(fcx - fw * 0.5f + fw * u0, fcy - sh * 0.5f,
+                                        fcx - fw * 0.5f + fw * u1 + 0.5f, fcy + sh * 0.5f);
+            D2D1_RECT_F src = D2D1::RectF(w * u0, 0.0f, w * u1, h);
+            g_rt->DrawBitmap(bitmap, d, alpha, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR, src);
+        }
+        return;
+    }
+
     D2D1_RECT_F dest = D2D1::RectF(ncx - dw * 0.5f, ncy - dh * 0.5f, ncx + dw * 0.5f, ncy + dh * 0.5f);
-    const bool pixelExact = dw == w && dh == h &&
+
+    // Smooth 240ms old-surface -> new-surface resize crossfade + scale morph.
+    float newFaceWeight = 1.0f;
+    if (i == g_resizeFadeTile) {
+        DWORD el = NowMs() - g_resizeFadeTick;
+        if (el < RESIZE_MORPH_MS && g_resizeOldW > 0 && g_resizeOldH > 0) {
+            float u = EaseMetroOut((float)el / (float)RESIZE_MORPH_MS);
+            float mw = (g_resizeOldW + (w - (float)g_resizeOldW) * u) * sc;
+            float mh = (g_resizeOldH + (h - (float)g_resizeOldH) * u) * sc;
+            // Anchor top-left corner while morphing size, matching Windows 8.1 Start resize.
+            dest = D2D1::RectF(dest.left, dest.top, dest.left + mw, dest.top + mh);
+            dw = mw; dh = mh;
+            if (!g_resizeOldGpu && !g_resizeOldPx.empty()) {
+                D2D1_BITMAP_PROPERTIES bp = GpuBitmapProperties();
+                g_rt->CreateBitmap(D2D1::SizeU((UINT32)g_resizeOldW, (UINT32)g_resizeOldH),
+                                   g_resizeOldPx.data(), (UINT32)g_resizeOldW * 4, &bp, &g_resizeOldGpu);
+            }
+            if (g_resizeOldGpu) {
+                g_rt->DrawBitmap(g_resizeOldGpu, dest, Clamp01(a * (1.0f - u)),
+                                 D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+                newFaceWeight = u;
+            }
+        }
+    }
+
+    const bool pixelExact = newFaceWeight >= 1.0f && dw == w && dh == h &&
                             dest.left == (float)(int)dest.left && dest.top == (float)(int)dest.top;
     D2D1_BITMAP_INTERPOLATION_MODE interp = pixelExact ? D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR : D2D1_BITMAP_INTERPOLATION_MODE_LINEAR;
-    if (bitmap && ((IsCalendarLiveTile(t) && EnsureCalendarFace(i, (int)w, (int)h)) ||
-                   (IsWeatherLiveTile(t) && EnsureWeatherFace(i, (int)w, (int)h)))) {
+    const float faceA = Clamp01(a * newFaceWeight);
+    if (bitmap && IsLiveFlipTile(t) && EnsureLiveFlipFace(i, (int)w, (int)h)) {
         CalendarSurface& c = g_calendarFace[i];
         if (!c.gpu) { D2D1_BITMAP_PROPERTIES bp = GpuBitmapProperties(); g_rt->CreateBitmap(D2D1::SizeU((UINT32)w,(UINT32)h), c.bits, (UINT32)w*4, &bp, &c.gpu); }
         if (c.gpu) {
@@ -6438,33 +7761,38 @@ static void DrawTileGpu(int i, float a, float slide, float gs) {
             if (p < 1.0f) {
                 D2D1_RECT_F d = D2D1::RectF(dest.left, dest.top + dh * p, dest.right, dest.bottom);
                 D2D1_RECT_F src = D2D1::RectF(0, 0, w, h * (1 - p));
-                g_rt->DrawBitmap(oldFace, d, Clamp01(a), interp, src);
+                g_rt->DrawBitmap(oldFace, d, faceA, interp, src);
             }
             if (p > 0.0f) {
                 D2D1_RECT_F d = D2D1::RectF(dest.left, dest.top, dest.right, dest.top + dh * p);
                 D2D1_RECT_F src = D2D1::RectF(0, h * (1 - p), w, h);
-                g_rt->DrawBitmap(nextFace, d, Clamp01(a), interp, src);
+                g_rt->DrawBitmap(nextFace, d, faceA, interp, src);
             }
-        } else g_rt->DrawBitmap(bitmap,dest,Clamp01(a),interp);
-    } else if (bitmap) g_rt->DrawBitmap(bitmap,dest,Clamp01(a),interp);
+        } else g_rt->DrawBitmap(bitmap, dest, faceA, interp);
+    } else if (bitmap) g_rt->DrawBitmap(bitmap, dest, faceA, interp);
+
     if (g_scratch && g_barVisible && g_barMode == 1 && g_barIdx == i) {
-        SetBr(RGB(255, 140, 32), 1.0f);
-        g_rt->DrawRectangle(D2D1::RectF(dest.left + 1.5f, dest.top + 1.5f, dest.right - 1.5f, dest.bottom - 1.5f),
-                            g_scratch, 3.0f);
+        const COLORREF selC = SelectionBorderColor();
+        const float bw = ScF(4.0f);
+        SetBr(selC, Clamp01(a));
+        g_rt->DrawRectangle(D2D1::RectF(dest.left + bw * 0.5f, dest.top + bw * 0.5f,
+                                        dest.right - bw * 0.5f, dest.bottom - bw * 0.5f),
+                            g_scratch, bw);
+        const float cs = ScF(34.0f);
         ID2D1PathGeometry* corner = NULL;
         ID2D1GeometrySink* sink = NULL;
         if (g_d2dFactory && SUCCEEDED(g_d2dFactory->CreatePathGeometry(&corner)) && corner &&
             SUCCEEDED(corner->Open(&sink)) && sink) {
-            sink->BeginFigure(D2D1::Point2F(dest.right - 31, dest.top + 2), D2D1_FIGURE_BEGIN_FILLED);
-            sink->AddLine(D2D1::Point2F(dest.right - 2, dest.top + 2));
-            sink->AddLine(D2D1::Point2F(dest.right - 2, dest.top + 31));
+            sink->BeginFigure(D2D1::Point2F(dest.right - cs, dest.top), D2D1_FIGURE_BEGIN_FILLED);
+            sink->AddLine(D2D1::Point2F(dest.right, dest.top));
+            sink->AddLine(D2D1::Point2F(dest.right, dest.top + cs));
             sink->EndFigure(D2D1_FIGURE_END_CLOSED);
             sink->Close(); sink->Release();
             g_rt->FillGeometry(corner, g_scratch);
         } else if (sink) sink->Release();
         if (corner) corner->Release();
-        TextAt(L"\xE10B", g_glyphSmall, dest.right - 24, dest.top + 1, dest.right - 1, dest.top + 24,
-               RGB(255, 255, 255));
+        TextAt(L"\xE10B", g_glyphSmall, dest.right - ScF(23.0f), dest.top + ScF(1.0f),
+               dest.right - ScF(1.0f), dest.top + ScF(22.0f), RGB(255, 255, 255));
     }
 }
 
@@ -6604,11 +7932,16 @@ static bool RenderGpu() {
                 g_rt->SetTransform(D2D1::Matrix3x2F::Scale(s, s, D2D1::Point2F((float)g_sw * 0.5f, (float)g_sh * 0.5f)));
                 for (int pass = 0; pass < 2; ++pass) {
                     for (int i = 0; i < g_tileCount; ++i) {
+                        if (i == g_launchFlipTile) continue;
                         if ((i == g_dragIdx) != (pass == 1)) continue;
                         if (g_tiles[i].alive) DrawTileGpu(i, 1.0f - tileU, 0.0f, 1.0f);
                     }
                 }
                 g_rt->SetTransform(D2D1::Matrix3x2F::Identity());
+            }
+            if (g_launchFlipTile >= 0 && g_launchFlipTile < g_tileCount && g_tiles[g_launchFlipTile].alive &&
+                (DWORD)(now - g_launchFlipTick) < LAUNCH_FLIP_MS) {
+                DrawTileGpu(g_launchFlipTile, 1.0f, 0.0f, 1.0f);
             }
         }
         if (tileU < 1.0f) {
@@ -6643,7 +7976,9 @@ static bool RenderGpu() {
     if (!g_closing) DrawBarGpu(now);
     if (!g_closing && g_open) DrawAppsChromeGpu();
     if (!g_closing && g_open) DrawCharmBarGpu(now);
+    const DWORD endDrawStart = NowMs();
     HRESULT hr = g_rt->EndDraw();
+    g_lastEndDrawMs = NowMs() - endDrawStart;
     if (FAILED(hr)) {
         Wh_Log(L"Direct2D EndDraw failed (%08X); falling back to GDI", (unsigned)hr);
         ReleaseGpuTarget();
@@ -6705,10 +8040,14 @@ static void Render() {
         const float wallA = Clamp01((tc - CLOSE_DESK_DELAY) / CLOSE_DESK_T);
         if (g_view == VIEW_START) {
             DrawHeader(hdrA, sdc, hdrA);
-            // GDI fallback: tiles shrink around their own centres (the GPU path shrinks around the screen centre).
             for (int pass = 0; pass < 2; ++pass) for (int i = 0; i < g_tileCount; ++i) {
+                if (i == g_launchFlipTile) continue;
                 if ((i == g_dragIdx) != (pass == 1)) continue;
                 if (g_tiles[i].alive && tileU < 1.0f) DrawTile(i, 1.0f - tileU, 0.0f, 1.0f - CLOSE_TILE_SCALE * tileU);
+            }
+            if (g_launchFlipTile >= 0 && g_launchFlipTile < g_tileCount && g_tiles[g_launchFlipTile].alive &&
+                (DWORD)(now - g_launchFlipTick) < LAUNCH_FLIP_MS) {
+                DrawTile(g_launchFlipTile, 1.0f, 0.0f, 1.0f);
             }
         }
         if (tileU < 1.0f) {
@@ -6923,9 +8262,10 @@ static void LoadIconFor(size_t i) {
         if (dc && bmp && bits) {
             HGDIOBJ old = SelectObject(dc,bmp);
             if (old && old != HGDI_ERROR) {
-                RECT r = {0,0,side,side}; HBRUSH bg = CreateSolidBrush(RGB(0,114,198));
-                if (bg) { FillRect(dc,&r,bg); DeleteObject(bg); }
-                bool drawn = bg && DrawImportedMetroIcon(dc,path.c_str(),8,8,48);
+                COLORREF cL = RGB(0x00, 0x72, 0xC6), cR = RGB(0x00, 0x86, 0xDC);
+                Win81SystemAppColor(path.c_str(), &cL, &cR);
+                FillHorizontalTile(dc, side, side, cL, cR, true);
+                bool drawn = DrawImportedMetroIcon(dc, path.c_str(), 10, 10, 44);
                 GdiFlush();
                 if (drawn) {
                     BYTE* copy = new (std::nothrow) BYTE[side*side*4];
@@ -7951,9 +9291,39 @@ static DWORD WINAPI AppsThread(LPVOID) {
         const Local items[] = {
             {L"windhawk:weather-tile-v1",L"Weather (tile)",L"Meteo (riquadro)",L"weather meteo"},
             {L"windhawk:calendar-tile-v1",L"Calendar (tile)",L"Calendario (riquadro)",L"calendar calendario"},
-            {L"windhawk:clock-tile-v1",L"Clock (tile)",L"Orologio (riquadro)",L"clock orologio alarms sveglie"}
+            {L"windhawk:clock-tile-v1",L"Clock (tile)",L"Orologio (riquadro)",L"clock orologio alarms sveglie"},
+            {L"windhawk:news-tile-v1",L"News (tile)",L"Notizie (riquadro)",L"news notizie giornale rss"},
+            {L"windhawk:mail-tile-v1",L"Mail (tile)",L"Posta (riquadro)",L"mail posta outlook"},
+            {L"windhawk:photos-tile-v1",L"Photos (tile)",L"Foto (riquadro)",L"photos foto immagini"},
+            {L"windhawk:people-tile-v1",L"People (tile)",L"Persone (riquadro)",L"people persone contatti"},
+            {L"windhawk:sports-tile-v1",L"Sports (tile)",L"Sport (riquadro)",L"sports sport"},
+            {L"windhawk:finance-tile-v1",L"Finance (tile)",L"Finanza (riquadro)",L"finance finanza soldi"},
+            {L"windhawk:maps-tile-v1",L"Maps (tile)",L"Mappe (riquadro)",L"maps mappe"},
+            {L"windhawk:camera-tile-v1",L"Camera (tile)",L"Fotocamera (riquadro)",L"camera fotocamera"},
+            {L"windhawk:games-tile-v1",L"Games (tile)",L"Giochi (riquadro)",L"games giochi xbox"},
+            {L"windhawk:music-tile-v1",L"Music (tile)",L"Musica (riquadro)",L"music musica"},
+            {L"windhawk:video-tile-v1",L"Video (tile)",L"Video (riquadro)",L"video film"},
+            {L"windhawk:recorder-tile-v1",L"Sound Recorder (tile)",L"Registratore (riquadro)",L"recorder registratore"}
         };
         for (const auto& item : items) {
+            // Avoid fake shortcuts for app-only kinds without an installed counterpart.
+            const wchar_t* need = NULL;
+            if (!_wcsicmp(item.id, L"windhawk:photos-tile-v1")) need = L"microsoft.windows.photos";
+            else if (!_wcsicmp(item.id, L"windhawk:camera-tile-v1")) need = L"microsoft.windowscamera";
+            else if (!_wcsicmp(item.id, L"windhawk:music-tile-v1")) need = L"microsoft.zunemusic";
+            else if (!_wcsicmp(item.id, L"windhawk:video-tile-v1")) need = L"microsoft.zunevideo";
+            else if (!_wcsicmp(item.id, L"windhawk:clock-tile-v1")) need = L"microsoft.windowsalarms";
+            else if (!_wcsicmp(item.id, L"windhawk:recorder-tile-v1")) need = L"microsoft.windowssoundrecorder";
+            if (need) {
+                bool installed = false;
+                for (const auto& a : list) {
+                    if (a.exe || a.searchOnly || a.charmCat != CC_APP) continue;
+                    std::wstring low = a.parse;
+                    for (auto& c : low) c = (wchar_t)towlower(c);
+                    if (low.find(need) != std::wstring::npos) { installed = true; break; }
+                }
+                if (!installed) continue;
+            }
             AddApp(list, it ? item.italian : item.en, item.id, false, false, CC_APP, true, true);
             list.back().keywords = item.words;
         }
@@ -8062,8 +9432,15 @@ static int ResultRow(int i) {
 
 static int HitResult(int mx, int my) {
     float sx = (float)mx + g_scrollCur;
-    for (int i = 0; i < (int)g_results.size(); ++i) {
-        float x = (float)(kItemX + ResultCol(i) * kItemPitchX);
+    // Results are column-ordered. Restrict hit testing to the pointer's column instead
+    // of scanning the full list on every mouse move, including at the far-right end.
+    if (sx < kItemX || kItemPitchX <= 0) return -1;
+    const int col = (int)floorf((sx - (float)kItemX) / (float)kItemPitchX);
+    const int count = (int)g_results.size();
+    int lo = 0, hi = count;
+    while (lo < hi) { int mid = (lo + hi) / 2; if (ResultCol(mid) < col) lo = mid + 1; else hi = mid; }
+    for (int i = lo; i < count && ResultCol(i) == col; ++i) {
+        float x = (float)(kItemX + col * kItemPitchX);
         float y = (float)(kItemY + ResultRow(i) * kItemPitchY);
         if (sx >= x && sx < x + kItemW && (float)my >= y && (float)my < y + kItemH) return i;
     }
@@ -8322,8 +9699,8 @@ static void LaunchEntry(const AppEntry& a) {
     if (a.launchKind != 0) { CloseStart(); LaunchSettingEntry(a); return; }
     std::wstring target = AppTarget(a);
     CloseStart();
-    const wchar_t* url = LocalInfoUrl(target.c_str());
-    ShellExecuteW(NULL, L"open", url ? url : target.c_str(), NULL, NULL, SW_SHOWNORMAL);
+    std::wstring dest = IsLocalInfoTile(target.c_str()) ? ResolveLocalTileTarget(target.c_str()) : target;
+    OpenTileTarget(dest);
 }
 static void LaunchResult(int i) {
     if (i < 0 || i >= (int)g_results.size()) return;
@@ -8499,6 +9876,39 @@ static void TextAt(const wchar_t* s, IDWriteTextFormat* f, float l, float t, flo
     g_rt->DrawText(s, (UINT32)wcslen(s), f, D2D1::RectF(l, t, r, b), g_scratch, D2D1_DRAW_TEXT_OPTIONS_CLIP);
 }
 
+// DrawText builds a new IDWriteTextLayout on every call. The names in the list of all apps do not change
+// while it scrolls, so their layouts are kept and drawn with DrawTextLayout, which is what the
+// DirectWrite documentation recommends for text that is drawn again and again. An entry is made again
+// when the text, the format or the box changes; all of them are released with the text formats.
+struct NameLayout { IDWriteTextLayout* layout = NULL; IDWriteTextFormat* fmt = NULL; float w = 0.0f, h = 0.0f; std::wstring text; };
+static std::vector<NameLayout> g_nameLayouts;
+static void ReleaseNameLayouts() {
+    for (NameLayout& n : g_nameLayouts) if (n.layout) { n.layout->Release(); n.layout = NULL; }
+    g_nameLayouts.clear();
+}
+static void NameTextAt(int appIdx, IDWriteTextFormat* f, float l, float t, float r, float b, COLORREF c, float a) {
+    if (appIdx < 0 || appIdx >= (int)g_apps.size()) return;
+    const std::wstring& name = g_apps[(size_t)appIdx].name;
+    if (!g_writeFactory || !f || name.empty() || r <= l || l >= (float)g_sw || r <= 0.0f) {
+        TextAt(name.c_str(), f, l, t, r, b, c, a);
+        return;
+    }
+    if ((size_t)appIdx >= g_nameLayouts.size()) g_nameLayouts.resize(std::max(g_apps.size(), (size_t)appIdx + 1));
+    NameLayout& n = g_nameLayouts[(size_t)appIdx];
+    const float w = r - l, h = b - t;
+    if (!n.layout || n.fmt != f || fabsf(n.w - w) > 0.01f || fabsf(n.h - h) > 0.01f || n.text != name) {
+        if (n.layout) { n.layout->Release(); n.layout = NULL; }
+        if (FAILED(g_writeFactory->CreateTextLayout(name.c_str(), (UINT32)name.size(), f, w, h, &n.layout)) || !n.layout) {
+            n.layout = NULL;
+            TextAt(name.c_str(), f, l, t, r, b, c, a);
+            return;
+        }
+        n.fmt = f; n.w = w; n.h = h; n.text = name;
+    }
+    SetBr(c, a);
+    g_rt->DrawTextLayout(D2D1::Point2F(l, t), n.layout, g_scratch, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+}
+
 static ID2D1Bitmap* IconGpu(int appIdx) {
     if (appIdx < 0 || appIdx >= (int)g_icons.size()) return NULL;
     if (g_apps[appIdx].desktop) {
@@ -8512,7 +9922,11 @@ static ID2D1Bitmap* IconGpu(int appIdx) {
     }
     IconSlot& s = g_icons[appIdx];
     if (s.gpu) return s.gpu;
-    if (!InterlockedCompareExchange(&s.ready, 0, 0) && (g_apps[appIdx].exe || g_apps[appIdx].searchOnly)) LoadIconFor((size_t)appIdx);
+    // Shell icon extraction can synchronously touch disk or invoke extensions. Never perform it
+    // in the scroll paint path; a final settled repaint loads any still-missing visible icons.
+    if (!InterlockedCompareExchange(&s.ready, 0, 0) && !g_sbDrag &&
+        fabsf(g_scrollTarget - g_scrollCur) <= 0.3f &&
+        (g_apps[appIdx].exe || g_apps[appIdx].searchOnly)) LoadIconFor((size_t)appIdx);
     if (!InterlockedCompareExchange(&s.ready, 0, 0) || !s.px) return NULL;
     D2D1_BITMAP_PROPERTIES p = {};
     p.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
@@ -8526,8 +9940,8 @@ static void DrawSearchGpu(DWORD now, bool closing, float alpha) {
     if (!g_scratch || !g_subFormat) return;
     alpha = Clamp01(alpha);
     g_whiteGpu->SetOpacity(alpha);
-    g_rt->DrawText(T(STR_APPS), 4, g_titleFormat,
-                   D2D1::RectF((float)LEFT, 40.0f, (float)LEFT + 400, 140.0f), g_whiteGpu);
+    g_rt->DrawText(T(STR_APPS), (UINT32)wcslen(T(STR_APPS)), g_titleFormat,
+                   D2D1::RectF((float)LEFT - ScI(3), ScF(42.0f), (float)LEFT + ScI(400), ScF(140.0f)), g_whiteGpu);
     if (g_queryLen > 0) {
         wchar_t sub[384];
         swprintf_s(sub, T(STR_RESULTS_FOR), std::wstring(g_query, (size_t)g_queryLen).c_str(),
@@ -8572,7 +9986,21 @@ static void DrawSearchGpu(DWORD now, bool closing, float alpha) {
                 }
             }
         }
-        for (int i = 0; i < (int)g_results.size(); ++i) {
+        // The items are ordered by column, so the visible ones are a contiguous range found with a
+        // binary search, instead of testing every app of the list on every frame.
+        const int nRes = (int)g_results.size();
+        const float pitchX = (float)kItemPitchX;
+        const int colsPerScreen = std::max(1, (int)((float)g_sw / pitchX));
+        const int colLo = (int)floorf((g_scrollCur - (float)kItemX - (float)kItemW) / pitchX);
+        const int colHi = (int)ceilf((g_scrollCur + (float)g_sw - (float)kItemX) / pitchX);
+        auto firstFrom = [&](int col) {
+            int lo = 0, hi = nRes;
+            while (lo < hi) { int mid = (lo + hi) / 2; if (ResultCol(mid) < col) lo = mid + 1; else hi = mid; }
+            return lo;
+        };
+        const int iBegin = firstFrom(colLo);
+        for (int i = iBegin; i < nRes; ++i) {
+            if (ResultCol(i) > colHi) break;
             float x = (float)(kItemX + ResultCol(i) * kItemPitchX) - g_scrollCur;
             float y = (float)(kItemY + ResultRow(i) * kItemPitchY);
             if (x + kItemW < 0.0f || x > (float)g_sw) continue;
@@ -8582,12 +10010,29 @@ static void DrawSearchGpu(DWORD now, bool closing, float alpha) {
             if (ID2D1Bitmap* ic = IconGpu(ai))
                 g_rt->DrawBitmap(ic, D2D1::RectF(x + ScF(10.5f), y + ScF(9.5f), x + ScF(50.5f), y + ScF(49.5f)), fade,
                                  D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
-            TextAt(g_apps[ai].name.c_str(), g_itemFormat, x + ScF(60.0f), y + ScF(8.0f), x + (float)kItemW - ScF(4.0f), y + ScF(54.0f),
-                   RGB(235, 235, 245), fade);
+            NameTextAt(ai, g_itemFormat, x + ScF(60.0f), y + ScF(8.0f), x + (float)kItemW - ScF(4.0f), y + ScF(54.0f),
+                       RGB(235, 235, 245), fade);
             if (i == g_selected) {
                 SetBr(RGB(255, 255, 255), fade);
                 g_rt->DrawRectangle(D2D1::RectF(x + 1.0f, y + 1.0f, x + (float)kItemW - 1.0f, y + (float)kItemH - 1.0f),
                                     g_scratch, 2.0f);
+            }
+        }
+        // The first draw of an icon uploads it to the GPU. While the list scrolls that used to happen
+        // on the frame in which the icon appears; now a few icons of the columns just outside the
+        // screen (one screen on each side) are uploaded per frame, so they are already there.
+        {
+            // Do not upload speculative textures while the user is actively scrolling.
+            int budget = (g_sbDrag || fabsf(g_scrollTarget - g_scrollCur) > 0.3f) ? 0 : 6;
+            const int pf0 = firstFrom(colLo - colsPerScreen);
+            for (int i = pf0; i < nRes && budget > 0; ++i) {
+                if (ResultCol(i) > colHi + colsPerScreen) break;
+                const int ai = g_results[i];
+                if (ai < 0 || ai >= (int)g_icons.size() || g_apps[ai].desktop) continue;
+                IconSlot& sl = g_icons[(size_t)ai];
+                if (sl.gpu || !InterlockedCompareExchange(&sl.ready, 0, 0) || !sl.px) continue;
+                IconGpu(ai);
+                --budget;
             }
         }
     }
@@ -8749,6 +10194,23 @@ static void Relayout(bool animate) {
         int i = g_order[k]; cws[k] = g_tiles[i].cw; groups[k] = g_tileGroup[i];
     }
     LayoutSlots(cws, groups, g_orderCount, xs, ys);
+    // Restore explicit, collision-free cell drops after the normal auto-layout.
+    // Older layouts have no coordinates and keep their existing behaviour.
+    for (int k = 0; k < g_orderCount; ++k) {
+        Tile& t = g_tiles[g_order[k]];
+        int x = t.manualCellX, y = t.manualCellY;
+        if (x < 0 || y < 0 || x + TileCellsW(t.cw) > GroupColumns()*2 ||
+            y + TileCellsH(t.cw) > GroupRows()*2) continue;
+        float nx = (float)(LEFT + groups[k]*GroupPitch() + x*CellStep());
+        float ny = (float)(TOP + y*CellStep());
+        float w = (float)TilePxW(t.cw), h = (float)TilePxH(t.cw);
+        bool free = true;
+        for (int j = 0; j < g_orderCount && free; ++j) if (j != k) {
+            float ow = (float)TilePxW(cws[j]), oh = (float)TilePxH(cws[j]);
+            if (nx < xs[j]+ow && nx+w > xs[j] && ny < ys[j]+oh && ny+h > ys[j]) free = false;
+        }
+        if (free) { xs[k] = nx; ys[k] = ny; }
+    }
     for (int k = 0; k < g_orderCount; ++k) {
         Tile& t = g_tiles[g_order[k]];
         t.tx = xs[k]; t.ty = ys[k];
@@ -8816,7 +10278,7 @@ static void SaveLayout() {
     for (int i = 0; i < g_tileCount; ++i) g_committedGroup[i] = g_tileGroup[i];
     std::wstring path;
     if (!LayoutPath(path)) return;
-    std::wstring text = L"#Win8StartScreen tiles v7 (kind label target c1 c2 size style iconIndex iconFile group glyph caption auto shortcut iconFrom)\n";
+    std::wstring text = L"#Win8StartScreen tiles v8 (kind label target c1 c2 size style iconIndex iconFile group glyph caption auto shortcut iconFrom cellX cellY)\n";
     for (int k = 0; k < g_orderCount; ++k) {
         const Tile& t = g_tiles[g_order[k]];
         text += std::to_wstring(t.kind) + L"\t" + (t.label ? t.label : L"") + L"\t" + (t.target ? t.target : L"") + L"\t" +
@@ -8824,7 +10286,8 @@ static void SaveLayout() {
                 std::to_wstring(t.cw) + L"\t" + std::to_wstring((int)t.style) + L"\t" + std::to_wstring(t.iconIdx) + L"\t" +
                 (t.iconFile ? t.iconFile : L"") + L"\t" + std::to_wstring(g_tileGroup[g_order[k]]) + L"\t" +
                 std::to_wstring(t.mg) + L"\t" + t.caption + L"\t" + (t.mgAuto ? L"1" : L"0") + L"\t" +
-                (t.mpShortcut ? L"1" : L"0") + L"\t" + (t.iconSrc ? t.iconSrc : L"") + L"\n";
+                (t.mpShortcut ? L"1" : L"0") + L"\t" + (t.iconSrc ? t.iconSrc : L"") + L"\t" +
+                std::to_wstring(t.manualCellX) + L"\t" + std::to_wstring(t.manualCellY) + L"\n";
     }
     if (!WriteTextFileAtomic(path, text))
         Wh_Log(L"Couldn't save the Start layout to %s", path.c_str());
@@ -8906,6 +10369,7 @@ static bool LoadLayout() {
         // program with a packaged app (Notepad and Paint on Windows 11, Calculator before it), and
         // the icon has to be loaded again from the new place.
         if (p.size() >= 15) t.iconSrc = DupW(p[14].c_str());
+        if (p.size() >= 17) { t.manualCellX = _wtoi(p[15].c_str()); t.manualCellY = _wtoi(p[16].c_str()); }
         if (p.size() >= 11) {
             const int glyph = _wtoi(p[10].c_str());
             if (glyph >= MG_IE && glyph <= MG_CONTROL) t.mg = glyph;
@@ -8925,7 +10389,8 @@ static bool LoadLayout() {
         if (t.kind == 1 && t.target) {
             if (_wcsicmp(t.target, kDesktopTarget) == 0) {
                 t.style = DESKTOP_REFERENCE;
-            } else if (IsPackagedAppTarget(t.target)) {
+            } else if (IsPackagedAppTarget(t.target) || IsLocalInfoTile(t.target) ||
+                       Win81SystemAppColor(t.target, NULL, NULL)) {
                 t.style = PINNED_APP;
             } else {
                 t.style = TOP_APP;
@@ -9291,6 +10756,10 @@ static void LoadPinIcon(Tile& t) {
         const wchar_t* aumid = PackagedAumidForProgram(t.target);
         if (aumid) LoadShellImageInto(t, aumid);
     }
+    // If the shell returns no usable icon (e.g. a broken Paint stub), show the
+    // standard application icon instead of an anonymous solid-colour square.
+    if (!t.pinBmp && !t.icon && t.style == TOP_APP)
+        t.icon = CopyIcon(LoadIconW(NULL, IDI_APPLICATION));
     Wh_Log(L"LoadPinIcon: %s mg=%d style=%d pinBmp=%d icon=%d", t.target ? t.target : L"(null)", t.mg, (int)t.style,
            t.pinBmp ? 1 : 0, t.icon ? 1 : 0);
 }
@@ -9332,19 +10801,24 @@ static void PinAppSized(const wchar_t* name, const std::wstring& target, int cw,
     if (_wcsicmp(target.c_str(), kDesktopTarget) == 0) {
         t.style = DESKTOP_REFERENCE;
         t.c1 = RGB(25, 9, 98); t.c2 = RGB(70, 120, 215);
-    } else if (IsPackagedAppTarget(target.c_str())) {
+    } else if (IsPackagedAppTarget(target.c_str()) || IsLocalInfoTile(target.c_str()) ||
+               Win81SystemAppColor(target.c_str(), NULL, NULL)) {
         t.style = PINNED_APP;
-        t.c1 = t.c2 = RGB(97, 43, 146);
+        COLORREF sysL = 0, sysR = 0;
+        if (Win81SystemAppColor(target.c_str(), &sysL, &sysR)) {
+            t.c1 = sysL; t.c2 = sysR;
+        } else {
+            t.c1 = t.c2 = RGB(97, 43, 146);
+        }
     } else {
         t.style = TOP_APP;
         ApplyDesktopTileTheme(t);
     }
     if (glyph >= 0) {
-        // A simulated Metro tile keeps its own Metro colour and its Metro glyph.
         t.mg = glyph;
         t.mgAuto = autoTile;
         wcsncpy_s(t.caption, caption ? caption : L"", _TRUNCATE);
-        const COLORREF left = metroTile ? metroTile : MetroPalette(glyph % 12);   // palette is the fallback
+        const COLORREF left = metroTile ? metroTile : MetroPalette(glyph % 12);
         t.c1 = left;
         t.c2 = MetroTileSecond(left);
     }
@@ -9359,40 +10833,49 @@ static void PinAppSized(const wchar_t* name, const std::wstring& target, int cw,
     g_tileScale[idx] = 1.0f;
     g_tileGroup[idx] = g_orderCount ? g_tileGroup[g_order[g_orderCount - 1]] + (newGroup ? 1 : 0) : 0;
     g_order[g_orderCount++] = idx;
-    if (t.style == PINNED_APP && t.mg < 0) QueuePackageArt(t.target);
+    if (t.style == PINNED_APP && t.mg < 0 && !IsStoreTarget(t.target)) QueuePackageArt(t.target);
     Relayout(true);
     RebuildTile(idx);
     SaveLayout();
     UpdatePhotoWorker();
     UpdateWeatherWorker();
+    UpdateNewsWorker();
     RepaintNow();
 }
 static void PinApp(const wchar_t* name, const std::wstring& target) {
     PinAppSized(name, target, TS_MEDIUM, false);
 }
 
+static bool CanPinEntry(const AppEntry& a);
 static void SeedStartLayout() {
     InterlockedExchange(&g_seedPending, 0);
-    Wh_SetIntValue(L"layoutSeeded", 1);
-    struct Seed { const wchar_t* match[3]; int cw; bool newGroup; };
+    Wh_SetIntValue(L"layoutSeededV140", 1);
+    const bool itLang = PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_ITALIAN;
+    // Seed installed apps and selected web substitutes. Store is only added when installed;
+    // browser and OneDrive are deliberately excluded. Settings uses CanPinEntry.
+    struct Seed { const wchar_t* match[3]; int cw; bool newGroup; const wchar_t* fallbackId; const wchar_t* fbEn; const wchar_t* fbIt; };
     static const Seed kSeeds[] = {
-        { { L"microsoft.windowslive.mail",     L"microsoft.outlookforwindows", NULL }, TS_WIDE,   true  },
-        { { L"microsoft.windowslive.calendar", NULL, NULL },                          TS_WIDE,   false },
-        { { L"microsoft.windows.photos",       NULL, NULL },                          TS_MEDIUM, false },
-        { { L"microsoft.microsoftedge",        NULL, NULL },                          TS_MEDIUM, false },
-        { { L"microsoft.bingweather",          NULL, NULL },                          TS_LARGE,  true  },
-        { { L"microsoft.bingnews",             L"microsoft.start", NULL },            TS_WIDE,   false },
-        { { L"microsoft.windowscamera",        NULL, NULL },                          TS_SMALL,  true  },
-        { { L"microsoft.gamingapp",            L"microsoft.xboxapp", NULL },          TS_SMALL,  false },
-        { { L"microsoft.zunemusic",            NULL, NULL },                          TS_SMALL,  false },
-        { { L"microsoft.zunevideo",            NULL, NULL },                          TS_SMALL,  false },
-        { { L"microsoft.skydrive",             L"onedrive.exe", NULL },               TS_MEDIUM, false },
-        { { L"microsoft.windowsmaps",          NULL, NULL },                          TS_MEDIUM, false },
-        { { L"windows.immersivecontrolpanel",  NULL, NULL },                          TS_MEDIUM, false },
-        { { L"microsoft.windowscalculator",    NULL, NULL },                          TS_SMALL,  true  },
-        { { L"microsoft.windowsalarms",        NULL, NULL },                          TS_SMALL,  false },
-        { { L"microsoft.windowsnotepad",       NULL, NULL },                          TS_SMALL,  false },
-        { { L"microsoft.paint",                NULL, NULL },                          TS_SMALL,  false },
+        { { L"microsoft.windowslive.mail",     L"microsoft.outlookforwindows", NULL }, TS_WIDE,   true,  L"windhawk:mail-tile-v1",     L"Mail",     L"Posta" },
+        { { L"microsoft.windowslive.calendar", NULL, NULL },                          TS_WIDE,   false, L"windhawk:calendar-tile-v1", L"Calendar", L"Calendario" },
+        { { L"microsoft.windowsstore",         NULL, NULL },                          TS_WIDE,   false, NULL, NULL, NULL },
+        { { L"microsoft.windows.photos",       NULL, NULL },                          TS_MEDIUM, false, NULL, NULL, NULL },
+        { { L"microsoft.bingweather",          NULL, NULL },                          TS_LARGE,  true,  L"windhawk:weather-tile-v1",  L"Weather",  L"Meteo" },
+        { { L"microsoft.bingnews",             L"microsoft.start", NULL },            TS_WIDE,   false, L"windhawk:news-tile-v1",     L"News",     L"Notizie" },
+        { { L"microsoft.people",               NULL, NULL },                          TS_MEDIUM, false, L"windhawk:people-tile-v1",   L"People",   L"Persone" },
+        { { L"microsoft.bingsports",           NULL, NULL },                          TS_MEDIUM, false, L"windhawk:sports-tile-v1",   L"Sports",   L"Sport" },
+        { { L"microsoft.bingfinance",          NULL, NULL },                          TS_MEDIUM, false, L"windhawk:finance-tile-v1",  L"Finance",  L"Finanza" },
+        { { L"microsoft.windowscamera",        NULL, NULL },                          TS_SMALL,  true,  NULL, NULL, NULL },
+        { { L"microsoft.gamingapp",            L"microsoft.xboxapp", NULL },          TS_SMALL,  false, L"windhawk:games-tile-v1",    L"Games",    L"Giochi" },
+        { { L"microsoft.zunemusic",            NULL, NULL },                          TS_SMALL,  false, NULL, NULL, NULL },
+        { { L"microsoft.zunevideo",            NULL, NULL },                          TS_SMALL,  false, NULL, NULL, NULL },
+        { { L"microsoft.windowsmaps",          NULL, NULL },                          TS_MEDIUM, false, L"windhawk:maps-tile-v1",     L"Maps",     L"Mappe" },
+        { { L"windows.immersivecontrolpanel",  NULL, NULL },                          TS_MEDIUM, false, L"ms-settings:",              L"Settings", L"Impostazioni" },
+        { { L"microsoft.windowscalculator",    NULL, NULL },                          TS_SMALL,  true,  L"calc.exe",                  L"Calculator", L"Calcolatrice" },
+        { { L"microsoft.windowsalarms",        NULL, NULL },                          TS_SMALL,  false, NULL, NULL, NULL },
+        { { L"microsoft.windowsnotepad",       NULL, NULL },                          TS_SMALL,  false, L"notepad.exe",               L"Notepad",  L"Blocco note" },
+        { { L"microsoft.paint",                NULL, NULL },                          TS_SMALL,  false, L"mspaint.exe",               L"Paint",    L"Paint" },
+        { { L"microsoft.windowssoundrecorder", NULL, NULL },                          TS_SMALL,  false, NULL, NULL, NULL },
+        { { L"win8start:desktop",              NULL, NULL },                          TS_MEDIUM, true,  L"win8start:desktop",         L"Desktop",  L"Desktop" },
     };
     int added = 0;
     std::vector<int> used;
@@ -9402,7 +10885,7 @@ static void SeedStartLayout() {
             SrwGuard guard(&g_appsLock, false);
             for (size_t i = 0; i < g_apps.size() && target.empty(); ++i) {
                 const AppEntry& a = g_apps[i];
-                if (a.exe || a.searchOnly || a.charmCat != CC_APP) continue;
+                if (a.exe || !CanPinEntry(a)) continue;
                 bool taken = false;
                 for (int u : used) if (u == (int)i) { taken = true; break; }
                 if (taken) continue;
@@ -9415,13 +10898,23 @@ static void SeedStartLayout() {
                 }
             }
         }
+        if (target.empty() && seed.fallbackId) {
+            target = seed.fallbackId;
+            name = itLang ? seed.fbIt : seed.fbEn;
+        }
         if (target.empty() || IsPinned(target.c_str())) continue;
+        if (target.size() >= 4 && _wcsicmp(target.c_str() + target.size() - 4, L".exe") == 0 &&
+            target.find(L'\\') == std::wstring::npos) {
+            wchar_t full[MAX_PATH] = {};
+            if (!SearchPathW(NULL, target.c_str(), NULL, ARRAYSIZE(full), full, NULL)) continue;
+            target = full;
+        }
         int cw = seed.cw;
         while (cw > TS_MEDIUM && TileCellsH(cw) > GroupRows() * 2) --cw;
         PinAppSized(name.c_str(), target, cw, seed.newGroup);
         ++added;
     }
-    if (added) Wh_Log(L"Seeded the Start layout with %d installed app(s) in Windows 8.1 sizes", added);
+    if (added) Wh_Log(L"Seeded the Start layout with %d Windows 8.1 tile(s) (installed apps + built-in fallbacks)", added);
 }
 
 // Takes one tile out of the order and frees it, without touching the layout or the screen. Used by
@@ -9543,6 +11036,7 @@ static void UnpinTile(int idx) {
     RemoveTileFromOrder(idx);
     UpdatePhotoWorker();
     UpdateWeatherWorker();
+    UpdateNewsWorker();
     Relayout(true);
     ClampScroll();
     SaveLayout();
@@ -9850,6 +11344,7 @@ static void SyncMetroTiles(bool create) {
     }
 }
 
+static void ResumeFrames();
 static void ResizeTileTo(int idx, int size) {
     if (idx < 0 || idx >= g_tileCount || !g_tiles[idx].alive) return;
     int supported[4];
@@ -9857,13 +11352,25 @@ static void ResizeTileTo(int idx, int size) {
     bool allowed = false;
     for (int i = 0; i < count; ++i) if (supported[i] == size) allowed = true;
     if (!allowed || g_tiles[idx].cw == size) return;
+
+    ReleaseResizeOldGpu();
+    g_resizeOldPx.clear();
+    g_resizeOldW = TilePxW(g_tiles[idx].cw);
+    g_resizeOldH = TilePxH(g_tiles[idx].cw);
+    if (g_tileBits[idx][0] && g_resizeOldW > 0 && g_resizeOldH > 0) {
+        const size_t bytes = (size_t)g_resizeOldW * (size_t)g_resizeOldH * 4;
+        const BYTE* src = (const BYTE*)g_tileBits[idx][0];
+        g_resizeOldPx.assign(src, src + bytes);
+    }
     g_resizeFadeTile = idx;
     g_resizeFadeTick = NowMs();
+
     g_tiles[idx].cw = size;
     RebuildTile(idx);
     Relayout(true);
     ClampScroll();
     SaveLayout();
+    ResumeFrames();
     RepaintNow();
 }
 
@@ -9892,7 +11399,29 @@ static int NearbyGroup(float cx, float cy) {
     return nearest;
 }
 
-static void UpdateDrag(int mx, int my) {
+// Check a snapped empty cell without moving other tiles. Positions are relative to the group,
+// so they survive scroll changes, screen-size changes and saving the layout.
+static bool EmptyDropCell(int idx, float px, float py, int* outX, int* outY) {
+    const Tile& d = g_tiles[idx];
+    const int group = g_tileGroup[idx], step = CellStep();
+    if (group < 0 || step <= 0) return false;
+    const int origin = LEFT + group * GroupPitch();
+    int x = (int)floorf((px - origin) / step + 0.5f);
+    int y = (int)floorf((py - TOP) / step + 0.5f);
+    if (x < 0 || y < 0 || x + TileCellsW(d.cw) > GroupColumns()*2 ||
+        y + TileCellsH(d.cw) > GroupRows()*2) return false;
+    float nx = (float)(origin + x*step), ny = (float)(TOP + y*step);
+    float w = (float)TilePxW(d.cw), h = (float)TilePxH(d.cw);
+    for (int k=0; k<g_orderCount; ++k) {
+        int i = g_order[k]; if (i == idx || !g_tiles[i].alive) continue;
+        const Tile& o = g_tiles[i];
+        if (nx < o.tx + TilePxW(o.cw) && nx+w > o.tx &&
+            ny < o.ty + TilePxH(o.cw) && ny+h > o.ty) return false;
+    }
+    *outX=x; *outY=y; return true;
+}
+
+static void UpdateDrag(int mx, int my, bool dropping = false) {
     if (g_dragIdx < 0) return;
     Tile& d = g_tiles[g_dragIdx];
     d.px = (float)mx + g_scrollCur - g_grabX;
@@ -9901,12 +11430,25 @@ static void UpdateDrag(int mx, int my) {
     float cx = d.px + w * 0.5f, cy = d.py + th * 0.5f;
     int destination = NearbyGroup(cx, cy);
     int cur = OrderPos(g_dragIdx), n = g_orderCount;
-    if (destination >= 0 && cur >= 0 && n > 1) {
+    int emptyX, emptyY;
+    bool emptyDrop = destination == g_tileGroup[g_dragIdx] &&
+                     EmptyDropCell(g_dragIdx, d.px, d.py, &emptyX, &emptyY);
+    if (dropping && !emptyDrop && destination >= 0 && cur >= 0 && n > 1) {
         int others[MAX_TILES], on = 0;
         for (int k = 0; k < n; ++k) if (k != cur) others[on++] = g_order[k];
         float bestD = 1e30f;
-        int bestJ = -1;
+        int bestJ = -1, nearestPos = cur;
+        float nearestD = 1e30f;
+        for (int k = 0; k < on; ++k) {
+            const Tile& other = g_tiles[others[k]];
+            if (g_tileGroup[others[k]] != destination) continue;
+            float dx = other.tx + TilePxW(other.cw)*0.5f - cx;
+            float dy = other.ty + TilePxH(other.cw)*0.5f - cy;
+            float d2 = dx*dx + dy*dy;
+            if (d2 < nearestD) { nearestD = d2; nearestPos = k; }
+        }
         for (int j = 0; j < n; ++j) {
+            if (j != cur && abs(j-nearestPos) > 2 && j != n-1) continue;
             if ((j > 0 && g_tileGroup[others[j - 1]] > destination) ||
                 (j < on && g_tileGroup[others[j]] < destination)) continue;
             int cws[MAX_TILES], groups[MAX_TILES], m = 0;
@@ -9930,6 +11472,7 @@ static void UpdateDrag(int mx, int my) {
             for (int k = n - 1; k > bestJ; --k) g_order[k] = g_order[k - 1];
             g_order[bestJ] = g_dragIdx;
             g_tileGroup[g_dragIdx] = destination;
+            d.manualCellX = d.manualCellY = -1;
             Relayout(true);
         }
     }
@@ -9957,6 +11500,13 @@ static void EndDrag() {
     float cx = tile.px + (float)TilePxW(tile.cw) * 0.5f;
     float cy = tile.py + (float)TilePxH(tile.cw) * 0.5f;
     float lastRight = (float)(LEFT + (g_groupCount - 1) * GroupPitch() + GroupWidth());
+    int cellX = -1, cellY = -1;
+    if (NearbyGroup(cx, cy) == g_tileGroup[g_dragIdx] &&
+        EmptyDropCell(g_dragIdx, tile.px, tile.py, &cellX, &cellY)) {
+        g_tiles[g_dragIdx].manualCellX = cellX;
+        g_tiles[g_dragIdx].manualCellY = cellY;
+        Relayout(true);
+    }
     if (NearbyGroup(cx, cy) < 0 && cx > lastRight + 43.0f &&
         cy >= TOP - 55.0f && cy <= TOP + GroupHeight() + 55.0f) {
         for (int k = 0; k < g_orderCount; ++k) g_order[k] = g_dragStartOrder[k];
@@ -9966,6 +11516,7 @@ static void EndDrag() {
             for (int k = cur; k + 1 < g_orderCount; ++k) g_order[k] = g_order[k + 1];
             g_order[g_orderCount - 1] = g_dragIdx;
             g_tileGroup[g_dragIdx] = g_groupCount;
+            g_tiles[g_dragIdx].manualCellX = g_tiles[g_dragIdx].manualCellY = -1;
             Relayout(true);
         }
     }
@@ -9983,20 +11534,35 @@ static int kBarH = 100, kBarBtnW = 100;
 static void CreateUiFonts();
 static void RecreateFonts();
 static void UpdateDpiMetrics() {
-    TILE = ScI(150); GAP = ScI(10); LEFT = ScI(120); TOP = ScI(168);
-    GROUP_SEPARATION = ScI(40);
+    // Windows 8.1 grid as measured on the reference Start screen (1366x768): 120 px tiles, 8 px gap,
+    // 120 px left margin, tiles from y = 171, 56 px between groups. ScI() scales these with the
+    // screen height (see UpdateDpi), so the proportions are the same on every resolution.
+    TILE = ScI(120); GAP = ScI(8); LEFT = ScI(120); TOP = ScI(171);
+    GROUP_SEPARATION = ScI(56);
     TILE_PIVOT_Y = (float)TOP + 2.875f * (float)TILE;
     TILE_SLIDE = ScF(110.0f);
     LOGON_TILE_SLIDE = ScF(260.0f);
     SB_W = ScI(346); SB_PAD = ScI(40);
     kBarH = ScI(100); kBarBtnW = ScI(100);
 }
-static bool UpdateDpi(int forcedDpi = 0) {
+static bool UpdateDpi(int forcedDpi = 0, int screenH = 0) {
     int dpi = forcedDpi;
     if (!dpi && g_wnd) dpi = (int)GetDpiForWindow(g_wnd);
     if (!dpi) dpi = (int)GetDpiForSystem();
     if (!dpi) { HDC dc = GetDC(NULL); if (dc) { dpi = GetDeviceCaps(dc, LOGPIXELSY); ReleaseDC(NULL, dc); } }
     if (dpi < 96) dpi = 96; if (dpi > 480) dpi = 480;
+    // The whole layout is drawn in units of the 1366x768 Windows 8.1 reference, so the scale follows
+    // the height of the screen Start is shown on (768 px = 100 %), not the Windows DPI setting:
+    // tiles, header and margins then keep the proportions of the real Start screen at any
+    // resolution and any display scaling. The DPI is only the fallback if the height is unknown.
+    {
+        const int h = screenH > 0 ? screenH : g_sh;
+        if (h >= 480) {
+            dpi = MulDiv(h, 96, 768);
+            if (dpi < 72) dpi = 72;
+            if (dpi > 480) dpi = 480;
+        }
+    }
     if (dpi == g_dpi) return false;
     g_dpi = dpi; g_dpiScale = (float)dpi / 96.0f;
     UpdateDpiMetrics();
@@ -10585,32 +12151,25 @@ static void DrawAppsChromeGdi(HDC, float closeA) {
         // The disc first: it is the background inside the ring, the white glyph goes over it.
         if (g_hoverArrow && ha > 0) BlitIconGdi(g_bbDC, g_iconArrowHoverDisc, ar, false, ha);
         BlitIconGdi(g_bbDC, g_iconArrowDown, ar, false, aa);
-    } else if (g_queryLen == 0) {
-        // In the list of all apps the same corner shows an up arrow that goes back to the Start
-        // screen, as in Windows 8.1.
+    } else if (g_view == VIEW_SEARCH) {
+        // The up arrow is always visible in the All Apps / search view (1.4.0 fix): it was
+        // hidden whenever a query had results, so the pointer had no way back. Only the sort
+        // button is gated on an empty query.
         if (!g_barVisible) {
             RECT br; AppsBackRect(&br);
             if (g_hoverArrow && ha > 0) BlitIconGdi(g_bbDC, g_iconArrowHoverDisc, br, false, ha);
             BlitIconGdi(g_bbDC, g_iconArrowUp, br, false, aa);
         }
-        RECT sr; SortButtonRect(&sr);
-        wchar_t txt[128];
-        const int sort = (int)InterlockedCompareExchange(&g_appSort, 0, 0);
-        swprintf_s(txt, L"%s \x25BE",
-                   T(sort == 1 ? STR_SORTBY_DATE : sort == 2 ? STR_SORTBY_CAT : STR_SORTBY_NAME));
-        SetTextColor(g_bbDC, RGB(235, 235, 245));
-        SetBkMode(g_bbDC, TRANSPARENT);
-        SelectObject(g_bbDC, g_fLabel);
-        DrawTextW(g_bbDC, txt, -1, &sr, DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_NOPREFIX);
-    } else if (g_view == VIEW_SEARCH && g_results.empty()) {
-        // The query filtered the list and nothing matched: the page shows only the
-        // "no results" message, and in Windows 8.1 this corner stays empty. The up arrow is
-        // kept visible here anyway, so the pointer always has a way back to the normal Start
-        // screen; the sort button stays hidden while a query is active.
-        if (!g_barVisible) {
-            RECT br; AppsBackRect(&br);
-            if (g_hoverArrow && ha > 0) BlitIconGdi(g_bbDC, g_iconArrowHoverDisc, br, false, ha);
-            BlitIconGdi(g_bbDC, g_iconArrowUp, br, false, aa);
+        if (g_queryLen == 0) {
+            RECT sr; SortButtonRect(&sr);
+            wchar_t txt[128];
+            const int sort = (int)InterlockedCompareExchange(&g_appSort, 0, 0);
+            swprintf_s(txt, L"%s \x25BE",
+                       T(sort == 1 ? STR_SORTBY_DATE : sort == 2 ? STR_SORTBY_CAT : STR_SORTBY_NAME));
+            SetTextColor(g_bbDC, RGB(235, 235, 245));
+            SetBkMode(g_bbDC, TRANSPARENT);
+            SelectObject(g_bbDC, g_fLabel);
+            DrawTextW(g_bbDC, txt, -1, &sr, DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_NOPREFIX);
         }
     }
     if (g_view == VIEW_SEARCH && !g_charmOpen) DrawAppsSearchBoxGdi();
@@ -10651,21 +12210,14 @@ static void DrawAppsChromeGpu(float closeA) {
             RECT ar; AppsArrowRect(&ar);
             arrow(g_iconArrowDown, ar);
         }
-    } else if (g_queryLen == 0) {
-        // The up arrow of the list of all apps, bottom left (see the GDI version). While the app
-        // bar is open it covers that corner: the arrow is not drawn over it, and not at all.
+    } else if (g_view == VIEW_SEARCH) {
+        // The up arrow is always visible in the All Apps / search view (1.4.0 fix, see GDI).
+        // While the app bar is open it covers that corner: the arrow is not drawn over it.
         if (!g_barVisible) {
             RECT br; AppsBackRect(&br);
             arrow(g_iconArrowUp, br);
         }
-        DrawSortButtonGpu(1.0f);
-    } else if (g_results.empty()) {
-        // Same case as the GDI version: the query matched nothing, the up arrow remains so the
-        // "no results" page can always be left with the pointer, back to the normal Start.
-        if (!g_barVisible) {
-            RECT br; AppsBackRect(&br);
-            arrow(g_iconArrowUp, br);
-        }
+        if (g_queryLen == 0) DrawSortButtonGpu(1.0f);
     }
     if (g_view == VIEW_SEARCH && !g_charmOpen) DrawAppsSearchBoxGpu(1.0f);
 }
@@ -11618,7 +13170,7 @@ static void ReleaseAvatarPicture() {
     g_avatarPicBits = NULL;
 }
 static bool EnsureAvatarPicture() {
-    const int S = ScI(44);
+    const int S = ScI(40);
     try {
     if (!g_gdipToken || S < 4) return false;
     if (g_avatarPicBmp && g_avatarPicSize == S) {
@@ -13046,11 +14598,13 @@ static int UserTextWidth() {
     return w;
 }
 
-static int HeaderAvatarRight() { return g_sw - ScI(150); }
+static int HeaderAvatarRight() { return g_sw - ScI(162); }
 static void HeaderButtonRects(RECT* pwr, RECT* srch) {
-    const int s = ScI(40), top = ScI(34);
-    if (srch) { srch->right = g_sw - ScI(40); srch->left = srch->right - s; srch->top = top; srch->bottom = top + s; }
-    if (pwr) { pwr->right = g_sw - ScI(104); pwr->left = pwr->right - s; pwr->top = top; pwr->bottom = top + s; }
+    // Centres as on the reference: power 126 px and search 68 px from the right edge, both on the
+    // vertical centre of the title (y = 80).
+    const int s = ScI(40), top = ScI(60);
+    if (srch) { srch->right = g_sw - ScI(48); srch->left = srch->right - s; srch->top = top; srch->bottom = top + s; }
+    if (pwr) { pwr->right = g_sw - ScI(106); pwr->left = pwr->right - s; pwr->top = top; pwr->bottom = top + s; }
 }
 static void IconDestRect(const RECT& hit, RECT* out) {
     const int s = ScI(22);
@@ -13058,19 +14612,17 @@ static void IconDestRect(const RECT& hit, RECT* out) {
     out->left = cx - s / 2; out->right = cx + s / 2;
     out->top = cy - s / 2; out->bottom = cy + s / 2;
 }
-// The All apps arrow, bottom left, where it has always been: its centre is 44 px above the bottom
+// The All apps arrow, bottom left, where it has always been: its centre is 51 px above the bottom
 // edge and it is 36 px across, drawn from a 34 px bitmap.
 static void AppsArrowRect(RECT* r) {
-    const int cx = LEFT + ScI(11), cy = g_sh - ScI(44) - ChromeLift(), h = ScI(18);
+    const int cx = LEFT + ScI(15), cy = g_sh - ScI(51) - ChromeLift(), h = ScI(18);
     r->left = cx - h; r->top = cy - h; r->right = cx + h; r->bottom = cy + h;
 }
-// The up arrow that goes back from the list of all apps to the Start screen. In Windows 8.1 it
-// replaces the All apps arrow in the same bottom left corner, so it sits exactly where that one is.
 static void AppsBackRect(RECT* r) {
     AppsArrowRect(r);
 }
 static void ZoomButtonRect(RECT* r) {
-    const int cx = g_sw - LEFT - ScI(11), cy = g_sh - ScI(44) - ChromeLift(), h = ScI(18);
+    const int cx = g_sw - LEFT - ScI(15), cy = g_sh - ScI(51) - ChromeLift(), h = ScI(18);
     r->left = cx - h; r->top = cy - h; r->right = cx + h; r->bottom = cy + h;
 }
 static int AppsTitleWidth() {
@@ -13110,10 +14662,10 @@ static void SortButtonRect(RECT* r) {
     r->top = ScI(60); r->right = r->left + cachedW + ScI(8); r->bottom = ScI(98);
 }
 static void AccountRect(RECT* r) {
-    r->top = ScI(26);
-    r->bottom = ScI(86);
+    r->top = ScI(52);
+    r->bottom = ScI(108);
     r->right = HeaderAvatarRight() + ScI(6);
-    r->left = HeaderAvatarRight() - ScI(44) - ScI(10) - UserTextWidth() - ScI(10);
+    r->left = HeaderAvatarRight() - ScI(40) - ScI(13) - UserTextWidth() - ScI(10);
 }
 
 static void DismissUserMenu() {
@@ -13164,6 +14716,24 @@ static void CharmClickActions(int hit, int row, int ly) {
     }
 }
 
+// 1.4.0: the Settings app (ImmersiveControlPanel / ms-settings: / Control Panel) can be pinned
+// like any other app, from All Apps, the app bar and the Search Charm. Settings scope filtering
+// in RunSearch is unchanged: this only affects pinning, not search scopes.
+static bool IsSettingsPinTarget(const std::wstring& parse, const std::wstring& target) {
+    const std::wstring pl = LowerW(parse), tl = LowerW(target);
+    return pl.find(L"immersivecontrolpanel") != std::wstring::npos ||
+           tl.find(L"immersivecontrolpanel") != std::wstring::npos ||
+           pl.find(L"ms-settings") != std::wstring::npos ||
+           tl.find(L"ms-settings") != std::wstring::npos ||
+           pl.find(L"26ee0668") != std::wstring::npos ||
+           tl.find(L"26ee0668") != std::wstring::npos;
+}
+static bool CanPinEntry(const AppEntry& a) {
+    if (AppTarget(a).empty()) return false;
+    if (a.charmCat == CC_APP) return !a.searchOnly;
+    if (a.charmCat == CC_SETTING && IsSettingsPinTarget(a.parse, AppTarget(a))) return true;
+    return false;
+}
 static void BuildMenuEntries(int kind, std::vector<UserMenuEntry>& out) {
     out.clear();
     if (kind == 1) {
@@ -13178,7 +14748,7 @@ static void BuildMenuEntries(int kind, std::vector<UserMenuEntry>& out) {
         bool fileish = !IsLocalInfoTile(a.parse.c_str()) && !a.parse.empty() && wcsstr(a.parse.c_str(), L"shell:") == NULL &&
                        wcsstr(a.parse.c_str(), L"ms-") == NULL;
         out.push_back({ T(STR_CTX_OPEN), CM_OPEN });
-        if (a.charmCat == CC_APP && !AppTarget(a).empty())
+        if (CanPinEntry(a))
             out.push_back({ IsPinned(AppTarget(a).c_str()) ? T(STR_CTX_UNPIN_START) : T(STR_BAR_PIN_START), CM_PINSTART });
         if (fileish) out.push_back({ T(STR_CTX_LOCATION), CM_LOCATION });
         if (fileish) out.push_back({ T(STR_CTX_RUNAS), CM_RUNAS });
@@ -13684,7 +15254,12 @@ static DWORD WINAPI FrameThread(LPVOID) {
             LARGE_INTEGER now;
             QueryPerformanceCounter(&now);
             if (target.QuadPart <= now.QuadPart) target.QuadPart = nextVBlank(now.QuadPart, period);
-            LONGLONG delta = target.QuadPart - now.QuadPart;
+            // Give the UI thread time to prepare the next frame *before* vblank instead of
+            // posting at the vblank itself, where EndDraw may miss that presentation slot.
+            // This is deliberately a small lead; actual presentation remains DWM-synchronised.
+            const LONGLONG lead = std::min(period / 4, freq.QuadPart * 3 / 1000);
+            LONGLONG delta = target.QuadPart - lead - now.QuadPart;
+            if (delta < 1) delta = 1;
             LARGE_INTEGER due;
             due.QuadPart = -(delta * 10000000LL / freq.QuadPart);
             if (due.QuadPart == 0) due.QuadPart = -1;
@@ -13752,20 +15327,36 @@ static bool InteractiveDesktopReady() {
 
 static DWORD WINAPI LogonOpenThread(LPVOID) {
   RunGuarded(L"LogonOpenThread", [] {
-    DWORD session = 0;
-    if (!ProcessIdToSessionId(GetCurrentProcessId(), &session)) return;
-    LPWSTR buffer = NULL;
-    DWORD bytes = 0;
-    if (!WTSQuerySessionInformationW(WTS_CURRENT_SERVER_HANDLE, session, WTSSessionInfoEx, &buffer, &bytes))
-        return;
-    ULONGLONG loggedOn = 0;
-    if (bytes >= sizeof(WTSINFOEXW)) {
-        WTSINFOEXW* info = reinterpret_cast<WTSINFOEXW*>(buffer);
-        if (info->Level == 1 && info->Data.WTSInfoExLevel1.SessionState == WTSActive)
-            loggedOn = (ULONGLONG)info->Data.WTSInfoExLevel1.LogonTime.QuadPart;
+    // Obtain a per-logon-session unique identifier via TokenStatistics (AuthenticationId LUID).
+    // Unlike WTSQuerySessionInformationW, TokenStatistics has zero dependency on TermService,
+    // works identically in installed Windhawk and Windhawk Portable (Task Scheduler / Startup),
+    // and is immune to NTP wall-clock jumps.
+    ULONGLONG logonId = 0;
+    HANDLE tok = NULL;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &tok) && tok) {
+        TOKEN_STATISTICS stats = {};
+        DWORD retLen = 0;
+        if (GetTokenInformation(tok, TokenStatistics, &stats, sizeof(stats), &retLen)) {
+            logonId = ((ULONGLONG)(DWORD)stats.AuthenticationId.HighPart << 32) |
+                      (ULONGLONG)stats.AuthenticationId.LowPart;
+        }
+        CloseHandle(tok);
     }
-    WTSFreeMemory(buffer);
-    if (!loggedOn) return;
+
+    ULONGLONG loggedOn = 0;
+    DWORD session = 0;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &session)) {
+        LPWSTR buffer = NULL;
+        DWORD bytes = 0;
+        if (WTSQuerySessionInformationW(WTS_CURRENT_SERVER_HANDLE, session, WTSSessionInfoEx, &buffer, &bytes)) {
+            if (bytes >= sizeof(WTSINFOEXW)) {
+                WTSINFOEXW* info = reinterpret_cast<WTSINFOEXW*>(buffer);
+                if (info->Level == 1 && info->Data.WTSInfoExLevel1.SessionState == WTSActive)
+                    loggedOn = (ULONGLONG)info->Data.WTSInfoExLevel1.LogonTime.QuadPart;
+            }
+            WTSFreeMemory(buffer);
+        }
+    }
 
     FILETIME nowFile = {}, created = {}, exited = {}, kernel = {}, user = {};
     GetSystemTimeAsFileTime(&nowFile);
@@ -13773,30 +15364,47 @@ static DWORD WINAPI LogonOpenThread(LPVOID) {
     ULARGE_INTEGER now = {}, started = {};
     now.LowPart = nowFile.dwLowDateTime; now.HighPart = nowFile.dwHighDateTime;
     started.LowPart = created.dwLowDateTime; started.HighPart = created.dwHighDateTime;
-    const ULONGLONG second = 10000000ULL;
-    if (now.QuadPart < loggedOn || now.QuadPart - loggedOn > 120ULL * second ||
-        now.QuadPart < started.QuadPart || now.QuadPart - started.QuadPart > 45ULL * second ||
-        started.QuadPart + 10ULL * second < loggedOn ||
-        started.QuadPart > loggedOn + 120ULL * second) return;
 
-    int stable = 0;
-    for (int i = 0; i < 1900; ++i) {
-        if (InteractiveDesktopReady()) {
-            if (++stable >= 2) break;
-        } else stable = 0;
-        if (WaitForSingleObject(g_logonStop, 16) != WAIT_TIMEOUT) return;
+    const ULONGLONG second = 10000000ULL;
+    const ULONGLONG anchor = loggedOn ? loggedOn : started.QuadPart;
+    if (!logonId) logonId = anchor;
+    if (!logonId) return;
+
+    // Allow up to 15 minutes (900s) after sign-in / shell start so delayed startup tasks and
+    // Windhawk Portable scheduled tasks still open Start at sign-in, while reloading the mod or
+    // restarting Explorer hours into a session never pops Start unexpectedly.
+    if (now.QuadPart >= anchor && now.QuadPart - anchor > 900ULL * second) return;
+    if (loggedOn && started.QuadPart > loggedOn + 900ULL * second) return;
+
+    const std::wstring sid = CurrentUserSid();
+    const std::wstring idKey = L"LastStartLogonId-" + sid;
+    ULONGLONG prevId = 0;
+    if (Wh_GetBinaryValue(idKey.c_str(), &prevId, sizeof(prevId)) == sizeof(prevId) && prevId == logonId)
+        return;
+    if (loggedOn) {
+        const std::wstring timeKey = L"LastStartLogonTime-" + sid;
+        ULONGLONG prevTime = 0;
+        if (Wh_GetBinaryValue(timeKey.c_str(), &prevTime, sizeof(prevTime)) == sizeof(prevTime) && prevTime == loggedOn)
+            return;
     }
-    if (stable < 2 || WaitForSingleObject(g_logonStop, 0) != WAIT_TIMEOUT) {
+
+    bool ready = InteractiveDesktopReady();
+    for (int i = 0; !ready && i < 1900; ++i) {
+        if (WaitForSingleObject(g_logonStop, 16) != WAIT_TIMEOUT) return;
+        ready = InteractiveDesktopReady();
+    }
+    if (!ready || WaitForSingleObject(g_logonStop, 0) != WAIT_TIMEOUT) {
         Wh_Log(L"Sign-in Start: interactive desktop was not ready; skipped this session");
         return;
     }
-    const std::wstring valueName = L"LastStartLogonTime-" + CurrentUserSid();
-    ULONGLONG previous = 0;
-    const size_t got = Wh_GetBinaryValue(valueName.c_str(), &previous, sizeof(previous));
-    if (got == sizeof(previous) && previous == loggedOn) return;
-    if (!Wh_SetBinaryValue(valueName.c_str(), &loggedOn, sizeof(loggedOn))) return;
 
-    Wh_Log(L"Sign-in Start: interactive desktop ready; requesting opening reveal");
+    if (!Wh_SetBinaryValue(idKey.c_str(), &logonId, sizeof(logonId))) return;
+    if (loggedOn) {
+        const std::wstring timeKey = L"LastStartLogonTime-" + sid;
+        Wh_SetBinaryValue(timeKey.c_str(), &loggedOn, sizeof(loggedOn));
+    }
+
+    Wh_Log(L"Sign-in Start: interactive desktop ready; requesting immediate opening reveal");
     if (g_wnd) PostMessageW(g_wnd, WM_APP_LOGON_OPEN, 0, 0);
   });
     return 0;
@@ -14006,6 +15614,8 @@ static void TrayEdgeHover(int mx, int my) {
 
 static void OpenStart(bool atLogon = false) {
     if (!g_wnd) return;
+    // Reopening cancels a launch whose close animation was interrupted.
+    g_pendingLaunch.clear();
     g_trayCloseTick = 0;
     TrayRevealReset();     // the window may be moved to another monitor, or resized
     if (g_appsRefresh && InterlockedCompareExchange(&g_appsReady, 0, 0) &&
@@ -14042,7 +15652,7 @@ static void OpenStart(bool atLogon = false) {
         }
     }
     bool wasVisible = IsWindowVisible(g_wnd) != 0;
-    bool dpiChanged = UpdateDpi(targetDpi);
+    bool dpiChanged = UpdateDpi(targetDpi, sh);
     if (dpiChanged || sw != g_sw || sh != g_sh || monX != g_monX || monY != g_monY || !g_bgBmp) {
         if (wasVisible) ShowWindow(g_wnd, SW_HIDE);
         g_sw = sw; g_sh = sh; g_monX = monX; g_monY = monY;
@@ -14100,7 +15710,9 @@ static void OpenStart(bool atLogon = false) {
     g_openTick = g_lastTick = NowMs();
     g_open = true;
     g_closing = false;
+    g_launchFlipTile = -1;
     UpdatePhotoWorker();
+    UpdateNewsWorker();
     g_dirty = true;
     if (atLogon && g_allAppsAtSignIn.load()) {
         // allAppsAtSignIn: the automatic opening shows the list of all apps.
@@ -14115,7 +15727,7 @@ static void OpenStart(bool atLogon = false) {
     InvalidateRect(g_wnd, NULL, FALSE);
     UpdateWindow(g_wnd);
     g_logonLastFrameTick = NowMs();
-    g_logonRevealGateTick = atLogon ? g_logonLastFrameTick + 400 : 0;
+    g_logonRevealGateTick = atLogon ? g_logonLastFrameTick + 16 : 0;
     StartFrames();
     if (g_wallWake) SetEvent(g_wallWake);
 }
@@ -14144,8 +15756,9 @@ static void CloseStart(bool immediate) {
     DismissUserMenu();
     if (g_dragging) EndDrag();
     g_logonOpening = false;
-    if (instantDesktop || !g_snapReady) {
+    if (instantDesktop || (!g_snapReady && g_launchFlipTile < 0)) {
         g_closing = false;
+        g_launchFlipTile = -1;
         g_pressed = g_hover = -1;
         g_dirty = true;
         ShowWindow(g_wnd, SW_HIDE);
@@ -14154,10 +15767,13 @@ static void CloseStart(bool immediate) {
     }
     g_closing = true;
     g_closeSlideSeconds = (float)CloseSlideMs() / 1000.0f;
+    if (g_launchFlipTile >= 0 && g_closeSlideSeconds < (float)LAUNCH_FLIP_MS / 1000.0f)
+        g_closeSlideSeconds = (float)LAUNCH_FLIP_MS / 1000.0f;
     g_closeTick = NowMs();
     g_pressed = -1;
     g_hover = -1;
     g_dirty = true;
+    ResumeFrames();
 }
 
 static void Launch(int i) {
@@ -14167,17 +15783,19 @@ static void Launch(int i) {
                    (target && _wcsicmp(target, kDesktopTarget) == 0);
     if (desktop) Wh_Log(L"Desktop tile: first-after-logon=%d, direct return=%d",
                         (int)g_firstDesktopAfterLogon, (int)(desktop && g_firstDesktopAfterLogon));
-    CloseStart(desktop && g_firstDesktopAfterLogon);
-    if (!target || desktop) return;
-    // A simulated tile of a classic program carries the name of the executable, not its full path
-    // (the layout stays the same on every PC): let Windows resolve that name before ShellExecute.
-    std::wstring exe = target;
-    if (tile.mg >= 0 && !wcschr(target, L'\\')) {
+    // The launch-tile flip code is prepared for a future update, but remains disabled:
+    // it is not yet connected reliably to actual UWP app activation. This is separate
+    // from the Start screen entrance animation and the normal closing transition.
+    g_launchFlipTile = -1;
+    std::wstring exe = target ? target : L"";
+    if (target && IsLocalInfoTile(target)) exe = ResolveLocalTileTarget(target);
+    else if (target && tile.mg >= 0 && !wcschr(target, L'\\')) {
         wchar_t full[MAX_PATH] = L"";
         if (FileInSystemDir(target, full, ARRAYSIZE(full)) && full[0]) exe = full;
     }
-    const wchar_t* url = LocalInfoUrl(target);
-    ShellExecuteW(NULL, L"open", url ? url : exe.c_str(), NULL, NULL, SW_SHOWNORMAL);
+    CloseStart(desktop && g_firstDesktopAfterLogon);
+    if (!target || desktop) return;
+    OpenTileTarget(exe);
 }
 
 static int HitTile(int mx, int my) {
@@ -14191,21 +15809,26 @@ static int HitTile(int mx, int my) {
 }
 
 static DWORD ArtRefreshAfterMs() {
-    if (!g_logonOpening) return 1700 + (DWORD)g_blockCount * 33;
+    if (!g_logonOpening) return 900 + (DWORD)g_blockCount * 24;
     float end = LOGON_TILE_DELAY + (float)(g_blockCount > 0 ? g_blockCount - 1 : 0) *
-                LOGON_BLOCK_STAGGER + LOGON_TILE_T + 0.10f;
+                LOGON_BLOCK_STAGGER + LOGON_TILE_T + 0.08f;
     return (DWORD)(end * 1000.0f);
 }
 
 static void Tick() {
     DWORD now = NowMs();
-    float dt = (float)(now - g_lastTick) / 1000.0f;
+    const float scrollDt = std::min(0.5f, (float)(now - g_lastTick) / 1000.0f);
+    float dt = scrollDt;
     if (dt > 0.1f) dt = 0.1f;
     g_lastTick = now;
     bool changed = false;
     if (g_resizeFadeTile >= 0) {
-        if ((DWORD)(now - g_resizeFadeTick) < 200 && g_open && !g_closing) changed = true;
-        else g_resizeFadeTile = -1;
+        if ((DWORD)(now - g_resizeFadeTick) < RESIZE_MORPH_MS && g_open && !g_closing) changed = true;
+        else {
+            g_resizeFadeTile = -1;
+            ReleaseResizeOldGpu();
+            g_resizeOldPx.clear();
+        }
     }
     if (g_open && !g_closing) {
         static bool wasWeatherFresh = false;
@@ -14230,15 +15853,16 @@ static void Tick() {
         static int lastMinute = -1;
         if (minute != lastMinute) {
             lastMinute = minute;
-            for (int i=0; i<g_tileCount; ++i) if (g_tiles[i].alive && g_tiles[i].target &&
-                !_wcsicmp(g_tiles[i].target,L"windhawk:clock-tile-v1")) { RebuildTile(i); changed = true; }
+            for (int i=0; i<g_tileCount; ++i) if (IsClockTile(g_tiles[i])) { RebuildTile(i); changed = true; }
         }
     }
     if (g_open && !g_closing) {
         DWORD elapsed = now - g_openTick;
-        if (elapsed >= 4000 && elapsed % 4000 < 500)
-            for (int i = 0; i < g_tileCount; ++i)
-                if (IsCalendarLiveTile(g_tiles[i]) || IsWeatherLiveTile(g_tiles[i])) { changed = true; break; }
+        for (int i = 0; i < g_tileCount; ++i) {
+            if (!IsLiveFlipTile(g_tiles[i])) continue;
+            DWORD te = elapsed + (DWORD)((i % 5) * 650);
+            if (te >= 5000 && (te % 5000) < 520) { changed = true; break; }
+        }
     }
     ScrollArrowTick();
 
@@ -14297,8 +15921,17 @@ static void Tick() {
         float tc = (float)(now - g_closeTick) / 1000.0f;
         if (tc >= g_closeSlideSeconds + 0.02f) {
             g_closing = false;
+            g_launchFlipTile = -1;
             ShowWindow(g_wnd, SW_HIDE);
             StopFrames();
+            if (!g_pendingLaunch.empty()) {
+                std::wstring target; target.swap(g_pendingLaunch);
+                HINSTANCE result = ShellExecuteW(NULL, L"open", target.c_str(), NULL, NULL, SW_SHOWNORMAL);
+                if ((INT_PTR)result <= 32) {
+                    Wh_Log(L"Unable to open tile %s (ShellExecute error %Id)", target.c_str(), (INT_PTR)result);
+                    MessageBoxW(NULL, L"Impossibile aprire questa tile: l'applicazione o il collegamento non è disponibile.", L"Start", MB_OK | MB_ICONWARNING);
+                }
+            }
             return;
         }
         changed = true;
@@ -14322,7 +15955,9 @@ static void Tick() {
     }
 
     if (fabsf(g_scrollTarget - g_scrollCur) > 0.3f) {
-        float k = dt * 12.0f; if (k > 1.0f) k = 1.0f;
+        // Exponential smoothing: the same speed at any frame rate, and a long frame no longer
+        // makes the scroll jump to its target (dt * 12 used to reach 1 after a 83 ms hitch).
+        const float k = 1.0f - expf(-scrollDt * 12.0f);
         g_scrollCur += (g_scrollTarget - g_scrollCur) * k;
         changed = true;
     } else if (g_scrollCur != g_scrollTarget) { g_scrollCur = g_scrollTarget; changed = true; }
@@ -14394,6 +16029,32 @@ struct StartTouchPan {
 static StartTouchPan g_touchPan;
 static volatile LONG g_experimentalTouch = 0;
 
+// Aggregate measurements for scroll paints, never log per frame. CPU duration includes EndDraw;
+// it is not a GPU profiler or an input-to-display latency measurement.
+struct ScrollPerf {
+    bool active = false; DWORD lastMotion = 0, lastPaint = 0;
+    unsigned frames = 0, slow = 0, maxGap = 0, maxPaint = 0;
+    unsigned long long totalPaint = 0, totalEndDraw = 0;
+    unsigned maxEndDraw = 0;
+    int view = 0;
+};
+static ScrollPerf g_scrollPerf;
+static void ScrollPerfMotion() {
+    DWORD now = NowMs();
+    if (g_scrollPerf.active && g_scrollPerf.view != (int)g_view) g_scrollPerf = {};
+    if (!g_scrollPerf.active) { g_scrollPerf = {}; g_scrollPerf.active = true; g_scrollPerf.view = (int)g_view; }
+    g_scrollPerf.lastMotion = now;
+}
+static void ScrollPerfFlush(DWORD now) {
+    ScrollPerf& p = g_scrollPerf;
+    if (!p.active || g_sbDrag || fabsf(g_scrollTarget - g_scrollCur) > 0.3f || now - p.lastMotion < 350) return;
+    if (p.frames) Wh_Log(L"[START-SCROLL-PERF] view=%s backend=%s frames=%u paint-avg-ms=%u paint-max-ms=%u enddraw-avg-ms=%u enddraw-max-ms=%u gap-max-ms=%u gaps-over-25ms=%u",
+        p.view == VIEW_SEARCH ? L"apps" : L"start", g_rt ? L"D2D" : L"GDI", p.frames,
+        (unsigned)(p.totalPaint / p.frames), p.maxPaint,
+        (unsigned)(p.totalEndDraw / p.frames), p.maxEndDraw, p.maxGap, p.slow);
+    p = {};
+}
+
 static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     return RunGuardedValue<LRESULT>(L"WndProc", 0, [&]() -> LRESULT {
     if (msg != WM_TIMER && msg != WM_PAINT && msg != WM_APP_FRAME &&
@@ -14404,12 +16065,23 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
     case WM_PAINT: {
         PAINTSTRUCT ps;
+        const DWORD paintStart = NowMs();
         HDC dc = BeginPaint(h, &ps);
+        g_lastEndDrawMs = 0;
         if (!g_rt || !RenderGpu()) {
             if (g_dirty) Render();
             if (g_bbDC) BitBlt(dc, 0, 0, g_sw, g_sh, g_bbDC, 0, 0, SRCCOPY);
         }
         EndPaint(h, &ps);
+        if (g_scrollPerf.active) {
+            ScrollPerf& p = g_scrollPerf;
+            DWORD duration = NowMs() - paintStart;
+            if (p.lastPaint) { DWORD gap = paintStart - p.lastPaint; p.maxGap = std::max(p.maxGap, (unsigned)gap); if (gap > 25) ++p.slow; }
+            p.lastPaint = paintStart; p.maxPaint = std::max(p.maxPaint, (unsigned)duration);
+            p.totalPaint += duration;
+            p.totalEndDraw += g_lastEndDrawMs; p.maxEndDraw = std::max(p.maxEndDraw, (unsigned)g_lastEndDrawMs);
+            ++p.frames;
+        }
         return 0;
     }
     case WM_SIZE: {
@@ -14476,13 +16148,17 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         RepaintNow();
         return 0;
     case WM_APP_METRO_TILES:
-        // The option was turned on or off, or the count changed: create or remove the tiles, then
-        // refresh the shading and the textures as for any other setting.
         SyncMetroTiles(true);
         UpdateWeatherWorker();
+        UpdateNewsWorker();
         if (InterlockedExchange(&g_tileColorsDirty, 0)) UpdateTileAppColors();
         BuildBuffers();
         InitGpu();
+        RepaintNow();
+        return 0;
+    case WM_APP + 23:
+        for (int i = 0; i < g_tileCount; ++i)
+            if (IsNewsTile(g_tiles[i])) { FreeCalendarFace(i); RebuildTile(i); }
         RepaintNow();
         return 0;
     case WM_APP_REBUILD_BG:
@@ -14504,6 +16180,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         AdvanceLogonClock();
         SyncDragToCursor(h);
         if (g_open || g_closing) Tick();
+        ScrollPerfFlush(NowMs());
         if (g_open && !g_closing && !g_dragging && !g_logonOpening && g_idleTicks > 45) EnterIdleFrames(h);
         if (g_artRebuildPending && !g_closing &&
             (!g_open || OpeningElapsedMs(NowMs()) > ArtRefreshAfterMs())) {
@@ -14515,6 +16192,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         AdvanceLogonClock();
         SyncDragToCursor(h);
         Tick();
+        ScrollPerfFlush(NowMs());
         if (g_framesIdle && g_idleTicks == 0) ResumeFrames();
         if (g_artRebuildPending && !g_closing &&
             (!g_open || OpeningElapsedMs(NowMs()) > ArtRefreshAfterMs())) {
@@ -14740,6 +16418,9 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             g_lastMouseMs = mn;
             if (wasFaded) RepaintNow();
         }
+        // Captured scrollbar movement only updates its position. Do not scan hover targets or
+        // toggle the taskbar while dragging across the bottom edge of either scrolling view.
+        if (g_sbDrag) { ScrollPerfMotion(); ScrollSetFromX(mx); RepaintNow(); return 0; }
         // The bottom edge of the screen gives the space back to the taskbar, as in Windows 8.1.
         TrayEdgeHover(mx, my);
         {
@@ -14790,7 +16471,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             const bool inStart = g_view == VIEW_START;
             // The up arrow is also on offer when a query filtered the list down to no results,
             // so the hover disc behaves exactly as in the unfiltered list.
-            const bool inApps = g_view == VIEW_SEARCH && (g_queryLen == 0 || g_results.empty());
+            const bool inApps = g_view == VIEW_SEARCH;
             const bool zActive = g_open && !g_closing && ZoomPresence(NowMs()) > 0.0f;
             bool overPwr = g_open && !g_closing && inStart && !zActive && PtInRect(&pw, pt) != FALSE;
             bool overSrch = g_open && !g_closing && inStart && !zActive && PtInRect(&sc, pt) != FALSE;
@@ -15189,7 +16870,16 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
         }
         if (g_view == VIEW_SEARCH) { if (g_open) OnSearchClick((short)LOWORD(lp), (short)HIWORD(lp)); return 0; }
-        if (g_dragging) { UpdateDrag((short)LOWORD(lp), (short)HIWORD(lp)); EndDrag(); return 0; }
+        if (g_dragging) { UpdateDrag((short)LOWORD(lp), (short)HIWORD(lp), true); EndDrag(); return 0; }
+        // Even if movement messages were coalesced, a drag must never become a click.
+        if (g_pressed >= 0) {
+            int dx = (short)LOWORD(lp) - g_pressX, dy = (short)HIWORD(lp) - g_pressY;
+            if (dx*dx + dy*dy > 64) {
+                int pressed = g_pressed;
+                BeginDrag(pressed, g_pressX, g_pressY);
+                UpdateDrag((short)LOWORD(lp), (short)HIWORD(lp), true); EndDrag(); return 0;
+            }
+        }
         if (BarClick((short)LOWORD(lp), (short)HIWORD(lp))) { g_pressed = -1; return 0; }
         int p = g_pressed;
         g_pressed = -1;
@@ -15275,9 +16965,9 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     }
     case WM_MOUSEHWHEEL:
         // Precision touchpads commonly send horizontal wheel messages.
-        if (InterlockedCompareExchange(&g_experimentalTouch, 0, 0) &&
-            g_open && !g_closing && !g_charmOpen && !g_dragging &&
+        if (g_open && !g_closing && !g_charmOpen && !g_dragging &&
             ZoomPresence(NowMs()) <= 0.0f) {
+            ScrollPerfMotion();
             g_scrollTarget += (float)GET_WHEEL_DELTA_WPARAM(wp) * 2.5f;
             ClampScroll();
             RepaintNow();
@@ -15304,6 +16994,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
                 return 0;
             }
         }
+        ScrollPerfMotion();
         g_scrollTarget -= (float)delta * 2.5f;
         float m = (g_view == VIEW_SEARCH) ? MaxScrollSearch() : MaxScroll();
         if (g_scrollTarget < 0.0f) g_scrollTarget = 0.0f;
@@ -15567,6 +17258,27 @@ static LRESULT CALLBACK KbProc(int code, WPARAM wp, LPARAM lp) {
                 PostMessageW(g_wnd, WM_APP_KEY, VK_ESCAPE, 0);
                 return 1;
             }
+            if (g_altShortcutOn && (LONG)(k->vkCode & 255) == g_altShortcutVk) {
+                if (down) {
+                    const LONG have =
+                        ((GetAsyncKeyState(VK_CONTROL) & 0x8000) ? 1 : 0) |
+                        ((GetAsyncKeyState(VK_MENU) & 0x8000) ? 2 : 0) |
+                        ((GetAsyncKeyState(VK_SHIFT) & 0x8000) ? 4 : 0) |
+                        (((GetAsyncKeyState(VK_LWIN) | GetAsyncKeyState(VK_RWIN)) & 0x8000) ? 8 : 0);
+                    if (have == g_altShortcutMods) {
+                        if (!g_altShortcutHeld) {
+                            g_altShortcutHeld = true;
+                            if (g_winDown) g_winCombo = true;   // the Windows key is part of the shortcut
+                            Wh_Log(L"Custom shortcut pressed (keyboard hook)");
+                            if (g_wnd) PostMessageW(g_wnd, WM_APP_TOGGLE, 0, 0);
+                        }
+                        return 1;   // held-down repeats are swallowed too
+                    }
+                } else if (up && g_altShortcutHeld) {
+                    g_altShortcutHeld = false;
+                    return 1;
+                }
+            }
             if (g_open && !g_closing && g_searchEnabled && !g_winDown) {
                 if (HandleSearchKey(k, down, up)) return 1;
             }
@@ -15693,6 +17405,14 @@ static void UpdateTileAppColor(Tile& t) {
     t.hasAppC = false;
     t.appC = t.c1;
     if (!t.alive || t.mg >= 0) return;
+    COLORREF sysL = 0, sysR = 0, sysBase = 0;
+    if (Win81SystemAppColor(t.target, &sysL, &sysR, &sysBase)) {
+        t.c1 = sysL;
+        t.c2 = sysR;
+        t.appC = sysBase;
+        t.hasAppC = true;
+        return;
+    }
     bool found = false;
     COLORREF c = t.c1;
     if (t.icon) {
@@ -15710,9 +17430,6 @@ static void UpdateTileAppColors() {
     for (int i = 0; i < g_tileCount; ++i) UpdateTileAppColor(g_tiles[i]);
 }
 
-// True only if the Microsoft Store package is actually registered for this user. The Store tile
-// is no longer one of the defaults, so nothing calls it at the moment; it stays here because it
-// is the only way to tell a registered Store package from a leftover of a previous installation.
 [[maybe_unused]] static bool StoreAppInstalled() {
     PIDLIST_ABSOLUTE pidl = NULL;
     const bool ok = SUCCEEDED(SHParseDisplayName(L"shell:AppsFolder\\Microsoft.WindowsStore_8wekyb3d8bbwe!App",
@@ -15721,23 +17438,29 @@ static void UpdateTileAppColors() {
     return ok;
 }
 
-// One-time move to the Windows 8.1 colours. Older layouts stored the colours of the tiles, so the
-// old ones would come back on every start: a normal tile of a desktop program is pointed at the
-// Windows 8.1 blue once, and the layout is saved again. Store packages, the desktop preview, the
-// Store tile and every simulated tile keep their own colours.
 static void ApplyStartColourRevision() {
-    if (Wh_GetIntValue(L"tileColours81", 0) != 0) return;
-    bool changed = false;
-    for (int i = 0; i < g_tileCount; ++i) {
-        Tile& t = g_tiles[i];
-        if (!t.alive || t.mg >= 0) continue;
-        if (t.style != TOP_APP && t.style != BOTTOM_CAPTION) continue;
-        if (t.c1 == kDesktopTileLeft && t.c2 == kDesktopTileRight) continue;
-        ApplyDesktopTileTheme(t);
-        changed = true;
+    if (Wh_GetIntValue(L"tileColours81", 0) < 2) {
+        bool changed = false;
+        for (int i = 0; i < g_tileCount; ++i) {
+            Tile& t = g_tiles[i];
+            if (!t.alive) continue;
+            COLORREF sysL = 0, sysR = 0;
+            if (!t.customTile && Win81SystemAppColor(t.target, &sysL, &sysR)) {
+                if (t.c1 != sysL || t.c2 != sysR) {
+                    t.c1 = sysL; t.c2 = sysR;
+                    changed = true;
+                }
+                continue;
+            }
+            if (t.mg >= 0) continue;
+            if (t.style != TOP_APP && t.style != BOTTOM_CAPTION) continue;
+            if (t.c1 == kDesktopTileLeft && t.c2 == kDesktopTileRight) continue;
+            ApplyDesktopTileTheme(t);
+            changed = true;
+        }
+        if (changed) SaveLayout();
+        Wh_SetIntValue(L"tileColours81", 2);
     }
-    if (changed) SaveLayout();
-    Wh_SetIntValue(L"tileColours81", 1);
 }
 
 // Configuration is read on each reload. The tile capacity is the natural limit,
@@ -15841,6 +17564,22 @@ static void InitTiles() {
         }
         for (int i = 0; i < defaultCount; ++i) g_tileGroup[i] = 0;
     }
+    // Remove obsolete fallback tiles once; do not repeatedly erase later manual pins.
+    if (!Wh_GetIntValue(L"obsoleteSeedCleanupV141", 0)) {
+        bool removed = false;
+        for (int i = 0; i < g_tileCount; ++i) {
+            Tile& t = g_tiles[i];
+            if (!t.alive || !t.target || t.customTile) continue;
+            std::wstring low = LowerW(t.target);
+            if (low == L"ms-windows-store:" || low == L"windhawk:edge-tile-v1" ||
+                low == L"windhawk:onedrive-tile-v1" || low.find(L"microsoft.microsoftedge") != std::wstring::npos ||
+                low.find(L"microsoft.skydrive") != std::wstring::npos || low.find(L"onedrive.exe") != std::wstring::npos) {
+                RemoveTileFromOrder(i); removed = true;
+            }
+        }
+        if (removed) SaveLayout();
+        Wh_SetIntValue(L"obsoleteSeedCleanupV141", 1);
+    }
     for (int i = 0; i < MAX_TILES; ++i) g_tileScale[i] = 1.0f;
     LoadTileIcons();
         UpdateTileAppColors();
@@ -15907,7 +17646,7 @@ static void UiRun() {
     DWORD n = 127;
     GetUserNameW(g_userName, &n);
     g_userTextW = -1;
-    UpdateDpi();
+    UpdateDpi(0, GetSystemMetrics(SM_CYSCREEN));
     InitTiles();
     RunGuarded(L"StartColourRevision", [] { ApplyStartColourRevision(); });
     LoadGroupNames();
@@ -15920,6 +17659,7 @@ static void UiRun() {
     g_wnd = CreateTopWindow(g_sw, g_sh);
     if (g_wnd) BuildBuffers();
     if (g_wnd) UpdateWeatherWorker();
+    if (g_wnd) UpdateNewsWorker();
     if (g_wnd && InterlockedCompareExchange(&g_openAtLogon, 0, 0) != 0) {
         g_logonStop = CreateEventW(NULL, TRUE, FALSE, NULL);
         if (g_logonStop) g_logonThread = CreateThread(NULL, 0, LogonOpenThread, NULL, 0, NULL);
@@ -15929,7 +17669,8 @@ static void UiRun() {
     g_artStop = CreateEventW(NULL, TRUE, FALSE, NULL);
     g_artWake = CreateEventW(NULL, FALSE, FALSE, NULL);
     for (int i = 0; i < g_tileCount; ++i)
-        if (g_tiles[i].alive && g_tiles[i].style == PINNED_APP && g_tiles[i].mg < 0)
+        if (g_tiles[i].alive && g_tiles[i].style == PINNED_APP && g_tiles[i].mg < 0 &&
+            !IsStoreTarget(g_tiles[i].target))
             QueuePackageArt(g_tiles[i].target);
     if (g_wnd && g_artStop && g_artWake)
         g_artThread = CreateThread(NULL, 0, PackageArtThread, NULL, 0, NULL);
@@ -15963,6 +17704,7 @@ static void UiRun() {
 
 static void UiTeardown() {
     g_weather.Stop();
+    g_news.Stop();
     g_photoSlideshow.Stop();
     if (g_logonStop) SetEvent(g_logonStop);
     if (g_logonThread) { WaitForSingleObject(g_logonThread, INFINITE); CloseHandle(g_logonThread); g_logonThread = NULL; }
@@ -16031,6 +17773,7 @@ static void UiTeardown() {
     IDWriteTextFormat** searchFormats[] = { &g_subFormat, &g_itemFormat, &g_sbTitleFormat, &g_boldFormat, &g_rowFormat,
                                             &g_countFormat, &g_queryFormat, &g_glyphFormat, &g_glyphSmall, &g_barLabel, &g_flyFormat, &g_zoomFormat, &g_hdrGlyphFmt };
     for (IDWriteTextFormat** f : searchFormats) if (*f) { (*f)->Release(); *f = NULL; }
+    ReleaseNameLayouts();
     if (g_writeFactory) { g_writeFactory->Release(); g_writeFactory = NULL; }
     if (g_d2dFactory) { g_d2dFactory->Release(); g_d2dFactory = NULL; }
     for (int i = 0; i < g_tileCount; i++) FreeTile(g_tiles[i]);
@@ -16042,6 +17785,9 @@ static void UiTeardown() {
         UnregisterClassW(kClassName, g_inst);
         g_classRegistered = false;
     }
+    ReleaseResizeOldGpu();
+    g_resizeOldPx.clear();
+    ReleaseStoreBase64Icon();
     g_iconBitmapCache.reset();
     if (g_gdipToken) { Gdiplus::GdiplusShutdown(g_gdipToken); g_gdipToken = 0; }
     if (g_uiCoInit) {
@@ -16085,11 +17831,75 @@ static void LoadNavigationOptions() {
     });
 }
 
+// Parses text such as "Ctrl+Alt+S" or "Shift+F12" into modifier bits and a virtual key.
+// A letter or digit needs at least one modifier; F1-F24 may stand alone.
+static bool ParseShortcut(const wchar_t* text, LONG& mods, LONG& vk) {
+    mods = 0; vk = 0;
+    if (!text || !*text) return false;
+    std::wstring all(text);
+    all.push_back(L'+');
+    std::wstring tok;
+    for (wchar_t ch : all) {
+        if (ch != L'+') { if (ch != L' ') tok.push_back((wchar_t)towlower(ch)); continue; }
+        if (tok.empty()) return false;
+        LONG key = 0;
+        if (tok == L"ctrl" || tok == L"control") mods |= 1;
+        else if (tok == L"alt") mods |= 2;
+        else if (tok == L"shift") mods |= 4;
+        else if (tok == L"win" || tok == L"windows") mods |= 8;
+        else if (tok.size() == 1 && tok[0] >= L'a' && tok[0] <= L'z') key = (LONG)(tok[0] - L'a' + L'A');
+        else if (tok.size() == 1 && tok[0] >= L'0' && tok[0] <= L'9') key = (LONG)tok[0];
+        else if (tok[0] == L'f' && tok.size() >= 2 && tok.size() <= 3 &&
+                 iswdigit(tok[1]) && (tok.size() == 2 || iswdigit(tok[2]))) {
+            int n = _wtoi(tok.c_str() + 1);
+            if (n < 1 || n > 24) return false;
+            key = VK_F1 + n - 1;
+        }
+        else if (tok == L"space") key = VK_SPACE;
+        else if (tok == L"tab") key = VK_TAB;
+        else if (tok == L"enter" || tok == L"return") key = VK_RETURN;
+        else if (tok == L"home") key = VK_HOME;
+        else if (tok == L"end") key = VK_END;
+        else if (tok == L"insert" || tok == L"ins") key = VK_INSERT;
+        else if (tok == L"delete" || tok == L"del") key = VK_DELETE;
+        else if (tok == L"pageup" || tok == L"pgup") key = VK_PRIOR;
+        else if (tok == L"pagedown" || tok == L"pgdn") key = VK_NEXT;
+        else if (tok == L"up") key = VK_UP;
+        else if (tok == L"down") key = VK_DOWN;
+        else if (tok == L"left") key = VK_LEFT;
+        else if (tok == L"right") key = VK_RIGHT;
+        else return false;
+        if (key) { if (vk) return false; vk = key; }
+        tok.clear();
+    }
+    if (!vk) return false;
+    if (!mods && !(vk >= VK_F1 && vk <= VK_F24)) return false;
+    return true;
+}
+
 static void LoadSettings() {
     InterlockedExchange(&g_experimentalTouch, Wh_GetIntSetting(L"experimentalTouch") != 0);
     InterlockedExchange(&g_photoEnabled, Wh_GetIntSetting(L"photoSlideshow") != 0);
-    InterlockedExchange(&g_calendarSlide, Wh_GetIntSetting(L"calendarSlide") != 0);
+    // Live Tile flips are on when calendarSlide is on, and also when the 8.1 layout is seeded,
+    // so the seeded tiles animate without an extra option.
+    InterlockedExchange(&g_calendarSlide,
+        (Wh_GetIntSetting(L"calendarSlide") != 0 || Wh_GetIntSetting(L"seedStartLayout") != 0) ? 1 : 0);
     g_useWinKey = Wh_GetIntSetting(L"winKey") != 0;
+    {
+        InterlockedExchange(&g_altShortcutOn, 0);   // off while the new values are being read
+        g_altShortcutHeld = false;
+        if (Wh_GetIntSetting(L"altShortcut") != 0) {
+            WindhawkUtils::StringSetting keys(WindhawkUtils::StringSetting::make(L"altShortcutKey"));
+            LONG mods = 0, vk = 0;
+            if (ParseShortcut(keys.get(), mods, vk)) {
+                InterlockedExchange(&g_altShortcutMods, mods);
+                InterlockedExchange(&g_altShortcutVk, vk);
+                InterlockedExchange(&g_altShortcutOn, 1);
+            } else {
+                Wh_Log(L"Custom shortcut ignored: invalid key combination \"%s\"", keys.get());
+            }
+        }
+    }
     g_searchEnabled = Wh_GetIntSetting(L"searchOnType") != 0;
     g_trayRevealOn = Wh_GetIntSetting(L"taskbarOnBottomHover") != 0;
     InterlockedExchange(&g_openAtLogon, Wh_GetIntSetting(L"openAtLogon") != 0);
@@ -16144,8 +17954,9 @@ static void LoadSettings() {
         const LONG seed = Wh_GetIntSetting(L"seedStartLayout") != 0 ? 1 : 0;
         // Seed at most once per user: re-seeding would re-pin apps the user removed.
         // Turning the option off clears the flag, so off -> on seeds again on request.
-        if (!seed) Wh_SetIntValue(L"layoutSeeded", 0);
-        const bool alreadySeeded = Wh_GetIntValue(L"layoutSeeded", 0) != 0;
+        // 1.4.0 uses layoutSeededV140 so existing layouts get the full 8.1 tile set once.
+        if (!seed) Wh_SetIntValue(L"layoutSeededV140", 0);
+        const bool alreadySeeded = Wh_GetIntValue(L"layoutSeededV140", 0) != 0;
         if (!seed) InterlockedExchange(&g_seedLayout, 0);
         if (seed && !alreadySeeded && InterlockedExchange(&g_seedLayout, seed) == 0) {
             InterlockedExchange(&g_seedPending, 1);
