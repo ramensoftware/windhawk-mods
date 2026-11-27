@@ -596,8 +596,10 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd,
                 bool anchoredToBottom = false;
                 MONITORINFO monitorInfo{};
                 monitorInfo.cbSize = sizeof(monitorInfo);
+                RECT requestedRect{newX, newY, newX + requestedWidth,
+                                   newY + requestedHeight};
                 HMONITOR monitor =
-                    MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+                    MonitorFromRect(&requestedRect, MONITOR_DEFAULTTONEAREST);
                 if (monitor && GetMonitorInfoW(monitor, &monitorInfo)) {
                     int monitorBottom = monitorInfo.rcMonitor.bottom;
                     int originalBottom = newY + requestedHeight;
@@ -707,8 +709,9 @@ BOOL WINAPI MoveWindow_Hook(HWND hWnd,
             int newY = Y;
             MONITORINFO monitorInfo{};
             monitorInfo.cbSize = sizeof(monitorInfo);
+            RECT requestedRect{X, Y, X + nWidth, Y + nHeight};
             HMONITOR monitor =
-                MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+                MonitorFromRect(&requestedRect, MONITOR_DEFAULTTONEAREST);
             if (monitor && GetMonitorInfoW(monitor, &monitorInfo)) {
                 int monitorBottom = monitorInfo.rcMonitor.bottom;
                 if (Y + nHeight >= monitorBottom - 2 &&
@@ -3969,7 +3972,8 @@ void ApplyToFrameWhenNeeded(void* taskbarFrameThis) {
 
         // Skip frames that aren't in the visual tree yet. Right after Explorer
         // starts, MeasureOverride and OnApplyTemplate run before the frame is
-        // loaded. OnLoaded and the 600 ms calibration apply the layout later.
+        // loaded. OnLoaded and the multi-stage calibration apply the layout
+        // later.
         if (!frame.IsLoaded() || !frame.XamlRoot()) {
             return;
         }
@@ -4333,10 +4337,37 @@ bool HasUndersizedTaskbarWindow(int areaHeightPx) {
 }
 
 void RefreshAllClickThroughRegionsNow() {
-    ForEachTaskbarWindow([](HWND hWnd) {
+    struct SearchContext {
+        DWORD processId;
+        std::vector<DWORD> seenThreads;
+        std::vector<HWND> windows;
+    };
+
+    SearchContext context{GetCurrentProcessId(), {}, {}};
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            auto* ctx = reinterpret_cast<SearchContext*>(lParam);
+            DWORD pid = 0;
+            DWORD threadId = GetWindowThreadProcessId(hWnd, &pid);
+            if (!threadId || pid != ctx->processId ||
+                !IsTaskbarWindowClass(hWnd)) {
+                return TRUE;
+            }
+
+            if (std::find(ctx->seenThreads.begin(), ctx->seenThreads.end(),
+                          threadId) == ctx->seenThreads.end()) {
+                ctx->seenThreads.push_back(threadId);
+                ctx->windows.push_back(hWnd);
+            }
+
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&context));
+
+    for (HWND hWnd : context.windows) {
         RunFromWindowThread(hWnd, RefreshClickThroughRegionsOnCurrentThread,
                             nullptr);
-    });
+    }
 }
 
 constexpr DWORD kLayoutCalibrationDelaysMs[] = {300, 600, 900};
@@ -4934,8 +4965,6 @@ void KickTaskbarRelayout() {
                             0, SMTO_ABORTIFHUNG | SMTO_NORMAL, 1000, nullptr);
     });
 }
-
-using RunFromWindowThreadProc_t = void (*)(PVOID);
 
 bool RunFromWindowThread(HWND hWnd,
                          RunFromWindowThreadProc_t proc,
