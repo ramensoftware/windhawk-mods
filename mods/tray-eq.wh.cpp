@@ -552,7 +552,6 @@ static void STDMETHODCALLTYPE RCDtor_h(void* t) {
 
 // The WASAPI implementation classes of AudioSes.dll, resolved by symbol (x64).
 static bool HookAudioSes(HMODULE audioSes) {
-    // AudioSes.dll
     WindhawkUtils::SYMBOL_HOOK audioSesDllHooks[] = {
         {{L"public: virtual long __cdecl CAudioClient::Initialize(enum "
           L"_AUDCLNT_SHAREMODE,unsigned long,__int64,__int64,struct "
