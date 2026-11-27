@@ -2,7 +2,7 @@
 // @id              taskbar-notification-icon-spacing
 // @name            Taskbar tray icon spacing and grid
 // @description     Reduce or increase the spacing between tray icons on the taskbar, optionally have a grid of tray icons (Windows 11 only)
-// @version         1.4
+// @version         1.5
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -45,8 +45,9 @@ versions check out [7+ Taskbar Tweaker](https://tweaker.ramensoftware.com/).
 ## Vertical taskbar
 
 With the native vertical taskbar of newer Windows 11 builds, the tray icon width
-sets the height of the tray icons. When the taskbar is wide enough, it arranges
-the tray icons in a grid, and the tray icon rows set the number of columns.
+sets the height of the tray icons, and the tray icon rows set the number of
+columns of the grid of tray icons. With a single row, the tray icons are
+arranged in a grid when the taskbar is wide enough.
 */
 // ==/WindhawkModReadme==
 
@@ -63,9 +64,9 @@ the tray icons in a grid, and the tray icon rows set the number of columns.
   $description: >-
     Allows having a grid of tray icons.
 
-    With the native vertical taskbar, sets the number of columns when the
-    taskbar is wide enough for a grid of tray icons. With 1, the number of
-    columns depends on the tray icon width.
+    With the native vertical taskbar, sets the number of columns. With 1, the
+    tray icons are arranged in a grid when the taskbar is wide enough, and the
+    number of columns depends on the tray icon width.
 - gridArrangement: rowFirstLeftToRight
   $name: Grid arrangement
   $description: >-
@@ -124,10 +125,12 @@ the tray icons in a grid, and the tray icon rows set the number of columns.
 #include <cmath>
 #include <functional>
 #include <list>
+#include <optional>
 
 #undef GetCurrentTime
 
 #include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.h>
@@ -158,7 +161,11 @@ using FrameworkElementLoadedEventRevoker = winrt::impl::event_revoker<
     IFrameworkElement,
     &winrt::impl::abi<IFrameworkElement>::type::remove_Loaded>;
 
-std::list<FrameworkElementLoadedEventRevoker> g_autoRevokerList;
+// Only accessed from the taskbar thread, which is also where it's cleared in
+// ApplySettings, rather than by the destructor at process exit.
+[[clang::no_destroy]] std::optional<
+    std::list<FrameworkElementLoadedEventRevoker>> g_autoRevokerList{
+    std::in_place};
 
 winrt::weak_ref<FrameworkElement> g_notificationAreaIconsStackPanel;
 winrt::weak_ref<FrameworkElement> g_overflowRootGrid;
@@ -291,19 +298,25 @@ FrameworkElement FindDescendantByName(DependencyObject element, PCWSTR name) {
     return nullptr;
 }
 
-// The native vertical taskbar switches the tray to a vertical layout with a
-// visual state. A tray which is rotated as a whole keeps the horizontal layout.
-bool IsVerticalSystemTray(FrameworkElement systemTrayFrameGrid) {
+bool IsCurrentVisualState(FrameworkElement element,
+                          PCWSTR groupName,
+                          PCWSTR stateName) {
     for (const auto& group :
-         VisualStateManager::GetVisualStateGroups(systemTrayFrameGrid)) {
-        if (group.Name() == L"OrientationStates") {
+         VisualStateManager::GetVisualStateGroups(element)) {
+        if (group.Name() == groupName) {
             auto currentState = group.CurrentState();
-            return currentState &&
-                   currentState.Name() == L"VerticalOrientation";
+            return currentState && currentState.Name() == stateName;
         }
     }
 
     return false;
+}
+
+// The native vertical taskbar switches the tray to a vertical layout with a
+// visual state. A tray which is rotated as a whole keeps the horizontal layout.
+bool IsVerticalSystemTray(FrameworkElement systemTrayFrameGrid) {
+    return IsCurrentVisualState(systemTrayFrameGrid, L"OrientationStates",
+                                L"VerticalOrientation");
 }
 
 void ApplyNotifyIconViewOverflowStyle(FrameworkElement notifyIconViewElement,
@@ -645,6 +658,45 @@ bool ApplyNotifyIconsWrapGridEdgePadding(Controls::ItemsControl itemsControl,
     return true;
 }
 
+// The compact layout of a vertical tray, used when the taskbar doesn't show
+// labels, stacks the icons in a single column. For a grid, the icons get the
+// wrap grid of the detailed layout, and the rest of the compact layout is kept.
+// Returns whether the panel was changed.
+bool ApplyNotifyIconsCompactLayoutPanel(
+    FrameworkElement systemTrayFrameGrid,
+    Controls::ItemsControl notificationAreaIcons,
+    int rows) {
+    if (!IsCurrentVisualState(systemTrayFrameGrid, L"LayoutStates",
+                              L"VerticalCompactLayout")) {
+        return false;
+    }
+
+    // The panels which the layout states set.
+    auto resources = Application::Current().Resources();
+    auto compactPanel =
+        resources
+            .TryLookup(winrt::box_value(L"VerticalNotificationAreaIconsPanel"))
+            .try_as<Controls::ItemsPanelTemplate>();
+    auto detailedPanel =
+        resources
+            .TryLookup(winrt::box_value(L"DetailedNotificationAreaIconsPanel"))
+            .try_as<Controls::ItemsPanelTemplate>();
+    if (!compactPanel || !detailedPanel) {
+        Wh_Log(L"Notification area icons panel resources not found");
+        return false;
+    }
+
+    bool hasDetailedPanel = notificationAreaIcons.ItemsPanel() == detailedPanel;
+    if ((rows > 1) == hasDetailedPanel) {
+        return false;
+    }
+
+    Wh_Log(L"Setting %s panel for NotificationAreaIcons",
+           rows > 1 ? L"detailed" : L"compact");
+    notificationAreaIcons.ItemsPanel(rows > 1 ? detailedPanel : compactPanel);
+    return true;
+}
+
 bool ApplyNotifyIconsStyle(FrameworkElement notificationAreaIcons,
                            int rows,
                            int width,
@@ -826,12 +878,48 @@ bool ApplyIconStackStyle(PCWSTR containerName,
     return true;
 }
 
+// On newer builds, the XAML root content is the taskbar frame, and the tray
+// frame is an item of its repeater.
+FrameworkElement FindSystemTrayFrame(FrameworkElement xamlRootContent) {
+    if (winrt::get_class_name(xamlRootContent) != L"Taskbar.TaskbarFrame") {
+        return FindChildByClassName(xamlRootContent,
+                                    L"SystemTray.SystemTrayFrame");
+    }
+
+    FrameworkElement child = xamlRootContent;
+    if (!(child = FindChildByName(child, L"RootGrid")) ||
+        !(child = FindChildByName(child, L"TaskbarFrameRepeater"))) {
+        return nullptr;
+    }
+
+    FrameworkElement systemTrayFrame = nullptr;
+    EnumChildElements(child, [&systemTrayFrame](FrameworkElement item) {
+        if (winrt::get_class_name(item) != L"Taskbar.TaskbarExtensionElement") {
+            return false;
+        }
+
+        auto extensionElement = item.try_as<Controls::ContentControl>();
+        auto content =
+            extensionElement
+                ? extensionElement.Content().try_as<FrameworkElement>()
+                : nullptr;
+        if (!content ||
+            winrt::get_class_name(content) != L"SystemTray.SystemTrayFrame") {
+            return false;
+        }
+
+        systemTrayFrame = content;
+        return true;
+    });
+
+    return systemTrayFrame;
+}
+
 bool ApplyStyle(XamlRoot xamlRoot, int rows, int width) {
     FrameworkElement systemTrayFrameGrid = nullptr;
 
     FrameworkElement child = xamlRoot.Content().try_as<FrameworkElement>();
-    if (child &&
-        (child = FindChildByClassName(child, L"SystemTray.SystemTrayFrame")) &&
+    if (child && (child = FindSystemTrayFrame(child)) &&
         (child = FindChildByName(child, L"SystemTrayFrameGrid"))) {
         systemTrayFrameGrid = child;
     }
@@ -847,6 +935,15 @@ bool ApplyStyle(XamlRoot xamlRoot, int rows, int width) {
     FrameworkElement notificationAreaIcons =
         FindChildByName(systemTrayFrameGrid, L"NotificationAreaIcons");
     if (notificationAreaIcons) {
+        auto itemsControl =
+            notificationAreaIcons.try_as<Controls::ItemsControl>();
+        if (vertical && itemsControl &&
+            ApplyNotifyIconsCompactLayoutPanel(systemTrayFrameGrid,
+                                               itemsControl, rows)) {
+            // Creates the panel, which is styled below.
+            itemsControl.UpdateLayout();
+        }
+
         somethingSucceeded |=
             ApplyNotifyIconsStyle(notificationAreaIcons, rows, width, vertical);
     }
@@ -887,6 +984,11 @@ void* WINAPI IconView_IconView_Hook(void* pThis) {
 
     void* ret = IconView_IconView_Original(pThis);
 
+    // A handler registered while unloading could outlive the mod.
+    if (g_unloading) {
+        return ret;
+    }
+
     FrameworkElement iconView = nullptr;
     ((IUnknown**)pThis)[1]->QueryInterface(winrt::guid_of<FrameworkElement>(),
                                            winrt::put_abi(iconView));
@@ -894,8 +996,8 @@ void* WINAPI IconView_IconView_Hook(void* pThis) {
         return ret;
     }
 
-    g_autoRevokerList.emplace_back();
-    auto autoRevokerIt = g_autoRevokerList.end();
+    g_autoRevokerList->emplace_back();
+    auto autoRevokerIt = g_autoRevokerList->end();
     --autoRevokerIt;
 
     *autoRevokerIt = iconView.Loaded(
@@ -904,7 +1006,7 @@ void* WINAPI IconView_IconView_Hook(void* pThis) {
                         RoutedEventArgs const& e) {
             Wh_Log(L">");
 
-            g_autoRevokerList.erase(autoRevokerIt);
+            g_autoRevokerList->erase(autoRevokerIt);
 
             auto iconView = sender.try_as<FrameworkElement>();
             if (!iconView) {
@@ -982,22 +1084,74 @@ void WINAPI NotifyIconView_ApplyLayoutMode_Hook(void* pThis, int layoutMode) {
         return;
     }
 
-    FrameworkElement notifyIconView = nullptr;
-    ((IUnknown**)pThis)[1]->QueryInterface(winrt::guid_of<FrameworkElement>(),
-                                           winrt::put_abi(notifyIconView));
-    if (!notifyIconView ||
-        IsChildOfElementByClassName(notifyIconView,
-                                    L"SystemTray.NotificationAreaOverflow")) {
-        return;
-    }
+    try {
+        FrameworkElement notifyIconView = nullptr;
+        ((IUnknown**)pThis)[1]->QueryInterface(
+            winrt::guid_of<FrameworkElement>(), winrt::put_abi(notifyIconView));
+        if (!notifyIconView ||
+            IsChildOfElementByClassName(
+                notifyIconView, L"SystemTray.NotificationAreaOverflow")) {
+            return;
+        }
 
-    Wh_Log(L"Setting MinHeight=%d for NotifyIconView",
-           g_settings.notificationIconWidth);
-    notifyIconView.MinHeight(g_settings.notificationIconWidth);
+        Wh_Log(L"Setting MinHeight=%d for NotifyIconView",
+               g_settings.notificationIconWidth);
+        notifyIconView.MinHeight(g_settings.notificationIconWidth);
+
+        // The compact layout state sets its panel some time after the layout of
+        // the icons is updated, replacing the panel set for a grid. The icons
+        // apply their layout mode once they're moved to that panel, and the
+        // grid panel is set again after that.
+        if (g_settings.notificationIconRows <= 1) {
+            return;
+        }
+
+        auto notificationAreaIcons =
+            FindParentByName(notifyIconView, L"NotificationAreaIcons")
+                .try_as<Controls::ItemsControl>();
+        if (!notificationAreaIcons || notificationAreaIcons.ItemsPanelRoot()
+                                          .try_as<Controls::WrapGrid>()) {
+            return;
+        }
+
+        notificationAreaIcons.Dispatcher().TryRunAsync(
+            winrt::Windows::UI::Core::CoreDispatcherPriority::Normal,
+            [notificationAreaIconsWeak =
+                 winrt::make_weak(notificationAreaIcons)]() {
+                auto notificationAreaIcons = notificationAreaIconsWeak.get();
+                if (!notificationAreaIcons || g_unloading) {
+                    return;
+                }
+
+                try {
+                    int rows = g_settings.notificationIconRows;
+                    auto systemTrayFrameGrid = FindParentByName(
+                        notificationAreaIcons, L"SystemTrayFrameGrid");
+                    if (!systemTrayFrameGrid ||
+                        !ApplyNotifyIconsCompactLayoutPanel(
+                            systemTrayFrameGrid, notificationAreaIcons, rows)) {
+                        return;
+                    }
+
+                    // Creates the panel, which is styled below.
+                    notificationAreaIcons.UpdateLayout();
+                    ApplyNotifyIconsStyle(notificationAreaIcons, rows,
+                                          g_settings.notificationIconWidth,
+                                          /*vertical=*/true);
+                } catch (...) {
+                    HRESULT hr = winrt::to_hresult();
+                    Wh_Log(L"Error %08X", hr);
+                }
+            });
+    } catch (...) {
+        HRESULT hr = winrt::to_hresult();
+        Wh_Log(L"Error %08X", hr);
+    }
 }
 
-// Sets the columns of the tray grids, and schedules the edge padding of the
-// icons, which is applied after the columns are set here.
+// Runs once the layout state is applied, and creates the panel of the icons,
+// which is set before. Sets the columns of the tray grids after, and schedules
+// the edge padding of the icons, which is applied after the columns are set.
 using SystemTrayFrame_UpdateNotificationAreaIconsLayout_t =
     void(WINAPI*)(void* pThis);
 SystemTrayFrame_UpdateNotificationAreaIconsLayout_t
@@ -1006,31 +1160,50 @@ void WINAPI
 SystemTrayFrame_UpdateNotificationAreaIconsLayout_Hook(void* pThis) {
     Wh_Log(L">");
 
+    Controls::ItemsControl notificationAreaIcons = nullptr;
+
+    if (!g_unloading) {
+        try {
+            FrameworkElement systemTrayFrame = nullptr;
+            ((IUnknown**)pThis)[1]->QueryInterface(
+                winrt::guid_of<FrameworkElement>(),
+                winrt::put_abi(systemTrayFrame));
+
+            FrameworkElement systemTrayFrameGrid = nullptr;
+            if (systemTrayFrame) {
+                systemTrayFrameGrid =
+                    FindChildByName(systemTrayFrame, L"SystemTrayFrameGrid");
+            }
+
+            if (systemTrayFrameGrid) {
+                if (auto child = FindChildByName(systemTrayFrameGrid,
+                                                 L"NotificationAreaIcons")) {
+                    notificationAreaIcons =
+                        child.try_as<Controls::ItemsControl>();
+                }
+            }
+
+            if (notificationAreaIcons) {
+                ApplyNotifyIconsCompactLayoutPanel(
+                    systemTrayFrameGrid, notificationAreaIcons,
+                    g_settings.notificationIconRows);
+            }
+        } catch (...) {
+            HRESULT hr = winrt::to_hresult();
+            Wh_Log(L"Error %08X", hr);
+        }
+    }
+
     SystemTrayFrame_UpdateNotificationAreaIconsLayout_Original(pThis);
 
-    if (g_unloading) {
+    if (g_unloading || !notificationAreaIcons) {
         return;
     }
 
     try {
-        FrameworkElement systemTrayFrame = nullptr;
-        ((IUnknown**)pThis)[1]->QueryInterface(
-            winrt::guid_of<FrameworkElement>(),
-            winrt::put_abi(systemTrayFrame));
-        if (!systemTrayFrame) {
-            return;
-        }
-
-        FrameworkElement child = systemTrayFrame;
-        if ((child = FindChildByName(child, L"SystemTrayFrameGrid")) &&
-            (child = FindChildByName(child, L"NotificationAreaIcons"))) {
-            if (auto notificationAreaIcons =
-                    child.try_as<Controls::ItemsControl>()) {
-                ApplyNotifyIconsWrapGridColumns(
-                    notificationAreaIcons, g_settings.notificationIconRows,
-                    g_settings.notificationIconWidth);
-            }
-        }
+        ApplyNotifyIconsWrapGridColumns(notificationAreaIcons,
+                                        g_settings.notificationIconRows,
+                                        g_settings.notificationIconWidth);
     } catch (...) {
         HRESULT hr = winrt::to_hresult();
         Wh_Log(L"Error %08X", hr);
@@ -1064,6 +1237,34 @@ void WINAPI SystemTrayFrame_ApplyPositionAwareHorizontalPadding_Hook(
 
     SystemTrayFrame_ApplyPositionAwareHorizontalPadding_Original(itemsControl,
                                                                  itemCount);
+}
+
+// The compact layout resets the padding of the icons, which are in a single
+// column. A grid of icons is padded like in the detailed layout instead.
+using SystemTrayFrame_ResetIconViewLocalPadding_t =
+    void(WINAPI*)(void* itemsControl);
+SystemTrayFrame_ResetIconViewLocalPadding_t
+    SystemTrayFrame_ResetIconViewLocalPadding_Original;
+void WINAPI SystemTrayFrame_ResetIconViewLocalPadding_Hook(void* itemsControl) {
+    Wh_Log(L">");
+
+    if (!g_unloading && g_settings.notificationIconRows > 1) {
+        try {
+            Controls::ItemsControl itemsControlObject = nullptr;
+            winrt::copy_from_abi(itemsControlObject, *(void**)itemsControl);
+            if (itemsControlObject &&
+                itemsControlObject.Name() == L"NotificationAreaIcons" &&
+                ApplyNotifyIconsWrapGridEdgePadding(
+                    itemsControlObject, itemsControlObject.Items().Size())) {
+                return;
+            }
+        } catch (...) {
+            HRESULT hr = winrt::to_hresult();
+            Wh_Log(L"Error %08X", hr);
+        }
+    }
+
+    SystemTrayFrame_ResetIconViewLocalPadding_Original(itemsControl);
 }
 
 void ApplyOverflowStyle(FrameworkElement overflowRootGrid) {
@@ -1323,6 +1524,7 @@ void ApplySettings() {
         HWND hTaskbarWnd;
         int rows;
         int width;
+        winrt::Windows::UI::Core::CoreDispatcher dispatcher{nullptr};
     };
 
     Wh_Log(L"Applying settings");
@@ -1344,12 +1546,18 @@ void ApplySettings() {
         [](void* pParam) {
             ApplySettingsParam& param = *(ApplySettingsParam*)pParam;
 
-            g_autoRevokerList.clear();
+            g_autoRevokerList->clear();
 
             auto xamlRoot = GetTaskbarXamlRoot(param.hTaskbarWnd);
             if (!xamlRoot) {
                 Wh_Log(L"Getting XamlRoot failed");
                 return;
+            }
+
+            if (g_unloading) {
+                if (auto content = xamlRoot.Content()) {
+                    param.dispatcher = content.Dispatcher();
+                }
             }
 
             if (!ApplyStyle(xamlRoot, param.rows, param.width)) {
@@ -1361,10 +1569,26 @@ void ApplySettings() {
             }
         },
         &param);
+
+    // The callbacks queued by NotifyIconView_ApplyLayoutMode_Hook run mod code,
+    // and none are queued while unloading. They run at Normal priority, so all
+    // of them have run once a Low priority callback runs.
+    if (param.dispatcher) {
+        try {
+            param.dispatcher
+                .TryRunAsync(
+                    winrt::Windows::UI::Core::CoreDispatcherPriority::Low,
+                    [] {})
+                .get();
+        } catch (...) {
+            HRESULT hr = winrt::to_hresult();
+            Wh_Log(L"Error %08X", hr);
+        }
+    }
 }
 
 bool HookSystemTraySymbols(HMODULE module) {
-    // SystemTray.dll, Taskbar.View.dll
+    // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"},
@@ -1397,6 +1621,12 @@ bool HookSystemTraySymbols(HMODULE module) {
             {LR"(private: static void __cdecl winrt::SystemTray::implementation::SystemTrayFrame::ApplyPositionAwareHorizontalPadding(struct winrt::Windows::UI::Xaml::Controls::ItemsControl const &,unsigned int))"},
             &SystemTrayFrame_ApplyPositionAwareHorizontalPadding_Original,
             SystemTrayFrame_ApplyPositionAwareHorizontalPadding_Hook,
+            true,  // Only used with the native vertical taskbar.
+        },
+        {
+            {LR"(private: static void __cdecl winrt::SystemTray::implementation::SystemTrayFrame::ResetIconViewLocalPadding(struct winrt::Windows::UI::Xaml::Controls::ItemsControl const &))"},
+            &SystemTrayFrame_ResetIconViewLocalPadding_Original,
+            SystemTrayFrame_ResetIconViewLocalPadding_Hook,
             true,  // Only used with the native vertical taskbar.
         },
     };

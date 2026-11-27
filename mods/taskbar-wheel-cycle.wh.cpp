@@ -2,7 +2,7 @@
 // @id              taskbar-wheel-cycle
 // @name            Cycle taskbar buttons with mouse wheel
 // @description     Use the mouse wheel and/or keyboard shortcuts to cycle between taskbar buttons
-// @version         1.1.11
+// @version         1.1.12
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -56,15 +56,17 @@ check out [7+ Taskbar Tweaker](https://tweaker.ramensoftware.com/).
     will cycle between taskbar buttons. If set, it will override the default
     behavior of using the task list area for scrolling. Each region is a range
     like "100-200" (pixels) or "20%-50%" (percentage of taskbar length).
-- cycleLeftKeyboardShortcut: Alt+VK_OEM_4
+- cycleLeftKeyboardShortcut: Alt+[
   $name: Cycle left keyboard shortcut
   $description: >-
-    Possible modifier keys: Alt, Ctrl, Shift, Win. For possible shortcut keys,
-    refer to the following page:
+    Possible modifier keys: Alt, Ctrl, Shift, Win. Keys can be letters, digits,
+    F1-F24, names such as Left, Home, PageUp, Space, or characters such as
+    [ ] ; ' (US keyboard layout). VK_ names and numeric virtual-key codes are
+    also supported, see:
     https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
 
     Set to an empty string to disable.
-- cycleRightKeyboardShortcut: Alt+VK_OEM_6
+- cycleRightKeyboardShortcut: Alt+]
   $name: Cycle right keyboard shortcut
 - oldTaskbarOnWin11: false
   $name: Customize the old taskbar on Windows 11
@@ -85,9 +87,11 @@ check out [7+ Taskbar Tweaker](https://tweaker.ramensoftware.com/).
 #include <winrt/Windows.UI.Input.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
+#include <winrt/Windows.UI.Xaml.Media.h>
 
 #include <algorithm>
 #include <atomic>
+#include <climits>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -117,7 +121,6 @@ enum class WinVersion {
     Unsupported,
     Win10,
     Win11,
-    Win11_24H2,
 };
 
 WinVersion g_winVersion;
@@ -624,7 +627,11 @@ bool SvToInt(std::wstring_view s, int* result) {
         if (c < L'0' || c > L'9') {
             return false;
         }
-        value = value * 10 + (c - L'0');
+        int digit = c - L'0';
+        if (value > (INT_MAX - digit) / 10) {
+            return false;
+        }
+        value = value * 10 + digit;
     }
 
     *result = value;
@@ -689,7 +696,7 @@ bool IsPointInsideCustomRegion(HWND hMMTaskbarWnd, POINT pt) {
     if (isHorizontal) {
         taskbarLength = rc.right - rc.left;
         if (GetWindowLong(hMMTaskbarWnd, GWL_EXSTYLE) & WS_EX_LAYOUTRTL) {
-            cursorOffset = rc.right - pt.x;
+            cursorOffset = rc.right - 1 - pt.x;
         } else {
             cursorOffset = pt.x - rc.left;
         }
@@ -776,61 +783,7 @@ bool FromStringHotKey(std::wstring_view hotkeyString,
     };
 
     static const std::unordered_map<std::wstring_view, UINT> vkMap = {
-        {L"VK_LBUTTON", 0x01},
-        {L"VK_RBUTTON", 0x02},
-        {L"VK_CANCEL", 0x03},
-        {L"VK_MBUTTON", 0x04},
-        {L"VK_XBUTTON1", 0x05},
-        {L"VK_XBUTTON2", 0x06},
-        {L"VK_BACK", 0x08},
-        {L"VK_TAB", 0x09},
-        {L"VK_CLEAR", 0x0C},
-        {L"VK_RETURN", 0x0D},
-        {L"VK_SHIFT", 0x10},
-        {L"VK_CONTROL", 0x11},
-        {L"VK_MENU", 0x12},
-        {L"VK_PAUSE", 0x13},
-        {L"VK_CAPITAL", 0x14},
-        {L"VK_KANA", 0x15},
-        {L"VK_HANGUEL", 0x15},
-        {L"VK_HANGUL", 0x15},
-        {L"VK_IME_ON", 0x16},
-        {L"VK_JUNJA", 0x17},
-        {L"VK_FINAL", 0x18},
-        {L"VK_HANJA", 0x19},
-        {L"VK_KANJI", 0x19},
-        {L"VK_IME_OFF", 0x1A},
-        {L"VK_ESCAPE", 0x1B},
-        {L"VK_CONVERT", 0x1C},
-        {L"VK_NONCONVERT", 0x1D},
-        {L"VK_ACCEPT", 0x1E},
-        {L"VK_MODECHANGE", 0x1F},
-        {L"VK_SPACE", 0x20},
-        {L"VK_PRIOR", 0x21},
-        {L"VK_NEXT", 0x22},
-        {L"VK_END", 0x23},
-        {L"VK_HOME", 0x24},
-        {L"VK_LEFT", 0x25},
-        {L"VK_UP", 0x26},
-        {L"VK_RIGHT", 0x27},
-        {L"VK_DOWN", 0x28},
-        {L"VK_SELECT", 0x29},
-        {L"VK_PRINT", 0x2A},
-        {L"VK_EXECUTE", 0x2B},
-        {L"VK_SNAPSHOT", 0x2C},
-        {L"VK_INSERT", 0x2D},
-        {L"VK_DELETE", 0x2E},
-        {L"VK_HELP", 0x2F},
-        {L"0", 0x30},
-        {L"1", 0x31},
-        {L"2", 0x32},
-        {L"3", 0x33},
-        {L"4", 0x34},
-        {L"5", 0x35},
-        {L"6", 0x36},
-        {L"7", 0x37},
-        {L"8", 0x38},
-        {L"9", 0x39},
+        // Letters A-Z
         {L"A", 0x41},
         {L"B", 0x42},
         {L"C", 0x43},
@@ -857,6 +810,213 @@ bool FromStringHotKey(std::wstring_view hotkeyString,
         {L"X", 0x58},
         {L"Y", 0x59},
         {L"Z", 0x5A},
+        // Numbers 0-9
+        {L"0", 0x30},
+        {L"1", 0x31},
+        {L"2", 0x32},
+        {L"3", 0x33},
+        {L"4", 0x34},
+        {L"5", 0x35},
+        {L"6", 0x36},
+        {L"7", 0x37},
+        {L"8", 0x38},
+        {L"9", 0x39},
+        // Function keys F1-F24
+        {L"F1", 0x70},
+        {L"F2", 0x71},
+        {L"F3", 0x72},
+        {L"F4", 0x73},
+        {L"F5", 0x74},
+        {L"F6", 0x75},
+        {L"F7", 0x76},
+        {L"F8", 0x77},
+        {L"F9", 0x78},
+        {L"F10", 0x79},
+        {L"F11", 0x7A},
+        {L"F12", 0x7B},
+        {L"F13", 0x7C},
+        {L"F14", 0x7D},
+        {L"F15", 0x7E},
+        {L"F16", 0x7F},
+        {L"F17", 0x80},
+        {L"F18", 0x81},
+        {L"F19", 0x82},
+        {L"F20", 0x83},
+        {L"F21", 0x84},
+        {L"F22", 0x85},
+        {L"F23", 0x86},
+        {L"F24", 0x87},
+        // Common keys
+        {L"BACKSPACE", 0x08},
+        {L"TAB", 0x09},
+        {L"ENTER", 0x0D},
+        {L"RETURN", 0x0D},
+        {L"PAUSE", 0x13},
+        {L"CAPSLOCK", 0x14},
+        {L"ESCAPE", 0x1B},
+        {L"ESC", 0x1B},
+        {L"SPACE", 0x20},
+        {L"SPACEBAR", 0x20},
+        {L"PAGEUP", 0x21},
+        {L"PAGEDOWN", 0x22},
+        {L"END", 0x23},
+        {L"HOME", 0x24},
+        {L"LEFT", 0x25},
+        {L"UP", 0x26},
+        {L"RIGHT", 0x27},
+        {L"DOWN", 0x28},
+        {L"PRINTSCREEN", 0x2C},
+        {L"PRTSC", 0x2C},
+        {L"INSERT", 0x2D},
+        {L"INS", 0x2D},
+        {L"DELETE", 0x2E},
+        {L"DEL", 0x2E},
+        {L"HELP", 0x2F},
+        {L"SLEEP", 0x5F},
+        {L"APPS", 0x5D},
+        {L"MENU", 0x5D},
+        // Numpad keys
+        {L"NUMPAD0", 0x60},
+        {L"NUMPAD1", 0x61},
+        {L"NUMPAD2", 0x62},
+        {L"NUMPAD3", 0x63},
+        {L"NUMPAD4", 0x64},
+        {L"NUMPAD5", 0x65},
+        {L"NUMPAD6", 0x66},
+        {L"NUMPAD7", 0x67},
+        {L"NUMPAD8", 0x68},
+        {L"NUMPAD9", 0x69},
+        {L"NUM0", 0x60},
+        {L"NUM1", 0x61},
+        {L"NUM2", 0x62},
+        {L"NUM3", 0x63},
+        {L"NUM4", 0x64},
+        {L"NUM5", 0x65},
+        {L"NUM6", 0x66},
+        {L"NUM7", 0x67},
+        {L"NUM8", 0x68},
+        {L"NUM9", 0x69},
+        {L"MULTIPLY", 0x6A},
+        {L"ADD", 0x6B},
+        {L"SUBTRACT", 0x6D},
+        {L"DECIMAL", 0x6E},
+        {L"DIVIDE", 0x6F},
+        {L"NUMLOCK", 0x90},
+        {L"SCROLLLOCK", 0x91},
+        // Media keys
+        {L"VOLUMEMUTE", 0xAD},
+        {L"VOLUMEDOWN", 0xAE},
+        {L"VOLUMEUP", 0xAF},
+        {L"MEDIANEXT", 0xB0},
+        {L"MEDIAPREV", 0xB1},
+        {L"MEDIASTOP", 0xB2},
+        {L"MEDIAPLAYPAUSE", 0xB3},
+        // Browser keys
+        {L"BROWSERBACK", 0xA6},
+        {L"BROWSERFORWARD", 0xA7},
+        {L"BROWSERREFRESH", 0xA8},
+        {L"BROWSERSTOP", 0xA9},
+        {L"BROWSERSEARCH", 0xAA},
+        {L"BROWSERFAVORITES", 0xAB},
+        {L"BROWSERHOME", 0xAC},
+        // Modifier keys (for use as the key itself)
+        {L"LWIN", 0x5B},
+        {L"RWIN", 0x5C},
+        {L"LSHIFT", 0xA0},
+        {L"RSHIFT", 0xA1},
+        {L"LCTRL", 0xA2},
+        {L"RCTRL", 0xA3},
+        {L"LALT", 0xA4},
+        {L"RALT", 0xA5},
+        // VK_ prefixed versions
+        {L"VK_LBUTTON", 0x01},
+        {L"VK_RBUTTON", 0x02},
+        {L"VK_CANCEL", 0x03},
+        {L"VK_MBUTTON", 0x04},
+        {L"VK_XBUTTON1", 0x05},
+        {L"VK_XBUTTON2", 0x06},
+        {L"VK_CLEAR", 0x0C},
+        {L"VK_SHIFT", 0x10},
+        {L"VK_CONTROL", 0x11},
+        {L"VK_MENU", 0x12},
+        {L"VK_KANA", 0x15},
+        {L"VK_HANGUL", 0x15},
+        {L"VK_IME_ON", 0x16},
+        {L"VK_JUNJA", 0x17},
+        {L"VK_FINAL", 0x18},
+        {L"VK_HANJA", 0x19},
+        {L"VK_KANJI", 0x19},
+        {L"VK_IME_OFF", 0x1A},
+        {L"VK_CONVERT", 0x1C},
+        {L"VK_NONCONVERT", 0x1D},
+        {L"VK_ACCEPT", 0x1E},
+        {L"VK_MODECHANGE", 0x1F},
+        {L"VK_SELECT", 0x29},
+        {L"VK_PRINT", 0x2A},
+        {L"VK_EXECUTE", 0x2B},
+        {L"VK_SEPARATOR", 0x6C},
+        {L"VK_LAUNCH_MAIL", 0xB4},
+        {L"VK_LAUNCH_MEDIA_SELECT", 0xB5},
+        {L"VK_LAUNCH_APP1", 0xB6},
+        {L"VK_LAUNCH_APP2", 0xB7},
+        {L"VK_OEM_1", 0xBA},
+        {L"VK_OEM_PLUS", 0xBB},
+        {L"VK_OEM_COMMA", 0xBC},
+        {L"VK_OEM_MINUS", 0xBD},
+        {L"VK_OEM_PERIOD", 0xBE},
+        {L"VK_OEM_2", 0xBF},
+        {L"VK_OEM_3", 0xC0},
+        {L"VK_OEM_4", 0xDB},
+        {L"VK_OEM_5", 0xDC},
+        {L"VK_OEM_6", 0xDD},
+        {L"VK_OEM_7", 0xDE},
+        {L"VK_OEM_8", 0xDF},
+        {L"VK_OEM_102", 0xE2},
+        {L"VK_PROCESSKEY", 0xE5},
+        {L"VK_PACKET", 0xE7},
+        {L"VK_ATTN", 0xF6},
+        {L"VK_CRSEL", 0xF7},
+        {L"VK_EXSEL", 0xF8},
+        {L"VK_EREOF", 0xF9},
+        {L"VK_PLAY", 0xFA},
+        {L"VK_ZOOM", 0xFB},
+        {L"VK_NONAME", 0xFC},
+        {L"VK_PA1", 0xFD},
+        {L"VK_OEM_CLEAR", 0xFE},
+        // Unshifted characters of the OEM keys on the US keyboard layout.
+        {L";", 0xBA},   // VK_OEM_1
+        {L"=", 0xBB},   // VK_OEM_PLUS
+        {L",", 0xBC},   // VK_OEM_COMMA
+        {L"-", 0xBD},   // VK_OEM_MINUS
+        {L".", 0xBE},   // VK_OEM_PERIOD
+        {L"/", 0xBF},   // VK_OEM_2
+        {L"`", 0xC0},   // VK_OEM_3
+        {L"[", 0xDB},   // VK_OEM_4
+        {L"\\", 0xDC},  // VK_OEM_5
+        {L"]", 0xDD},   // VK_OEM_6
+        {L"'", 0xDE},   // VK_OEM_7
+        // Legacy VK_-prefixed names kept for backwards compatibility with
+        // existing configurations. These duplicate the friendly names above.
+        {L"VK_BACK", 0x08},
+        {L"VK_TAB", 0x09},
+        {L"VK_RETURN", 0x0D},
+        {L"VK_PAUSE", 0x13},
+        {L"VK_CAPITAL", 0x14},
+        {L"VK_HANGUEL", 0x15},
+        {L"VK_ESCAPE", 0x1B},
+        {L"VK_SPACE", 0x20},
+        {L"VK_PRIOR", 0x21},
+        {L"VK_NEXT", 0x22},
+        {L"VK_END", 0x23},
+        {L"VK_HOME", 0x24},
+        {L"VK_LEFT", 0x25},
+        {L"VK_UP", 0x26},
+        {L"VK_RIGHT", 0x27},
+        {L"VK_DOWN", 0x28},
+        {L"VK_SNAPSHOT", 0x2C},
+        {L"VK_INSERT", 0x2D},
+        {L"VK_DELETE", 0x2E},
+        {L"VK_HELP", 0x2F},
         {L"VK_LWIN", 0x5B},
         {L"VK_RWIN", 0x5C},
         {L"VK_APPS", 0x5D},
@@ -873,7 +1033,6 @@ bool FromStringHotKey(std::wstring_view hotkeyString,
         {L"VK_NUMPAD9", 0x69},
         {L"VK_MULTIPLY", 0x6A},
         {L"VK_ADD", 0x6B},
-        {L"VK_SEPARATOR", 0x6C},
         {L"VK_SUBTRACT", 0x6D},
         {L"VK_DECIMAL", 0x6E},
         {L"VK_DIVIDE", 0x6F},
@@ -923,67 +1082,14 @@ bool FromStringHotKey(std::wstring_view hotkeyString,
         {L"VK_MEDIA_PREV_TRACK", 0xB1},
         {L"VK_MEDIA_STOP", 0xB2},
         {L"VK_MEDIA_PLAY_PAUSE", 0xB3},
-        {L"VK_LAUNCH_MAIL", 0xB4},
-        {L"VK_LAUNCH_MEDIA_SELECT", 0xB5},
-        {L"VK_LAUNCH_APP1", 0xB6},
-        {L"VK_LAUNCH_APP2", 0xB7},
-        {L"VK_OEM_1", 0xBA},
-        {L"VK_OEM_PLUS", 0xBB},
-        {L"VK_OEM_COMMA", 0xBC},
-        {L"VK_OEM_MINUS", 0xBD},
-        {L"VK_OEM_PERIOD", 0xBE},
-        {L"VK_OEM_2", 0xBF},
-        {L"VK_OEM_3", 0xC0},
-        {L"VK_OEM_4", 0xDB},
-        {L"VK_OEM_5", 0xDC},
-        {L"VK_OEM_6", 0xDD},
-        {L"VK_OEM_7", 0xDE},
-        {L"VK_OEM_8", 0xDF},
-        {L"VK_OEM_102", 0xE2},
-        {L"VK_PROCESSKEY", 0xE5},
-        {L"VK_PACKET", 0xE7},
-        {L"VK_ATTN", 0xF6},
-        {L"VK_CRSEL", 0xF7},
-        {L"VK_EXSEL", 0xF8},
-        {L"VK_EREOF", 0xF9},
-        {L"VK_PLAY", 0xFA},
-        {L"VK_ZOOM", 0xFB},
-        {L"VK_NONAME", 0xFC},
-        {L"VK_PA1", 0xFD},
-        {L"VK_OEM_CLEAR", 0xFE},
-    };
-
-    // https://stackoverflow.com/a/46931770
-    auto splitStringView = [](std::wstring_view s, WCHAR delimiter) {
-        size_t pos_start = 0, pos_end;
-        std::wstring_view token;
-        std::vector<std::wstring_view> res;
-
-        while ((pos_end = s.find(delimiter, pos_start)) !=
-               std::wstring_view::npos) {
-            token = s.substr(pos_start, pos_end - pos_start);
-            pos_start = pos_end + 1;
-            res.push_back(token);
-        }
-
-        res.push_back(s.substr(pos_start));
-        return res;
-    };
-
-    // https://stackoverflow.com/a/54364173
-    auto trimStringView = [](std::wstring_view s) {
-        s.remove_prefix(std::min(s.find_first_not_of(L" \t\r\v\n"), s.size()));
-        s.remove_suffix(std::min(
-            s.size() - s.find_last_not_of(L" \t\r\v\n") - 1, s.size()));
-        return s;
     };
 
     UINT modifiers = 0;
     UINT vk = 0;
 
-    auto hotkeyParts = splitStringView(hotkeyString, '+');
+    auto hotkeyParts = SplitStringView(hotkeyString, L"+");
     for (auto hotkeyPart : hotkeyParts) {
-        hotkeyPart = trimStringView(hotkeyPart);
+        hotkeyPart = TrimStringView(hotkeyPart);
         std::wstring hotkeyPartUpper{hotkeyPart};
         std::transform(hotkeyPartUpper.begin(), hotkeyPartUpper.end(),
                        hotkeyPartUpper.begin(), ::toupper);
@@ -995,7 +1101,7 @@ bool FromStringHotKey(std::wstring_view hotkeyString,
         }
 
         if (vk) {
-            // Only one is allowed.
+            // Only one key is allowed.
             return false;
         }
 
@@ -1278,6 +1384,23 @@ LRESULT WINAPI CSecondaryTray_v_WndProc_Hook(void* pThis,
     return ret;
 }
 
+bool IsInSystemTrayFrame(DependencyObject element) {
+    while (element) {
+        auto className = winrt::get_class_name(element);
+        if (className == L"SystemTray.SystemTrayFrame") {
+            return true;
+        }
+
+        if (className == L"Taskbar.TaskbarFrame") {
+            break;
+        }
+
+        element = Media::VisualTreeHelper::GetParent(element);
+    }
+
+    return false;
+}
+
 using TaskbarFrame_OnPointerWheelChanged_t = int(WINAPI*)(PVOID pThis,
                                                           PVOID pArgs);
 TaskbarFrame_OnPointerWheelChanged_t
@@ -1317,6 +1440,11 @@ int TaskbarFrame_OnPointerWheelChanged_Hook(PVOID pThis, PVOID pArgs) {
         ->QueryInterface(winrt::guid_of<Input::PointerRoutedEventArgs>(),
                          winrt::put_abi(args));
     if (!args) {
+        return original();
+    }
+
+    // On newer builds, the tray is inside the taskbar frame.
+    if (IsInSystemTrayFrame(args.OriginalSource().try_as<DependencyObject>())) {
         return original();
     }
 
@@ -1532,7 +1660,9 @@ VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
     return (VS_FIXEDFILEINFO*)pFixedFileInfo;
 }
 
-WinVersion GetExplorerVersion() {
+WinVersion GetExplorerVersion(bool* hasWin10Taskbar) {
+    *hasWin10Taskbar = false;
+
     VS_FIXEDFILEINFO* fixedFileInfo = GetModuleVersionInfo(nullptr, nullptr);
     if (!fixedFileInfo) {
         return WinVersion::Unsupported;
@@ -1547,12 +1677,12 @@ WinVersion GetExplorerVersion() {
 
     switch (major) {
         case 10:
+            // explorer.exe includes the Win10 taskbar before this build.
+            *hasWin10Taskbar = build < 26100 || (build == 26100 && qfe < 1301);
             if (build < 22000) {
                 return WinVersion::Win10;
-            } else if (build < 26100) {
-                return WinVersion::Win11;
             } else {
-                return WinVersion::Win11_24H2;
+                return WinVersion::Win11;
             }
             break;
     }
@@ -1718,15 +1848,14 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    g_winVersion = GetExplorerVersion();
+    bool hasWin10Taskbar;
+    g_winVersion = GetExplorerVersion(&hasWin10Taskbar);
     if (g_winVersion == WinVersion::Unsupported) {
         Wh_Log(L"Unsupported Windows version");
         return FALSE;
     }
 
     if (g_settings.oldTaskbarOnWin11) {
-        bool hasWin10Taskbar = g_winVersion < WinVersion::Win11_24H2;
-
         if (g_winVersion >= WinVersion::Win11) {
             g_winVersion = WinVersion::Win10;
         }
@@ -1761,9 +1890,9 @@ BOOL Wh_ModInit() {
     HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
     auto pKernelBaseLoadLibraryExW = (decltype(&LoadLibraryExW))GetProcAddress(
         kernelBaseModule, "LoadLibraryExW");
-    WindhawkUtils::Wh_SetFunctionHookT(pKernelBaseLoadLibraryExW,
-                                       LoadLibraryExW_Hook,
-                                       &LoadLibraryExW_Original);
+    WindhawkUtils::SetFunctionHook(pKernelBaseLoadLibraryExW,
+                                   LoadLibraryExW_Hook,
+                                   &LoadLibraryExW_Original);
 
     g_initialized = true;
 

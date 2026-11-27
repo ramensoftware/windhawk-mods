@@ -2,7 +2,7 @@
 // @id              file-hover-info
 // @name            File Hover Info
 // @description     A themeable info card with size, dates and more when you hover files on the desktop or in File Explorer
-// @version         1.1.2
+// @version         1.2.0
 // @author          HaVeN80
 // @github          https://github.com/haven80
 // @include         explorer.exe
@@ -25,8 +25,8 @@ The card follows the Windows display language (English, Italian, Spanish,
 French, German, Portuguese and Simplified Chinese are included; other
 languages fall back to English), or you can pick one.
 
-Everything is configurable: which fields to show, date style (absolute,
-relative or both), theme (follow Windows, dark, light or fully custom colors),
+Everything is configurable: which fields to show, whether file names include
+their extension, date style (absolute, relative or both), theme (follow Windows, dark, light or fully custom colors),
 solid / acrylic / blur background, accent color and bar, corner radius,
 shadow, fade-in, font, size, icon or thumbnail.
 
@@ -64,6 +64,13 @@ free space instead of being scanned.
   $name: Show on the desktop
 - showInExplorer: true
   $name: Show in File Explorer windows
+- extensions: show
+  $name: File extensions in the name
+  $description: Whether the file name on the card includes its extension (.jpg, .pdf...). Shortcuts (.lnk, .url) never show it, as in File Explorer.
+  $options:
+  - show: Always show
+  - hide: Always hide
+  - explorer: Same as File Explorer ("File name extensions" setting)
 - hideNativeTooltip: true
   $name: Hide Windows' own hover popup
   $description: Hides the built-in popup so only this card appears. The Windows setting is not changed.
@@ -277,11 +284,13 @@ static const wchar_t kCardClass[] = L"WhFileHoverInfoCard";
 // ---------------------------------------------------------------------------
 enum Theme { ThemeAuto, ThemeDark, ThemeLight, ThemeCustom };
 enum Background { BgSolid, BgAcrylic, BgBlur };
+enum Extensions { ExtShow, ExtHide, ExtExplorer };
 enum DateStyle { DateLong, DateShort, DateRelative, DateShortRelative };
 
 struct Settings {
     int delay;
     bool onDesktop, inExplorer;
+    int extensions;
     int lang;
     int folderSizeLimit;
     int dateStyle;
@@ -437,6 +446,12 @@ static void LoadSettings() {
     g_set.delay = std::clamp(Wh_GetIntSetting(L"delay"), 0, 5000);
     g_set.onDesktop = GetBool(L"showOnDesktop");
     g_set.inExplorer = GetBool(L"showInExplorer");
+    {
+        std::wstring ext = GetStr(L"extensions");
+        g_set.extensions = ext == L"hide"       ? ExtHide
+                           : ext == L"explorer" ? ExtExplorer
+                                                : ExtShow;
+    }
     {
         static const wchar_t* codes[] = {L"en", L"it", L"es", L"fr", L"de", L"pt", L"zh"};
         std::wstring lang = GetStr(L"language");
@@ -1143,6 +1158,34 @@ static void AddRow(const wchar_t* label, const std::wstring& value) {
 
 static void LayoutCard();
 
+// True for types whose extension File Explorer never shows (shortcuts and
+// the like), marked with the NeverShowExt registry value.
+static bool IsNeverShowExt(PCWSTR ext) {
+    if (!ext || !*ext)
+        return false;
+    if (RegGetValueW(HKEY_CLASSES_ROOT, ext, L"NeverShowExt", RRF_RT_ANY,
+                     nullptr, nullptr, nullptr) == ERROR_SUCCESS)
+        return true;
+    wchar_t progId[256];
+    DWORD sz = sizeof(progId);
+    if (RegGetValueW(HKEY_CLASSES_ROOT, ext, nullptr, RRF_RT_REG_SZ, nullptr,
+                     progId, &sz) != ERROR_SUCCESS ||
+        !*progId)
+        return false;
+    return RegGetValueW(HKEY_CLASSES_ROOT, progId, L"NeverShowExt", RRF_RT_ANY,
+                        nullptr, nullptr, nullptr) == ERROR_SUCCESS;
+}
+
+// The file name without its extension. Names that are only an extension
+// (".gitignore") are kept whole.
+static std::wstring StripExtension(const std::wstring& name) {
+    PCWSTR ext = PathFindExtensionW(name.c_str());
+    size_t pos = (size_t)(ext - name.c_str());
+    if (!*ext || pos == 0)
+        return name;
+    return name.substr(0, pos);
+}
+
 static bool BuildCard(IShellItem2* item, UINT dpi) {
     *g_card = Card();
     Card& c = *g_card;
@@ -1155,7 +1198,17 @@ static bool BuildCard(IShellItem2* item, UINT dpi) {
         CoTaskMemFree(raw);
     }
     raw = nullptr;
-    if (!path.empty() && !PathIsRootW(path.c_str())) {
+    bool isFile = false;
+    if (!path.empty()) {
+        DWORD a = GetFileAttributesW(path.c_str());
+        isFile = a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY);
+    }
+    if (isFile && g_set.extensions != ExtExplorer) {
+        c.name = PathFindFileNameW(path.c_str());
+        if (g_set.extensions == ExtHide ||
+            IsNeverShowExt(PathFindExtensionW(c.name.c_str())))
+            c.name = StripExtension(c.name);
+    } else if (!path.empty() && !isFile && !PathIsRootW(path.c_str())) {
         c.name = PathFindFileNameW(path.c_str());
     } else if (SUCCEEDED(item->GetDisplayName(SIGDN_NORMALDISPLAY, &raw)) &&
                raw) {

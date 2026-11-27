@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              taskbar-content-presenter-injector
 // @name            Taskbar ContentPresenter Injector
-// @description     Injects a ContentPresenter into Taskbar.TaskListLabeledButtonPanel and Taskbar.TaskListButtonPanel
-// @version         1.4.1
+// @description     Injects a ContentPresenter into Taskbar.TaskListLabeledButtonPanel, Grid#IconPanel, and Taskbar.TaskListButtonPanel
+// @version         1.4.2
 // @author          Lockframe
 // @github          https://github.com/Lockframe
 // @include         explorer.exe
@@ -14,11 +14,13 @@
 /*
 # Taskbar ContentPresenter Injector
 
-This mod acts as an addon to the [Windows 11 Taskbar Styler mod](https://windhawk.net/mods/windows-11-taskbar-styler), enabling deeper customization of the taskbar, such as replacing icons with glyphs, by injecting a `ContentPresenter` named `CustomInjectedPresenter` into every `Taskbar.TaskListLabeledButtonPanel`, `Taskbar.TaskListButtonPanel` and `SearchUx.SearchUI.SearchButtonRootGrid`.
+This mod acts as an addon to the [Windows 11 Taskbar Styler mod](https://windhawk.net/mods/windows-11-taskbar-styler), enabling deeper customization of the taskbar, such as replacing icons with glyphs, by injecting a `ContentPresenter` named `CustomInjectedPresenter` into every `Taskbar.TaskListLabeledButtonPanel` (or `Grid#IconPanel` on newer Windows 11 builds), `Taskbar.TaskListButtonPanel` and `SearchUx.SearchUI.SearchButtonRootGrid`.
 
 ## Path to the injected element:
 
-```Taskbar.TaskListButton > Taskbar.TaskListLabeledButtonPanel > Windows.UI.Xaml.Controls.ContentPresenter#CustomInjectedPresenter```
+```Taskbar.TaskListButton > Grid#IconPanel > Windows.UI.Xaml.Controls.ContentPresenter#CustomInjectedPresenter```
+
+(Older Windows 11 builds: ```Taskbar.TaskListButton > Taskbar.TaskListLabeledButtonPanel > Windows.UI.Xaml.Controls.ContentPresenter#CustomInjectedPresenter```)
 
 ```Taskbar.ExperienceToggleButton > Taskbar.TaskListButtonPanel > Windows.UI.Xaml.Controls.ContentPresenter#CustomInjectedPresenter```
 
@@ -64,8 +66,13 @@ std::mutex g_panelMutex;
 std::vector<PendingHook> g_pendingHooks;
 std::vector<winrt::weak_ref<FrameworkElement>> g_scannedFrames;
 std::mutex g_pendingMutex;
+std::atomic<bool> g_unloading{false};
+// Release with `g_dispatcher = nullptr;` in Wh_ModUninit.
+[[clang::no_destroy]] winrt::Windows::UI::Core::CoreDispatcher g_dispatcher{nullptr};
 
 constexpr std::wstring_view c_TargetPanelLabeled  = L"Taskbar.TaskListLabeledButtonPanel";
+constexpr std::wstring_view c_TargetPanelIconGrid = L"Windows.UI.Xaml.Controls.Grid";
+constexpr std::wstring_view c_TargetPanelIconName = L"IconPanel";
 constexpr std::wstring_view c_TargetPanelButton   = L"Taskbar.TaskListButtonPanel";
 constexpr std::wstring_view c_TargetSearchBar     = L"SearchUx.SearchUI.SearchButtonRootGrid";
 constexpr std::wstring_view c_RootFrameName       = L"Taskbar.TaskbarFrame";
@@ -178,7 +185,7 @@ void InjectContentPresenterIntoPanel(FrameworkElement targetPanel) {
         *tokenHolder = targetPanel.SizeChanged(
             [weakPanel, tokenHolder, pAbi](winrt::Windows::Foundation::IInspectable const&,
                                            winrt::Windows::UI::Xaml::SizeChangedEventArgs const&) {
-                
+                if (g_unloading) return;
                 auto p = weakPanel.get();
                 if (!p) return; 
 
@@ -189,6 +196,7 @@ void InjectContentPresenterIntoPanel(FrameworkElement targetPanel) {
                     auto weakP2 = winrt::make_weak(p);
                     
                     dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Normal, [weakP2, pAbi]() {
+                        if (g_unloading) return;
                         auto p_inner = weakP2.get();
                         if (!p_inner) return;
 
@@ -229,7 +237,10 @@ void ScanAndInjectRecursive(FrameworkElement element) {
     if (!element) return;
 
     auto className = winrt::get_class_name(element);
-    if (className == c_TargetPanelLabeled || className == c_TargetPanelButton || className == c_TargetSearchBar) {
+    if (className == c_TargetPanelLabeled ||
+        (className == c_TargetPanelIconGrid && element.Name() == c_TargetPanelIconName) ||
+        className == c_TargetPanelButton ||
+        className == c_TargetSearchBar) {
         InjectContentPresenterIntoPanel(element);
         return;
     }
@@ -268,6 +279,11 @@ void InjectForElement(void* pThis) {
             auto dispatcher = elem.Dispatcher();
             if (!dispatcher) return;
 
+            {
+                std::lock_guard<std::mutex> lock(g_pendingMutex);
+                if (!g_dispatcher) g_dispatcher = dispatcher;
+            }
+
             t_scanPending = true;
             auto weakElem = winrt::make_weak(elem);
 
@@ -275,6 +291,7 @@ void InjectForElement(void* pThis) {
                 winrt::Windows::UI::Core::CoreDispatcherPriority::Low,
                 [weakElem]() {
                     t_scanPending = false;
+                    if (g_unloading) return;
                     auto elem = weakElem.get();
                     if (!elem) return;
 
@@ -340,7 +357,7 @@ void WINAPI ExperienceToggleButton_UpdateVisualStates_Hook(void* pThis) {
 // Init / Uninit
 // -------------------------------------------------------------------------
 bool HookTaskbarViewDllSymbols(HMODULE module) {
-    // Taskbar.View.dll
+    // Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
         {
             {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))"},
@@ -390,6 +407,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
 
 BOOL Wh_ModInit() {
     Wh_Log(L"Initializing Taskbar Injector Mod");
+    g_unloading = false;
 
     if (HMODULE m = GetTaskbarViewModuleHandle()) {
         g_taskbarViewDllLoaded = true;
@@ -397,13 +415,24 @@ BOOL Wh_ModInit() {
     } else {
         HMODULE kb = GetModuleHandle(L"kernelbase.dll");
         auto pLoadLibraryExW = (decltype(&LoadLibraryExW))GetProcAddress(kb, "LoadLibraryExW");
-        WindhawkUtils::Wh_SetFunctionHookT(pLoadLibraryExW, LoadLibraryExW_Hook, &LoadLibraryExW_Original);
+        WindhawkUtils::SetFunctionHook(pLoadLibraryExW, LoadLibraryExW_Hook, &LoadLibraryExW_Original);
     }
     return TRUE;
 }
 
 void Wh_ModUninit() {
     Wh_Log(L"Uninitializing Taskbar Injector Mod");
+    g_unloading = true;
+
+    winrt::Windows::UI::Core::CoreDispatcher dispatcher{nullptr};
+    {
+        std::lock_guard<std::mutex> lock(g_pendingMutex);
+        dispatcher = std::exchange(g_dispatcher, nullptr);
+    }
+    if (dispatcher) {
+        // Runs after every Low-priority scan queued before the hooks were removed.
+        try { dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::Low, [] {}).get(); } catch (...) {}
+    }
 
     std::vector<PendingHook> localHooks;
     {

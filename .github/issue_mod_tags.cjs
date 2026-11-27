@@ -186,11 +186,21 @@ function stripHtmlComments(body) {
 }
 
 /**
+ * The handles that the Markdown text mentions. As on GitHub, a mention isn't in
+ * code, a link, or a URL, and its handle isn't preceded by a word character, nor
+ * followed by one, a slash, or a dot and a word character.
+ *
  * @param {string} text
  * @returns {Set<string>} Lowercase handles.
  */
 function mentionedHandles(text) {
-  return new Set([...text.matchAll(/@([A-Za-z0-9-]+)/g)].map((match) => match[1].toLowerCase()));
+  const prose = text
+    // Code blocks, fenced, where an unclosed fence runs to the end, or indented.
+    .replace(/^ {0,3}(`{3,}|~{3,})[\s\S]*?(?:^ {0,3}\1|(?![\s\S]))|^(?: {4}|\t).*/gm, ' ')
+    // Code spans, links, and URLs.
+    .replace(/(`+)[\s\S]*?\1|!?\[[^\]]*\](?:\([^)]*\)|\[[^\]]*\])|(?:https?:\/\/|www\.)\S+/gi, ' ');
+  const mentions = prose.matchAll(/(?<![A-Za-z0-9_])@([A-Za-z0-9][A-Za-z0-9-]*)(?![A-Za-z0-9_/-]|\.[A-Za-z0-9_])/g);
+  return new Set([...mentions].map((match) => match[1].toLowerCase()));
 }
 
 /**

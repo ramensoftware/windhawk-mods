@@ -2,7 +2,7 @@
 // @id              chrome-native-ui-tweaks
 // @name            Chrome Native UI Tweaks
 // @description     Customize Chrome's native UI: fonts, tab close (×) buttons, menu density, extension spacing, and bookmark folder icons. Web content is untouched.
-// @version         1.0
+// @version         1.1
 // @author          Dron007
 // @github          https://github.com/Dron007
 // @include         chrome.exe
@@ -59,6 +59,23 @@
     - "23": "23"
     - "24": "24"
   $name: "Address bar"
+
+- findBar:
+  - fontSize: "default"
+    $name: "Font size"
+    $description: "Font size for the Find in page (Ctrl+F) text field. Chrome default preserves the original font, including its weight."
+    $options:
+    - "default": "Chrome default"
+    - "12": "12"
+    - "13": "13"
+    - "14": "14"
+    - "15": "15"
+    - "16": "16"
+    - "17": "17"
+    - "18": "18"
+    - "19": "19"
+    - "20": "20"
+  $name: "Find in page (Ctrl+F)"
 
 - tabs:
   - fontSize: "default"
@@ -194,6 +211,9 @@ Disabling or uninstalling the mod restores the original UI in the running Chrome
 ### Address bar
 - Adjust the font size of URL and search text in the address bar.
 
+### Find in page (Ctrl+F)
+- Adjust the search text field font size without altering the result counter.
+
 ### Tabs
 - Adjust the tab title font size.
 - Hide tab close (×) buttons and reclaim the reserved space.
@@ -211,7 +231,7 @@ Disabling or uninstalling the mod restores the original UI in the running Chrome
 
 ## Notes
 
-- Tested with **Google Chrome 152.0.7977.76 x64**.
+- Tested with **Google Chrome 157.0.8103.79 x64**.
 - The mod relies on Chrome's internal native UI symbols, so Chrome updates can occasionally require compatibility adjustments.
 - After a Chrome update, Windhawk may need to download and resolve new `chrome.dll` symbols. The mod waits up to 5 seconds for cached symbols. If resolution takes longer, Chrome continues with its normal UI while symbol preparation finishes in the background. A temporary tray icon shows the current status on hover and displays short balloon messages when preparation starts and finishes. Keep that Chrome instance open until the status says the symbols are ready, then restart Chrome once to activate the mod.
 - A full fresh-symbol fallback can be large. In a Chrome 152.0.7977.76 test with the local PDB and Windhawk symbol cache removed, the resulting uncompressed `chrome.dll.pdb` was **5.59 GB (5.21 GiB)** and total preparation took **139.5 seconds** on a **75 Mbit/s** connection and an **Intel Core i7-8700K**. The download finished after roughly two minutes and symbol analysis took roughly another 20 seconds. Symbol-server delivery is compressed, so the network transfer is much smaller than the final PDB. Times vary with connection, CPU, and Chrome build.
@@ -221,6 +241,7 @@ Disabling or uninstalling the mod restores the original UI in the running Chrome
 - The older **Chrome UI Tweaks** mod overlaps with this mod's menu spacing and corner-radius options. If both mods are used on a Chrome version where they work, configure those overlapping menu options in only one mod to avoid conflicting results.
 */
 // ==/WindhawkModReadme==
+
 // clang-format on
 
 #include <windows.h>
@@ -246,16 +267,21 @@ static constexpr wchar_t kChromeWidgetWindowClassPrefix[] = L"Chrome_WidgetWin_"
 static constexpr int kChromeDefaultTabPreTitlePadding = 8;
 static constexpr int kChromeDefaultExtensionButtonWidth = 34;
 
-// Chrome 151-154 LayoutConstant ordinals for the tab constants used below.
-static constexpr int kLayoutTabAfterTitlePadding = 33;
-static constexpr int kLayoutTabAlertIndicatorCaptureIconWidth = 34;
-static constexpr int kLayoutTabAlertIndicatorIconWidth = 35;
-static constexpr int kLayoutTabCloseButtonSize = 36;
-static constexpr int kLayoutTabHeight = 37;
-static constexpr int kLayoutTabStripHeight = 38;
-static constexpr int kLayoutTabStripPadding = 39;
-static constexpr int kLayoutTabSeparatorHeight = 40;
-static constexpr int kLayoutTabPreTitlePadding = 41;
+// The nine tab-related LayoutConstant values are contiguous, but earlier
+// constants can be inserted by Chrome updates. Chromium 151-155 used base 33;
+// Chromium 157.0.8103.79 uses base 38. Select only after validating all nine
+// values against the original GetLayoutConstant function.
+static constexpr int kTabLayoutBaseLegacy = 33;
+static constexpr int kTabLayoutBase157 = 38;
+static constexpr int kTabLayoutAfterTitle = 0;
+static constexpr int kTabLayoutCaptureIcon = 1;
+static constexpr int kTabLayoutAlertIcon = 2;
+static constexpr int kTabLayoutCloseButton = 3;
+static constexpr int kTabLayoutHeight = 4;
+static constexpr int kTabLayoutStripHeight = 5;
+static constexpr int kTabLayoutStripPadding = 6;
+static constexpr int kTabLayoutSeparatorHeight = 7;
+static constexpr int kTabLayoutPreTitle = 8;
 
 // -----------------------------------------------------------------------------
 // Opaque Chromium types
@@ -345,6 +371,21 @@ using OmniboxViewViewsDtorFn = void (*)(void*);
 using TextfieldCtorFn = void (*)(void*);
 using TextfieldSetFontListFn = void (*)(void*, const FontListOpaque*);
 
+using FindBarViewCtorFn = void (*)(void*, void*);
+using FindBarViewDeletingDtorFn = void* (*)(void*, unsigned int);
+// FindBarHost repositions and resizes the standalone find bar widget.
+using FindBarHostMoveWindowIfNecessaryFn = void (*)(void*);
+// gfx::Rect is four 32-bit coordinates in Chrome's Windows build.
+struct GfxRectEmpty {
+  int x;
+  int y;
+  int width;
+  int height;
+};
+static_assert(sizeof(GfxRectEmpty) == 16);
+using FindBarHostMoveWindowIfNecessaryWithRectFn =
+    void (*)(void*, const GfxRectEmpty*);
+
 using TabTitleCtorFn = void (*)(void*);
 using TabTitleDtorFn = void (*)(void*);
 
@@ -355,6 +396,7 @@ using TabCloseButtonDtorFn = void (*)(void*);
 using ViewSetVisibleFn = void (*)(void*, bool);
 
 using ViewInvalidateLayoutFn = void (*)(void*, bool);
+using ViewSchedulePaintFn = void (*)(void*);
 
 using ViewPreferredSizeChangedFn = void (*)(void*);
 
@@ -427,6 +469,11 @@ static OmniboxViewViewsCtorFn g_OmniboxViewViewsCtorOriginal;
 static OmniboxViewViewsDtorFn g_OmniboxViewViewsDtorOriginal;
 static TextfieldCtorFn g_TextfieldCtorOriginal;
 static TextfieldSetFontListFn g_TextfieldSetFontListOriginal;
+static FindBarViewCtorFn g_FindBarViewCtorOriginal;
+static FindBarViewDeletingDtorFn g_FindBarViewDeletingDtorOriginal;
+static FindBarHostMoveWindowIfNecessaryFn g_FindBarHostMoveWindowIfNecessary;
+static FindBarHostMoveWindowIfNecessaryWithRectFn
+    g_FindBarHostMoveWindowIfNecessaryWithRect;
 
 static TabTitleCtorFn g_TabTitleCtorOriginal;
 static TabTitleDtorFn g_TabTitleDtorOriginal;
@@ -435,6 +482,7 @@ static TabCloseButtonDtorFn g_TabCloseButtonDtorOriginal;
 
 static ViewSetVisibleFn g_ViewSetVisibleOriginal;
 static ViewInvalidateLayoutFn g_ViewInvalidateLayout;
+static ViewSchedulePaintFn g_ViewSchedulePaint;
 static ViewPreferredSizeChangedFn g_ViewPreferredSizeChanged;
 static GetLayoutConstantFn g_GetLayoutConstantOriginal;
 
@@ -485,6 +533,7 @@ static HANDLE g_symbolNotificationStopEvent;
 
 static std::atomic_int g_bookmarkFontSize = -1;
 static std::atomic_int g_addressBarFontSize = -1;
+static std::atomic_int g_findBarFontSize = -1;
 static std::atomic_int g_menuFontSize = -1;
 static std::atomic_int g_tabFontSize = -1;
 
@@ -500,6 +549,7 @@ static std::atomic_bool g_tabCloseButtonsHidden = false;
 static std::atomic_bool g_useWindowsFolderIcon = false;
 
 static std::atomic_bool g_addressBarFontHooksReady = false;
+static std::atomic_bool g_findBarFontHooksReady = false;
 static std::atomic_bool g_tabFontHooksReady = false;
 static std::atomic_bool g_tabCloseHooksReady = false;
 
@@ -510,6 +560,7 @@ static std::atomic_bool g_bookmarkFolderLiveUpdateReady = false;
 
 static void ClearChromeRuntimeReadiness() {
   g_addressBarFontHooksReady.store(false, std::memory_order_release);
+  g_findBarFontHooksReady.store(false, std::memory_order_release);
   g_tabFontHooksReady.store(false, std::memory_order_release);
   g_tabCloseHooksReady.store(false, std::memory_order_release);
   g_extensionTrackingReady.store(false, std::memory_order_release);
@@ -521,10 +572,8 @@ static std::once_flag g_windowsFolderOnce;
 static std::mutex g_windowsFolderImageMutex;
 static DWORD g_windowsFolderThreadId = 0;
 
-//  0 = not checked
-//  1 = compatible
-// -1 = incompatible
-static std::atomic_int g_tabLayoutCompatibility = 0;
+// 0 = not checked, -1 = incompatible, positive = validated after-title ordinal.
+static std::atomic_int g_tabLayoutBase = 0;
 
 static thread_local int g_bookmarkCtorDepth = 0;
 static thread_local int g_bookmarkMenuCtorDepth = 0;
@@ -537,6 +586,10 @@ static thread_local const FontListOpaque* g_pendingTabTitleOriginalFont = nullpt
 
 static thread_local int g_omniboxCtorDepth = 0;
 static thread_local void* g_pendingOmniboxTextfield = nullptr;
+static thread_local int g_findBarCtorDepth = 0;
+static thread_local void* g_pendingFindBarTextfield = nullptr;
+static thread_local std::unique_ptr<OpaqueObjectStorage>
+    g_pendingFindBarOriginalFontStorage;
 
 struct BookmarkLabelInfo {
   DWORD threadId;
@@ -557,6 +610,16 @@ struct OmniboxInfo {
 
 static std::mutex g_omniboxesMutex;
 static std::unordered_map<void*, OmniboxInfo> g_omniboxes;
+
+struct FindBarInfo {
+  DWORD threadId;
+  void* textfield;
+  void* host;
+  std::unique_ptr<OpaqueObjectStorage> originalFontStorage;
+};
+
+static std::mutex g_findBarsMutex;
+static std::unordered_map<void*, FindBarInfo> g_findBars;
 
 struct TabTitleInfo {
   DWORD threadId;
@@ -642,6 +705,8 @@ static void LoadSettings() {
 
   int addressBarFontSize = ReadFontSizeSetting(L"addressBar.fontSize");
 
+  int findBarFontSize = ReadFontSizeSetting(L"findBar.fontSize");
+
   int menuFontSize = ReadFontSizeSetting(L"menus.fontSize");
 
   int menuVerticalSpacing = ReadMenuSpacingSetting();
@@ -661,6 +726,8 @@ static void LoadSettings() {
   g_useWindowsFolderIcon.store(useWindowsFolderIcon, std::memory_order_relaxed);
 
   g_addressBarFontSize.store(addressBarFontSize, std::memory_order_relaxed);
+
+  g_findBarFontSize.store(findBarFontSize, std::memory_order_relaxed);
 
   g_menuFontSize.store(menuFontSize, std::memory_order_relaxed);
 
@@ -688,6 +755,12 @@ static void LoadSettings() {
     Wh_Log(L"Address bar font size: Chrome default");
   } else {
     Wh_Log(L"Address bar font size: %d", addressBarFontSize);
+  }
+
+  if (findBarFontSize < 0) {
+    Wh_Log(L"Find in page font size: Chrome default");
+  } else {
+    Wh_Log(L"Find in page font size: %d", findBarFontSize);
   }
 
   if (menuFontSize < 0) {
@@ -880,6 +953,31 @@ static void TextfieldCtorHook(void* self) {
   }
 }
 
+// FindBarView assigns its medium-weight font via Textfield::SetFontList.
+// Capture that exact argument rather than depending on GetFontList(), whose
+// tiny implementation can disappear from optimized Chrome PDBs. There can be
+// multiple SetFontList calls during construction; preserve the LAST one.
+static void TextfieldSetFontListHook(void* self, const FontListOpaque* font) {
+  g_TextfieldSetFontListOriginal(self, font);
+
+  if (g_findBarCtorDepth <= 0 ||
+      !g_findBarFontHooksReady.load(std::memory_order_relaxed) || !font) {
+    return;
+  }
+
+  auto originalFontStorage =
+      CopyFontListToOwnedStorage(font, L"Find in page original FontList");
+  if (!originalFontStorage) {
+    Wh_Log(L"Find in page: couldn't capture SetFontList argument");
+    return;
+  }
+
+  DestroyOwnedFontListStorage(std::move(g_pendingFindBarOriginalFontStorage),
+                              L"Previous Find in page constructor FontList");
+  g_pendingFindBarTextfield = self;
+  g_pendingFindBarOriginalFontStorage = std::move(originalFontStorage);
+}
+
 static void OmniboxViewViewsCtorHook(void* self,
                                      bool popupWindowMode,
                                      void* controller,
@@ -950,6 +1048,106 @@ static void OmniboxViewViewsDtorHook(void* self) {
                               L"Address bar original FontList");
 
   g_OmniboxViewViewsDtorOriginal(self);
+}
+
+// -----------------------------------------------------------------------------
+// Find in page (Ctrl+F)
+// -----------------------------------------------------------------------------
+
+// PreferredSizeChanged() updates the View hierarchy, but FindBarHost owns a
+// separate Widget whose bounds are only updated by its positioning routine.
+// On a live size change, ask Chrome to recalculate both the view and the host
+// window. The routine itself skips inactive find sessions.
+static bool RefreshFindBarBounds(void* host) {
+  if (!host) return false;
+  if (g_FindBarHostMoveWindowIfNecessary) {
+    g_FindBarHostMoveWindowIfNecessary(host);
+    return true;
+  }
+  if (g_FindBarHostMoveWindowIfNecessaryWithRect) {
+    const GfxRectEmpty emptyRect{};
+    g_FindBarHostMoveWindowIfNecessaryWithRect(host, &emptyRect);
+    return true;
+  }
+  return false;
+}
+
+static bool ApplyFindBarFont(void* textfield, const FontListOpaque* originalFont) {
+  if (!textfield || !originalFont || !g_TextfieldSetFontListOriginal) return false;
+
+  int targetSize = g_findBarFontSize.load(std::memory_order_relaxed);
+  if (targetSize < 0 || !g_FontListGetFontSize ||
+      targetSize == g_FontListGetFontSize(originalFont)) {
+    g_TextfieldSetFontListOriginal(textfield, originalFont);
+    // Textfield::SetFontList recalculates preferred size but doesn't repaint.
+    // Live setting changes need an explicit paint request for visible text.
+    if (g_ViewSchedulePaint) g_ViewSchedulePaint(textfield);
+    return true;
+  }
+
+  auto derivedFontStorage =
+      DeriveFontListToOwnedStorage(originalFont, targetSize, L"Find in page");
+  if (!derivedFontStorage) return false;
+
+  g_TextfieldSetFontListOriginal(textfield, GetOwnedFontList(derivedFontStorage));
+  if (g_ViewSchedulePaint) g_ViewSchedulePaint(textfield);
+  DestroyOwnedFontListStorage(std::move(derivedFontStorage), L"Find in page");
+  return true;
+}
+
+static void FindBarViewCtorHook(void* self, void* host) {
+  void* previousPending = g_pendingFindBarTextfield;
+  auto previousFontStorage = std::move(g_pendingFindBarOriginalFontStorage);
+  g_pendingFindBarTextfield = nullptr;
+  g_findBarCtorDepth++;
+
+  g_FindBarViewCtorOriginal(self, host);
+
+  g_findBarCtorDepth--;
+  void* textfield = g_pendingFindBarTextfield;
+  auto originalFontStorage = std::move(g_pendingFindBarOriginalFontStorage);
+  g_pendingFindBarTextfield = previousPending;
+  g_pendingFindBarOriginalFontStorage = std::move(previousFontStorage);
+
+  if (!g_findBarFontHooksReady.load(std::memory_order_relaxed)) {
+    DestroyOwnedFontListStorage(std::move(originalFontStorage),
+                                L"Find in page unused FontList");
+    return;
+  }
+  if (!textfield || !originalFontStorage) {
+    Wh_Log(L"Find in page: no Textfield::SetFontList captured in FindBarView constructor");
+    DestroyOwnedFontListStorage(std::move(originalFontStorage),
+                                L"Find in page incomplete FontList");
+    return;
+  }
+
+  const FontListOpaque* originalFont = GetOwnedFontList(originalFontStorage);
+  if (!ApplyFindBarFont(textfield, originalFont)) {
+    Wh_Log(L"Find in page: failed to apply font size");
+  }
+
+  std::lock_guard<std::mutex> lock(g_findBarsMutex);
+  g_findBars.insert_or_assign(
+      self, FindBarInfo{GetCurrentThreadId(), textfield, host,
+                        std::move(originalFontStorage)});
+}
+
+// Hook the virtual deleting destructor: optimized Chrome builds may inline
+// ~FindBarView() into this entry instead of calling the standalone destructor.
+static void* FindBarViewDeletingDtorHook(void* self, unsigned int flags) {
+  std::unique_ptr<OpaqueObjectStorage> originalFontStorage;
+  {
+    std::lock_guard<std::mutex> lock(g_findBarsMutex);
+    auto it = g_findBars.find(self);
+    if (it != g_findBars.end()) {
+      originalFontStorage = std::move(it->second.originalFontStorage);
+      g_findBars.erase(it);
+    }
+  }
+
+  DestroyOwnedFontListStorage(std::move(originalFontStorage),
+                              L"Find in page original FontList");
+  return g_FindBarViewDeletingDtorOriginal(self, flags);
 }
 
 // -----------------------------------------------------------------------------
@@ -1315,88 +1513,100 @@ static void TabCloseButtonDtorHook(void* self) {
   g_TabCloseButtonDtorOriginal(self);
 }
 
-static bool ValidateTabLayoutConstants() {
-  int state = g_tabLayoutCompatibility.load(std::memory_order_acquire);
+static bool CheckTabLayoutConstants(int base) {
+  int afterTitle = g_GetLayoutConstantOriginal(base + kTabLayoutAfterTitle);
+  int captureIcon = g_GetLayoutConstantOriginal(base + kTabLayoutCaptureIcon);
+  int alertIcon = g_GetLayoutConstantOriginal(base + kTabLayoutAlertIcon);
+  int closeButton = g_GetLayoutConstantOriginal(base + kTabLayoutCloseButton);
+  int tabHeight = g_GetLayoutConstantOriginal(base + kTabLayoutHeight);
+  int tabStripHeight = g_GetLayoutConstantOriginal(base + kTabLayoutStripHeight);
+  int tabStripPadding = g_GetLayoutConstantOriginal(base + kTabLayoutStripPadding);
+  int separatorHeight = g_GetLayoutConstantOriginal(base + kTabLayoutSeparatorHeight);
+  int preTitle = g_GetLayoutConstantOriginal(base + kTabLayoutPreTitle);
 
-  if (state != 0) return state > 0;
+  bool valid = (afterTitle == 4 || afterTitle == 8) && captureIcon == 16 &&
+               (alertIcon == 12 || alertIcon == 16) &&
+               (closeButton == 14 || closeButton == 16 || closeButton == 24) &&
+               tabHeight == 35 && tabStripHeight == 41 && tabStripPadding == 6 &&
+               (separatorHeight == 20 || separatorHeight == 24) && preTitle == 8;
 
-  if (!g_GetLayoutConstantOriginal) return false;
+  Wh_Log(
+      L"Tab layout candidate base=%d: %ls "
+      L"afterTitle=%d capture=%d alert=%d close=%d "
+      L"height=%d stripHeight=%d stripPadding=%d separator=%d preTitle=%d",
+      base, valid ? L"MATCH" : L"mismatch", afterTitle, captureIcon, alertIcon,
+      closeButton, tabHeight, tabStripHeight, tabStripPadding, separatorHeight, preTitle);
 
-  int afterTitle = g_GetLayoutConstantOriginal(kLayoutTabAfterTitlePadding);
+  return valid;
+}
 
-  int captureIcon = g_GetLayoutConstantOriginal(kLayoutTabAlertIndicatorCaptureIconWidth);
+// Returns the validated LayoutConstant ordinal for TabAfterTitlePadding,
+// or zero when this Chrome build doesn't match either known layout.
+static int ValidateTabLayoutConstants() {
+  int base = g_tabLayoutBase.load(std::memory_order_acquire);
+  if (base != 0) return base > 0 ? base : 0;
+  if (!g_GetLayoutConstantOriginal) return 0;
 
-  int alertIcon = g_GetLayoutConstantOriginal(kLayoutTabAlertIndicatorIconWidth);
+  int selectedBase = -1;
 
-  int closeButton = g_GetLayoutConstantOriginal(kLayoutTabCloseButtonSize);
-
-  int tabHeight = g_GetLayoutConstantOriginal(kLayoutTabHeight);
-
-  int tabStripHeight = g_GetLayoutConstantOriginal(kLayoutTabStripHeight);
-
-  int tabStripPadding = g_GetLayoutConstantOriginal(kLayoutTabStripPadding);
-
-  int separatorHeight = g_GetLayoutConstantOriginal(kLayoutTabSeparatorHeight);
-
-  int preTitle = g_GetLayoutConstantOriginal(kLayoutTabPreTitlePadding);
-
-  bool valid = (afterTitle == 4 || afterTitle == 8) && captureIcon == 16 && (alertIcon == 12 || alertIcon == 16) &&
-               (closeButton == 14 || closeButton == 16 || closeButton == 24) && tabHeight == 35 &&
-               tabStripHeight == 41 && tabStripPadding == 6 && (separatorHeight == 20 || separatorHeight == 24) &&
-               preTitle == 8;
-
-  int newState = valid ? 1 : -1;
+  if (CheckTabLayoutConstants(kTabLayoutBase157)) {
+    selectedBase = kTabLayoutBase157;
+  } else if (CheckTabLayoutConstants(kTabLayoutBaseLegacy)) {
+    selectedBase = kTabLayoutBaseLegacy;
+  }
 
   int expected = 0;
-
-  if (g_tabLayoutCompatibility.compare_exchange_strong(expected, newState, std::memory_order_release,
-                                                       std::memory_order_relaxed)) {
-    if (valid) {
-      Wh_Log(
-          L"Tab layout constants validated: "
-          L"afterTitle=%d capture=%d alert=%d close=%d "
-          L"height=%d stripHeight=%d stripPadding=%d separator=%d preTitle=%d",
-          afterTitle, captureIcon, alertIcon, closeButton, tabHeight, tabStripHeight, tabStripPadding, separatorHeight,
-          preTitle);
+  if (g_tabLayoutBase.compare_exchange_strong(expected, selectedBase,
+                                              std::memory_order_release,
+                                              std::memory_order_relaxed)) {
+    if (selectedBase > 0) {
+      Wh_Log(L"Tab layout constants validated at base=%d", selectedBase);
     } else {
-      Wh_Log(
-          L"WARNING: Tab layout constants don't match expected Chromium "
-          L"layout; tab layout tweaks disabled. "
-          L"Values: afterTitle=%d capture=%d alert=%d close=%d "
-          L"height=%d stripHeight=%d stripPadding=%d separator=%d preTitle=%d",
-          afterTitle, captureIcon, alertIcon, closeButton, tabHeight, tabStripHeight, tabStripPadding, separatorHeight,
-          preTitle);
+      Wh_Log(L"WARNING: Unknown Chrome tab layout; close-button and icon/title "
+             L"spacing tweaks disabled to avoid modifying unrelated constants");
     }
   }
 
-  return g_tabLayoutCompatibility.load(std::memory_order_acquire) > 0;
+  base = g_tabLayoutBase.load(std::memory_order_acquire);
+  return base > 0 ? base : 0;
 }
 
 static int GetLayoutConstantHook(int constant) {
   int originalValue = g_GetLayoutConstantOriginal(constant);
 
-  if (constant == kLayoutTabPreTitlePadding) {
-    int configuredPadding = g_tabPreTitlePadding.load(std::memory_order_relaxed);
+  int configuredPadding = g_tabPreTitlePadding.load(std::memory_order_relaxed);
+  bool changePadding = configuredPadding != kChromeDefaultTabPreTitlePadding;
+  bool hideCloseButtons =
+      g_tabCloseHooksReady.load(std::memory_order_relaxed) &&
+      g_tabCloseButtonsHidden.load(std::memory_order_relaxed);
 
-    if (configuredPadding != kChromeDefaultTabPreTitlePadding && ValidateTabLayoutConstants()) {
-      return configuredPadding;
-    }
+  if (!changePadding && !hideCloseButtons) return originalValue;
 
+  // Don't validate for unrelated layout constants, even if these options are
+  // enabled. The two known mappings share ordinal 41, but validation disambiguates.
+  if (constant != kTabLayoutBaseLegacy + kTabLayoutAfterTitle &&
+      constant != kTabLayoutBaseLegacy + kTabLayoutCloseButton &&
+      constant != kTabLayoutBaseLegacy + kTabLayoutPreTitle &&
+      constant != kTabLayoutBase157 + kTabLayoutAfterTitle &&
+      constant != kTabLayoutBase157 + kTabLayoutCloseButton &&
+      constant != kTabLayoutBase157 + kTabLayoutPreTitle) {
     return originalValue;
   }
 
-  if (!g_tabCloseHooksReady.load(std::memory_order_relaxed) ||
-      !g_tabCloseButtonsHidden.load(std::memory_order_relaxed)) {
-    return originalValue;
+  int base = ValidateTabLayoutConstants();
+  if (!base) return originalValue;
+
+  if (changePadding && constant == base + kTabLayoutPreTitle) {
+    return configuredPadding;
   }
 
-  if (constant != kLayoutTabAfterTitlePadding && constant != kLayoutTabCloseButtonSize) {
-    return originalValue;
+  if (hideCloseButtons &&
+      (constant == base + kTabLayoutAfterTitle ||
+       constant == base + kTabLayoutCloseButton)) {
+    return 0;
   }
 
-  if (!ValidateTabLayoutConstants()) return originalValue;
-
-  return 0;
+  return originalValue;
 }
 
 static void ViewSetVisibleHook(void* self, bool visible) {
@@ -1705,6 +1915,106 @@ static void ApplyFontToExistingAddressBars(bool teardown = false) {
 
     if (!RunFromWindowThread(hwnd, ApplyAddressBarFontOnCurrentThread, &params)) {
       Wh_Log(L"Address bar %ls: failed to dispatch to UI thread %lu",
+             teardown ? L"teardown" : L"live update", threadId);
+    }
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Live Find in page update
+// -----------------------------------------------------------------------------
+
+struct FindBarApplyParams {
+  bool teardown;
+};
+
+static void WINAPI ApplyFindBarFontOnCurrentThread(void* parameter) {
+  const auto* params = static_cast<const FindBarApplyParams*>(parameter);
+  bool teardown = params && params->teardown;
+  DWORD threadId = GetCurrentThreadId();
+
+  if (!teardown && !g_findBarFontHooksReady.load(std::memory_order_relaxed)) return;
+
+  if (!teardown) {
+    struct LiveEntry {
+      void* textfield;
+      void* host;
+      const FontListOpaque* originalFont;
+    };
+    std::vector<LiveEntry> fields;
+    {
+      std::lock_guard<std::mutex> lock(g_findBarsMutex);
+      for (const auto& [findBar, info] : g_findBars) {
+        if (info.threadId == threadId) {
+          fields.push_back({info.textfield, info.host,
+                            GetOwnedFontList(info.originalFontStorage)});
+        }
+      }
+    }
+
+    for (const auto& entry : fields) {
+      if (ApplyFindBarFont(entry.textfield, entry.originalFont)) {
+        RefreshFindBarBounds(entry.host);
+      }
+    }
+    return;
+  }
+
+  struct TeardownEntry {
+    void* textfield;
+    void* host;
+    std::unique_ptr<OpaqueObjectStorage> originalFontStorage;
+  };
+  std::vector<TeardownEntry> fields;
+  {
+    std::lock_guard<std::mutex> lock(g_findBarsMutex);
+    for (auto it = g_findBars.begin(); it != g_findBars.end();) {
+      if (it->second.threadId == threadId) {
+        fields.push_back({it->second.textfield, it->second.host,
+                          std::move(it->second.originalFontStorage)});
+        it = g_findBars.erase(it);
+      } else {
+        ++it;
+      }
+    }
+  }
+
+  for (auto& entry : fields) {
+    const FontListOpaque* originalFont = GetOwnedFontList(entry.originalFontStorage);
+    if (originalFont && g_TextfieldSetFontListOriginal) {
+      g_TextfieldSetFontListOriginal(entry.textfield, originalFont);
+      if (g_ViewSchedulePaint) g_ViewSchedulePaint(entry.textfield);
+      RefreshFindBarBounds(entry.host);
+    }
+    DestroyOwnedFontListStorage(std::move(entry.originalFontStorage),
+                                L"Find in page original FontList");
+  }
+
+  Wh_Log(L"Restored and released %llu Find in page fonts on UI thread %lu",
+         static_cast<unsigned long long>(fields.size()), threadId);
+}
+
+static void ApplyFontToExistingFindBars(bool teardown = false) {
+  std::vector<DWORD> threadIds;
+  {
+    std::lock_guard<std::mutex> lock(g_findBarsMutex);
+    for (const auto& [findBar, info] : g_findBars) {
+      threadIds.push_back(info.threadId);
+    }
+  }
+  std::sort(threadIds.begin(), threadIds.end());
+  threadIds.erase(std::unique(threadIds.begin(), threadIds.end()), threadIds.end());
+
+  FindBarApplyParams params{teardown};
+  for (DWORD threadId : threadIds) {
+    HWND hwnd = FindWindowForThread(threadId);
+    if (!hwnd) {
+      Wh_Log(L"Find in page %ls: no window found on UI thread %lu",
+             teardown ? L"teardown" : L"live update", threadId);
+      continue;
+    }
+    if (!RunFromWindowThread(hwnd, ApplyFindBarFontOnCurrentThread, &params)) {
+      Wh_Log(L"Find in page %ls: failed to dispatch to UI thread %lu",
              teardown ? L"teardown" : L"live update", threadId);
     }
   }
@@ -2223,6 +2533,30 @@ static bool InstallChromeHooks(HMODULE chromeDll) {
 
       {{LR"(?SetFontList@Textfield@views@@QEAAXAEBVFontList@gfx@@@Z)"},
        &g_TextfieldSetFontListOriginal,
+       TextfieldSetFontListHook,
+       true},
+
+      // Find in page uses the same Textfield functions, but initializes the
+      // field's medium-weight font in FindBarView's constructor.
+      {{LR"(??0FindBarView@@QEAA@PEAVFindBarHost@@@Z)"},
+       &g_FindBarViewCtorOriginal,
+       FindBarViewCtorHook,
+       true},
+
+      {{LR"(??_GFindBarView@@UEAAPEAXI@Z)"},
+       &g_FindBarViewDeletingDtorOriginal,
+       FindBarViewDeletingDtorHook,
+       true},
+
+      // Prefer the public virtual resize routine, which is emitted for the
+      // vtable; the private helper may be inlined in optimized builds.
+      {{LR"(?MoveWindowIfNecessary@FindBarHost@@UEAAXXZ)"},
+       &g_FindBarHostMoveWindowIfNecessary,
+       nullptr,
+       true},
+
+      {{LR"(?MoveWindowIfNecessaryWithRect@FindBarHost@@AEAAXAEBVRect@gfx@@@Z)"},
+       &g_FindBarHostMoveWindowIfNecessaryWithRect,
        nullptr,
        true},
 
@@ -2267,6 +2601,14 @@ static bool InstallChromeHooks(HMODULE chromeDll) {
 
       {{L"views::View::InvalidateLayout", LR"(?InvalidateLayout@View@views@@QEAAX_N@Z)"},
        &g_ViewInvalidateLayout,
+       nullptr,
+       true},
+
+      // Textfield::SetFontList() does not request a repaint itself.
+      // This is optional: on builds without the symbol, existing font sizing
+      // still works, but visible Find in page fields may wait for repaint.
+      {{LR"(?SchedulePaint@View@views@@QEAAXXZ)"},
+       &g_ViewSchedulePaint,
        nullptr,
        true},
 
@@ -2342,6 +2684,11 @@ static bool InstallChromeHooks(HMODULE chromeDll) {
       g_TextfieldCtorOriginal && g_TextfieldSetFontListOriginal && g_FontListCopyCtor &&
       g_FontListGetFontSize && g_FontListDeriveWithSizeDelta && g_FontListDtor;
 
+  bool findBarFontReady =
+      g_FindBarViewCtorOriginal && g_FindBarViewDeletingDtorOriginal &&
+      g_TextfieldSetFontListOriginal && g_FontListCopyCtor &&
+      g_FontListGetFontSize && g_FontListDeriveWithSizeDelta && g_FontListDtor;
+
   bool tabFontReady =
       g_TabTitleCtorOriginal && g_TabTitleDtorOriginal && g_LabelSetFontList &&
       g_FontListCopyCtor && g_FontListGetFontSize && g_FontListDeriveWithSizeDelta &&
@@ -2390,6 +2737,8 @@ static bool InstallChromeHooks(HMODULE chromeDll) {
 
   g_addressBarFontHooksReady.store(addressBarFontReady, std::memory_order_release);
 
+  g_findBarFontHooksReady.store(findBarFontReady, std::memory_order_release);
+
   g_tabFontHooksReady.store(tabFontReady, std::memory_order_release);
 
   g_tabCloseHooksReady.store(tabCloseReady, std::memory_order_release);
@@ -2414,6 +2763,12 @@ static bool InstallChromeHooks(HMODULE chromeDll) {
       g_FontListGetFontSize ? L"ready" : L"MISSING",
       g_FontListDeriveWithSizeDelta ? L"ready" : L"MISSING",
       g_FontListDtor ? L"ready" : L"MISSING");
+
+  Wh_Log(L"Find in page font tweak: %ls (ctor=%ls deletingDtor=%ls setFont=%ls)",
+         findBarFontReady ? L"ready" : L"unavailable",
+         g_FindBarViewCtorOriginal ? L"ready" : L"MISSING",
+         g_FindBarViewDeletingDtorOriginal ? L"ready" : L"MISSING",
+         g_TextfieldSetFontListOriginal ? L"ready" : L"MISSING");
 
   Wh_Log(L"Tab title tweak: %ls", tabFontReady ? L"ready" : L"unavailable");
 
@@ -2893,6 +3248,7 @@ void Wh_ModSettingsChanged() {
 
   ApplyFontToExistingBookmarkLabels();
   ApplyFontToExistingAddressBars();
+  ApplyFontToExistingFindBars();
 
   if (oldUseWindowsFolderIcon != g_useWindowsFolderIcon.load(std::memory_order_relaxed)) {
     ApplyFolderIconToExistingBookmarkBars();
@@ -2940,6 +3296,7 @@ void Wh_ModBeforeUninit() {
   g_bookmarkFontSize.store(-1, std::memory_order_relaxed);
   g_useWindowsFolderIcon.store(false, std::memory_order_relaxed);
   g_addressBarFontSize.store(-1, std::memory_order_relaxed);
+  g_findBarFontSize.store(-1, std::memory_order_relaxed);
   g_menuFontSize.store(-1, std::memory_order_relaxed);
   g_menuVerticalSpacing.store(-1, std::memory_order_relaxed);
   g_menuCornerRadius.store(-1, std::memory_order_relaxed);
@@ -2975,6 +3332,7 @@ void Wh_ModBeforeUninit() {
 
   ApplyFontToExistingBookmarkLabels(true);
   ApplyFontToExistingAddressBars(true);
+  ApplyFontToExistingFindBars(true);
   ApplyFolderIconToExistingBookmarkBars();
   ApplyTweaksToExistingTabs(true);
   ApplyWidthToExistingExtensionButtons();

@@ -1,0 +1,1536 @@
+// ==WindhawkMod==
+// @id              one-letter-language-indicator
+// @name            1 Letter Language Indicator
+// @description     Shortens the taskbar language indicator ("ENG", "ENG (US)") to a single letter ("E")
+// @version         1.1
+// @author          Deen-0x
+// @github          https://github.com/Deen-0x
+// @include         explorer.exe
+// @architecture    x86-64
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion
+// @license         GPL-3.0
+// ==/WindhawkMod==
+
+// The taskbar XamlRoot lookup, the system tray module handling and the
+// RunFromWindowThread helper are based on m417z's "Taskbar tray icon spacing
+// and grid" mod (GPL-3.0):
+// https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-notification-icon-spacing.wh.cpp
+
+// ==WindhawkModReadme==
+/*
+# 1 Letter Language Indicator
+
+Simplifies the input language indicator in the Windows 11 taskbar tray to a
+single letter: `ENG` becomes `E`, and `ENG (US)` becomes `E`.
+
+![Demo](https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/one-letter-language-indicator/demo.png)
+
+The indicator keeps updating when you switch input languages, and the original
+text is restored when the mod is disabled.
+
+## Settings
+
+- **Letter size**: the font size of the letter. Set it to 0 to keep the
+  Windows size (12).
+- **Letter weight**: the font weight of the letter, from 1 to 999, e.g. 300
+  (Light), 400 (Normal), 600 (Semi Bold) or 700 (Bold). Set it to 0 to keep the
+  Windows weight (400). The taskbar font, Segoe UI Variable, renders weights
+  from 300 to 700, so values outside that range look like 300 or 700.
+- **Letter color**: separate colors for light mode and dark mode, chosen by the
+  taskbar's theme (the Windows mode). Each one can be:
+  - A hex color (`#RRGGBB` or `#AARRGGBB`) or a color name (`Red`, `White`).
+  - `accent` for the Windows accent color, or one of its shades:
+    `accentLight1` to `accentLight3`, `accentDark1` to `accentDark3`. The
+    letter follows accent color changes.
+  - Empty, to keep the Windows color in that mode.
+- **Vertical offset**: moves the letter up (negative) or down (positive), in
+  pixels. Useful for re-centering the letter after changing its size.
+- **Indicator width**: the language indicator normally reserves room for three
+  letters. With a single letter that leaves empty space, so by default the
+  indicator is narrowed to 32 pixels, the width of a regular tray icon. Set it
+  to 0 to keep the Windows width.
+
+## Notes
+
+- Languages and layouts which start with the same letter look the same, e.g.
+  `ENG (US)` and `ENG (UK)`, or `ENG` and `ESP`.
+- Other mods may set the same properties. "Taskbar tray icon spacing and grid"
+  sets the width of the language indicator: while **Indicator width** is set,
+  this mod's width wins. Windows 11 Taskbar Styler themes which change the font
+  size, weight or color of the indicator conflict with **Letter size**,
+  **Letter weight** and **Letter color**, and whichever mod applies last wins. To let the other mod control a
+  property, set the matching setting to 0 (or leave the color empty).
+
+## Target
+
+```
+SystemTray.LanguageTextIconContent > Grid#ContainerGrid >
+SystemTray.AdaptiveTextBlock#LanguageInnerTextBlock > TextBlock#InnerTextBlock
+```
+
+Only Windows 11 is supported.
+*/
+// ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- fontSize: 0
+  $name: Letter size
+  $description: >-
+    Font size of the letter. Set to 0 to keep the Windows default size (12).
+- fontWeight: 0
+  $name: Letter weight
+  $description: >-
+    Font weight of the letter, from 1 to 999: 100 Thin, 200 Extra Light,
+    300 Light, 400 Normal, 500 Medium, 600 Semi Bold, 700 Bold, 800 Extra Bold,
+    900 Black. Set to 0 to keep the Windows default weight (400).
+- textColor:
+  - light: ""
+    $name: Light mode
+    $description: Color of the letter when the taskbar is light.
+  - dark: ""
+    $name: Dark mode
+    $description: Color of the letter when the taskbar is dark.
+  $name: Letter color
+  $description: >-
+    A hex color (#RRGGBB or #AARRGGBB), a color name (e.g. Red), or accent,
+    accentLight1-3, accentDark1-3 for the Windows accent color. Leave a mode
+    empty to keep the Windows color in that mode.
+- verticalOffset: 0
+  $name: Vertical offset
+  $description: >-
+    Moves the letter vertically, in pixels. Negative values move it up,
+    positive values move it down.
+- iconWidth: 32
+  $name: Indicator width
+  $description: >-
+    Width of the language indicator, in pixels. 32 matches the other tray
+    icons. Set to 0 to keep the Windows default width.
+*/
+// ==/WindhawkModSettings==
+
+#include <windhawk_utils.h>
+
+#include <algorithm>
+#include <atomic>
+#include <cwctype>
+#include <functional>
+#include <iterator>
+#include <limits>
+#include <list>
+#include <optional>
+#include <string>
+#include <string_view>
+
+#undef GetCurrentTime
+
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.UI.Text.h>
+#include <winrt/Windows.UI.ViewManagement.h>
+#include <winrt/Windows.UI.Xaml.Controls.h>
+#include <winrt/Windows.UI.Xaml.Data.h>
+#include <winrt/Windows.UI.Xaml.Interop.h>
+#include <winrt/Windows.UI.Xaml.Markup.h>
+#include <winrt/Windows.UI.Xaml.Media.h>
+#include <winrt/Windows.UI.Xaml.h>
+#include <winrt/Windows.UI.h>
+#include <winrt/base.h>
+
+using namespace winrt::Windows::UI::Xaml;
+
+using WinrtInspectable = winrt::Windows::Foundation::IInspectable;
+using winrt::Windows::UI::Color;
+using winrt::Windows::UI::ViewManagement::UIColorType;
+using winrt::Windows::UI::ViewManagement::UISettings;
+
+struct {
+    int fontSize;
+    int fontWeight;
+    std::wstring textColorLight;
+    std::wstring textColorDark;
+    int verticalOffset;
+    int iconWidth;
+} g_settings;
+
+std::atomic<bool> g_systemTrayModuleHooked;
+std::atomic<bool> g_unloading;
+
+// Globals which own XAML/WinRT objects are marked no_destroy and released on the
+// taskbar thread in ApplySettings when the mod unloads. When explorer exits,
+// Wh_ModUninit doesn't run, and the automatic destructors would release the
+// objects from the exiting thread, after XAML may already be torn down. If the
+// taskbar thread can't be reached on unload, the objects are kept alive, which
+// is safer than releasing them from the wrong thread.
+
+// Loaded handlers of tray icons which haven't been loaded yet.
+[[clang::no_destroy]] std::optional<std::list<FrameworkElement::Loaded_revoker>>
+    g_autoRevokerList{std::in_place};
+
+// Only used when a color setting refers to the accent color. Created and
+// released on the taskbar UI thread.
+[[clang::no_destroy]] UISettings g_uiSettings{nullptr};
+winrt::event_token g_colorValuesChangedToken{};
+
+// ColorValuesChanged handlers currently running on worker threads. Wh_ModUninit
+// waits for them, since they run mod code and install a hook on the taskbar
+// thread.
+std::atomic<int> g_colorValuesChangedHandlersRunning;
+
+////////////////////////////////////////////////////////////////////////////////
+// Helpers.
+
+HWND FindCurrentProcessTaskbarWnd() {
+    HWND hTaskbarWnd = nullptr;
+
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            DWORD dwProcessId;
+            WCHAR className[32];
+            if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
+                dwProcessId == GetCurrentProcessId() &&
+                GetClassName(hWnd, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                *reinterpret_cast<HWND*>(lParam) = hWnd;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&hTaskbarWnd));
+
+    return hTaskbarWnd;
+}
+
+using RunFromWindowThreadProc_t = void(WINAPI*)(void* parameter);
+
+// Runs the procedure synchronously on the thread of the given window.
+bool RunFromWindowThread(HWND hWnd,
+                         RunFromWindowThreadProc_t proc,
+                         void* procParam) {
+    static const UINT runFromWindowThreadRegisteredMsg =
+        RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+
+    struct RUN_FROM_WINDOW_THREAD_PARAM {
+        RunFromWindowThreadProc_t proc;
+        void* procParam;
+    };
+
+    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
+    if (dwThreadId == 0) {
+        return false;
+    }
+
+    if (dwThreadId == GetCurrentThreadId()) {
+        proc(procParam);
+        return true;
+    }
+
+    HHOOK hook = SetWindowsHookEx(
+        WH_CALLWNDPROC,
+        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (nCode == HC_ACTION) {
+                const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
+                if (cwp->message == runFromWindowThreadRegisteredMsg) {
+                    RUN_FROM_WINDOW_THREAD_PARAM* param =
+                        (RUN_FROM_WINDOW_THREAD_PARAM*)cwp->lParam;
+                    param->proc(param->procParam);
+                }
+            }
+
+            return CallNextHookEx(nullptr, nCode, wParam, lParam);
+        },
+        nullptr, dwThreadId);
+    if (!hook) {
+        return false;
+    }
+
+    RUN_FROM_WINDOW_THREAD_PARAM param;
+    param.proc = proc;
+    param.procParam = procParam;
+    SendMessage(hWnd, runFromWindowThreadRegisteredMsg, 0, (LPARAM)&param);
+
+    UnhookWindowsHookEx(hook);
+
+    return true;
+}
+
+FrameworkElement FindParentByClassName(FrameworkElement element,
+                                       PCWSTR className) {
+    auto parent = element;
+    while (true) {
+        parent = Media::VisualTreeHelper::GetParent(parent)
+                     .try_as<FrameworkElement>();
+        if (!parent) {
+            return nullptr;
+        }
+
+        if (winrt::get_class_name(parent) == className) {
+            return parent;
+        }
+    }
+}
+
+FrameworkElement FindChildByClassName(FrameworkElement element,
+                                      PCWSTR className) {
+    int childrenCount = Media::VisualTreeHelper::GetChildrenCount(element);
+    for (int i = 0; i < childrenCount; i++) {
+        auto child = Media::VisualTreeHelper::GetChild(element, i)
+                         .try_as<FrameworkElement>();
+        if (child && winrt::get_class_name(child) == className) {
+            return child;
+        }
+    }
+
+    return nullptr;
+}
+
+FrameworkElement FindDescendantByName(DependencyObject element, PCWSTR name) {
+    int childrenCount = Media::VisualTreeHelper::GetChildrenCount(element);
+    for (int i = 0; i < childrenCount; i++) {
+        auto child = Media::VisualTreeHelper::GetChild(element, i);
+        auto childElement = child.try_as<FrameworkElement>();
+        if (childElement && childElement.Name() == name) {
+            return childElement;
+        }
+
+        if (auto result = FindDescendantByName(child, name)) {
+            return result;
+        }
+    }
+
+    return nullptr;
+}
+
+// Calls the callback for every descendant of the given class, without
+// descending into matching elements. Returns the number of matches.
+int EnumDescendantsByClassName(
+    DependencyObject element,
+    PCWSTR className,
+    const std::function<void(FrameworkElement)>& callback) {
+    int count = 0;
+
+    int childrenCount = Media::VisualTreeHelper::GetChildrenCount(element);
+    for (int i = 0; i < childrenCount; i++) {
+        auto child = Media::VisualTreeHelper::GetChild(element, i);
+        auto childElement = child.try_as<FrameworkElement>();
+        if (childElement && winrt::get_class_name(childElement) == className) {
+            callback(childElement);
+            count++;
+            continue;
+        }
+
+        count += EnumDescendantsByClassName(child, className, callback);
+    }
+
+    return count;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Property overrides.
+//
+// Each override watches a dependency property with a property changed callback.
+// Whenever the property gets a value which doesn't match the override (e.g. the
+// taskbar sets the text of a new input language), the value is replaced. The
+// taskbar's value is kept, so that it can be restored when the mod is unloaded
+// or the settings change.
+
+// Returns one of:
+// - The value to set.
+// - nullptr if the current value is fine.
+// - DependencyProperty::UnsetValue() if the property shouldn't be overridden
+//   right now (e.g. no color is set for the current theme). An existing
+//   override is reverted to the taskbar's value.
+using ComputeOverride_t =
+    std::function<WinrtInspectable(const DependencyObject& element,
+                                   const WinrtInspectable& currentValue)>;
+
+struct PropertyOverride {
+    winrt::weak_ref<DependencyObject> element;
+    DependencyProperty property{nullptr};
+    ComputeOverride_t computeOverride;
+    int64_t callbackToken = 0;
+
+    // Whether the value currently set is ours.
+    bool overridden = false;
+    // The taskbar's local value, restored when the override is removed.
+    WinrtInspectable originalLocalValue{nullptr};
+    // The value we set, to tell our value apart from the taskbar's.
+    WinrtInspectable lastSetValue{nullptr};
+
+    // For overrides which depend on the theme (the letter color).
+    bool refreshOnThemeChange = false;
+    winrt::event_token themeChangedToken{};
+};
+
+// Only accessed from the taskbar UI thread. See the note on no_destroy above.
+[[clang::no_destroy]] std::optional<std::list<PropertyOverride>>
+    g_propertyOverrides{std::in_place};
+
+void RestoreOriginalValue(PropertyOverride& propertyOverride,
+                          const DependencyObject& element) {
+    if (!propertyOverride.overridden) {
+        return;
+    }
+
+    // Reset first: setting the value runs the property changed callback
+    // synchronously, and it must not see the override as active.
+    propertyOverride.overridden = false;
+
+    const auto& original = propertyOverride.originalLocalValue;
+    if (!original || original == DependencyProperty::UnsetValue() ||
+        original.try_as<Data::BindingExpressionBase>()) {
+        element.ClearValue(propertyOverride.property);
+    } else {
+        element.SetValue(propertyOverride.property, original);
+    }
+}
+
+void ApplyPropertyOverride(PropertyOverride& propertyOverride,
+                           const DependencyObject& element) {
+    WinrtInspectable currentValue = element.GetValue(propertyOverride.property);
+    WinrtInspectable newValue =
+        propertyOverride.computeOverride(element, currentValue);
+    if (!newValue) {
+        return;
+    }
+
+    if (newValue == DependencyProperty::UnsetValue()) {
+        RestoreOriginalValue(propertyOverride, element);
+        return;
+    }
+
+    // Remember the taskbar's value. When an override is already active, the
+    // local value is either the taskbar's new value (e.g. a language switch),
+    // or our own previous value being replaced (e.g. the accent color changed),
+    // in which case the remembered value stays.
+    WinrtInspectable localValue =
+        element.ReadLocalValue(propertyOverride.property);
+    if (!propertyOverride.overridden ||
+        localValue != propertyOverride.lastSetValue) {
+        propertyOverride.originalLocalValue = localValue;
+    }
+
+    propertyOverride.overridden = true;
+    propertyOverride.lastSetValue = newValue;
+
+    // Runs the property changed callback again, which is a no-op since the
+    // value now matches the override.
+    element.SetValue(propertyOverride.property, newValue);
+}
+
+void RefreshAllPropertyOverrides() {
+    if (!g_propertyOverrides) {
+        return;
+    }
+
+    for (auto& propertyOverride : *g_propertyOverrides) {
+        auto element = propertyOverride.element.get();
+        if (!element) {
+            continue;
+        }
+
+        try {
+            ApplyPropertyOverride(propertyOverride, element);
+        } catch (const winrt::hresult_error& ex) {
+            Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+        }
+    }
+}
+
+void TrackProperty(const DependencyObject& element,
+                   const DependencyProperty& property,
+                   ComputeOverride_t computeOverride,
+                   bool refreshOnThemeChange = false) {
+    if (!g_propertyOverrides) {
+        return;
+    }
+
+    auto& propertyOverrides = *g_propertyOverrides;
+
+    // Drop entries of elements which no longer exist.
+    for (auto it = propertyOverrides.begin(); it != propertyOverrides.end();) {
+        if (!it->element.get()) {
+            it = propertyOverrides.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    // Already tracked, e.g. the Loaded event fired more than once.
+    for (auto& propertyOverride : propertyOverrides) {
+        if (propertyOverride.property == property &&
+            propertyOverride.element.get() == element) {
+            ApplyPropertyOverride(propertyOverride, element);
+            return;
+        }
+    }
+
+    propertyOverrides.emplace_back();
+    auto it = std::prev(propertyOverrides.end());
+
+    it->element = winrt::make_weak(element);
+    it->property = property;
+    it->computeOverride = std::move(computeOverride);
+    it->callbackToken = element.RegisterPropertyChangedCallback(
+        property,
+        [it](const DependencyObject& sender, const DependencyProperty&) {
+            if (g_unloading) {
+                return;
+            }
+
+            try {
+                ApplyPropertyOverride(*it, sender);
+            } catch (const winrt::hresult_error& ex) {
+                Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+            }
+        });
+
+    // While the property is overridden, a theme change doesn't change the
+    // property, so the callback above doesn't run. Re-evaluate on theme change.
+    if (refreshOnThemeChange) {
+        if (auto frameworkElement = element.try_as<FrameworkElement>()) {
+            it->refreshOnThemeChange = true;
+            it->themeChangedToken = frameworkElement.ActualThemeChanged(
+                [it](const FrameworkElement& sender, const WinrtInspectable&) {
+                    if (g_unloading) {
+                        return;
+                    }
+
+                    try {
+                        ApplyPropertyOverride(*it, sender);
+                    } catch (const winrt::hresult_error& ex) {
+                        Wh_Log(L"Error %08X: %s", ex.code(),
+                               ex.message().c_str());
+                    }
+                });
+        }
+    }
+
+    ApplyPropertyOverride(*it, element);
+}
+
+void RestoreAllPropertyOverrides() {
+    if (!g_propertyOverrides) {
+        return;
+    }
+
+    for (auto& propertyOverride : *g_propertyOverrides) {
+        auto element = propertyOverride.element.get();
+        if (!element) {
+            continue;
+        }
+
+        try {
+            element.UnregisterPropertyChangedCallback(
+                propertyOverride.property, propertyOverride.callbackToken);
+
+            if (propertyOverride.refreshOnThemeChange) {
+                if (auto frameworkElement = element.try_as<FrameworkElement>()) {
+                    frameworkElement.ActualThemeChanged(
+                        propertyOverride.themeChangedToken);
+                }
+            }
+
+            RestoreOriginalValue(propertyOverride, element);
+        } catch (const winrt::hresult_error& ex) {
+            Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+        }
+    }
+
+    g_propertyOverrides->clear();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Colors.
+
+// Accepts anything XAML accepts for a color: "#RRGGBB", "#AARRGGBB", "Red".
+std::optional<Color> ParseColor(const std::wstring& str) {
+    try {
+        auto value = Markup::XamlBindingHelper::ConvertValue(
+            winrt::xaml_typename<Color>(),
+            winrt::box_value(winrt::hstring(str)));
+        return winrt::unbox_value<Color>(value);
+    } catch (const winrt::hresult_error& ex) {
+        Wh_Log(L"Invalid color \"%s\": %08X", str.c_str(), ex.code());
+        return std::nullopt;
+    }
+}
+
+// "accent", "accentLight1".."accentLight3", "accentDark1".."accentDark3"
+// (case-insensitive).
+std::optional<UIColorType> GetAccentColorType(const std::wstring& setting) {
+    static const struct {
+        PCWSTR name;
+        UIColorType type;
+    } accentColors[] = {
+        {L"accent", UIColorType::Accent},
+        {L"accentLight1", UIColorType::AccentLight1},
+        {L"accentLight2", UIColorType::AccentLight2},
+        {L"accentLight3", UIColorType::AccentLight3},
+        {L"accentDark1", UIColorType::AccentDark1},
+        {L"accentDark2", UIColorType::AccentDark2},
+        {L"accentDark3", UIColorType::AccentDark3},
+    };
+
+    for (const auto& accentColor : accentColors) {
+        if (_wcsicmp(setting.c_str(), accentColor.name) == 0) {
+            return accentColor.type;
+        }
+    }
+
+    return std::nullopt;
+}
+
+bool UsesAccentColor() {
+    return GetAccentColorType(g_settings.textColorLight) ||
+           GetAccentColorType(g_settings.textColorDark);
+}
+
+void RegisterAccentColorChanges();
+
+// Called on the taskbar UI thread.
+std::optional<Color> ResolveColorSetting(const std::wstring& setting) {
+    auto accentColorType = GetAccentColorType(setting);
+    if (!accentColorType) {
+        return ParseColor(setting);
+    }
+
+    // Usually registered by ApplySettings already, but not when the taskbar
+    // didn't exist yet at that point (e.g. right after explorer starts).
+    RegisterAccentColorChanges();
+    if (!g_uiSettings) {
+        Wh_Log(L"UISettings unavailable for %s", setting.c_str());
+        return std::nullopt;
+    }
+
+    try {
+        return g_uiSettings.GetColorValue(*accentColorType);
+    } catch (const winrt::hresult_error& ex) {
+        Wh_Log(L"GetColorValue failed: %08X", ex.code());
+        return std::nullopt;
+    }
+}
+
+// Must be called on the taskbar UI thread. The ColorValuesChanged event fires
+// on a worker thread, so the refresh is sent back to the taskbar thread.
+void RegisterAccentColorChanges() {
+    if (g_uiSettings || g_unloading) {
+        return;
+    }
+
+    try {
+        g_uiSettings = UISettings();
+        g_colorValuesChangedToken = g_uiSettings.ColorValuesChanged(
+            [](const UISettings&, const WinrtInspectable&) {
+                // Counted before checking g_unloading, so that Wh_ModUninit
+                // either sees this handler or the handler sees g_unloading.
+                g_colorValuesChangedHandlersRunning++;
+                struct RunningHandlerGuard {
+                    ~RunningHandlerGuard() {
+                        g_colorValuesChangedHandlersRunning--;
+                    }
+                } runningHandlerGuard;
+
+                if (g_unloading) {
+                    return;
+                }
+
+                HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+                if (!hTaskbarWnd) {
+                    return;
+                }
+
+                Wh_Log(L"Color values changed");
+
+                RunFromWindowThread(
+                    hTaskbarWnd,
+                    [](void*) {
+                        if (!g_unloading) {
+                            RefreshAllPropertyOverrides();
+                        }
+                    },
+                    nullptr);
+            });
+    } catch (const winrt::hresult_error& ex) {
+        Wh_Log(L"UISettings failed: %08X", ex.code());
+        g_uiSettings = nullptr;
+    }
+}
+
+// Must be called on the taskbar UI thread.
+void UnregisterAccentColorChanges() {
+    if (!g_uiSettings) {
+        return;
+    }
+
+    try {
+        g_uiSettings.ColorValuesChanged(g_colorValuesChangedToken);
+    } catch (const winrt::hresult_error& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+    }
+
+    g_uiSettings = nullptr;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Language indicator.
+
+// "ENG" -> "E", "ENG (US)" -> "E", "ENG\nUS" -> "E". Returns std::nullopt if
+// the text is empty or already a single letter.
+std::optional<std::wstring> ShortenLanguageText(std::wstring_view text) {
+    size_t start = 0;
+    while (start < text.size() && std::iswspace(text[start])) {
+        start++;
+    }
+
+    if (start == text.size()) {
+        return std::nullopt;
+    }
+
+    // Keep surrogate pairs whole.
+    size_t length = 1;
+    if (IS_HIGH_SURROGATE(text[start]) && start + 1 < text.size() &&
+        IS_LOW_SURROGATE(text[start + 1])) {
+        length = 2;
+    }
+
+    if (start == 0 && length == text.size()) {
+        return std::nullopt;
+    }
+
+    return std::wstring(text.substr(start, length));
+}
+
+WinrtInspectable ComputeShortText(const DependencyObject&,
+                                  const WinrtInspectable& value) {
+    auto text = winrt::unbox_value_or<winrt::hstring>(value, L"");
+    auto shortText = ShortenLanguageText(text);
+    if (!shortText) {
+        return nullptr;
+    }
+
+    Wh_Log(L"\"%s\" -> \"%s\"", text.c_str(), shortText->c_str());
+
+    return winrt::box_value(winrt::hstring(*shortText));
+}
+
+ComputeOverride_t MakeDoubleOverride(double desiredValue) {
+    return [desiredValue](const DependencyObject&,
+                          const WinrtInspectable& value) -> WinrtInspectable {
+        double currentValue = winrt::unbox_value_or<double>(
+            value, std::numeric_limits<double>::quiet_NaN());
+        if (currentValue == desiredValue) {
+            return nullptr;
+        }
+
+        return winrt::box_value(desiredValue);
+    };
+}
+
+ComputeOverride_t MakeFontWeightOverride(uint16_t desiredWeight) {
+    return [desiredWeight](const DependencyObject&,
+                           const WinrtInspectable& value) -> WinrtInspectable {
+        // A null or unexpected value unboxes to weight 0, which never equals a
+        // desired weight (1-999).
+        auto currentWeight =
+            winrt::unbox_value_or<winrt::Windows::UI::Text::FontWeight>(value,
+                                                                         {});
+        if (currentWeight.Weight == desiredWeight) {
+            return nullptr;
+        }
+
+        return winrt::box_value(
+            winrt::Windows::UI::Text::FontWeight{desiredWeight});
+    };
+}
+
+// Picks the light or dark mode color by the TextBlock's theme, which follows
+// the taskbar (the Windows mode), not the apps mode.
+WinrtInspectable ComputeForeground(const DependencyObject& element,
+                                   const WinrtInspectable& value) {
+    auto frameworkElement = element.try_as<FrameworkElement>();
+    bool light =
+        frameworkElement && frameworkElement.ActualTheme() == ElementTheme::Light;
+
+    const std::wstring& setting =
+        light ? g_settings.textColorLight : g_settings.textColorDark;
+    if (setting.empty()) {
+        return DependencyProperty::UnsetValue();
+    }
+
+    auto color = ResolveColorSetting(setting);
+    if (!color) {
+        return DependencyProperty::UnsetValue();
+    }
+
+    if (auto brush = value ? value.try_as<Media::SolidColorBrush>() : nullptr) {
+        if (brush.Color() == *color) {
+            return nullptr;
+        }
+    }
+
+    Wh_Log(L"Setting %s mode color %s", light ? L"light" : L"dark",
+           setting.c_str());
+
+    return Media::SolidColorBrush{*color};
+}
+
+// A render transform moves the letter without affecting the layout, so it
+// doesn't conflict with the margin the taskbar sets on the TextBlock.
+ComputeOverride_t MakeVerticalOffsetOverride(double offsetY) {
+    return [offsetY](const DependencyObject&,
+                     const WinrtInspectable& value) -> WinrtInspectable {
+        if (auto translateTransform =
+                value ? value.try_as<Media::TranslateTransform>() : nullptr) {
+            if (translateTransform.X() == 0 &&
+                translateTransform.Y() == offsetY) {
+                return nullptr;
+            }
+        }
+
+        Media::TranslateTransform newTransform;
+        newTransform.Y(offsetY);
+        return newTransform;
+    };
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Recreated indicators.
+//
+// Some taskbar changes, such as switching the taskbar size between small and
+// default, recreate the language indicator's content inside existing tray
+// icons. Neither the IconView constructor hook nor the icon's Loaded event sees
+// the new content then. Instead, when a tracked indicator element is unloaded,
+// the system tray is watched for a few seconds, and indicators which appear
+// meanwhile are tracked.
+
+constexpr ULONGLONG kRescanWatchDurationMs = 5000;
+
+// The globals below hold only weak references, event tokens and tick counts, so
+// unlike the XAML-owning globals above they're safe to destroy at process exit.
+// They're still cleared on the taskbar thread on unload, which also removes
+// their event handlers.
+
+struct UnloadWatch {
+    winrt::weak_ref<FrameworkElement> element;
+    // The tray the element belongs to. Each taskbar, primary and secondary,
+    // has its own SystemTray.SystemTrayFrame.
+    winrt::weak_ref<FrameworkElement> systemTrayFrame;
+    winrt::event_token unloadedToken{};
+};
+
+// Only accessed from the taskbar UI thread.
+std::list<UnloadWatch> g_unloadWatches;
+
+struct RescanWatch {
+    winrt::weak_ref<FrameworkElement> root;
+    winrt::event_token layoutUpdatedToken{};
+    ULONGLONG deadline = 0;
+};
+
+// One per system tray being watched for new indicators, so that a watch on one
+// taskbar doesn't cancel a watch on another. Only accessed from the taskbar UI
+// thread.
+std::list<RescanWatch> g_rescanWatches;
+
+int TrackLanguageIndicatorsIn(DependencyObject root);
+
+void StopRescanWatch(std::list<RescanWatch>::iterator it) {
+    if (auto root = it->root.get()) {
+        try {
+            root.LayoutUpdated(it->layoutUpdatedToken);
+        } catch (const winrt::hresult_error& ex) {
+            Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+        }
+    }
+
+    g_rescanWatches.erase(it);
+}
+
+void StopAllRescanWatches() {
+    while (!g_rescanWatches.empty()) {
+        StopRescanWatch(g_rescanWatches.begin());
+    }
+}
+
+// Watches the given system tray for a few seconds, or extends an existing watch
+// of it.
+void StartRescanWatch(const FrameworkElement& systemTrayFrame) {
+    if (g_unloading || !systemTrayFrame) {
+        return;
+    }
+
+    ULONGLONG deadline = GetTickCount64() + kRescanWatchDurationMs;
+
+    for (auto& rescanWatch : g_rescanWatches) {
+        if (rescanWatch.root.get() == systemTrayFrame) {
+            rescanWatch.deadline = deadline;
+            return;
+        }
+    }
+
+    Wh_Log(L"Watching the system tray for new language indicators");
+
+    g_rescanWatches.emplace_back();
+    auto it = std::prev(g_rescanWatches.end());
+    it->root = winrt::make_weak(systemTrayFrame);
+    it->deadline = deadline;
+
+    // Elements are added to the tree in a layout pass, so a scan after each
+    // pass finds them. LayoutUpdated has no meaningful sender. The handler is
+    // removed before its list entry is erased, so the iterator stays valid
+    // while the handler can run.
+    it->layoutUpdatedToken = systemTrayFrame.LayoutUpdated(
+        [it](const WinrtInspectable&, const WinrtInspectable&) {
+            if (g_unloading) {
+                return;
+            }
+
+            auto root = it->root.get();
+            if (!root || GetTickCount64() > it->deadline) {
+                Wh_Log(L"Stopped watching the system tray");
+                StopRescanWatch(it);
+                return;
+            }
+
+            try {
+                int count = TrackLanguageIndicatorsIn(root);
+                if (count > 0) {
+                    Wh_Log(L"New language indicators: %d", count);
+                }
+            } catch (const winrt::hresult_error& ex) {
+                Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+            }
+        });
+}
+
+bool IsUnloadWatched(const FrameworkElement& element) {
+    for (const auto& unloadWatch : g_unloadWatches) {
+        if (unloadWatch.element.get() == element) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void WatchUnload(const FrameworkElement& element,
+                 const FrameworkElement& systemTrayFrame) {
+    if (IsUnloadWatched(element)) {
+        return;
+    }
+
+    // Drop entries of elements which no longer exist.
+    g_unloadWatches.remove_if([](const UnloadWatch& unloadWatch) {
+        return !unloadWatch.element.get();
+    });
+
+    auto& unloadWatch = g_unloadWatches.emplace_back();
+    unloadWatch.element = winrt::make_weak(element);
+    if (systemTrayFrame) {
+        unloadWatch.systemTrayFrame = winrt::make_weak(systemTrayFrame);
+    }
+
+    unloadWatch.unloadedToken = element.Unloaded(
+        [systemTrayFrameWeak = unloadWatch.systemTrayFrame](
+            const WinrtInspectable&, const RoutedEventArgs&) {
+            if (g_unloading) {
+                return;
+            }
+
+            Wh_Log(L"Language indicator element unloaded");
+
+            if (auto systemTrayFrame = systemTrayFrameWeak.get()) {
+                StartRescanWatch(systemTrayFrame);
+            } else {
+                Wh_Log(L"No system tray to watch");
+            }
+        });
+}
+
+void RemoveAllUnloadWatches() {
+    for (const auto& unloadWatch : g_unloadWatches) {
+        if (auto element = unloadWatch.element.get()) {
+            try {
+                element.Unloaded(unloadWatch.unloadedToken);
+            } catch (const winrt::hresult_error& ex) {
+                Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+            }
+        }
+    }
+
+    g_unloadWatches.clear();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Tracking an indicator.
+
+// Returns false if the indicator was already tracked.
+bool TrackLanguageIndicator(FrameworkElement languageTextIconContent) {
+    Controls::TextBlock innerTextBlock = nullptr;
+    if (auto adaptiveTextBlock = FindDescendantByName(
+            languageTextIconContent, L"LanguageInnerTextBlock")) {
+        innerTextBlock =
+            FindDescendantByName(adaptiveTextBlock, L"InnerTextBlock")
+                .try_as<Controls::TextBlock>();
+    }
+
+    // Both elements are watched once tracked. A watched content element with a
+    // new TextBlock means its template was applied again, and the new
+    // TextBlock still needs tracking.
+    if (IsUnloadWatched(languageTextIconContent) &&
+        (!innerTextBlock || IsUnloadWatched(innerTextBlock))) {
+        return false;
+    }
+
+    Wh_Log(L"Found LanguageTextIconContent");
+
+    // The tray to rescan when the indicator is recreated.
+    auto systemTrayFrame = FindParentByClassName(languageTextIconContent,
+                                                 L"SystemTray.SystemTrayFrame");
+
+    WatchUnload(languageTextIconContent, systemTrayFrame);
+
+    if (g_settings.iconWidth > 0) {
+        TrackProperty(languageTextIconContent,
+                      FrameworkElement::WidthProperty(),
+                      MakeDoubleOverride(g_settings.iconWidth));
+        TrackProperty(languageTextIconContent,
+                      FrameworkElement::MinWidthProperty(),
+                      MakeDoubleOverride(0));
+    }
+
+    if (!innerTextBlock) {
+        Wh_Log(L"InnerTextBlock not found");
+        return true;
+    }
+
+    WatchUnload(innerTextBlock, systemTrayFrame);
+
+    if (innerTextBlock.GetBindingExpression(
+            Controls::TextBlock::TextProperty())) {
+        // Overriding a data-bound Text replaces the binding, which would stop
+        // the indicator from updating on language switches.
+        Wh_Log(L"Warning: InnerTextBlock.Text is data-bound");
+    }
+
+    TrackProperty(innerTextBlock, Controls::TextBlock::TextProperty(),
+                  ComputeShortText);
+
+    if (g_settings.fontSize > 0) {
+        TrackProperty(innerTextBlock, Controls::TextBlock::FontSizeProperty(),
+                      MakeDoubleOverride(g_settings.fontSize));
+    }
+
+    if (g_settings.fontWeight > 0) {
+        TrackProperty(innerTextBlock, Controls::TextBlock::FontWeightProperty(),
+                      MakeFontWeightOverride(
+                          static_cast<uint16_t>(g_settings.fontWeight)));
+    }
+
+    if (!g_settings.textColorLight.empty() ||
+        !g_settings.textColorDark.empty()) {
+        TrackProperty(innerTextBlock, Controls::TextBlock::ForegroundProperty(),
+                      ComputeForeground, /*refreshOnThemeChange=*/true);
+    }
+
+    if (g_settings.verticalOffset != 0) {
+        TrackProperty(innerTextBlock, UIElement::RenderTransformProperty(),
+                      MakeVerticalOffsetOverride(g_settings.verticalOffset));
+    }
+
+    return true;
+}
+
+// Returns the number of newly tracked indicators.
+int TrackLanguageIndicatorsIn(DependencyObject root) {
+    int newCount = 0;
+    EnumDescendantsByClassName(root, L"SystemTray.LanguageTextIconContent",
+                               [&newCount](FrameworkElement element) {
+                                   if (TrackLanguageIndicator(element)) {
+                                       newCount++;
+                                   }
+                               });
+    return newCount;
+}
+
+// Stops tracking everything and restores the taskbar's values. Must be called
+// on the taskbar UI thread.
+void UntrackAllLanguageIndicators() {
+    StopAllRescanWatches();
+    RemoveAllUnloadWatches();
+    RestoreAllPropertyOverrides();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// New tray icons, e.g. after explorer restarts or an input language is added.
+
+using IconView_IconView_t = void*(WINAPI*)(void* pThis);
+IconView_IconView_t IconView_IconView_Original;
+void* WINAPI IconView_IconView_Hook(void* pThis) {
+    void* ret = IconView_IconView_Original(pThis);
+
+    if (g_unloading || !g_autoRevokerList) {
+        return ret;
+    }
+
+    FrameworkElement iconView = nullptr;
+    ((IUnknown**)pThis)[1]->QueryInterface(winrt::guid_of<FrameworkElement>(),
+                                           winrt::put_abi(iconView));
+    if (!iconView) {
+        return ret;
+    }
+
+    // The icon's content isn't created yet, look for the language indicator
+    // once the icon is loaded.
+    g_autoRevokerList->emplace_back();
+    auto autoRevokerIt = std::prev(g_autoRevokerList->end());
+
+    *autoRevokerIt = iconView.Loaded(
+        winrt::auto_revoke,
+        [autoRevokerIt](const WinrtInspectable& sender, const RoutedEventArgs&) {
+            // The list is reset only on unload, which also revokes this
+            // handler, so it's still there when the handler runs.
+            g_autoRevokerList->erase(autoRevokerIt);
+
+            if (g_unloading) {
+                return;
+            }
+
+            auto iconView = sender.try_as<FrameworkElement>();
+            if (!iconView) {
+                return;
+            }
+
+            try {
+                if (TrackLanguageIndicatorsIn(iconView) > 0) {
+                    Wh_Log(L"Language indicator loaded");
+                } else if (iconView.Name() == L"SystemTrayIcon") {
+                    // The icon's content might not be created yet. This is
+                    // also the language indicator's icon type. Watch the tray
+                    // this icon belongs to.
+                    StartRescanWatch(FindParentByClassName(
+                        iconView, L"SystemTray.SystemTrayFrame"));
+                }
+            } catch (const winrt::hresult_error& ex) {
+                Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+            }
+        });
+
+    return ret;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Taskbar XamlRoot, for applying to the existing taskbar.
+
+void* CTaskBand_ITaskListWndSite_vftable;
+
+using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis, void** result);
+CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original;
+
+void* TaskbarHost_FrameHeight_Original;
+
+using std__Ref_count_base__Decref_t = void(WINAPI*)(void* pThis);
+std__Ref_count_base__Decref_t std__Ref_count_base__Decref_Original;
+
+XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
+    HWND hTaskSwWnd = (HWND)GetProp(hTaskbarWnd, L"TaskbandHWND");
+    if (!hTaskSwWnd) {
+        return nullptr;
+    }
+
+    void* taskBand = (void*)GetWindowLongPtr(hTaskSwWnd, 0);
+    void* taskBandForTaskListWndSite = taskBand;
+    for (int i = 0; *(void**)taskBandForTaskListWndSite !=
+                    CTaskBand_ITaskListWndSite_vftable;
+         i++) {
+        if (i == 20) {
+            return nullptr;
+        }
+
+        taskBandForTaskListWndSite = (void**)taskBandForTaskListWndSite + 1;
+    }
+
+    void* taskbarHostSharedPtr[2]{};
+    CTaskBand_GetTaskbarHost_Original(taskBandForTaskListWndSite,
+                                      taskbarHostSharedPtr);
+    if (!taskbarHostSharedPtr[0] && !taskbarHostSharedPtr[1]) {
+        return nullptr;
+    }
+
+    // The offset of the taskbar element in TaskbarHost, read from the code of
+    // TaskbarHost::FrameHeight.
+    size_t taskbarElementIUnknownOffset = 0x10;
+
+#if defined(_M_X64)
+    {
+        // 48:83EC 28 | sub rsp,28
+        // 48:83C1 48 | add rcx,48
+        const BYTE* b = (const BYTE*)TaskbarHost_FrameHeight_Original;
+        if (b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC && b[4] == 0x48 &&
+            b[5] == 0x83 && b[6] == 0xC1 && b[7] <= 0x7F) {
+            taskbarElementIUnknownOffset = b[7];
+        } else {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+        }
+    }
+#elif defined(_M_ARM64)
+    {
+        // 7f2303d5 pacibsp
+        // fd7bbfa9 stp     fp, lr, [sp, #-0x10]!
+        // fd030091 mov     fp, sp
+        // 080c41f8 ldr     x8, [x0, #0x10]!
+        const DWORD* p = (const DWORD*)TaskbarHost_FrameHeight_Original;
+        if (p[0] == 0xD503237F && (p[1] & 0xFFC07FFF) == 0xA9807BFD &&
+            p[2] == 0x910003FD && (p[3] & 0xFFF00FE0) == 0xF8400C00) {
+            taskbarElementIUnknownOffset = (p[3] >> 12) & 0xFF;
+        } else {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+        }
+    }
+#else
+#error "Unsupported architecture"
+#endif
+
+    auto* taskbarElementIUnknown =
+        *(IUnknown**)((BYTE*)taskbarHostSharedPtr[0] +
+                      taskbarElementIUnknownOffset);
+
+    FrameworkElement taskbarElement = nullptr;
+    taskbarElementIUnknown->QueryInterface(winrt::guid_of<FrameworkElement>(),
+                                           winrt::put_abi(taskbarElement));
+
+    auto result = taskbarElement ? taskbarElement.XamlRoot() : nullptr;
+
+    std__Ref_count_base__Decref_Original(taskbarHostSharedPtr[1]);
+
+    return result;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Settings.
+
+std::wstring GetTrimmedStringSetting(PCWSTR name) {
+    std::wstring result = WindhawkUtils::StringSetting::make(name).get();
+
+    size_t first = result.find_first_not_of(L" \t");
+    if (first == std::wstring::npos) {
+        return L"";
+    }
+
+    size_t last = result.find_last_not_of(L" \t");
+    return result.substr(first, last - first + 1);
+}
+
+// Once the mod is running, the settings are read on the taskbar thread (by
+// property callbacks and Loaded handlers), so they're reloaded there too. See
+// ApplySettings.
+void LoadSettings() {
+    g_settings.fontSize = Wh_GetIntSetting(L"fontSize");
+    if (g_settings.fontSize < 0) {
+        g_settings.fontSize = 0;
+    }
+
+    // XAML accepts weights from 1 to 999.
+    g_settings.fontWeight = std::clamp(Wh_GetIntSetting(L"fontWeight"), 0, 999);
+
+    g_settings.textColorLight = GetTrimmedStringSetting(L"textColor.light");
+    g_settings.textColorDark = GetTrimmedStringSetting(L"textColor.dark");
+
+    g_settings.verticalOffset = Wh_GetIntSetting(L"verticalOffset");
+
+    g_settings.iconWidth = Wh_GetIntSetting(L"iconWidth");
+    if (g_settings.iconWidth < 0) {
+        g_settings.iconWidth = 0;
+    }
+}
+
+// On the taskbar thread: restores everything, optionally reloads the settings,
+// then, unless unloading, applies the settings to the existing taskbar. When
+// unloading, releases the XAML-owning globals on the taskbar thread.
+void ApplySettings(bool reloadSettings) {
+    Wh_Log(L"Applying settings");
+
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+    if (!hTaskbarWnd) {
+        Wh_Log(L"No taskbar found");
+        // Nothing reads the settings on the taskbar thread without a taskbar.
+        if (reloadSettings) {
+            LoadSettings();
+        }
+        return;
+    }
+
+    struct ApplySettingsParam {
+        HWND hTaskbarWnd;
+        bool reloadSettings;
+    };
+
+    ApplySettingsParam param{
+        .hTaskbarWnd = hTaskbarWnd,
+        .reloadSettings = reloadSettings,
+    };
+
+    bool ran = RunFromWindowThread(
+        hTaskbarWnd,
+        [](void* pParam) {
+            const auto& param = *(const ApplySettingsParam*)pParam;
+            HWND hTaskbarWnd = param.hTaskbarWnd;
+
+            UntrackAllLanguageIndicators();
+
+            if (g_unloading) {
+                UnregisterAccentColorChanges();
+                g_autoRevokerList.reset();
+                g_propertyOverrides.reset();
+                return;
+            }
+
+            if (param.reloadSettings) {
+                LoadSettings();
+            }
+
+            if (UsesAccentColor()) {
+                RegisterAccentColorChanges();
+            } else {
+                UnregisterAccentColorChanges();
+            }
+
+            try {
+                auto xamlRoot = GetTaskbarXamlRoot(hTaskbarWnd);
+                if (!xamlRoot) {
+                    Wh_Log(L"Getting XamlRoot failed");
+                    return;
+                }
+
+                auto content = xamlRoot.Content().try_as<FrameworkElement>();
+                if (!content) {
+                    Wh_Log(L"No XamlRoot content");
+                    return;
+                }
+
+                FrameworkElement searchRoot = FindChildByClassName(
+                    content, L"SystemTray.SystemTrayFrame");
+                if (!searchRoot) {
+                    Wh_Log(L"SystemTrayFrame not found, searching everything");
+                    searchRoot = content;
+                }
+
+                int count = TrackLanguageIndicatorsIn(searchRoot);
+                Wh_Log(L"Language indicators found: %d", count);
+            } catch (const winrt::hresult_error& ex) {
+                Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+            }
+        },
+        &param);
+
+    if (!ran) {
+        Wh_Log(L"Failed to run on the taskbar thread");
+        if (reloadSettings) {
+            LoadSettings();
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Hooks.
+
+bool HookSystemTraySymbols(HMODULE module) {
+    // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+        {
+            {LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"},
+            &IconView_IconView_Original,
+            IconView_IconView_Hook,
+        },
+    };
+
+    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
+        Wh_Log(L"HookSymbols failed");
+        return false;
+    }
+
+    return true;
+}
+
+VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
+    void* pFixedFileInfo = nullptr;
+    UINT uPtrLen = 0;
+
+    HRSRC hResource =
+        FindResource(hModule, MAKEINTRESOURCE(VS_VERSION_INFO), RT_VERSION);
+    if (hResource) {
+        HGLOBAL hGlobal = LoadResource(hModule, hResource);
+        if (hGlobal) {
+            void* pData = LockResource(hGlobal);
+            if (pData) {
+                if (!VerQueryValue(pData, L"\\", &pFixedFileInfo, &uPtrLen) ||
+                    uPtrLen == 0) {
+                    pFixedFileInfo = nullptr;
+                    uPtrLen = 0;
+                }
+            }
+        }
+    }
+
+    if (puPtrLen) {
+        *puPtrLen = uPtrLen;
+    }
+
+    return (VS_FIXEDFILEINFO*)pFixedFileInfo;
+}
+
+HMODULE GetSystemTrayModuleHandle() {
+    HMODULE module = GetModuleHandle(L"SystemTray.dll");
+    if (!module) {
+        module = GetModuleHandle(L"Taskbar.View.dll");
+        if (module) {
+            // Starting with Taskbar.View.dll 2604.8002.200.6000, the SystemTray
+            // types moved out of Taskbar.View.dll into SystemTray.dll, so don't
+            // hook Taskbar.View.dll at this version and above.
+            VS_FIXEDFILEINFO* fixedFileInfo =
+                GetModuleVersionInfo(module, nullptr);
+            WORD moduleMajor =
+                fixedFileInfo ? HIWORD(fixedFileInfo->dwFileVersionMS) : 0;
+            if (!moduleMajor || moduleMajor >= 2604) {
+                Wh_Log(L"Skipping Taskbar.View.dll version %d", moduleMajor);
+                module = nullptr;
+            }
+        }
+    }
+    if (!module) {
+        module = GetModuleHandle(L"ExplorerExtensions.dll");
+    }
+
+    return module;
+}
+
+void HandleLoadedModuleIfSystemTray(HMODULE module, LPCWSTR lpLibFileName) {
+    if (!g_systemTrayModuleHooked && GetSystemTrayModuleHandle() == module &&
+        !g_systemTrayModuleHooked.exchange(true)) {
+        Wh_Log(L"Loaded %s", lpLibFileName);
+
+        if (HookSystemTraySymbols(module)) {
+            Wh_ApplyHookOperations();
+        }
+    }
+}
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+LoadLibraryExW_t LoadLibraryExW_Original;
+HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
+                                   HANDLE hFile,
+                                   DWORD dwFlags) {
+    HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
+    if (module) {
+        HandleLoadedModuleIfSystemTray(module, lpLibFileName);
+    }
+
+    return module;
+}
+
+bool HookTaskbarDllSymbols() {
+    HMODULE module =
+        LoadLibraryEx(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!module) {
+        Wh_Log(L"Failed to load taskbar.dll");
+        return false;
+    }
+
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
+        {
+            {LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
+            &CTaskBand_ITaskListWndSite_vftable,
+        },
+        {
+            {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
+            &CTaskBand_GetTaskbarHost_Original,
+        },
+        {
+            {LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
+            &TaskbarHost_FrameHeight_Original,
+        },
+        {
+            {LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
+            &std__Ref_count_base__Decref_Original,
+        },
+    };
+
+    return HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Mod lifecycle.
+
+BOOL Wh_ModInit() {
+    Wh_Log(L">");
+
+    LoadSettings();
+
+    if (HMODULE systemTrayModule = GetSystemTrayModuleHandle()) {
+        g_systemTrayModuleHooked = true;
+        if (!HookSystemTraySymbols(systemTrayModule)) {
+            return FALSE;
+        }
+    } else {
+        Wh_Log(L"System tray module not loaded yet");
+
+        HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
+        auto pKernelBaseLoadLibraryExW =
+            (decltype(&LoadLibraryExW))GetProcAddress(kernelBaseModule,
+                                                      "LoadLibraryExW");
+        WindhawkUtils::SetFunctionHook(pKernelBaseLoadLibraryExW,
+                                       LoadLibraryExW_Hook,
+                                       &LoadLibraryExW_Original);
+    }
+
+    if (!HookTaskbarDllSymbols()) {
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    Wh_Log(L">");
+
+    // The system tray module might have been loaded after Wh_ModInit checked.
+    if (!g_systemTrayModuleHooked) {
+        if (HMODULE systemTrayModule = GetSystemTrayModuleHandle()) {
+            if (!g_systemTrayModuleHooked.exchange(true)) {
+                Wh_Log(L"Got system tray module");
+
+                if (HookSystemTraySymbols(systemTrayModule)) {
+                    Wh_ApplyHookOperations();
+                }
+            }
+        }
+    }
+
+    // The settings were loaded in Wh_ModInit.
+    ApplySettings(/*reloadSettings=*/false);
+}
+
+void Wh_ModBeforeUninit() {
+    Wh_Log(L">");
+
+    g_unloading = true;
+
+    ApplySettings(/*reloadSettings=*/false);
+}
+
+void Wh_ModUninit() {
+    Wh_Log(L">");
+
+    // A ColorValuesChanged handler which started before g_unloading was set may
+    // still be running mod code. It bails out quickly, and doesn't wait for this
+    // thread, so this can't deadlock.
+    while (g_colorValuesChangedHandlersRunning > 0) {
+        Sleep(10);
+    }
+}
+
+void Wh_ModSettingsChanged() {
+    Wh_Log(L">");
+
+    ApplySettings(/*reloadSettings=*/true);
+}

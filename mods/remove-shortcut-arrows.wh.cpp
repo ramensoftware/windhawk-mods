@@ -1,52 +1,41 @@
 // ==WindhawkMod==
 // @id              remove-shortcut-arrows
-// @name            Remove Shortcut Arrow Overlays
-// @description     Removes shortcut arrow overlays from desktop and File Explorer icons cleanly in memory.
-// @version         1.0.0
+// @name            Remove Shortcut Arrow Icons
+// @description     Removes shortcut arrow icons from desktop and File Explorer cleanly in memory.
+// @version         2.0.1
 // @author          Dev-StudioCode
 // @github          https://github.com/Dev-StudioCode
 // @include         explorer.exe
-// @compilerOptions -lgdi32
+// @compilerOptions -lgdi32 -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# Remove Shortcut Arrow Overlays
+# Remove Shortcut Arrow Icons
 
-Removes the shortcut arrow overlay from desktop and File Explorer icons cleanly
-in memory without modifying the Windows Registry.
+Removes shortcut arrow icons from desktop and File Explorer cleanly in memory without modifying the Windows Registry.
 
-### Why this is better than the Registry tweak:
-* **In-Place Overlay Replacement**: Modifies Explorer's system image lists
-in-place with zero image slot leaks.
-* **No Black Squares**: The common registry tweak (`Shell Icons\29` pointing to
-a blank `.ico`) frequently causes visual bugs such as black squares on icons
-after icon cache updates or on high-DPI displays.
-* **No Registry Tampering**: Does not alter system registry keys and does not
-require copying files into `C:\Windows\System32`.
-* **Zero Dependencies**: Generates a 100% transparent icon dynamically in
-memory. No external `.ico` files are needed.
-* **Instant Reversibility**: Automatically restores the original Windows
-shortcut arrows when the mod is disabled or unloaded without an Explorer restart.
-* **Optional Custom Icon**: Allows using a custom badge or icon instead of a
-completely transparent one.
+### Before and After
 
-### Scope & Process Behavior
-* System image lists are per-process, so this mod targets `explorer.exe` (Desktop
-and File Explorer). Shell Open/Save dialogs hosted inside other application
-processes retain their separate process image lists.
+| Default Windows (With Arrows) | Clean Desktop (With Mod) |
+| :---: | :---: |
+| ![Before](https://raw.githubusercontent.com/Dev-StudioCode/Hide-Desktop-Shortcut-Icon/main/assets/before.png) | ![After](https://raw.githubusercontent.com/Dev-StudioCode/Hide-Desktop-Shortcut-Icon/main/assets/after.png) |
+
+### Features
+* **Zero Registry Modifications**: Operates purely in-memory, leaving your registry keys untouched.
+* **No Black Squares or Artifacts**: Immune to the black box glitches caused by legacy Shell Icons registry hacks.
+* **Instant Toggle**: Applies immediately on load and restores original shortcut arrows when unloaded.
+* **Custom Badge Support**: Optional setting to supply your own custom icon badge instead of a transparent icon.
 
 ### Credits
-* Credit to the **Hide Desktop Icon Text and Shortcut Arrows** mod
-(`hide-desktop-icon-text`) by kivsak for the transparent GDI icon generation and
-shell image list technique.
+* Credit to the **Hide Desktop Icon Text and Shortcut Arrows** mod (`hide-desktop-icon-text`) by kivsak for the transparent GDI icon generation and desktop hook structure.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
 - custom_icon_path: ""
-  $name: Custom Overlay Icon Path (Optional)
+  $name: Custom Shortcut Icon Path (Optional)
   $description: Leave empty for fully transparent arrows. To use a custom badge, specify the path to a .ico file with artwork in the bottom-left corner and the rest transparent.
 */
 // ==/WindhawkModSettings==
@@ -78,6 +67,8 @@ static const GUID g_iidImageList = {
 
 static std::vector<OverlayBackup> g_backupOverlays;
 static int g_overlayImageIndex = -1;
+static UINT g_msgDeferredRefresh =
+    RegisterWindowMessageW(L"RemoveShortcutArrows_DeferredRefresh");
 static WindhawkUtils::StringSetting g_customIconPath;
 
 // ---------------------------------------------------------------------------
@@ -146,15 +137,14 @@ static HICON GetReplacementIcon(int cx, int cy) {
 // Overlay Management via Shell Image List (In-Place Replacement)
 // ---------------------------------------------------------------------------
 
-static void HideShortcutOverlay() {
+static bool HideShortcutOverlay() {
   int linkOverlay = SHGetIconOverlayIndexW(nullptr, IDO_SHGIOI_LINK);
   if (linkOverlay <= 0)
-    return;
+    return false;
 
   const int sizes[] = {SHIL_LARGE, SHIL_SMALL, SHIL_EXTRALARGE, SHIL_SYSSMALL,
                        SHIL_JUMBO};
-  g_backupOverlays.clear();
-  g_overlayImageIndex = -1;
+  bool anyReplaced = false;
 
   for (int shil : sizes) {
     IImageList *piml = nullptr;
@@ -165,29 +155,55 @@ static void HideShortcutOverlay() {
     int imageIndex = -1, cx = 0, cy = 0;
     HICON original = nullptr;
     if (SUCCEEDED(piml->GetOverlayImage(linkOverlay, &imageIndex)) &&
-        imageIndex >= 0 && SUCCEEDED(piml->GetIconSize(&cx, &cy)) &&
-        SUCCEEDED(piml->GetIcon(imageIndex, ILD_TRANSPARENT, &original))) {
+        imageIndex >= 0 && SUCCEEDED(piml->GetIconSize(&cx, &cy))) {
       g_overlayImageIndex = imageIndex;
-      if (HICON replacement = GetReplacementIcon(cx, cy)) {
-        int replaced = -1;
-        if (SUCCEEDED(piml->ReplaceIcon(imageIndex, replacement, &replaced))) {
-          g_backupOverlays.push_back({shil, imageIndex, original});
-          original = nullptr;
+
+      // Check if this SHIL size was already backed up
+      bool alreadyBackedUp = false;
+      for (const auto &b : g_backupOverlays) {
+        if (b.shil == shil) {
+          alreadyBackedUp = true;
+          break;
         }
-        DestroyIcon(replacement);
       }
-      if (original) {
-        DestroyIcon(original);
+
+      if (!alreadyBackedUp) {
+        if (SUCCEEDED(piml->GetIcon(imageIndex, ILD_TRANSPARENT, &original))) {
+          if (HICON replacement = GetReplacementIcon(cx, cy)) {
+            int replaced = -1;
+            if (SUCCEEDED(piml->ReplaceIcon(imageIndex, replacement, &replaced))) {
+              g_backupOverlays.push_back({shil, imageIndex, original});
+              original = nullptr;
+              anyReplaced = true;
+            }
+            DestroyIcon(replacement);
+          }
+          if (original) {
+            DestroyIcon(original);
+          }
+        }
+      } else {
+        // Re-apply replacement in case image list was swapped by Explorer
+        if (HICON replacement = GetReplacementIcon(cx, cy)) {
+          int replaced = -1;
+          if (SUCCEEDED(piml->ReplaceIcon(imageIndex, replacement, &replaced))) {
+            anyReplaced = true;
+          }
+          DestroyIcon(replacement);
+        }
       }
     }
     piml->Release();
   }
+
+  return anyReplaced;
 }
 
 static void RestoreShortcutOverlay() {
   // Restore in reverse order so lists returned for multiple SHIL sizes restore
   // properly
-  for (auto it = g_backupOverlays.rbegin(); it != g_backupOverlays.rend(); ++it) {
+  for (auto it = g_backupOverlays.rbegin(); it != g_backupOverlays.rend();
+       ++it) {
     IImageList *piml = nullptr;
     if (SUCCEEDED(SHGetImageList(it->shil, g_iidImageList, (void **)&piml)) &&
         piml) {
@@ -201,46 +217,108 @@ static void RestoreShortcutOverlay() {
 }
 
 // ---------------------------------------------------------------------------
-// Desktop Redraw Helpers
+// Desktop Redraw & Hook Helpers
 // ---------------------------------------------------------------------------
 
-static void RefreshDesktop() {
+static HWND GetDesktopListView() {
   HWND hShell = GetShellWindow();
+  if (!hShell) {
+    hShell = FindWindowW(L"Progman", L"Program Manager");
+  }
   if (!hShell)
-    return;
+    return nullptr;
 
-  DWORD pid = 0;
-  GetWindowThreadProcessId(hShell, &pid);
-  if (pid != GetCurrentProcessId())
-    return;
-
-  HWND hDefView = FindWindowEx(hShell, nullptr, L"SHELLDLL_DefView", nullptr);
+  HWND hDefView = FindWindowExW(hShell, nullptr, L"SHELLDLL_DefView", nullptr);
   if (!hDefView) {
     HWND hWorkerW = nullptr;
-    while ((hWorkerW = FindWindowEx(nullptr, hWorkerW, L"WorkerW", nullptr)) !=
+    while ((hWorkerW = FindWindowExW(nullptr, hWorkerW, L"WorkerW", nullptr)) !=
            nullptr) {
-      hDefView = FindWindowEx(hWorkerW, nullptr, L"SHELLDLL_DefView", nullptr);
+      hDefView = FindWindowExW(hWorkerW, nullptr, L"SHELLDLL_DefView", nullptr);
       if (hDefView)
         break;
     }
   }
   if (hDefView) {
     HWND hListView =
-        FindWindowEx(hDefView, nullptr, L"SysListView32", L"FolderView");
-    if (hListView) {
-      InvalidateRect(hListView, nullptr, TRUE);
+        FindWindowExW(hDefView, nullptr, L"SysListView32", L"FolderView");
+    DWORD pid = 0;
+    if (hListView && GetWindowThreadProcessId(hListView, &pid) &&
+        pid == GetCurrentProcessId()) {
+      return hListView;
     }
+  }
+  return nullptr;
+}
+
+static void RefreshDesktop() {
+  if (HWND hListView = GetDesktopListView()) {
+    InvalidateRect(hListView, nullptr, TRUE);
   }
 }
 
 static void RefreshDesktopAndExplorer() {
   if (g_overlayImageIndex >= 0) {
     SHChangeNotify(
-        SHCNE_UPDATEIMAGE, SHCNF_DWORD | SHCNF_FLUSH, nullptr,
-        reinterpret_cast<LPCVOID>(
-            static_cast<ULONG_PTR>(g_overlayImageIndex)));
+        SHCNE_UPDATEIMAGE, SHCNF_DWORD | SHCNF_FLUSHNOWAIT, nullptr,
+        reinterpret_cast<LPCVOID>(static_cast<ULONG_PTR>(g_overlayImageIndex)));
   }
   RefreshDesktop();
+}
+
+static bool EnsureShortcutOverlayHidden() {
+  if (HideShortcutOverlay()) {
+    RefreshDesktopAndExplorer();
+    return true;
+  }
+  return false;
+}
+
+static bool IsDesktopFolderView(HWND hWnd) {
+  WCHAR buf[32];
+  if (!GetClassNameW(hWnd, buf, ARRAYSIZE(buf)) || wcscmp(buf, L"SysListView32"))
+    return false;
+  HWND hDefView = GetParent(hWnd);
+  if (!hDefView || !GetClassNameW(hDefView, buf, ARRAYSIZE(buf)) ||
+      wcscmp(buf, L"SHELLDLL_DefView"))
+    return false;
+  HWND hTop = GetParent(hDefView);
+  if (!hTop || !GetClassNameW(hTop, buf, ARRAYSIZE(buf)) ||
+      (wcscmp(buf, L"Progman") && wcscmp(buf, L"WorkerW")))
+    return false;
+  DWORD pid = 0;
+  return GetWindowThreadProcessId(hWnd, &pid) && pid == GetCurrentProcessId();
+}
+
+static LRESULT CALLBACK DesktopSubclassProc(
+    HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
+    DWORD_PTR dwRefData) {
+  if (g_msgDeferredRefresh && uMsg == g_msgDeferredRefresh) {
+    EnsureShortcutOverlayHidden();
+    return 0;
+  }
+  switch (uMsg) {
+    case WM_SETTINGCHANGE:
+    case WM_THEMECHANGED:
+      EnsureShortcutOverlayHidden();
+      break;
+  }
+  return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
+using CreateWindowExW_t = decltype(&CreateWindowExW);
+static CreateWindowExW_t CreateWindowExW_Original;
+static HWND WINAPI CreateWindowExW_Hook(
+    DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName,
+    DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
+    HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, PVOID lpParam) {
+  HWND hWnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName,
+                                       dwStyle, X, Y, nWidth, nHeight,
+                                       hWndParent, hMenu, hInstance, lpParam);
+  if (hWnd && IsDesktopFolderView(hWnd)) {
+    WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, DesktopSubclassProc, 0);
+    PostMessageW(hWnd, g_msgDeferredRefresh, 0, 0);
+  }
+  return hWnd;
 }
 
 // ---------------------------------------------------------------------------
@@ -252,18 +330,32 @@ static void LoadSettings() {
 }
 
 BOOL Wh_ModInit() {
-  Wh_Log(L"Initializing Remove Shortcut Arrows mod");
+  Wh_Log(L"Initializing Remove Shortcut Arrow Icons mod");
   LoadSettings();
-  HideShortcutOverlay();
+
+  WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
+                                 &CreateWindowExW_Original);
+
+  EnsureShortcutOverlayHidden();
   return TRUE;
 }
 
-void Wh_ModAfterInit() { RefreshDesktopAndExplorer(); }
+void Wh_ModAfterInit() {
+  if (HWND hDesktop = GetDesktopListView()) {
+    WindhawkUtils::SetWindowSubclassFromAnyThread(hDesktop, DesktopSubclassProc, 0);
+  }
+}
 
 void Wh_ModUninit() {
-  Wh_Log(L"Uninitializing Remove Shortcut Arrows mod");
+  Wh_Log(L"Uninitializing Remove Shortcut Arrow Icons mod");
+
+  if (HWND hDesktop = GetDesktopListView()) {
+    WindhawkUtils::RemoveWindowSubclassFromAnyThread(hDesktop, DesktopSubclassProc);
+  }
+
   RestoreShortcutOverlay();
   RefreshDesktopAndExplorer();
+  g_overlayImageIndex = -1;
 }
 
 BOOL Wh_ModSettingsChanged(BOOL *bReload) {

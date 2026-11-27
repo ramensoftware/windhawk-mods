@@ -1,10 +1,8 @@
 // ==WindhawkMod==
 // @id              desktop-icon-dock
 // @name            Desktop Icon Dock
-// @name:zh-CN      桌面图标 Dock
-// @description     A standalone macOS-style dock: drag shortcuts, files and folders onto it, reorder them, drag them out to put them back on the desktop; shortcuts are copied into a dock-owned folder so desktop cleanups do not affect the dock; optional glass panel
-// @description:zh-CN 独立的 macOS 风格 Dock：把快捷方式、文件和文件夹拖进来，拖动排序，拖出放回桌面；快捷方式会复制到 Dock 自己的目录，清理桌面不影响 Dock；可选液态玻璃面板
-// @version         1.1.3
+// @description     A standalone macOS-style desktop dock. Drag shortcuts, files and folders in, reorder them, or drag them back to the desktop. It keeps its own list, can be moved by its edges, and offers six background styles.
+// @version         2.3.1
 // @author          yizqq0721
 // @github          https://github.com/yizqq0721
 // @include         explorer.exe
@@ -19,7 +17,8 @@
 Turns shortcuts, files and folders that you drag onto it into a centered
 macOS-style dock. The dock is an independent list, not a mirror of the
 desktop. A fully transparent background is used by default, showing only the
-icons; an optional Liquid Glass panel is available.
+icons; choose one of five panel materials for a visible background: Clear,
+Frosted, Acrylic, Mica, or Liquid Glass.
 
 ![Desktop Icon Dock preview](https://raw.githubusercontent.com/yizqq0721/desktop-icon-dock/main/images/dock-preview-transparent.jpg)
 
@@ -52,17 +51,31 @@ magnified with its label shown.*
   because the list is empty.
 - **macOS-style hover magnification**: icons grow smoothly as the pointer
   approaches, with cosine falloff and neighboring icons spreading aside.
+- **Move by the edges**: drag the top or bottom edge to move the dock
+  vertically, or the left or right edge to move it horizontally; each edge
+  moves the dock only along its own axis. The position is saved automatically
+  and restored on the next start. Edges are available with a visible panel
+  style; the transparent style has no border to grab.
+- **Position reset actions**: right-click an empty part of the dock, or use
+  the "Dock position action" setting, to reset the position to the default
+  (centered, at the configured default distance from the taskbar), to center
+  it horizontally,
+  or to reset only the distance from the taskbar.
+- **Adjustable corners**: the corner roundness of the panel can be set from
+  square (0%) to fully rounded (100%).
 - **Transparent background (default)**: only the icons and a soft drop shadow
   are drawn, so the dock blends into the wallpaper; transparent areas of the
   dock window are click-through, so desktop right-click and clicks keep
   working.
-- **Optional Liquid Glass panel**: enabled by turning off "Transparent
-  background". Blurred wallpaper backdrop, milky glass tint, specular rim and
-  a hover glow. The backdrop is sampled from the screen above the dock and
-  works with Wallpaper Engine and other animated wallpapers.
-- **Name labels**: hovering an icon shows a name pill above it; in transparent
-  mode the pill stays at a fixed position instead of jumping while icons
-  scale.
+- **Six background styles**: Transparent, Clear, Frosted, Acrylic, Mica and
+  Liquid Glass. Each style is a tuned material preset with its own blur, tint,
+  saturation, noise, rim and highlight treatment; the backdrop is sampled from
+  the screen above the dock and works with Wallpaper Engine and other animated
+  wallpapers. "Panel tone" can force a light or dark material, or follow the
+  wallpaper automatically.
+- **Name labels**: hovering an icon shows a name pill above it, using the
+  active panel tone; in transparent mode the pill stays at a fixed position
+  instead of jumping while icons scale.
 - **Native interaction**: left click opens an item; right click opens that
   item's native Explorer context menu (open, send to, create shortcut,
   properties, delete, ...).
@@ -78,6 +91,30 @@ magnified with its label shown.*
   unloaded. Off by default, so the desktop remains available as a drag source.
 - **Icon cache with cleanup**: icons are cached per item path and reused;
   virtual items such as the Recycle Bin refresh their icons periodically.
+
+## Background styles
+
+- **Transparent** (default): only the icons and their shadows are drawn, so
+  the dock blends into the wallpaper. Transparent areas remain click-through.
+- **Clear**: a thin translucent tint with a light rim and no blur, like a clear
+  shell. It is the lightest visible panel.
+- **Frosted**: a balanced blur, a soft milky tint, and fine noise. It is the
+  safest general-purpose glass material.
+- **Acrylic**: stronger blur, higher saturation, a thicker tint, and more
+  visible grain, similar to a Windows flyout.
+- **Mica**: a wallpaper-tinted, low-saturation, nearly opaque panel. It is
+  quiet and suited to an always-visible dock.
+- **Liquid Glass**: a milky blur with a specular rim, an iridescent inner
+  line, pointer-following highlights, and a faint edge refraction. Its tone
+  follows the Panel tone setting and adapts to the wallpaper in Auto mode.
+
+Each style also follows the **Panel tone** setting: Light, Dark, or Auto. The
+transparent style ignores the tone. The default is **Transparent**; select a
+panel style in the mod settings.
+
+When upgrading from 1.x, the old transparent-background toggle and glass
+sliders are replaced by Background style and Panel tone; choose a panel style
+again if you previously used the glass panel.
 
 ## How it works
 
@@ -112,9 +149,20 @@ desktop icons.
   the system "align icons to grid" setting.
 - **Empty state**: the centered hint pill is drawn with a non-transparent
   background and is registered as part of the same drop target.
-- **Layout**: centered horizontally at the bottom of the primary monitor,
-  above the taskbar; the panel widens as items are added, and icons are
-  vertically centered at rest.
+- **Layout**: the default position is horizontally centered with the panel's
+  bottom edge at the configured default distance from the taskbar (80 px by
+  default at 100% DPI); the panel widens as items
+  are added, and icons are vertically centered at rest.
+- **Moving**: the top and bottom edges move the dock vertically, and the left
+  and right edges move it horizontally. The bottom distance is measured from
+  the lower edge of the panel to the top of the taskbar, so 0 means the panel
+  touches the taskbar. The position is stored in the current user's mod-local
+  values and survives restarts and Explorer restarts without a settings
+  change. The dock stays inside the primary monitor (the transparent glow
+  margin may overhang it).
+- **Reset actions**: right-clicking an empty part of the dock opens the three
+  position actions described under "Adjusting the position". With a transparent
+  background, the empty-state hint can be right-clicked while the dock is empty.
 - **Maintenance**: every 30 seconds, entries that failed to resolve earlier
   are retried and the icons of virtual items are refreshed. Items that still
   cannot be resolved are skipped on screen but kept in storage.
@@ -132,13 +180,52 @@ desktop icons.
 | Effect radius | 160 | Distance in pixels over which magnification fades out from the cursor |
 | Neighbor spread (%) | 60 | How much neighboring icons move aside while magnifying |
 | Smoothing speed | 16 | Higher is snappier, lower is softer |
-| Bottom offset | 10 | Gap between the dock and the taskbar, in pixels at 100% DPI |
-| Transparent background | On | Show only the icons; turn off to use the Liquid Glass panel |
-| Glass opacity (%) | 24 | Glass mode only: strength of the milky tint |
-| Glass blur | 20 | Glass mode only: backdrop blur strength |
+| Corner radius (%) | 72 | Corner roundness of the panel; 0 = square corners, 100 = fully rounded |
+| Default bottom distance | 80 | Distance from the panel's bottom edge to the taskbar on a fresh install and for the reset actions, in pixels at 100% DPI; a drag overrides it until the next reset |
+| Dock position action | Keep current position | One-shot position action from the settings page: reset the position, center only, or reset the bottom distance only. The same actions are available by right-clicking an empty part of the dock |
+| Background style | Transparent | Transparent, Clear, Frosted, Acrylic, Mica or Liquid Glass |
+| Panel tone | Auto | Light, Dark or Auto (follow the wallpaper) for panel styles |
 | Show labels | On | Show a name pill for the hovered item |
 | Hide original desktop icons | Off | Hide the system desktop icons while the dock is active by hiding the desktop list view in memory; they are shown again when the mod is unloaded |
-| Backdrop refresh interval (s) | 20 | How often the blurred backdrop (used by the glass panel and the label pill) is re-sampled; 0 disables refresh |
+| Backdrop refresh interval (s) | 20 | How often the blurred backdrop used by the panel is re-sampled; 0 disables refresh |
+
+## Adjusting the position
+
+![Moving the dock vertically](https://raw.githubusercontent.com/yizqq0721/desktop-icon-dock/b9402bec82648ee05ea0dc39acee1fef1d41c0fb/images/dock-move.gif)
+
+*Drag the top or bottom edge to move vertically; the dock position is saved
+automatically.*
+
+![Moving the dock horizontally](https://raw.githubusercontent.com/yizqq0721/desktop-icon-dock/b9402bec82648ee05ea0dc39acee1fef1d41c0fb/images/dock-move-horizontal.gif)
+
+*Drag the left or right edge to move horizontally.*
+
+- **Drag the edges**: the top and bottom edges move the dock vertically; the
+  left and right edges move it horizontally. Each edge moves the dock only
+  along its own axis.
+- **Right-click an empty part of the dock** to open the three reset actions:
+  - **Reset position**: centered horizontally, with the panel's bottom edge
+    at the configured default distance from the taskbar.
+  - **Center horizontally**: keeps the current distance from the taskbar.
+  - **Reset distance from the taskbar**: sets it back to the configured
+    default distance.
+- **From the settings page**: the **Dock position action** setting offers the
+  same three actions plus "Keep current position". The selected action is
+  applied once when it changes; select "Keep current position" and save, then
+  select the action again, to repeat it. The setting description also points
+  to the right-click menu.
+- **What the numbers mean**: the bottom distance is measured from the lower
+  edge of the panel to the top of the taskbar, so 0 means the panel touches
+  the taskbar. The reset/default value comes from the **Default bottom
+  distance** setting (80 px by default). The horizontal position is centered
+  by default.
+- **Saving**: the position is written to the current user's mod-local values
+  immediately when a drag ends or a reset action is used. No settings save is
+  needed; the position survives restarts and Explorer restarts.
+- **Transparent style**: it has no visible border or background, so edge
+  dragging is unavailable. Set **Default bottom distance**, then use the
+  **Dock position action** setting's "Reset distance from the taskbar" option
+  (or the empty-state hint while the dock is empty) to place it.
 
 ## How it differs from existing mods
 
@@ -156,8 +243,9 @@ not a launcher that stays on top of other windows.
 - **Desktop integration**: hiding the system desktop icons in memory and
   opening the native Explorer context menu both work with the shell's desktop
   view from the mod's own process, without injecting into the running shell.
-- **Screen-sampled glass**: the backdrop and the name pills sample the screen
-  area behind the dock, which requires a desktop-level window.
+- **Screen-sampled panel**: the panel backdrop is sampled from the screen
+  above the dock, which requires a desktop-level window. Name pills use the
+  active panel tone instead of a second glass surface.
 
 ## Compatibility and limitations
 
@@ -166,12 +254,14 @@ not a launcher that stays on top of other windows.
   the shell is only accessed through its published shell interfaces. (The
   windhawk.exe host cannot be used here: Windhawk is a 32-bit app, while this
   mod is x86-64.)
-- Primary monitor only; the dock is anchored to the bottom of the primary
-  monitor, above the taskbar.
+- Primary monitor only; the dock starts at the bottom of the primary monitor,
+  above the taskbar, and can be moved by its edges within that monitor.
 - The dock is a layered window placed below normal windows; full-screen apps
   and other windows cover it, which is expected.
 - In transparent mode, fully transparent pixels are click-through; the icons
-  themselves remain clickable.
+  themselves remain clickable. Edge moving requires a panel style. The position
+  reset menu also requires a panel style, except that the empty-state hint can
+  be right-clicked while the dock is empty.
 
 ## Troubleshooting
 
@@ -196,20 +286,6 @@ not a launcher that stays on top of other windows.
   deletes the mod's storage, including the list and the shortcut copies, when
   the mod is removed.
 
-## 中文说明
-
-本模组把快捷方式、文件和文件夹变成一个居中的 macOS 风格 Dock，默认使用全透明背景；关闭“透明背景”后会显示液态玻璃面板。
-
-- 从桌面、资源管理器或 `shell:Desktop` 窗口把项目拖到 Dock 上即可添加，落点决定插入位置，重复项目会被忽略。快捷方式（`.lnk` / `.url`）会复制到 Dock 自己的目录，删除桌面上的原快捷方式不影响 Dock；文件和文件夹按路径引用。
-- 按住图标在 Dock 内拖动可实时排序；拖到 Dock 外、在桌面上松手会把项目放回桌面，图标落在松手位置。项目原本就在桌面上时移动原图标；否则在桌面新建指向它的快捷方式，原文件或文件夹保持原位；对于复制进来的快捷方式会优先使用原快捷方式，不会产生多余的 `(2)` 副本；在其他窗口上松手则项目留在 Dock。回收站等虚拟项目仅从 Dock 移除；Dock 副本在放回桌面后删除。移除最后一项后显示空状态提示。
-- Dock 是独立列表，不同步桌面；列表保存在 Windhawk 模组存储的 `items.tsv` 中，并按当前用户 SID 分目录，顺序即显示顺序，重启 Explorer 后保持；快捷方式副本位于同一目录的 `Items` 子目录。卸载模组时 Windhawk 会删除整个存储目录。
-- 图标支持悬停放大、相邻图标让位和名称标签；左键打开，右键打开资源管理器原生菜单。
-- “隐藏原始桌面图标”默认关闭；开启后仅在内存中隐藏桌面列表视图，卸载模组后自动恢复。
-- 解析失败的项目会跳过显示但保留在存储中，每 30 秒只重试此前失败的项目；回收站等虚拟项目的图标会定期刷新。
-- 与 Quick Launch Dock 等启动器 Dock 的区别：本模组位于桌面层级（所有普通窗口之下）、不抢焦点，支持把项目拖回桌面并复用原快捷方式，还提供隐藏系统桌面图标和屏幕采样玻璃背景；这些行为通过 Shell 桌面视图完成，模组本身运行在独立的 explorer.exe tool-mod 进程中，与正在运行的 Shell 进程分离（Windhawk 主程序为 32 位，无法承载本 x86-64 模组）。
-- 仅支持 x86-64 的 Windows 10/11，且只在主显示器底部显示。
-
-各设置项的说明见上方英文表格。
 */
 // ==/WindhawkModReadme==
 
@@ -217,69 +293,62 @@ not a launcher that stays on top of other windows.
 /*
 - IconSize: 48
   $name: Icon size
-  $name:zh-CN: 图标大小
   $description: Base icon size in pixels (at 100% DPI scaling)
-  $description:zh-CN: 图标的基础像素大小（100% DPI 缩放时）
 - Spacing: 10
   $name: Icon spacing
-  $name:zh-CN: 图标间距
   $description: Gap between icons at rest, in pixels
-  $description:zh-CN: 静止状态下图标之间的像素间距
 - MaxScale: 175
   $name: Maximum scale (%)
-  $name:zh-CN: 最大放大比例（%）
   $description: How large the hovered icon grows (175 = 1.75x)
-  $description:zh-CN: 鼠标悬停时图标的最大放大倍数（175 = 1.75 倍）
 - EffectRadius: 160
   $name: Effect radius
-  $name:zh-CN: 效果半径
   $description: Distance from the cursor where magnification fades out, in pixels
-  $description:zh-CN: 放大效果从光标向外衰减的距离（像素）
 - SpacingFactor: 60
   $name: Neighbor spread (%)
-  $name:zh-CN: 相邻扩散（%）
   $description: How much neighboring icons move aside while magnifying
-  $description:zh-CN: 放大时相邻图标向外让位的程度
 - Smoothing: 16
   $name: Smoothing speed
-  $name:zh-CN: 平滑速度
   $description: Higher is snappier, lower is softer
-  $description:zh-CN: 数值越大越跟手，越小越柔和
-- BottomOffset: 10
-  $name: Bottom offset
-  $name:zh-CN: 底部偏移
-  $description: Gap between the dock and the taskbar, in pixels
-  $description:zh-CN: Dock 与任务栏之间的间距（像素）
-- TransparentBackground: true
-  $name: Transparent background
-  $name:zh-CN: 透明背景
-  $description: Show only the icons and skip the glass panel
-  $description:zh-CN: 只显示图标，不使用玻璃背景
-- GlassOpacity: 24
-  $name: Glass opacity (%)
-  $name:zh-CN: 玻璃不透明度（%）
-  $description: Glass mode only (Transparent background off) - strength of the milky tint
-  $description:zh-CN: 仅玻璃模式（关闭透明背景）时生效：乳白色调的强度
-- GlassBlur: 20
-  $name: Glass blur
-  $name:zh-CN: 玻璃模糊
-  $description: Glass mode only (Transparent background off) - backdrop blur strength
-  $description:zh-CN: 仅玻璃模式（关闭透明背景）时生效：背景模糊强度
+- CornerRadius: 72
+  $name: Corner radius (%)
+  $description: Roundness of the dock panel corners; 0 draws square corners and 100 draws fully rounded ones
+- DefaultBottomDistance: 80
+  $name: Default bottom distance
+  $description: Distance from the panel's bottom edge to the taskbar for a fresh install and for the reset actions, in pixels at 100% DPI. A drag overrides it until the next reset.
+- PositionAction: keep
+  $name: Dock position action
+  $description: Applies once when the selection changes. Reset moves the dock to the default position; the same three actions are also available by right-clicking an empty part of the dock. Select "Keep current position" and save, then select an action again, to repeat it.
+  $options:
+  - keep: Keep current position
+  - reset: Reset position (centered, default distance)
+  - center: Center horizontally
+  - reset-bottom: Reset distance from the taskbar
+- BackgroundStyle: transparent
+  $name: Background style
+  $description: Panel material used when the dock has a background. "Transparent" draws only the icons.
+  $options:
+  - transparent: Transparent (icons only)
+  - clear: Clear shell
+  - frosted: Frosted glass
+  - acrylic: Acrylic
+  - mica: Mica
+  - liquid: Liquid Glass
+- Tone: auto
+  $name: Panel tone
+  $description: Light, dark, or automatic based on the wallpaper behind the dock. Ignored by the transparent style.
+  $options:
+  - auto: Auto (follow wallpaper)
+  - light: Light
+  - dark: Dark
 - ShowLabels: true
   $name: Show labels
-  $name:zh-CN: 显示名称
-  $description: Show the name of the hovered item in a floating glass pill
-  $description:zh-CN: 悬停时在浮动玻璃标签中显示名称
+  $description: Show the name of the hovered item in a floating name pill
 - HideDesktopIcons: false
   $name: Hide original desktop icons
-  $name:zh-CN: 隐藏原始桌面图标
   $description: Hide the original desktop icons while the dock is active by hiding the desktop list view in memory; restored on unload. Off by default so the desktop stays available as a drag source
-  $description:zh-CN: 启用 Dock 时在内存中隐藏桌面列表视图，不修改系统设置；卸载时恢复。默认关闭，便于随时从桌面拖入项目
 - BackdropRefreshSeconds: 20
   $name: Backdrop refresh interval (s)
-  $name:zh-CN: 背景刷新间隔（秒）
-  $description: How often the blurred backdrop used by the glass panel and the label pill is re-sampled; 0 disables refresh
-  $description:zh-CN: 多久重新采样一次玻璃面板和名称标签所使用的模糊背景；0 表示不自动刷新
+  $description: How often the blurred backdrop used by the panel is re-sampled; 0 disables refresh
 */
 // ==/WindhawkModSettings==
 
@@ -334,7 +403,24 @@ constexpr int kHoverPollMs = 50;
 constexpr int kIconRequestPx = 256;
 constexpr int kMaintenanceSeconds = 30;
 constexpr int kDragThresholdPx = 5;
+constexpr int kDefaultBottomDistance = 80;
+constexpr int kMissingLocalValue = -1000000;
 constexpr double kPi = 3.14159265358979323846;
+
+enum class PanelStyle {
+    Transparent,
+    Clear,
+    Frosted,
+    Acrylic,
+    Mica,
+    Liquid,
+};
+
+enum class PanelTone {
+    Auto,
+    Light,
+    Dark,
+};
 
 struct Settings {
     int iconSize = 48;
@@ -343,10 +429,11 @@ struct Settings {
     int effectRadius = 160;
     int spacingFactor = 60;
     int smoothing = 16;
-    int bottomOffset = 10;
-    int transparentBackground = 1;
-    int glassOpacity = 24;
-    int glassBlur = 20;
+    int cornerRadiusPercent = 72;
+    int defaultBottomDistance = kDefaultBottomDistance;
+    int positionAction = 0;
+    PanelStyle backgroundStyle = PanelStyle::Transparent;
+    PanelTone tone = PanelTone::Auto;
     int showLabels = 1;
     int hideDesktopIcons = 0;
     int backdropRefreshSeconds = 20;
@@ -377,7 +464,10 @@ std::unique_ptr<Bitmap> g_glowTexture;
 std::unique_ptr<Bitmap> g_shadowTexture;
 std::unique_ptr<Bitmap> g_noiseTexture;
 std::unique_ptr<Bitmap> g_backdrop;
+std::unique_ptr<Bitmap> g_backdropRefracted;
 bool g_backdropValid = false;
+double g_backdropLuminance = 0.5;
+bool g_autoLightPanel = true;
 std::chrono::steady_clock::time_point g_backdropCaptureTime;
 
 struct LayoutMetrics {
@@ -428,6 +518,7 @@ std::map<std::wstring, std::shared_ptr<Bitmap>> g_iconCache;
 // Windhawk's storage is shared between users, so the list and the shortcut
 // copies live in a per-user subfolder.
 std::wstring g_userStorageRoot;
+std::wstring g_userValueSuffix;
 std::wstring g_itemsFolderPath;
 std::wstring g_itemsFilePath;
 // Original shortcut path of each dock copy, keyed by the lowercased copy path.
@@ -444,7 +535,30 @@ int g_windowX = 0;
 int g_windowY = 0;
 int g_windowWidth = 0;
 int g_windowHeight = 0;
+int g_dockOffsetX = 0;
+// Distance from the top of the taskbar to the panel's bottom edge, in DIPs.
+// -1 means "not stored yet": the default position is used.
+int g_dockBottomDistance = -1;
 RECT g_lastWorkArea{};
+
+enum class DockEdge {
+    None,
+    Top,
+    Bottom,
+    Left,
+    Right,
+};
+
+enum class DockMoveAxis {
+    None,
+    Horizontal,
+    Vertical,
+};
+
+DockMoveAxis g_dockMoveAxis = DockMoveAxis::None;
+POINT g_dockMoveStartCursor{};
+int g_dockMoveStartWindowX = 0;
+int g_dockMoveStartWindowY = 0;
 
 double g_panelWidth = 0.0;
 double g_intensity = 0.0;
@@ -549,6 +663,14 @@ double Falloff(double distance) {
     return (std::cos(t * kPi) + 1.0) * 0.5;
 }
 
+// The setting is a percentage of the half height, so 100 percent produces a
+// fully rounded (pill) end and 0 produces square corners.
+float PanelCornerRadius(double panelHeight) {
+    double percent =
+        ClampDouble(g_settings.cornerRadiusPercent / 100.0, 0.0, 1.0);
+    return (float)(panelHeight * 0.5 * percent);
+}
+
 void AddRoundedRect(GraphicsPath& path, const RectF& rect, float radius) {
     if (radius < 0.5f) {
         path.AddRectangle(rect);
@@ -569,6 +691,219 @@ void AddRoundedRect(GraphicsPath& path, const RectF& rect, float radius) {
     path.CloseFigure();
 }
 
+PanelStyle ParsePanelStyle(const std::wstring& value) {
+    if (value == L"clear") return PanelStyle::Clear;
+    if (value == L"frosted") return PanelStyle::Frosted;
+    if (value == L"acrylic") return PanelStyle::Acrylic;
+    if (value == L"mica") return PanelStyle::Mica;
+    if (value == L"liquid") return PanelStyle::Liquid;
+    return PanelStyle::Transparent;
+}
+
+PanelTone ParsePanelTone(const std::wstring& value) {
+    if (value == L"light") return PanelTone::Light;
+    if (value == L"dark") return PanelTone::Dark;
+    return PanelTone::Auto;
+}
+
+int StyleBlurPx(PanelStyle style) {
+    switch (style) {
+        case PanelStyle::Frosted:
+            return 16;
+        case PanelStyle::Acrylic:
+            return 22;
+        case PanelStyle::Mica:
+            return 30;
+        case PanelStyle::Liquid:
+            return 18;
+        default:
+            return 0;
+    }
+}
+
+double StyleSaturation(PanelStyle style) {
+    switch (style) {
+        case PanelStyle::Frosted:
+            return 1.15;
+        case PanelStyle::Acrylic:
+            return 1.80;
+        case PanelStyle::Mica:
+            return 0.88;
+        case PanelStyle::Liquid:
+            return 1.40;
+        default:
+            return 1.0;
+    }
+}
+
+double StyleContrast(PanelStyle style) {
+    switch (style) {
+        case PanelStyle::Acrylic:
+            return 1.04;
+        case PanelStyle::Mica:
+            return 0.98;
+        case PanelStyle::Liquid:
+            return 1.01;
+        default:
+            return 1.0;
+    }
+}
+
+bool IsTransparentStyle() {
+    return g_settings.backgroundStyle == PanelStyle::Transparent;
+}
+
+bool ResolveLightPanel() {
+    if (g_settings.backgroundStyle == PanelStyle::Transparent) return true;
+    if (g_settings.tone == PanelTone::Light) return true;
+    if (g_settings.tone == PanelTone::Dark) return false;
+    return g_autoLightPanel;
+}
+
+struct PanelPalette {
+    bool light = true;
+    BYTE tintR = 247;
+    BYTE tintG = 250;
+    BYTE tintB = 255;
+    BYTE tintAlpha = 0;
+    BYTE shadeAlpha = 0;
+    BYTE bottomShadeAlpha = 0;
+    BYTE glossAlpha = 0;
+    float glossHeight = 0.0f;
+    BYTE bottomLightAlpha = 0;
+    float bottomLightHeight = 0.0f;
+    BYTE rimDarkAlpha = 0;
+    BYTE rimWhiteTop = 0;
+    BYTE rimWhiteBottom = 0;
+    float rimWidth = 1.0f;
+    BYTE iridescentAlpha = 0;
+    BYTE noiseAlpha = 0;
+    BYTE shadowAlpha = 0;
+    float shadowSpread = 1.0f;
+    BYTE specularAlpha = 0;
+    BYTE glossLineAlpha = 0;
+    bool drawBackdrop = true;
+    bool useRefraction = false;
+};
+
+PanelPalette BuildPanelPalette() {
+    PanelPalette p;
+    bool light = ResolveLightPanel();
+    p.light = light;
+
+    switch (g_settings.backgroundStyle) {
+        case PanelStyle::Clear:
+            p.drawBackdrop = false;
+            p.tintR = light ? 255 : 8;
+            p.tintG = light ? 255 : 10;
+            p.tintB = light ? 255 : 14;
+            p.tintAlpha = light ? 20 : 78;
+            p.glossAlpha = light ? 26 : 20;
+            p.glossHeight = 0.24f;
+            p.bottomLightAlpha = 8;
+            p.bottomLightHeight = 0.14f;
+            p.rimDarkAlpha = 18;
+            p.rimWhiteTop = light ? 88 : 58;
+            p.rimWhiteBottom = 32;
+            p.rimWidth = 1.0f;
+            p.shadowAlpha = 6;
+            p.shadowSpread = 0.9f;
+            p.glossLineAlpha = light ? 72 : 58;
+            break;
+        case PanelStyle::Frosted:
+            p.tintR = light ? 250 : 18;
+            p.tintG = light ? 252 : 21;
+            p.tintB = light ? 255 : 28;
+            p.tintAlpha = light ? 34 : 66;
+            p.shadeAlpha = light ? 10 : 12;
+            p.bottomShadeAlpha = 24;
+            p.glossAlpha = 48;
+            p.glossHeight = 0.30f;
+            p.bottomLightAlpha = 16;
+            p.bottomLightHeight = 0.16f;
+            p.rimDarkAlpha = 24;
+            p.rimWhiteTop = 140;
+            p.rimWhiteBottom = 40;
+            p.rimWidth = 1.2f;
+            p.noiseAlpha = 7;
+            p.shadowAlpha = 7;
+            p.shadowSpread = 1.05f;
+            p.glossLineAlpha = 110;
+            break;
+        case PanelStyle::Acrylic:
+            p.tintR = light ? 245 : 24;
+            p.tintG = light ? 248 : 28;
+            p.tintB = light ? 252 : 38;
+            p.tintAlpha = light ? 56 : 90;
+            p.shadeAlpha = light ? 22 : 24;
+            p.bottomShadeAlpha = 32;
+            p.glossAlpha = 32;
+            p.glossHeight = 0.24f;
+            p.bottomLightAlpha = 12;
+            p.bottomLightHeight = 0.14f;
+            p.rimDarkAlpha = 26;
+            p.rimWhiteTop = 90;
+            p.rimWhiteBottom = 28;
+            p.rimWidth = 1.1f;
+            p.noiseAlpha = 12;
+            p.shadowAlpha = 8;
+            p.shadowSpread = 1.15f;
+            p.glossLineAlpha = 75;
+            break;
+        case PanelStyle::Mica:
+            p.tintR = light ? 236 : 28;
+            p.tintG = light ? 239 : 31;
+            p.tintB = light ? 244 : 38;
+            p.tintAlpha = light ? 184 : 188;
+            p.rimDarkAlpha = 16;
+            p.rimWhiteTop = 45;
+            p.rimWhiteBottom = 20;
+            p.rimWidth = 1.0f;
+            p.noiseAlpha = 4;
+            p.shadowAlpha = 5;
+            p.shadowSpread = 1.0f;
+            p.glossLineAlpha = 30;
+            break;
+        case PanelStyle::Liquid:
+            p.tintR = light ? 247 : 14;
+            p.tintG = light ? 250 : 17;
+            p.tintB = light ? 255 : 24;
+            p.tintAlpha = light ? 58 : 72;
+            p.shadeAlpha = light ? 12 : 14;
+            p.bottomShadeAlpha = 38;
+            p.glossAlpha = 68;
+            p.glossHeight = 0.32f;
+            p.bottomLightAlpha = 26;
+            p.bottomLightHeight = 0.18f;
+            p.rimDarkAlpha = 30;
+            p.rimWhiteTop = 180;
+            p.rimWhiteBottom = 55;
+            p.rimWidth = 1.4f;
+            p.iridescentAlpha = light ? 40 : 30;
+            p.noiseAlpha = 5;
+            p.shadowAlpha = 9;
+            p.shadowSpread = 1.25f;
+            p.specularAlpha = light ? 110 : 90;
+            p.glossLineAlpha = 150;
+            p.useRefraction = true;
+            break;
+        default:
+            p.drawBackdrop = false;
+            break;
+    }
+    return p;
+}
+
+Color TintColor(const PanelPalette& palette, int alpha) {
+    return Color((BYTE)ClampInt(alpha, 0, 255), palette.tintR, palette.tintG,
+                 palette.tintB);
+}
+
+Color PanelTextColor(const PanelPalette& palette, int alpha) {
+    return palette.light ? Color((BYTE)ClampInt(alpha, 0, 255), 28, 30, 36)
+                         : Color((BYTE)ClampInt(alpha, 0, 255), 248, 250, 255);
+}
+
 void LoadSettings() {
     Settings s;
     s.iconSize = ClampInt(Wh_GetIntSetting(L"IconSize"), 24, 128);
@@ -577,10 +912,47 @@ void LoadSettings() {
     s.effectRadius = ClampInt(Wh_GetIntSetting(L"EffectRadius"), 20, 900);
     s.spacingFactor = ClampInt(Wh_GetIntSetting(L"SpacingFactor"), 0, 100);
     s.smoothing = ClampInt(Wh_GetIntSetting(L"Smoothing"), 1, 60);
-    s.bottomOffset = ClampInt(Wh_GetIntSetting(L"BottomOffset"), 0, 300);
-    s.transparentBackground = Wh_GetIntSetting(L"TransparentBackground") ? 1 : 0;
-    s.glassOpacity = ClampInt(Wh_GetIntSetting(L"GlassOpacity"), 0, 100);
-    s.glassBlur = ClampInt(Wh_GetIntSetting(L"GlassBlur"), 0, 80);
+    s.cornerRadiusPercent =
+        ClampInt(Wh_GetIntSetting(L"CornerRadius"), 0, 100);
+    int configuredBottomDistance =
+        Wh_GetIntSetting(L"DefaultBottomDistance");
+    s.defaultBottomDistance = configuredBottomDistance > 0
+                                  ? ClampInt(configuredBottomDistance, 1, 20000)
+                                  : kDefaultBottomDistance;
+
+    PCWSTR actionValue = Wh_GetStringSetting(L"PositionAction");
+    std::wstring actionText = actionValue ? actionValue : L"";
+    if (actionValue) Wh_FreeStringSetting(actionValue);
+    if (actionText == L"reset") {
+        s.positionAction = 1;
+    } else if (actionText == L"center") {
+        s.positionAction = 2;
+    } else if (actionText == L"reset-bottom") {
+        s.positionAction = 3;
+    } else {
+        s.positionAction = 0;
+    }
+
+    PCWSTR styleValue = Wh_GetStringSetting(L"BackgroundStyle");
+    std::wstring styleText = styleValue ? styleValue : L"";
+    if (styleValue) Wh_FreeStringSetting(styleValue);
+    if (!styleText.empty()) {
+        s.backgroundStyle = ParsePanelStyle(styleText);
+    } else {
+        // Upgrades from 1.x have the old keys but not BackgroundStyle yet.
+        int legacyTransparent = Wh_GetIntSetting(L"TransparentBackground");
+        int legacyOpacity = Wh_GetIntSetting(L"GlassOpacity");
+        int legacyBlur = Wh_GetIntSetting(L"GlassBlur");
+        s.backgroundStyle = (!legacyTransparent &&
+                             (legacyOpacity > 0 || legacyBlur > 0))
+                                ? PanelStyle::Liquid
+                                : PanelStyle::Transparent;
+    }
+
+    PCWSTR toneValue = Wh_GetStringSetting(L"Tone");
+    if (toneValue && *toneValue) s.tone = ParsePanelTone(toneValue);
+    if (toneValue) Wh_FreeStringSetting(toneValue);
+
     s.showLabels = Wh_GetIntSetting(L"ShowLabels") ? 1 : 0;
     s.hideDesktopIcons = Wh_GetIntSetting(L"HideDesktopIcons") ? 1 : 0;
     s.backdropRefreshSeconds =
@@ -676,6 +1048,10 @@ std::wstring GetCurrentUserSidString() {
 void EnsureStoragePaths() {
     if (!g_itemsFolderPath.empty()) return;
 
+    std::wstring sid = GetCurrentUserSidString();
+    if (sid.empty()) sid = L"default";
+    g_userValueSuffix = L"_" + sid;
+
     wchar_t storage[MAX_PATH * 4] = L"";
     size_t length = Wh_GetModStoragePath(storage, ARRAYSIZE(storage));
     if (length == 0 || length >= ARRAYSIZE(storage)) {
@@ -683,8 +1059,6 @@ void EnsureStoragePaths() {
         return;
     }
 
-    std::wstring sid = GetCurrentUserSidString();
-    if (sid.empty()) sid = L"default";
     g_userStorageRoot = std::wstring(storage) + L"\\" + sid;
     int result =
         SHCreateDirectoryExW(nullptr, g_userStorageRoot.c_str(), nullptr);
@@ -696,6 +1070,10 @@ void EnsureStoragePaths() {
     g_itemsFolderPath = g_userStorageRoot + L"\\Items";
     g_itemsFilePath = g_userStorageRoot + L"\\" + kItemsFileName;
     Wh_Log(L"Mod storage folder: %ls", g_userStorageRoot.c_str());
+}
+
+std::wstring UserValueName(PCWSTR name) {
+    return std::wstring(name) + g_userValueSuffix;
 }
 
 bool ReadFileBytes(const std::wstring& path, std::vector<BYTE>& data) {
@@ -1197,6 +1575,159 @@ void BoxBlurBitmap(Bitmap& bitmap, int radius) {
     bitmap.UnlockBits(&data);
 }
 
+double ComputeBitmapLuminance(Bitmap& bitmap) {
+    int width = (int)bitmap.GetWidth();
+    int height = (int)bitmap.GetHeight();
+    if (width < 1 || height < 1) return 0.5;
+
+    BitmapData data{};
+    Rect rect(0, 0, width, height);
+    if (bitmap.LockBits(&rect, ImageLockModeRead, PixelFormat32bppPARGB,
+                        &data) != Ok) {
+        return 0.5;
+    }
+
+    int stepX = std::max(1, width / 32);
+    int stepY = std::max(1, height / 16);
+    double sum = 0.0;
+    int count = 0;
+    for (int y = 0; y < height; y += stepY) {
+        BYTE* row = (BYTE*)data.Scan0 + (size_t)y * data.Stride;
+        for (int x = 0; x < width; x += stepX) {
+            BYTE* p = row + x * 4;
+            sum += 0.0722 * p[0] + 0.7152 * p[1] + 0.2126 * p[2];
+            ++count;
+        }
+    }
+    bitmap.UnlockBits(&data);
+    return count ? ClampDouble(sum / (count * 255.0), 0.0, 1.0) : 0.5;
+}
+
+void AdjustBackdropBitmap(Bitmap& bitmap, double saturation, double contrast) {
+    if (std::fabs(saturation - 1.0) < 0.001 &&
+        std::fabs(contrast - 1.0) < 0.001) {
+        return;
+    }
+
+    int width = (int)bitmap.GetWidth();
+    int height = (int)bitmap.GetHeight();
+    BitmapData data{};
+    Rect rect(0, 0, width, height);
+    if (bitmap.LockBits(&rect, ImageLockModeRead | ImageLockModeWrite,
+                        PixelFormat32bppPARGB, &data) != Ok) {
+        return;
+    }
+
+    for (int y = 0; y < height; ++y) {
+        BYTE* row = (BYTE*)data.Scan0 + (size_t)y * data.Stride;
+        for (int x = 0; x < width; ++x) {
+            BYTE* p = row + x * 4;
+            double b = p[0];
+            double g = p[1];
+            double r = p[2];
+            double luma = 0.299 * r + 0.587 * g + 0.114 * b;
+            r = luma + (r - luma) * saturation;
+            g = luma + (g - luma) * saturation;
+            b = luma + (b - luma) * saturation;
+            r = (r - 128.0) * contrast + 128.0;
+            g = (g - 128.0) * contrast + 128.0;
+            b = (b - 128.0) * contrast + 128.0;
+            p[2] = (BYTE)ClampInt((int)lround(r), 0, 255);
+            p[1] = (BYTE)ClampInt((int)lround(g), 0, 255);
+            p[0] = (BYTE)ClampInt((int)lround(b), 0, 255);
+        }
+    }
+    bitmap.UnlockBits(&data);
+}
+
+// Samples the blurred backdrop inward near the edges to fake a lens bend.
+// The small 1/4-size bitmap makes the per-pixel pass cheap.
+std::unique_ptr<Bitmap> BuildRefractedBackdrop(Bitmap& source,
+                                               int strengthPercent) {
+    if (strengthPercent <= 0) return nullptr;
+    int width = (int)source.GetWidth();
+    int height = (int)source.GetHeight();
+    if (width < 4 || height < 4) return nullptr;
+
+    auto dest = std::make_unique<Bitmap>(width, height, PixelFormat32bppPARGB);
+    if (dest->GetLastStatus() != Ok) return nullptr;
+
+    BitmapData srcData{};
+    BitmapData dstData{};
+    Rect rect(0, 0, width, height);
+    if (source.LockBits(&rect, ImageLockModeRead, PixelFormat32bppPARGB,
+                        &srcData) != Ok) {
+        return nullptr;
+    }
+    if (dest->LockBits(&rect, ImageLockModeWrite, PixelFormat32bppPARGB,
+                       &dstData) != Ok) {
+        source.UnlockBits(&srcData);
+        return nullptr;
+    }
+
+    const double band = std::max(2.0, std::min(width, height) * 0.14);
+    const double maxOffset = strengthPercent / 100.0 * 2.2;
+    auto sample = [&](int x, int y, int channel) -> BYTE {
+        x = ClampInt(x, 0, width - 1);
+        y = ClampInt(y, 0, height - 1);
+        BYTE* p = (BYTE*)srcData.Scan0 + (size_t)y * srcData.Stride + x * 4;
+        return p[channel];
+    };
+
+    for (int y = 0; y < height; ++y) {
+        BYTE* outRow = (BYTE*)dstData.Scan0 + (size_t)y * dstData.Stride;
+        for (int x = 0; x < width; ++x) {
+            BYTE* out = outRow + x * 4;
+            int dLeft = x;
+            int dRight = width - 1 - x;
+            int dTop = y;
+            int dBottom = height - 1 - y;
+            int d = std::min(std::min(dLeft, dRight), std::min(dTop, dBottom));
+            out[3] = 255;
+            if (d >= band) {
+                out[0] = sample(x, y, 0);
+                out[1] = sample(x, y, 1);
+                out[2] = sample(x, y, 2);
+                continue;
+            }
+
+            double t = 1.0 - (double)d / band;
+            double offset = maxOffset * t * t;
+            int sx = x;
+            int sy = y;
+            if (std::min(dLeft, dRight) <= std::min(dTop, dBottom)) {
+                sx = x + (dLeft <= dRight ? (int)lround(offset)
+                                           : -(int)lround(offset));
+            } else {
+                sy = y + (dTop <= dBottom ? (int)lround(offset)
+                                           : -(int)lround(offset));
+            }
+            double redOffset = offset * 1.3;
+            double blueOffset = offset * 0.7;
+            int rx = sx;
+            int ry = sy;
+            int bx = sx;
+            int by = sy;
+            if (std::min(dLeft, dRight) <= std::min(dTop, dBottom)) {
+                int dir = dLeft <= dRight ? 1 : -1;
+                rx = x + dir * (int)lround(redOffset);
+                bx = x + dir * (int)lround(blueOffset);
+            } else {
+                int dir = dTop <= dBottom ? 1 : -1;
+                ry = y + dir * (int)lround(redOffset);
+                by = y + dir * (int)lround(blueOffset);
+            }
+            out[2] = sample(rx, ry, 2);
+            out[1] = sample(sx, sy, 1);
+            out[0] = sample(bx, by, 0);
+        }
+    }
+
+    source.UnlockBits(&srcData);
+    dest->UnlockBits(&dstData);
+    return dest;
+}
+
 void ComputeLayout() {
     int count = (int)g_items.size();
     g_labelFont.reset();
@@ -1284,6 +1815,62 @@ RECT PanelClientRect() {
     return rect;
 }
 
+// The rest geometry is the dock at its un-hovered size. Edge dragging and edge
+// hover use it, so the hit zones stay put while the panel grows and shrinks
+// with the pointer. Without it, a zone based on the animated panel would move
+// away from the cursor as soon as magnification starts or stops.
+RECT RestPanelClientRect() {
+    RECT rect{};
+    int width = g_layout.panelBaseWidth;
+    rect.left = (g_layout.windowWidth - width) / 2;
+    rect.right = rect.left + width;
+    rect.top = g_layout.panelBottom - g_layout.panelHeightRest;
+    rect.bottom = g_layout.panelBottom;
+    return rect;
+}
+
+DockEdge PanelEdgeAtClientPoint(POINT point) {
+    if (IsTransparentStyle()) return DockEdge::None;
+    // A magnified panel belongs to the icons; edges exist only at rest.
+    if (g_intensity > 0.01) return DockEdge::None;
+    RECT panel = RestPanelClientRect();
+    if (point.x < panel.left || point.x > panel.right || point.y < panel.top ||
+        point.y > panel.bottom) {
+        return DockEdge::None;
+    }
+    int band = std::max(4, (int)lround(6 * g_dpiScale));
+    int bestDistance = band + 1;
+    DockEdge best = DockEdge::None;
+    int distance = point.x - panel.left;
+    if (distance <= band && distance < bestDistance) {
+        best = DockEdge::Left;
+        bestDistance = distance;
+    }
+    distance = panel.right - point.x;
+    if (distance <= band && distance < bestDistance) {
+        best = DockEdge::Right;
+        bestDistance = distance;
+    }
+    distance = point.y - panel.top;
+    if (distance <= band && distance < bestDistance) {
+        best = DockEdge::Top;
+        bestDistance = distance;
+    }
+    distance = panel.bottom - point.y;
+    if (distance <= band && distance < bestDistance) {
+        best = DockEdge::Bottom;
+        bestDistance = distance;
+    }
+    return best;
+}
+
+DockEdge PanelEdgeAtScreenPoint(POINT screenPoint) {
+    if (!g_hwnd) return DockEdge::None;
+    POINT point = screenPoint;
+    ScreenToClient(g_hwnd, &point);
+    return PanelEdgeAtClientPoint(point);
+}
+
 RectF IconRectFor(const DockItem& item) {
     double size = g_layout.iconPx * item.scale;
     double lift = 0.0;
@@ -1314,20 +1901,57 @@ double CurrentPanelTop() {
     return g_layout.panelBottom - CurrentPanelHeight();
 }
 
-void PositionWindow() {
+int BaseWindowX() {
+    MONITORINFO monitorInfo{};
+    monitorInfo.cbSize = sizeof(monitorInfo);
+    HMONITOR monitor = MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
+    GetMonitorInfoW(monitor, &monitorInfo);
+    int monitorWidth = monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left;
+    return monitorInfo.rcMonitor.left + (monitorWidth - g_windowWidth) / 2;
+}
+
+// The bottom distance is measured from the bottom edge of the panel to the
+// top of the taskbar (the work area bottom), so 0 means the panel touches the
+// taskbar. A fresh install and the reset actions use the configured default.
+int EffectiveBottomDistance() {
+    if (g_dockBottomDistance >= 0) return g_dockBottomDistance;
+    return g_settings.defaultBottomDistance;
+}
+
+// The window may overhang the monitor by its transparent glow margin, and it
+// may overhang the work area bottom by that margin so the panel itself can
+// touch the taskbar and the bottom distance can reach 0.
+void ClampWindowOrigin(int& x, int& y) {
     MONITORINFO monitorInfo{};
     monitorInfo.cbSize = sizeof(monitorInfo);
     HMONITOR monitor = MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
     GetMonitorInfoW(monitor, &monitorInfo);
 
+    int minX = monitorInfo.rcMonitor.left - g_layout.glowMargin;
+    int maxX = monitorInfo.rcMonitor.right - g_windowWidth + g_layout.glowMargin;
+    if (maxX < minX) maxX = minX;
+    int minY = monitorInfo.rcMonitor.top;
+    int maxY = monitorInfo.rcWork.bottom - g_layout.panelBottom;
+    if (maxY < minY) maxY = minY;
+    x = ClampInt(x, minX, maxX);
+    y = ClampInt(y, minY, maxY);
+}
+
+void PositionWindow() {
     g_windowWidth = g_layout.windowWidth;
     g_windowHeight = g_layout.windowHeight;
-    int monitorWidth = monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left;
-    g_windowX = monitorInfo.rcMonitor.left + (monitorWidth - g_windowWidth) / 2;
-    int bottom = monitorInfo.rcWork.bottom -
-                 (int)lround(g_settings.bottomOffset * g_dpiScale);
-    g_windowY = bottom - g_windowHeight;
-    if (g_windowY < monitorInfo.rcMonitor.top) g_windowY = monitorInfo.rcMonitor.top;
+    MONITORINFO monitorInfo{};
+    monitorInfo.cbSize = sizeof(monitorInfo);
+    HMONITOR monitor = MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
+    GetMonitorInfoW(monitor, &monitorInfo);
+
+    int x = BaseWindowX() + (int)lround(g_dockOffsetX * g_dpiScale);
+    int y = monitorInfo.rcWork.bottom -
+            (int)lround(EffectiveBottomDistance() * g_dpiScale) -
+            g_layout.panelBottom;
+    ClampWindowOrigin(x, y);
+    g_windowX = x;
+    g_windowY = y;
     g_lastWorkArea = monitorInfo.rcWork;
 
     SetWindowPos(g_hwnd, HWND_BOTTOM, g_windowX, g_windowY, g_windowWidth,
@@ -1340,6 +1964,16 @@ void CaptureBackdrop() {
         return;
     }
 
+    if (IsTransparentStyle()) {
+        g_backdrop.reset();
+        g_backdropRefracted.reset();
+        g_backdropValid = false;
+        return;
+    }
+
+    g_backdropValid = false;
+    g_backdropRefracted.reset();
+
     MONITORINFO monitorInfo{};
     monitorInfo.cbSize = sizeof(monitorInfo);
     HMONITOR monitor = MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
@@ -1349,6 +1983,7 @@ void CaptureBackdrop() {
                         (int)(monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left));
     int capH = g_layout.panelHeight;
     int capX = g_windowX + (g_windowWidth - capW) / 2;
+    // Sample above the window so the layered dock itself is not captured.
     int capY = g_windowY - capH;
     if (capX < monitorInfo.rcMonitor.left) capX = monitorInfo.rcMonitor.left;
     if (capX + capW > monitorInfo.rcMonitor.right)
@@ -1402,11 +2037,30 @@ void CaptureBackdrop() {
         graphics.SetPixelOffsetMode(PixelOffsetModeHighQuality);
         graphics.DrawImage(&source, Rect(0, 0, smallW, smallH), 0, 0, capW, capH,
                            UnitPixel);
-        int blurRadius = (int)lround(g_settings.glassBlur / 4.0);
+        int blurRadius = (int)lround(
+            StyleBlurPx(g_settings.backgroundStyle) * g_dpiScale / 4.0);
+        blurRadius = ClampInt(blurRadius, 0, 20);
         if (blurRadius > 0) {
             BoxBlurBitmap(*small, blurRadius);
             BoxBlurBitmap(*small, blurRadius);
         }
+        AdjustBackdropBitmap(*small, StyleSaturation(g_settings.backgroundStyle),
+                             StyleContrast(g_settings.backgroundStyle));
+
+        g_backdropLuminance = ComputeBitmapLuminance(*small);
+        if (g_settings.tone == PanelTone::Auto) {
+            if (g_backdropLuminance > 0.58) {
+                g_autoLightPanel = true;
+            } else if (g_backdropLuminance < 0.42) {
+                g_autoLightPanel = false;
+            }
+        }
+
+        g_backdropRefracted.reset();
+        if (g_settings.backgroundStyle == PanelStyle::Liquid) {
+            g_backdropRefracted = BuildRefractedBackdrop(*small, 35);
+        }
+
         g_backdrop = std::move(small);
         g_backdropValid = true;
         g_backdropCaptureTime = std::chrono::steady_clock::now();
@@ -1416,111 +2070,192 @@ void CaptureBackdrop() {
     DeleteObject(dib);
 }
 
-void DrawPanelShadow(Graphics& graphics, const RectF& panel, float radius) {
+void DrawPanelShadow(Graphics& graphics, const RectF& panel, float radius,
+                     const PanelPalette& palette) {
+    if (palette.shadowAlpha == 0) return;
+    double step = 1.6 * g_dpiScale * palette.shadowSpread;
     for (int i = 5; i >= 1; --i) {
-        double expand = i * 1.6 * g_dpiScale;
+        double expand = i * step;
         RectF shadowRect(panel.X - (REAL)expand, panel.Y - (REAL)(expand * 0.5) + 2.0f,
                          panel.Width + (REAL)(expand * 2.0f),
                          panel.Height + (REAL)(expand * 2.0f));
         GraphicsPath path;
-        AddRoundedRect(path, shadowRect, radius + (float)expand);
-        SolidBrush brush(Color(7, 0, 0, 0));
+        AddRoundedRect(path, shadowRect,
+                       radius >= 0.5f ? radius + (float)expand : 0.0f);
+        SolidBrush brush(Color(palette.shadowAlpha, 0, 0, 0));
         graphics.FillPath(&brush, &path);
     }
 }
 
 void DrawPanelRim(Graphics& graphics, GraphicsPath& panelPath, const RectF& panel,
-                  float radius) {
-    Pen darkPen(Color(40, 18, 24, 34), 1.0f);
-    graphics.DrawPath(&darkPen, &panelPath);
+                  float radius, const PanelPalette& palette) {
+    if (palette.rimDarkAlpha) {
+        Pen darkPen(Color(palette.rimDarkAlpha, 18, 24, 34), 1.0f);
+        graphics.DrawPath(&darkPen, &panelPath);
+    }
 
-    LinearGradientBrush rimBrush(
-        RectF(panel.X, panel.Y, panel.Width, panel.Height),
-        Color(235, 255, 255, 255), Color(55, 255, 255, 255),
-        LinearGradientModeVertical);
-    Pen rimPen(&rimBrush, (REAL)(1.4 * g_dpiScale));
-    graphics.DrawPath(&rimPen, &panelPath);
+    if (palette.rimWhiteTop || palette.rimWhiteBottom) {
+        LinearGradientBrush rimBrush(
+            RectF(panel.X, panel.Y, panel.Width, panel.Height),
+            Color(palette.rimWhiteTop, 255, 255, 255),
+            Color(palette.rimWhiteBottom, 255, 255, 255),
+            LinearGradientModeVertical);
+        Pen rimPen(&rimBrush, (REAL)(palette.rimWidth * g_dpiScale));
+        graphics.DrawPath(&rimPen, &panelPath);
+    }
 
-    RectF innerRect(panel.X + 1.5f, panel.Y + 1.5f, panel.Width - 3.0f,
-                    panel.Height - 3.0f);
-    GraphicsPath innerPath;
-    AddRoundedRect(innerPath, innerRect, std::max(1.0f, radius - 1.5f));
+    if (palette.iridescentAlpha) {
+        RectF innerRect(panel.X + 1.5f, panel.Y + 1.5f, panel.Width - 3.0f,
+                        panel.Height - 3.0f);
+        GraphicsPath innerPath;
+        AddRoundedRect(innerPath, innerRect,
+                       radius >= 2.0f ? radius - 1.5f : 0.0f);
 
-    Color iridColors[] = {Color(0, 255, 255, 255), Color(60, 120, 220, 255),
-                          Color(45, 255, 190, 255), Color(60, 255, 150, 210),
-                          Color(0, 255, 255, 255)};
-    REAL iridPositions[] = {0.0f, 0.25f, 0.5f, 0.75f, 1.0f};
-    LinearGradientBrush iridBrush(
-        RectF(panel.X, panel.Y, panel.Width, panel.Height), Color(0, 255, 255, 255),
-        Color(0, 255, 255, 255), LinearGradientModeHorizontal);
-    iridBrush.SetInterpolationColors(iridColors, iridPositions, 5);
-    Pen iridPen(&iridBrush, 1.0f);
-    graphics.DrawPath(&iridPen, &innerPath);
+        BYTE a = palette.iridescentAlpha;
+        Color iridColors[] = {
+            Color(0, 255, 255, 255), Color((BYTE)(a * 0.65), 120, 220, 255),
+            Color((BYTE)(a * 0.45), 255, 190, 255),
+            Color((BYTE)(a * 0.60), 150, 255, 220),
+            Color(0, 255, 255, 255)};
+        REAL iridPositions[] = {0.0f, 0.25f, 0.5f, 0.75f, 1.0f};
+        LinearGradientBrush iridBrush(
+            RectF(panel.X, panel.Y, panel.Width, panel.Height),
+            Color(0, 255, 255, 255), Color(0, 255, 255, 255),
+            LinearGradientModeHorizontal);
+        iridBrush.SetInterpolationColors(iridColors, iridPositions, 5);
+        Pen iridPen(&iridBrush, 1.0f);
+        graphics.DrawPath(&iridPen, &innerPath);
+    }
 
-    Color glossColors[] = {Color(0, 255, 255, 255), Color(180, 255, 255, 255),
-                           Color(0, 255, 255, 255)};
-    REAL glossPositions[] = {0.0f, 0.5f, 1.0f};
-    LinearGradientBrush glossBrush(
-        RectF(panel.X, panel.Y, panel.Width, 2.0f), Color(0, 255, 255, 255),
-        Color(0, 255, 255, 255), LinearGradientModeHorizontal);
-    glossBrush.SetInterpolationColors(glossColors, glossPositions, 3);
-    Pen glossPen(&glossBrush, (REAL)(1.3 * g_dpiScale));
-    GraphicsPath glossLine;
-    glossLine.AddLine(panel.X + radius * 0.8f, panel.Y + 1.0f,
-                      panel.X + panel.Width - radius * 0.8f, panel.Y + 1.0f);
-    graphics.DrawPath(&glossPen, &glossLine);
+    if (palette.glossLineAlpha) {
+        Color glossColors[] = {Color(0, 255, 255, 255),
+                               Color(palette.glossLineAlpha, 255, 255, 255),
+                               Color(0, 255, 255, 255)};
+        REAL glossPositions[] = {0.0f, 0.5f, 1.0f};
+        LinearGradientBrush glossBrush(
+            RectF(panel.X, panel.Y, panel.Width, 2.0f),
+            Color(0, 255, 255, 255), Color(0, 255, 255, 255),
+            LinearGradientModeHorizontal);
+        glossBrush.SetInterpolationColors(glossColors, glossPositions, 3);
+        Pen glossPen(&glossBrush, (REAL)(1.3 * g_dpiScale));
+        GraphicsPath glossLine;
+        glossLine.AddLine(panel.X + radius * 0.8f, panel.Y + 1.0f,
+                          panel.X + panel.Width - radius * 0.8f, panel.Y + 1.0f);
+        graphics.DrawPath(&glossPen, &glossLine);
+    }
 }
 
-void DrawGlassPanel(Graphics& graphics, const RectF& panel, float radius) {
+void DrawSpecularHighlight(Graphics& graphics, const RectF& panel,
+                           const PanelPalette& palette) {
+    if (palette.specularAlpha == 0) return;
+
+    double centerX;
+    if (g_mouseXValid && g_intensity > 0.01) {
+        centerX = ClampDouble(g_lastMouseX, panel.X + panel.Width * 0.12,
+                              panel.X + panel.Width * 0.88);
+    } else {
+        centerX = panel.X + panel.Width * 0.22;
+    }
+    double centerY = panel.Y + panel.Height * 0.14;
+    double radiusX = panel.Width * 0.42;
+    double radiusY = panel.Height * 0.62;
+    RectF ellipse((REAL)(centerX - radiusX), (REAL)(centerY - radiusY),
+                  (REAL)(radiusX * 2.0), (REAL)(radiusY * 2.0));
+
+    GraphicsPath path;
+    path.AddEllipse(ellipse);
+    PathGradientBrush brush(&path);
+    brush.SetCenterPoint(PointF((REAL)centerX, (REAL)centerY));
+    brush.SetCenterColor(Color(
+        (BYTE)ClampInt((int)lround(palette.specularAlpha *
+                                   (0.55 + 0.45 * g_intensity)),
+                       0, 255),
+        255, 255, 255));
+    Color surround(0, 255, 255, 255);
+    int count = 1;
+    brush.SetSurroundColors(&surround, &count);
+    graphics.FillPath(&brush, &path);
+}
+
+void DrawPanel(Graphics& graphics, const RectF& panel, float radius,
+               const PanelPalette& palette) {
+    if (IsTransparentStyle()) return;
+
     GraphicsPath panelPath;
     AddRoundedRect(panelPath, panel, radius);
 
-    DrawPanelShadow(graphics, panel, radius);
+    DrawPanelShadow(graphics, panel, radius, palette);
 
     GraphicsState state = graphics.Save();
     graphics.SetClip(&panelPath, CombineModeReplace);
 
-    if (g_backdropValid && g_backdrop) {
-        graphics.DrawImage(g_backdrop.get(), panel);
-        SolidBrush tint(Color((BYTE)lround(255.0 * g_settings.glassOpacity / 100.0),
-                              247, 250, 255));
-        graphics.FillRectangle(&tint, panel);
-    } else {
+    bool drewBackdrop = false;
+    if (palette.drawBackdrop) {
+        Bitmap* backdrop = nullptr;
+        if (palette.useRefraction && g_backdropRefracted) {
+            backdrop = g_backdropRefracted.get();
+        } else if (g_backdropValid && g_backdrop) {
+            backdrop = g_backdrop.get();
+        }
+        if (backdrop) {
+            graphics.DrawImage(backdrop, panel);
+            drewBackdrop = true;
+        }
+    }
+
+    if (!drewBackdrop && palette.drawBackdrop) {
         LinearGradientBrush fallback(
-            panel, Color(205, 228, 234, 242), Color(165, 196, 205, 218),
+            panel,
+            TintColor(palette, std::min(255, (int)palette.tintAlpha + 90)),
+            TintColor(palette, std::min(255, (int)palette.tintAlpha + 55)),
             LinearGradientModeVertical);
         graphics.FillRectangle(&fallback, panel);
     }
 
-    SolidBrush shadeTint(Color(26, 6, 10, 18));
-    graphics.FillRectangle(&shadeTint, panel);
+    if (palette.tintAlpha) {
+        SolidBrush tint(TintColor(palette, palette.tintAlpha));
+        graphics.FillRectangle(&tint, panel);
+    }
 
-    {
+    if (palette.shadeAlpha) {
+        SolidBrush shadeTint(Color(palette.shadeAlpha, 6, 10, 18));
+        graphics.FillRectangle(&shadeTint, panel);
+    }
+
+    if (palette.bottomShadeAlpha) {
         RectF shadeRect(panel.X, panel.Y + panel.Height * 0.52f, panel.Width,
                         panel.Height * 0.48f);
-        LinearGradientBrush shade(shadeRect, Color(0, 0, 0, 0), Color(70, 6, 10, 16),
+        LinearGradientBrush shade(shadeRect, Color(0, 0, 0, 0),
+                                  Color(palette.bottomShadeAlpha, 6, 10, 16),
                                   LinearGradientModeVertical);
         graphics.FillRectangle(&shade, shadeRect);
     }
-    {
-        RectF glossRect(panel.X, panel.Y, panel.Width, panel.Height * 0.40f);
-        LinearGradientBrush gloss(glossRect, Color(92, 255, 255, 255),
-                                  Color(0, 255, 255, 255), LinearGradientModeVertical);
+
+    if (palette.glossAlpha && palette.glossHeight > 0.0f) {
+        RectF glossRect(panel.X, panel.Y, panel.Width,
+                        panel.Height * palette.glossHeight);
+        LinearGradientBrush gloss(
+            glossRect, Color(palette.glossAlpha, 255, 255, 255),
+            Color(0, 255, 255, 255), LinearGradientModeVertical);
         graphics.FillRectangle(&gloss, glossRect);
     }
-    {
-        float lightHeight = panel.Height * 0.18f;
+
+    if (palette.bottomLightAlpha && palette.bottomLightHeight > 0.0f) {
+        float lightHeight = panel.Height * palette.bottomLightHeight;
         RectF lightRect(panel.X, panel.Y + panel.Height - lightHeight, panel.Width,
                         lightHeight);
         LinearGradientBrush light(lightRect, Color(0, 255, 255, 255),
-                                  Color(30, 255, 255, 255),
+                                  Color(palette.bottomLightAlpha, 255, 255, 255),
                                   LinearGradientModeVertical);
         graphics.FillRectangle(&light, lightRect);
     }
 
-    if (g_noiseTexture) {
-        TextureBrush noise(g_noiseTexture.get(), WrapModeTile);
-        graphics.FillPath(&noise, &panelPath);
+    if (g_noiseTexture && palette.noiseAlpha) {
+        int passes = palette.noiseAlpha >= 9 ? 2 : 1;
+        for (int pass = 0; pass < passes; ++pass) {
+            TextureBrush noise(g_noiseTexture.get(), WrapModeTile);
+            graphics.FillPath(&noise, &panelPath);
+        }
     }
 
     if (g_layout.maxScale > 1.0) {
@@ -1546,9 +2281,11 @@ void DrawGlassPanel(Graphics& graphics, const RectF& panel, float radius) {
                          0.10 * g_intensity);
     }
 
+    DrawSpecularHighlight(graphics, panel, palette);
+
     graphics.Restore(state);
 
-    DrawPanelRim(graphics, panelPath, panel, radius);
+    DrawPanelRim(graphics, panelPath, panel, radius, palette);
 }
 
 void DrawItemLabel(Graphics& graphics, int index, double panelTopNow) {
@@ -1613,40 +2350,35 @@ void DrawItemLabel(Graphics& graphics, int index, double panelTopNow) {
     GraphicsState state = graphics.Save();
     graphics.SetClip(&pillPath, CombineModeReplace);
 
-    if (g_backdropValid && g_backdrop) {
-        REAL fade = (REAL)alpha;
-        ColorMatrix matrix{};
-        matrix.m[0][0] = fade;
-        matrix.m[1][1] = fade;
-        matrix.m[2][2] = fade;
-        matrix.m[3][3] = fade;
-        matrix.m[4][4] = 1.0f;
-        ImageAttributes attributes;
-        attributes.SetColorMatrix(&matrix);
-        graphics.DrawImage(g_backdrop.get(), pill, 0, 0, (REAL)g_backdrop->GetWidth(),
-                           (REAL)g_backdrop->GetHeight(), UnitPixel, &attributes);
-        SolidBrush milk(Color((BYTE)(lround(170 * alpha)), 246, 249, 252));
-        graphics.FillPath(&milk, &pillPath);
-    } else {
-        SolidBrush milk(Color((BYTE)(lround(220 * alpha)), 240, 244, 248));
-        graphics.FillPath(&milk, &pillPath);
-    }
+    PanelPalette palette = BuildPanelPalette();
+    BYTE fillAlpha =
+        (BYTE)ClampInt((int)lround((palette.light ? 234.0 : 222.0) * alpha), 0,
+                       255);
+    SolidBrush fill(TintColor(palette, fillAlpha));
+    graphics.FillPath(&fill, &pillPath);
 
     {
         RectF glossRect(pill.X, pill.Y, pill.Width, pill.Height * 0.55f);
-        LinearGradientBrush gloss(glossRect,
-                                  Color((BYTE)(lround(120 * alpha)), 255, 255, 255),
-                                  Color(0, 255, 255, 255),
-                                  LinearGradientModeVertical);
+        LinearGradientBrush gloss(
+            glossRect,
+            Color((BYTE)ClampInt((int)lround((palette.light ? 110.0 : 60.0) *
+                                             alpha),
+                                 0, 255),
+                  255, 255, 255),
+            Color(0, 255, 255, 255), LinearGradientModeVertical);
         graphics.FillRectangle(&gloss, glossRect);
     }
     graphics.Restore(state);
 
-    Pen rim(Color((BYTE)(lround(180 * alpha)), 255, 255, 255),
+    Pen rim(Color((BYTE)ClampInt((int)lround((palette.light ? 180.0 : 95.0) *
+                                             alpha),
+                                 0, 255),
+                  255, 255, 255),
             (REAL)(1.0 * g_dpiScale));
     graphics.DrawPath(&rim, &pillPath);
 
-    SolidBrush textBrush(Color((BYTE)(lround(235 * alpha)), 30, 32, 38));
+    SolidBrush textBrush(PanelTextColor(
+        palette, (int)lround(235.0 * alpha)));
     RectF textRect(pill.X + (REAL)padX, pill.Y, pill.Width - (REAL)(padX * 2.0),
                    pill.Height);
     graphics.DrawString(item.name.c_str(), -1, g_labelFont.get(), textRect, &format,
@@ -1697,7 +2429,8 @@ void DrawEmptyState(Graphics& graphics, const RECT& panelRect) {
 
     EnsureEmptyFonts();
     GraphicsPath panelPath;
-    AddRoundedRect(panelPath, panel, panel.Height * 0.30f);
+    float panelRadius = PanelCornerRadius(panel.Height);
+    AddRoundedRect(panelPath, panel, panelRadius);
 
     for (int i = 3; i >= 1; --i) {
         double expand = i * 1.4 * g_dpiScale;
@@ -1706,22 +2439,31 @@ void DrawEmptyState(Graphics& graphics, const RECT& panelRect) {
                          panel.Height + (REAL)expand * 2);
         GraphicsPath shadowPath;
         AddRoundedRect(shadowPath, shadowRect,
-                       (float)(panel.Height * 0.30 + expand));
+                       panelRadius >= 0.5f ? panelRadius + (float)expand : 0.0f);
         SolidBrush shadow(Color((BYTE)(9 * i), 0, 0, 0));
         graphics.FillPath(&shadow, &shadowPath);
     }
 
-    bool glass = !g_settings.transparentBackground;
+    bool hasPanel = !IsTransparentStyle();
     bool active = g_externalDragActive;
-    Color fill = glass
-                     ? Color(active ? 165 : 120, 248, 250, 254)
-                     : Color(active ? 82 : 46, 18, 20, 26);
+    PanelPalette palette = BuildPanelPalette();
+    Color fill;
+    if (hasPanel) {
+        int fillAlpha = active ? std::min(235, (int)palette.tintAlpha + 110)
+                               : std::min(215, (int)palette.tintAlpha + 90);
+        fill = TintColor(palette, fillAlpha);
+    } else {
+        fill = Color(active ? 82 : 46, 18, 20, 26);
+    }
     SolidBrush fillBrush(fill);
     graphics.FillPath(&fillBrush, &panelPath);
 
-    Pen borderPen(glass ? Color((BYTE)(active ? 170 : 130), 35, 40, 50)
-                        : Color((BYTE)(active ? 235 : 155), 255, 255, 255),
-                 (REAL)std::max(1.0, 1.4 * g_dpiScale));
+    Pen borderPen(
+        hasPanel ? (palette.light
+                        ? Color((BYTE)(active ? 180 : 140), 35, 40, 50)
+                        : Color((BYTE)(active ? 200 : 150), 255, 255, 255))
+                 : Color((BYTE)(active ? 235 : 155), 255, 255, 255),
+        (REAL)std::max(1.0, 1.4 * g_dpiScale));
     borderPen.SetDashStyle(DashStyleDash);
     graphics.DrawPath(&borderPen, &panelPath);
 
@@ -1743,10 +2485,10 @@ void DrawEmptyState(Graphics& graphics, const RECT& panelRect) {
                         panel.Width - (REAL)(padX * 2.0),
                         panel.Height * 0.30f);
 
-    Color primaryColor = glass ? Color(232, 30, 32, 38)
-                               : Color(238, 255, 255, 255);
-    Color secondaryColor = glass ? Color(165, 42, 46, 54)
-                                 : Color(172, 255, 255, 255);
+    Color primaryColor = hasPanel ? PanelTextColor(palette, 232)
+                                  : Color(238, 255, 255, 255);
+    Color secondaryColor = hasPanel ? PanelTextColor(palette, 165)
+                                    : Color(172, 255, 255, 255);
     SolidBrush primaryBrush(primaryColor);
     SolidBrush secondaryBrush(secondaryColor);
     const wchar_t* primaryText =
@@ -1766,10 +2508,10 @@ void DrawDropBackdrop(Graphics& graphics, const RECT& panelRect) {
                 (REAL)(panelRect.right - panelRect.left),
                 (REAL)(panelRect.bottom - panelRect.top));
     if (panel.Width < 8.0f || panel.Height < 8.0f) return;
-    float radius = (float)(g_layout.panelHeightRest * 0.36);
+    float radius = PanelCornerRadius(g_layout.panelHeightRest);
     GraphicsPath path;
     AddRoundedRect(path, panel, radius);
-    if (g_settings.transparentBackground) {
+    if (IsTransparentStyle()) {
         // Any non-zero alpha makes the whole panel a valid OLE drop target,
         // including the otherwise click-through gaps between icons.
         SolidBrush fill(Color(24, 255, 255, 255));
@@ -1873,15 +2615,15 @@ void RenderFrame() {
                                (double)g_layout.panelMaxWidth);
     double x = (g_layout.windowWidth - width) * 0.5;
     double labelAnchor = 0.0;
-    if (g_settings.transparentBackground) {
+    if (IsTransparentStyle()) {
         labelAnchor = g_layout.panelBottom - g_layout.panelHeightMax;
     } else {
         double panelTopNow = CurrentPanelTop();
         double panelHeightNow = g_layout.panelBottom - panelTopNow;
         RectF panel((REAL)x, (REAL)panelTopNow, (REAL)width,
                     (REAL)panelHeightNow);
-        float radius = (float)(panelHeightNow * 0.36);
-        DrawGlassPanel(graphics, panel, radius);
+        float radius = PanelCornerRadius(panelHeightNow);
+        DrawPanel(graphics, panel, radius, BuildPanelPalette());
         labelAnchor = panelTopNow;
     }
     if (g_externalDragActive) {
@@ -1900,7 +2642,7 @@ void RenderFrame() {
 }
 
 void EnsureAnimationTimer() {
-    if (!g_hwnd) return;
+    if (!g_hwnd || g_dockMoveAxis != DockMoveAxis::None) return;
     if (!g_animationTimerRunning) {
         g_lastTickTime = std::chrono::steady_clock::now();
         SetTimer(g_hwnd, kTimerAnimation, 15, nullptr);
@@ -1912,7 +2654,7 @@ bool IsPointerOverDock(POINT screenPoint) {
     HWND under = WindowFromPoint(screenPoint);
     if (!under) return false;
     bool overDock = (under == g_hwnd);
-    if (!overDock && g_settings.transparentBackground) {
+    if (!overDock && IsTransparentStyle()) {
         // Fully transparent pixels are click-through, so accept the desktop
         // windows underneath as hovering the dock area.
         wchar_t className[64] = L"";
@@ -1934,8 +2676,7 @@ bool IsPointerOverDock(POINT screenPoint) {
 
 void UpdateHoverPollTimer() {
     if (!g_hwnd) return;
-    bool wantPoll =
-        g_settings.transparentBackground && g_dockShown && !g_items.empty();
+    bool wantPoll = IsTransparentStyle() && g_dockShown && !g_items.empty();
     if (wantPoll && !g_hoverPollRunning) {
         SetTimer(g_hwnd, kTimerHoverPoll, kHoverPollMs, nullptr);
         g_hoverPollRunning = true;
@@ -1947,6 +2688,7 @@ void UpdateHoverPollTimer() {
 
 bool UpdateAnimation() {
     if (g_items.empty() || !g_hwnd) return false;
+    if (g_dockMoveAxis != DockMoveAxis::None) return false;
 
     auto now = std::chrono::steady_clock::now();
     double dt = std::chrono::duration<double>(now - g_lastTickTime).count();
@@ -1958,7 +2700,11 @@ bool UpdateAnimation() {
     POINT clientPoint = screenPoint;
     ScreenToClient(g_hwnd, &clientPoint);
     bool dragging = g_internalDragActive || g_externalDragActive;
-    bool inside = !dragging && IsPointerOverDock(screenPoint);
+    // An edge belongs to moving the dock, not to magnification. Suppressing
+    // hover keeps the panel at its rest size, which is also the geometry the
+    // edge zones are based on, so the pointer cannot chase a moving edge.
+    bool onEdge = PanelEdgeAtClientPoint(clientPoint) != DockEdge::None;
+    bool inside = !dragging && !onEdge && IsPointerOverDock(screenPoint);
 
     if (inside) {
         g_lastMouseX = clientPoint.x;
@@ -2072,6 +2818,112 @@ int ItemAtCursor(POINT screenPoint) {
     return best;
 }
 
+void ResetInternalDragState();
+
+void MoveDockWindow(int x, int y) {
+    ClampWindowOrigin(x, y);
+    if (x == g_windowX && y == g_windowY) return;
+    g_windowX = x;
+    g_windowY = y;
+    SetWindowPos(g_hwnd, HWND_BOTTOM, x, y, 0, 0,
+                 SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+    CaptureBackdrop();
+    RenderFrame();
+}
+
+// The position is kept in Windhawk's per-user mod-local values rather than in
+// the user settings: it is written silently, has no settings page round trip,
+// and therefore does not reload the mod.
+void StoreDockPosition() {
+    Wh_SetIntValue(UserValueName(L"DockOffsetX").c_str(), g_dockOffsetX);
+    Wh_SetIntValue(UserValueName(L"DockBottomDistance").c_str(),
+                   g_dockBottomDistance);
+}
+
+void SaveDockOffsets() {
+    MONITORINFO monitorInfo{};
+    monitorInfo.cbSize = sizeof(monitorInfo);
+    HMONITOR monitor = MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
+    GetMonitorInfoW(monitor, &monitorInfo);
+
+    double scale = std::max(0.1, g_dpiScale);
+    g_dockOffsetX = (int)lround((g_windowX - BaseWindowX()) / scale);
+    int panelBottom = g_windowY + g_layout.panelBottom;
+    g_dockBottomDistance =
+        ClampInt((int)lround((monitorInfo.rcWork.bottom - panelBottom) / scale),
+                 0, 20000);
+    StoreDockPosition();
+}
+
+void ApplyDockPosition(int offsetX, int bottomDistance) {
+    g_dockOffsetX = offsetX;
+    g_dockBottomDistance = ClampInt(bottomDistance, 0, 20000);
+    StoreDockPosition();
+    PositionWindow();
+    CaptureBackdrop();
+    RenderFrame();
+}
+
+// The settings page exposes the same three actions as a one-shot selection.
+// Apply it only when the selected action changes, otherwise every settings
+// save or Explorer restart would move the dock again.
+void ApplyPendingPositionAction() {
+    int action = g_settings.positionAction;
+    std::wstring appliedName = UserValueName(L"PositionActionApplied");
+    int applied = Wh_GetIntValue(appliedName.c_str(), 0);
+    if (action == 0) {
+        if (applied != 0) Wh_SetIntValue(appliedName.c_str(), 0);
+        return;
+    }
+    if (action == applied) return;
+
+    if (action == 1) {
+        g_dockOffsetX = 0;
+        g_dockBottomDistance = g_settings.defaultBottomDistance;
+    } else if (action == 2) {
+        g_dockOffsetX = 0;
+        g_dockBottomDistance = EffectiveBottomDistance();
+    } else if (action == 3) {
+        g_dockBottomDistance = g_settings.defaultBottomDistance;
+    }
+    StoreDockPosition();
+    Wh_SetIntValue(appliedName.c_str(), action);
+}
+
+void FinishDockMove(bool releaseCapture) {
+    if (g_dockMoveAxis == DockMoveAxis::None) return;
+    g_dockMoveAxis = DockMoveAxis::None;
+    if (releaseCapture && GetCapture() == g_hwnd) ReleaseCapture();
+    SaveDockOffsets();
+    CaptureBackdrop();
+    RenderFrame();
+    if (!g_items.empty()) EnsureAnimationTimer();
+}
+
+void StartDockMove(DockEdge edge, POINT screenPoint) {
+    g_dockMoveAxis = (edge == DockEdge::Top || edge == DockEdge::Bottom)
+                         ? DockMoveAxis::Vertical
+                         : DockMoveAxis::Horizontal;
+    g_dockMoveStartCursor = screenPoint;
+    g_dockMoveStartWindowX = g_windowX;
+    g_dockMoveStartWindowY = g_windowY;
+    ResetInternalDragState();
+    g_intensity = 0.0;
+    g_hoverIndex = -1;
+    g_mouseXValid = false;
+    for (auto& item : g_items) {
+        item.scale = 1.0;
+        item.centerX = item.baseCenterX;
+        item.labelAlpha = 0.0;
+    }
+    g_panelWidth = g_layout.panelBaseWidth;
+    SetCapture(g_hwnd);
+    SetCursor(LoadCursorW(nullptr, g_dockMoveAxis == DockMoveAxis::Vertical
+                                       ? IDC_SIZENS
+                                       : IDC_SIZEWE));
+    RenderFrame();
+}
+
 void LaunchItem(DockItem& item) {
     SHELLEXECUTEINFOW info{};
     info.cbSize = sizeof(info);
@@ -2167,6 +3019,51 @@ void ShowItemContextMenu(int index, POINT screenPoint) {
     }
 
     DestroyMenu(popup);
+}
+
+// Right-clicking an empty part of the dock opens position actions. The same
+// one-shot actions are exposed by the PositionAction setting.
+void ShowDockPositionMenu(POINT screenPoint) {
+    constexpr UINT kResetAll = 1;
+    constexpr UINT kCenter = 2;
+    constexpr UINT kResetBottom = 3;
+
+    HMENU popup = CreatePopupMenu();
+    if (!popup) return;
+    AppendMenuW(popup, MF_STRING | MF_GRAYED, 0, L"Dock position");
+    AppendMenuW(popup, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(popup, MF_STRING, kResetAll,
+                L"Reset position (centered, default distance)");
+    AppendMenuW(popup, MF_STRING, kCenter, L"Center horizontally");
+    AppendMenuW(popup, MF_STRING, kResetBottom,
+                L"Reset distance from the taskbar");
+
+    g_menuOpen = true;
+    HWND previousForeground = GetForegroundWindow();
+    LONG_PTR exStyle = GetWindowLongPtrW(g_hwnd, GWL_EXSTYLE);
+    SetWindowLongPtrW(g_hwnd, GWL_EXSTYLE, exStyle & ~WS_EX_NOACTIVATE);
+    SetForegroundWindow(g_hwnd);
+
+    UINT command = TrackPopupMenuEx(popup, TPM_RETURNCMD | TPM_RIGHTBUTTON,
+                                    screenPoint.x, screenPoint.y, g_hwnd, nullptr);
+    PostMessageW(g_hwnd, WM_NULL, 0, 0);
+
+    SetWindowLongPtrW(g_hwnd, GWL_EXSTYLE, exStyle);
+    if (previousForeground && IsWindow(previousForeground) &&
+        previousForeground != g_hwnd) {
+        SetForegroundWindow(previousForeground);
+    }
+    g_menuOpen = false;
+    KeepWindowAtBottom();
+    DestroyMenu(popup);
+
+    if (command == kResetAll) {
+        ApplyDockPosition(0, g_settings.defaultBottomDistance);
+    } else if (command == kCenter) {
+        ApplyDockPosition(0, EffectiveBottomDistance());
+    } else if (command == kResetBottom) {
+        ApplyDockPosition(g_dockOffsetX, g_settings.defaultBottomDistance);
+    }
 }
 
 void PruneIconCache() {
@@ -2317,6 +3214,7 @@ bool RebuildFromList(bool retryFailed = true) {
     g_mouseXValid = false;
 
     ComputeLayout();
+    ApplyPendingPositionAction();
     g_panelWidth = g_layout.panelBaseWidth;
     for (auto& item : g_items) item.centerX = item.baseCenterX;
     EnsureFrameBuffer(g_layout.windowWidth, g_layout.windowHeight);
@@ -3039,6 +3937,7 @@ LRESULT CALLBACK DockWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
                     auto now = std::chrono::steady_clock::now();
                     if (!g_menuOpen && !g_internalDragActive &&
                         !g_externalDragActive &&
+                        g_dockMoveAxis == DockMoveAxis::None &&
                         now - g_lastItemCheckTime >
                             std::chrono::seconds(kMaintenanceSeconds)) {
                         g_lastItemCheckTime = now;
@@ -3046,7 +3945,8 @@ LRESULT CALLBACK DockWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
                         RefreshVirtualIconCache();
                     }
                     EnsureDesktopIconsHidden();
-                    if (g_settings.backdropRefreshSeconds > 0 && !g_menuOpen &&
+                    if (g_settings.backdropRefreshSeconds > 0 &&
+                        !IsTransparentStyle() && !g_menuOpen &&
                         now - g_backdropCaptureTime >
                             std::chrono::seconds(g_settings.backdropRefreshSeconds)) {
                         CaptureBackdrop();
@@ -3065,6 +3965,19 @@ LRESULT CALLBACK DockWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
             break;
 
         case WM_MOUSEMOVE:
+            if (g_dockMoveAxis != DockMoveAxis::None) {
+                POINT point{};
+                GetCursorPos(&point);
+                int x = g_dockMoveStartWindowX;
+                int y = g_dockMoveStartWindowY;
+                if (g_dockMoveAxis == DockMoveAxis::Horizontal) {
+                    x += point.x - g_dockMoveStartCursor.x;
+                } else {
+                    y += point.y - g_dockMoveStartCursor.y;
+                }
+                MoveDockWindow(x, y);
+                return 0;
+            }
             if (!g_trackingMouse) {
                 TRACKMOUSEEVENT track{};
                 track.cbSize = sizeof(track);
@@ -3152,6 +4065,11 @@ LRESULT CALLBACK DockWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
             if (g_externalDragActive || g_menuOpen) return 0;
             POINT point{};
             GetCursorPos(&point);
+            DockEdge edge = PanelEdgeAtScreenPoint(point);
+            if (edge != DockEdge::None) {
+                StartDockMove(edge, point);
+                return 0;
+            }
             int index = ItemAtCursor(point);
             if (index < 0) return 0;
             g_leftDown = true;
@@ -3166,6 +4084,10 @@ LRESULT CALLBACK DockWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
         }
 
         case WM_LBUTTONUP: {
+            if (g_dockMoveAxis != DockMoveAxis::None) {
+                FinishDockMove(true);
+                return 0;
+            }
             if (g_internalDragActive) {
                 POINT point{};
                 GetCursorPos(&point);
@@ -3190,7 +4112,9 @@ LRESULT CALLBACK DockWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
         }
 
         case WM_CAPTURECHANGED:
-            if (g_internalDragActive) {
+            if (g_dockMoveAxis != DockMoveAxis::None) {
+                FinishDockMove(false);
+            } else if (g_internalDragActive) {
                 PersistVisibleOrder(-1);
                 ResetInternalDragState();
                 RebuildFromList(true);
@@ -3200,7 +4124,8 @@ LRESULT CALLBACK DockWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
             return 0;
 
         case WM_RBUTTONUP: {
-            if (g_internalDragActive || g_leftDown || g_externalDragActive) {
+            if (g_internalDragActive || g_leftDown || g_externalDragActive ||
+                g_dockMoveAxis != DockMoveAxis::None) {
                 return 0;
             }
             POINT point{};
@@ -3208,12 +4133,21 @@ LRESULT CALLBACK DockWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
             int index = ItemAtCursor(point);
             if (index >= 0) {
                 ShowItemContextMenu(index, point);
+            } else {
+                ShowDockPositionMenu(point);
             }
             return 0;
         }
 
         case WM_SETCURSOR: {
             if (LOWORD(lParam) == HTCLIENT) {
+                if (g_dockMoveAxis != DockMoveAxis::None) {
+                    SetCursor(LoadCursorW(
+                        nullptr, g_dockMoveAxis == DockMoveAxis::Vertical
+                                     ? IDC_SIZENS
+                                     : IDC_SIZEWE));
+                    return TRUE;
+                }
                 if (g_internalDragActive) {
                     SetCursor(LoadCursorW(
                         nullptr, g_dragOutside ? IDC_NO : IDC_SIZEALL));
@@ -3221,6 +4155,15 @@ LRESULT CALLBACK DockWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPar
                 }
                 POINT point{};
                 GetCursorPos(&point);
+                DockEdge edge = PanelEdgeAtScreenPoint(point);
+                if (edge != DockEdge::None) {
+                    SetCursor(LoadCursorW(
+                        nullptr, (edge == DockEdge::Top ||
+                                  edge == DockEdge::Bottom)
+                                     ? IDC_SIZENS
+                                     : IDC_SIZEWE));
+                    return TRUE;
+                }
                 int index = ItemAtCursor(point);
                 SetCursor(LoadCursorW(nullptr, index >= 0 ? IDC_HAND : IDC_ARROW));
                 return TRUE;
@@ -3389,6 +4332,40 @@ int RunDockThread() {
     CreateTextures();
 
     LoadSettings();
+    EnsureStoragePaths();
+
+    std::wstring userOffsetX = UserValueName(L"DockOffsetX");
+    int offsetX = Wh_GetIntValue(userOffsetX.c_str(), kMissingLocalValue);
+    if (offsetX == kMissingLocalValue) {
+        offsetX = Wh_GetIntValue(L"DockOffsetX", 0);
+        Wh_SetIntValue(userOffsetX.c_str(), offsetX);
+    }
+    g_dockOffsetX = ClampInt(offsetX, -20000, 20000);
+
+    std::wstring userBottomDistance = UserValueName(L"DockBottomDistance");
+    int storedDistance =
+        Wh_GetIntValue(userBottomDistance.c_str(), kMissingLocalValue);
+    if (storedDistance == kMissingLocalValue) {
+        int legacyDistance =
+            Wh_GetIntValue(L"DockBottomDistance", kMissingLocalValue);
+        if (legacyDistance != kMissingLocalValue) {
+            storedDistance = legacyDistance;
+            Wh_SetIntValue(userBottomDistance.c_str(), storedDistance);
+        }
+    }
+    if (storedDistance == kMissingLocalValue) {
+        // 2.1.x used a BottomOffset setting plus the 10 DIP glow margin.
+        int legacyBottomOffset = Wh_GetIntSetting(L"BottomOffset");
+        if (legacyBottomOffset > 0) {
+            storedDistance =
+                ClampInt(legacyBottomOffset + 10, 0, 20000);
+            Wh_SetIntValue(userBottomDistance.c_str(), storedDistance);
+        }
+    }
+    if (storedDistance != kMissingLocalValue) {
+        g_dockBottomDistance = ClampInt(storedDistance, 0, 20000);
+    }
+
     g_storedKeys = LoadDockKeys();
     g_lastItemCheckTime = std::chrono::steady_clock::now();
     if (auto* dropTarget = new (std::nothrow) DockDropTarget()) {
@@ -3434,6 +4411,7 @@ int RunDockThread() {
     g_activeMenu3.Reset();
     DestroyFrameBuffer();
     g_backdrop.reset();
+    g_backdropRefracted.reset();
     g_backdropValid = false;
     g_iconCache.clear();
     g_items.clear();

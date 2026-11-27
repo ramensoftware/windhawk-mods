@@ -2,7 +2,7 @@
 // @id          net-speed-taskbar
 // @name        Taskbar Network Speed Indicator
 // @description A free-floating network speed widget you can place anywhere along the taskbar, featuring a sparkline chart and multiple layouts.
-// @version     1.6
+// @version     1.7
 // @author      Narayan
 // @github      https://github.com/NarayanChetri
 // @homepage    https://narayanchetri.dev
@@ -28,10 +28,11 @@ the taskbar's own content lives in DWM's immersive Z-band
 place a window in that band -- appears to require the calling process to
 actually be an `explorer.exe` image.
 
-![Demo](https://raw.githubusercontent.com/NarayanChetri/Files/main/taskbar-internet-speed-mod.gif)
+![Demo](https://raw.githubusercontent.com/NarayanChetri/Files/main/Adobe%20Express%20-%20Recording%202026-11-13%20200503.gif)
 
 - Choose from different looks: Side-by-Side, Top-Down, Chart, or Minimal.
 - Move the widget anywhere along your taskbar using the Horizontal Position setting.
+- Customizable typography and colors: custom font family, bold styling, and HEX color codes.
 - Click-through: it won't get in the way of your taskbar buttons.
 - Recovers automatically on an Explorer crash/restart, not just a clean shell exit.
 - Hides while a full-screen app or game covers the taskbar's monitor.
@@ -67,10 +68,25 @@ worth knowing:
   $name: Horizontal position (%)
 - verticalNudge: 0
   $name: Vertical nudge (px)
+  $description: "Vertical offset in pixels (-200 to 200)."
 - updateIntervalMs: 1000
   $name: Update interval (ms)
+  $description: "Update interval in milliseconds (200 to 60000)."
 - fontSize: 13
-  $name: Font size
+  $name: Font size (6-36)
+  $description: "Font size in pixels (6 to 36, default 13)."
+- fontFamily: ""
+  $name: Font family
+  $description: "Font family name (e.g. Segoe UI, Consolas, Arial). Leave empty for default Segoe UI."
+- isBold: false
+  $name: Bold text
+  $description: "Enable bold styling for the speed text."
+- textColor: ""
+  $name: Custom text color (HEX)
+  $description: "Custom HEX color code (e.g. #00FF7F, #00E5FF, #FFFFFF). Leave empty for theme default."
+- uploadColor: ""
+  $name: Custom upload color (HEX, optional)
+  $description: "Custom HEX color for upload speed. Leave empty to use the text color above or theme default."
 - opacity: 235
   $name: Opacity (0-255)
 */
@@ -98,6 +114,8 @@ worth knowing:
 #include <memory>
 #include <mutex>
 #include <cstdio>
+#include <cwctype>
+#include <cmath>
 
 using namespace Gdiplus;
 
@@ -149,6 +167,10 @@ struct Settings {
     int updateIntervalMs;
     int fontSize;
     int opacity;
+    std::wstring fontFamily;
+    bool isBold;
+    std::wstring textColor;
+    std::wstring uploadColor;
 };
 
 Settings g_settings;
@@ -191,6 +213,7 @@ std::vector<double> g_upHistory(kHistorySize, 0.0);
 size_t g_historyIdx = 0;
 
 struct GdiObjects {
+    std::unique_ptr<Gdiplus::FontFamily> fontFamily;
     std::unique_ptr<Gdiplus::Font> font;
     std::unique_ptr<Gdiplus::Font> largeFont;
     std::unique_ptr<Gdiplus::SolidBrush> bgBrush;
@@ -228,29 +251,90 @@ void LoadSettings() {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
     g_settings.theme = WindhawkUtils::StringSetting::make(L"theme").get();
     g_settings.horizontalPosition = std::clamp((int)Wh_GetIntSetting(L"horizontalPosition"), 0, 100);
-    g_settings.verticalNudge = std::clamp((int)Wh_GetIntSetting(L"verticalNudge"), -1000, 1000);
-    g_settings.updateIntervalMs = std::max((int)Wh_GetIntSetting(L"updateIntervalMs"), 200);
-    g_settings.fontSize = std::max((int)Wh_GetIntSetting(L"fontSize"), 6);
+    g_settings.verticalNudge = std::clamp((int)Wh_GetIntSetting(L"verticalNudge"), -200, 200);
+    g_settings.updateIntervalMs = std::clamp((int)Wh_GetIntSetting(L"updateIntervalMs"), 200, 60000);
+    g_settings.fontSize = std::clamp((int)Wh_GetIntSetting(L"fontSize"), 6, 36);
+    g_settings.fontFamily = WindhawkUtils::StringSetting::make(L"fontFamily").get();
+    g_settings.isBold = Wh_GetIntSetting(L"isBold") != 0;
+    g_settings.textColor = WindhawkUtils::StringSetting::make(L"textColor").get();
+    g_settings.uploadColor = WindhawkUtils::StringSetting::make(L"uploadColor").get();
     g_settings.opacity = std::clamp((int)Wh_GetIntSetting(L"opacity"), 0, 255);
 }
 
-void RebuildGdiObjects(int fontSize, const std::wstring& theme, UINT dpi) {
+bool ParseHexColor(const std::wstring& hexStr, BYTE alpha, Color& outColor) {
+    if (hexStr.empty()) return false;
+    const wchar_t* p = hexStr.c_str();
+    while (*p == L' ' || *p == L'\t') p++;
+    if (*p == L'#') p++;
+
+    size_t len = 0;
+    while (iswxdigit(p[len])) len++;
+
+    if (len == 6) {
+        unsigned int r = 0, g = 0, b = 0;
+        if (swscanf_s(p, L"%02x%02x%02x", &r, &g, &b) == 3) {
+            outColor = Color(alpha, (BYTE)r, (BYTE)g, (BYTE)b);
+            return true;
+        }
+    } else if (len == 3) {
+        unsigned int r = 0, g = 0, b = 0;
+        if (swscanf_s(p, L"%1x%1x%1x", &r, &g, &b) == 3) {
+            outColor = Color(alpha, (BYTE)(r * 17), (BYTE)(g * 17), (BYTE)(b * 17));
+            return true;
+        }
+    }
+    return false;
+}
+
+void RebuildGdiObjects(const Settings& s, UINT dpi) {
     auto newGdi = std::make_unique<GdiObjects>();
 
-    Gdiplus::FontFamily fontFamily(L"Segoe UI");
-    float scaledFontSize = (float)MulDiv(fontSize, dpi, 96);
+    std::wstring fontName = s.fontFamily;
+    size_t first = fontName.find_first_not_of(L" \t");
+    if (first == std::wstring::npos) {
+        fontName = L"Segoe UI";
+    } else {
+        fontName = fontName.substr(first);
+        size_t last = fontName.find_last_not_of(L" \t");
+        if (last != std::wstring::npos) {
+            fontName = fontName.substr(0, last + 1);
+        }
+    }
 
-    newGdi->font = std::make_unique<Gdiplus::Font>(&fontFamily, scaledFontSize, FontStyleRegular, UnitPixel);
-    newGdi->largeFont = std::make_unique<Gdiplus::Font>(&fontFamily, scaledFontSize * 1.3f, FontStyleBold, UnitPixel);
+    auto pFontFamily = std::make_unique<Gdiplus::FontFamily>(fontName.c_str());
+    if (pFontFamily->GetLastStatus() != Ok) {
+        pFontFamily = std::make_unique<Gdiplus::FontFamily>(L"Segoe UI");
+    }
+
+    float scaledFontSize = (float)MulDiv(s.fontSize, dpi, 96);
+    INT regularStyle = s.isBold ? FontStyleBold : FontStyleRegular;
+
+    newGdi->font = std::make_unique<Gdiplus::Font>(pFontFamily.get(), scaledFontSize, regularStyle, UnitPixel);
+    newGdi->largeFont = std::make_unique<Gdiplus::Font>(pFontFamily.get(), scaledFontSize * 1.3f, FontStyleBold, UnitPixel);
+    newGdi->fontFamily = std::move(pFontFamily);
 
     Color bgColor = Color(240, 18, 20, 22);
     Color downColor = Color(255, 64, 169, 255);
     Color upColor = Color(255, 100, 230, 90);
 
-    if (theme == L"Minimal") {
+    if (s.theme == L"Minimal") {
         bgColor = Color(0, 0, 0, 0);
         downColor = Color(255, 255, 255, 255);
         upColor = Color(255, 200, 200, 200);
+    }
+
+    Color customDown, customUp;
+    bool hasCustomDown = ParseHexColor(s.textColor, 255, customDown);
+    bool hasCustomUp = ParseHexColor(s.uploadColor, 255, customUp);
+
+    if (hasCustomDown) {
+        downColor = customDown;
+        if (!hasCustomUp) {
+            upColor = customDown;
+        }
+    }
+    if (hasCustomUp) {
+        upColor = customUp;
     }
 
     float sc = dpi / 96.0f;
@@ -273,21 +357,25 @@ void RebuildGdiObjects(int fontSize, const std::wstring& theme, UINT dpi) {
     }
 }
 
-void GetThemeDimensions(const std::wstring& theme, int fontSize, int& width, int& height) {
-    if (theme == L"Top-Down") {
-        width = 75; height = 36;
-    } else if (theme == L"Chart") {
-        width = 160; height = 44;
-    } else if (theme == L"Minimal") {
-        width = 130; height = 20;
+void GetThemeDimensions(const Settings& s, int& width, int& height) {
+    if (s.theme == L"Top-Down") {
+        width = 95; height = 36;
+    } else if (s.theme == L"Chart") {
+        width = 185; height = 38;
+    } else if (s.theme == L"Minimal") {
+        width = 175; height = 22;
     } else {
-        width = 140; height = 40;
+        width = 165; height = 40;
+    }
+
+    if (s.isBold) {
+        width = (int)(width * 1.15f);
     }
 
     // Base dimensions above assume the default 13px font; widen/heighten
     // proportionally so a larger "Font size" setting doesn't push text
     // outside a fixed box.
-    float fontScale = fontSize / 13.0f;
+    float fontScale = s.fontSize / 13.0f;
     width = (int)(width * fontScale);
     height = (int)(height * fontScale);
 }
@@ -401,23 +489,65 @@ void RepositionWidget(HWND hWnd, const Settings& s) {
 
     if (dpi != g_currentDpi || !g_gdi || !g_gdi->IsValid()) {
         g_currentDpi = dpi;
-        RebuildGdiObjects(s.fontSize, s.theme, dpi);
+        RebuildGdiObjects(s, dpi);
     }
 
     int baseW, baseH;
-    GetThemeDimensions(s.theme, s.fontSize, baseW, baseH);
+    GetThemeDimensions(s, baseW, baseH);
 
     int scaledWidth = MulDiv(baseW, dpi, 96);
     int scaledHeight = MulDiv(baseH, dpi, 96);
-    g_currentWidgetWidth = scaledWidth;
-    g_currentWidgetHeight = scaledHeight;
 
     int tbWidth = tbRect.right - tbRect.left;
     int tbHeight = tbRect.bottom - tbRect.top;
 
+    // Ensure the widget height never exceeds the taskbar height
+    if (tbHeight > 0 && scaledHeight > tbHeight) {
+        scaledHeight = tbHeight;
+    }
+
+    // Dynamic width expansion based on active font metrics so text is never cut off
+    if (g_gdi && g_gdi->font) {
+        HDC hdc = GetDC(nullptr);
+        if (hdc) {
+            {
+                Graphics g(hdc);
+                RectF sampleBounds;
+                StringFormat measureFormat;
+                measureFormat.SetFormatFlags(StringFormatFlagsNoWrap);
+                g.MeasureString(L"\x2193 999.9 MB/s", -1, g_gdi->font.get(), PointF(0, 0), &measureFormat, &sampleBounds);
+                int measuredTextW = (int)ceil(sampleBounds.Width);
+
+                float sc = dpi / 96.0f;
+                int minNeededW = scaledWidth;
+
+                if (s.theme == L"Minimal") {
+                    minNeededW = (measuredTextW + (int)(12 * sc)) * 2;
+                } else if (s.theme == L"Side-by-Side") {
+                    minNeededW = (measuredTextW + (int)(16 * sc)) * 2;
+                } else if (s.theme == L"Chart") {
+                    minNeededW = (int)((measuredTextW + (int)(24 * sc)) / 0.58f);
+                } else if (s.theme == L"Top-Down") {
+                    minNeededW = measuredTextW + (int)(32 * sc);
+                }
+
+                scaledWidth = std::max(scaledWidth, minNeededW);
+            }
+            ReleaseDC(nullptr, hdc);
+        }
+    }
+
+    g_currentWidgetWidth = scaledWidth;
+    g_currentWidgetHeight = scaledHeight;
+
     int usableWidth = std::max(tbWidth - scaledWidth, 0);
     int x = tbRect.left + (int)((usableWidth * s.horizontalPosition) / 100.0);
     int y = tbRect.top + (tbHeight - scaledHeight) / 2 + s.verticalNudge;
+
+    // Keep widget within taskbar bounds vertically if possible
+    if (tbHeight >= scaledHeight) {
+        y = std::clamp(y, (int)tbRect.top, (int)(tbRect.bottom - scaledHeight));
+    }
 
     UINT flags = SWP_NOACTIVATE;
     if (!IsWindowVisible(hWnd)) flags |= SWP_SHOWWINDOW;
@@ -475,6 +605,7 @@ void PaintWidgetContent(Graphics& graphics, int width, int height, const Setting
     }
 
     StringFormat format;
+    format.SetFormatFlags(StringFormatFlagsNoWrap);
     float w = bounds.Width;
     float h = bounds.Height;
     std::wstring strDown = FormatSpeed(g_downBps);
@@ -597,7 +728,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_UPDATE_SETTINGS: {
             Settings s = GetSafeSettings();
-            RebuildGdiObjects(s.fontSize, s.theme, g_currentDpi);
+            RebuildGdiObjects(s, g_currentDpi);
             KillTimer(hWnd, kTimerId);
             SetTimer(hWnd, kTimerId, s.updateIntervalMs, nullptr);
             RepositionWidget(hWnd, s);

@@ -2,7 +2,7 @@
 // @id              console-quick-paste
 // @name            Console Quick Paste
 // @description     Injects a "Quick Commands" submenu into the right-click context menu of Windows PowerShell and Command Prompt.
-// @version         1.0.0
+// @version         1.1.0
 // @author          Armaninyow
 // @github          https://github.com/armaninyow
 // @include         WindowsTerminal.exe
@@ -15,7 +15,7 @@
 /*
 # Console Quick Paste
 
-![Console Quick Paste](https://raw.githubusercontent.com/armaninyow/Remove-Context-Menu-Items/refs/heads/main/CQP.png)
+![Console Quick Paste](https://raw.githubusercontent.com/armaninyow/Remove-Context-Menu-Items/refs/heads/main/Don't%20Touch/CQP.png)
 
 Brings a "Quick Commands" submenu to Windows Terminal, giving you one-click access to your most-used PowerShell and Command Prompt snippets. To open it, right-click the empty space on the tab bar.
 
@@ -52,12 +52,9 @@ Brings a "Quick Commands" submenu to Windows Terminal, giving you one-click acce
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <mutex>
 #include <string>
 #include <vector>
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Configuration
-// ─────────────────────────────────────────────────────────────────────────────
 
 struct CommandEntry {
     std::wstring text;   // actual string to paste
@@ -71,43 +68,90 @@ struct Settings {
 
 static Settings g_settings;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Menu ID helpers
-// System menu predefined IDs are >= 0xF000, so we use IDs below that.
-// We pick a block well below 0xF000 and well above 0 to avoid clashing with
-// any standard SC_* values.
-// ─────────────────────────────────────────────────────────────────────────────
-
+static constexpr UINT QUICK_CMD_SUBMENU_ID = 0x6FFF; // ID of the "Quick Commands" submenu item itself
 static constexpr UINT QUICK_CMD_ID_BASE = 0x7000; // 28672
 static constexpr UINT QUICK_CMD_ID_MAX  = 0x7FFF; // up to 4096 items
 
-// Track the last system menu we injected into so we can recognise it in the
-// TrackPopupMenu hook and avoid injecting twice.
-static HMENU g_lastInjectedMenu = nullptr;
+static std::mutex g_injectedMutex;
+static std::vector<HMENU> g_injectedMenus;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SendInput helpers
-// ─────────────────────────────────────────────────────────────────────────────
+static void AddKey(std::vector<INPUT>& inputs, WORD vk, WORD scan, DWORD flags) {
+    INPUT in{};
+    in.type       = INPUT_KEYBOARD;
+    in.ki.wVk     = vk;
+    in.ki.wScan   = scan;
+    in.ki.dwFlags = flags;
+    inputs.push_back(in);
+}
 
-static void SendUnicodeString(const std::wstring& text) {
+static void AddUnicodeChar(std::vector<INPUT>& inputs, wchar_t ch) {
+    AddKey(inputs, 0, ch, KEYEVENTF_UNICODE);
+    AddKey(inputs, 0, ch, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP);
+}
+
+static bool KeyTypesChar(UINT vk, UINT scan, bool shift, bool capsOn,
+                         wchar_t ch, HKL hkl) {
+    BYTE keyState[256]{};
+    if (shift) keyState[VK_SHIFT] = 0x80;
+    if (capsOn) keyState[VK_CAPITAL] = 0x01;
+    WCHAR buf[4];
+    int n = ToUnicodeEx(vk, scan, keyState, buf, ARRAYSIZE(buf), 0x4, hkl);
+    return n == 1 && buf[0] == ch;
+}
+
+static void SendString(const std::wstring& text) {
     if (text.empty()) return;
 
+    HWND fg = GetForegroundWindow();
+    DWORD tid = fg ? GetWindowThreadProcessId(fg, nullptr) : 0;
+    HKL hkl = GetKeyboardLayout(tid);
+    bool capsOn = (GetKeyState(VK_CAPITAL) & 1) != 0;
+
+    WORD lang = PRIMARYLANGID(LOWORD(reinterpret_cast<UINT_PTR>(hkl)));
+    bool imeLayout = lang == LANG_JAPANESE || lang == LANG_CHINESE || lang == LANG_KOREAN;
+
+    WORD shiftScan = static_cast<WORD>(MapVirtualKeyExW(VK_SHIFT, MAPVK_VK_TO_VSC, hkl));
+
     std::vector<INPUT> inputs;
-    inputs.reserve(text.size() * 2);
+    inputs.reserve(text.size() * 4);
 
     for (wchar_t ch : text) {
-        INPUT in{};
-        in.type           = INPUT_KEYBOARD;
-        in.ki.wVk         = 0;
-        in.ki.wScan       = ch;
-        in.ki.dwFlags     = KEYEVENTF_UNICODE;
-        inputs.push_back(in);
+        if (ch == L'\r') continue; // treat CRLF as a single Enter
 
-        in.ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
-        inputs.push_back(in);
+        if (ch == L'\n') {
+            WORD scan = static_cast<WORD>(MapVirtualKeyExW(VK_RETURN, MAPVK_VK_TO_VSC, hkl));
+            AddKey(inputs, VK_RETURN, scan, 0);
+            AddKey(inputs, VK_RETURN, scan, KEYEVENTF_KEYUP);
+            continue;
+        }
+
+        SHORT res = VkKeyScanExW(ch, hkl);
+        WORD vk = LOBYTE(res);
+        UINT scan = MapVirtualKeyExW(vk, MAPVK_VK_TO_VSC, hkl);
+        bool shift = HIBYTE(static_cast<WORD>(res)) & 1;
+
+        bool useKey = !imeLayout && res != -1 &&
+                      (HIBYTE(static_cast<WORD>(res)) & ~1) == 0 && scan != 0;
+
+        if (useKey && !KeyTypesChar(vk, scan, shift, capsOn, ch, hkl)) {
+            shift = !shift; // Caps Lock may invert Shift for this key
+            useKey = KeyTypesChar(vk, scan, shift, capsOn, ch, hkl);
+        }
+
+        if (!useKey) {
+            AddUnicodeChar(inputs, ch);
+            continue;
+        }
+
+        if (shift) AddKey(inputs, VK_SHIFT, shiftScan, 0);
+        AddKey(inputs, vk, static_cast<WORD>(scan), 0);
+        AddKey(inputs, vk, static_cast<WORD>(scan), KEYEVENTF_KEYUP);
+        if (shift) AddKey(inputs, VK_SHIFT, shiftScan, KEYEVENTF_KEYUP);
     }
 
-    SendInput(static_cast<UINT>(inputs.size()), inputs.data(), sizeof(INPUT));
+    if (!inputs.empty()) {
+        SendInput(static_cast<UINT>(inputs.size()), inputs.data(), sizeof(INPUT));
+    }
 }
 
 static void SendEnterKey() {
@@ -125,26 +169,19 @@ static void SendEnterKey() {
 }
 
 static void PasteCommand(const std::wstring& text) {
-    // Small delay so the context menu can fully dismiss before we type.
     Sleep(50);
-    SendUnicodeString(text);
+    SendString(text);
     if (g_settings.autoEnter) {
         Sleep(20);
         SendEnterKey();
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Build the Quick Commands submenu from current settings
-// ─────────────────────────────────────────────────────────────────────────────
-
 static HMENU BuildSubMenu() {
     HMENU hSub = CreatePopupMenu();
     if (!hSub) return nullptr;
 
     if (g_settings.commands.empty()) {
-        // Show a greyed placeholder so the submenu isn't empty (empty submenus
-        // can cause rendering glitches on some Windows versions).
         AppendMenuW(hSub, MF_STRING | MF_GRAYED, 0, L"(no commands configured)");
         return hSub;
     }
@@ -159,34 +196,62 @@ static HMENU BuildSubMenu() {
     return hSub;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Prepend Quick Commands + separator to an existing popup menu
-// ─────────────────────────────────────────────────────────────────────────────
-
-static void PrependQuickCommandsMenu(HMENU hMenu) {
-    HMENU hSub = BuildSubMenu();
-    if (!hSub) return;
-
-    // Insert separator at position 1 (after the submenu we're about to add).
-    InsertMenuW(hMenu, 0, MF_BYPOSITION | MF_SEPARATOR, 0, nullptr);
-    // Insert the "Quick Commands ►" submenu at position 0 (very top).
-    InsertMenuW(hMenu, 0, MF_BYPOSITION | MF_POPUP | MF_STRING,
-                reinterpret_cast<UINT_PTR>(hSub), L"Quick Commands");
+static int FindQuickCommandsItem(HMENU hMenu) {
+    int count = GetMenuItemCount(hMenu);
+    for (int i = 0; i < count; i++) {
+        MENUITEMINFOW mii{};
+        mii.cbSize = sizeof(mii);
+        mii.fMask  = MIIM_ID;
+        if (GetMenuItemInfoW(hMenu, i, TRUE, &mii) && mii.wID == QUICK_CMD_SUBMENU_ID) {
+            return i;
+        }
+    }
+    return -1;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Hooks for GetSystemMenu, TrackPopupMenu, and TrackPopupMenuEx
-//
-// The console tab right-click menu on Windows 11 is the Win32 system (title-bar)
-// menu, not a shell popup.  The flow is:
-//   1. conhost/OpenConsole calls GetSystemMenu(hwnd, FALSE) to get the menu handle.
-//   2. It then calls TrackPopupMenu(Ex) to display it.
-//   3. The selected SC_* command is posted as WM_SYSCOMMAND.
-//
-// We hook GetSystemMenu to inject our submenu the moment the menu handle is
-// fetched, and hook TrackPopupMenu/Ex to intercept any selection that belongs
-// to us before it reaches DefWindowProc.
-// ─────────────────────────────────────────────────────────────────────────────
+static void RemoveQuickCommandsMenu(HMENU hMenu) {
+    int idx;
+    while ((idx = FindQuickCommandsItem(hMenu)) != -1) {
+        DeleteMenu(hMenu, idx, MF_BYPOSITION);
+
+        if (idx < GetMenuItemCount(hMenu)) {
+            MENUITEMINFOW mii{};
+            mii.cbSize = sizeof(mii);
+            mii.fMask  = MIIM_FTYPE;
+            if (GetMenuItemInfoW(hMenu, idx, TRUE, &mii) && (mii.fType & MFT_SEPARATOR)) {
+                DeleteMenu(hMenu, idx, MF_BYPOSITION);
+            }
+        }
+    }
+}
+
+static bool PrependQuickCommandsMenu(HMENU hMenu) {
+    HMENU hSub = BuildSubMenu();
+    if (!hSub) return false;
+
+    MENUITEMINFOW mii{};
+    mii.cbSize     = sizeof(mii);
+    mii.fMask      = MIIM_ID | MIIM_SUBMENU | MIIM_STRING;
+    mii.wID        = QUICK_CMD_SUBMENU_ID;
+    mii.hSubMenu   = hSub;
+    mii.dwTypeData = const_cast<LPWSTR>(L"Quick Commands");
+
+    if (!InsertMenuItemW(hMenu, 0, TRUE, &mii)) {
+        DestroyMenu(hSub);
+        return false;
+    }
+
+    InsertMenuW(hMenu, 1, MF_BYPOSITION | MF_SEPARATOR, 0, nullptr);
+    return true;
+}
+
+static void TrackInjectedMenu(HMENU hMenu) {
+    std::lock_guard<std::mutex> lock(g_injectedMutex);
+    for (HMENU h : g_injectedMenus) {
+        if (h == hMenu) return;
+    }
+    g_injectedMenus.push_back(hMenu);
+}
 
 using GetSystemMenu_t = HMENU(WINAPI*)(HWND, BOOL);
 using TrackPopupMenu_t = BOOL(WINAPI*)(HMENU, UINT, int, int, int, HWND, const RECT*);
@@ -196,7 +261,6 @@ static GetSystemMenu_t    Original_GetSystemMenu    = nullptr;
 static TrackPopupMenu_t   Original_TrackPopupMenu   = nullptr;
 static TrackPopupMenuEx_t Original_TrackPopupMenuEx = nullptr;
 
-// Returns true and populates `out` when `id` belongs to our submenu.
 static bool ResolveSelection(UINT id, std::wstring& out) {
     if (id < QUICK_CMD_ID_BASE) return false;
     size_t idx = id - QUICK_CMD_ID_BASE;
@@ -208,22 +272,12 @@ static bool ResolveSelection(UINT id, std::wstring& out) {
 static HMENU WINAPI Hook_GetSystemMenu(HWND hWnd, BOOL bRevert) {
     HMENU hMenu = Original_GetSystemMenu(hWnd, bRevert);
 
-    if (hMenu && !bRevert && hMenu != g_lastInjectedMenu) {
-        // Strip any previous injection (handles menu reuse across calls)
-        // by removing items in our ID range from position 0 and 1.
-        // Simpler: just check if item 0 is already ours.
-        MENUITEMINFOW mii{};
-        mii.cbSize = sizeof(mii);
-        mii.fMask  = MIIM_ID;
-        if (GetMenuItemInfoW(hMenu, 0, TRUE, &mii)) {
-            if (mii.wID >= QUICK_CMD_ID_BASE && mii.wID <= QUICK_CMD_ID_MAX) {
-                // Already injected — skip.
-                return hMenu;
-            }
+    if (hMenu && !bRevert) {
+        RemoveQuickCommandsMenu(hMenu);
+        if (PrependQuickCommandsMenu(hMenu)) {
+            TrackInjectedMenu(hMenu);
+            Wh_Log(L"Quick Commands injected into system menu %p for HWND %p", hMenu, hWnd);
         }
-        PrependQuickCommandsMenu(hMenu);
-        g_lastInjectedMenu = hMenu;
-        Wh_Log(L"Quick Commands injected into system menu %p for HWND %p", hMenu, hWnd);
     }
     return hMenu;
 }
@@ -232,6 +286,10 @@ static BOOL WINAPI Hook_TrackPopupMenu(
     HMENU hMenu, UINT uFlags, int x, int y,
     int nReserved, HWND hWnd, const RECT* prcRect)
 {
+    if (FindQuickCommandsItem(hMenu) == -1) {
+        return Original_TrackPopupMenu(hMenu, uFlags, x, y, nReserved, hWnd, prcRect);
+    }
+
     UINT flags = uFlags | TPM_RETURNCMD;
     BOOL result = Original_TrackPopupMenu(hMenu, flags, x, y, nReserved, hWnd, prcRect);
 
@@ -241,10 +299,8 @@ static BOOL WINAPI Hook_TrackPopupMenu(
         return (uFlags & TPM_RETURNCMD) ? 0 : FALSE;
     }
 
-    // Re-dispatch non-quick-command selections as WM_SYSCOMMAND so the
-    // window still responds to Minimize / Maximize / Close etc.
     if (result && hWnd && !(uFlags & TPM_RETURNCMD)) {
-        PostMessageW(hWnd, WM_SYSCOMMAND, result & 0xFFF0, 0);
+        PostMessageW(hWnd, WM_SYSCOMMAND, result, 0);
         return TRUE;
     }
 
@@ -255,6 +311,10 @@ static BOOL WINAPI Hook_TrackPopupMenuEx(
     HMENU hMenu, UINT uFlags, int x, int y,
     HWND hWnd, LPTPMPARAMS lptpm)
 {
+    if (FindQuickCommandsItem(hMenu) == -1) {
+        return Original_TrackPopupMenuEx(hMenu, uFlags, x, y, hWnd, lptpm);
+    }
+
     UINT flags = uFlags | TPM_RETURNCMD;
     BOOL result = Original_TrackPopupMenuEx(hMenu, flags, x, y, hWnd, lptpm);
 
@@ -265,22 +325,17 @@ static BOOL WINAPI Hook_TrackPopupMenuEx(
     }
 
     if (result && hWnd && !(uFlags & TPM_RETURNCMD)) {
-        PostMessageW(hWnd, WM_SYSCOMMAND, result & 0xFFF0, 0);
+        PostMessageW(hWnd, WM_SYSCOMMAND, result, 0);
         return TRUE;
     }
 
     return (uFlags & TPM_RETURNCMD) ? result : (result ? TRUE : FALSE);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Settings loading
-// ─────────────────────────────────────────────────────────────────────────────
-
 static void LoadSettings() {
     Settings s;
     s.autoEnter = Wh_GetIntSetting(L"autoEnter") != 0;
 
-    // commands is a nested array: commands[N].label and commands[N].text
     for (int i = 0; ; ++i) {
         PCWSTR text = Wh_GetStringSetting(L"commands[%d].command", i);
         if (!text || text[0] == L'\0') {
@@ -304,15 +359,10 @@ static void LoadSettings() {
     g_settings = std::move(s);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Windhawk entry points
-// ─────────────────────────────────────────────────────────────────────────────
-
 BOOL Wh_ModInit() {
     Wh_Log(L"Console Quick Paste: initialising");
     LoadSettings();
 
-    // Hook GetSystemMenu — inject our submenu when the system menu is fetched
     if (!Wh_SetFunctionHook(
             reinterpret_cast<void*>(GetSystemMenu),
             reinterpret_cast<void*>(Hook_GetSystemMenu),
@@ -322,7 +372,6 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    // Hook TrackPopupMenu — intercept our item selections
     if (!Wh_SetFunctionHook(
             reinterpret_cast<void*>(TrackPopupMenu),
             reinterpret_cast<void*>(Hook_TrackPopupMenu),
@@ -332,7 +381,6 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    // Hook TrackPopupMenuEx — same, for the Ex variant
     if (!Wh_SetFunctionHook(
             reinterpret_cast<void*>(TrackPopupMenuEx),
             reinterpret_cast<void*>(Hook_TrackPopupMenuEx),
@@ -350,7 +398,6 @@ BOOL Wh_ModInit() {
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L"Console Quick Paste: settings changed, reloading");
-    g_lastInjectedMenu = nullptr; // force re-injection on next GetSystemMenu call
     LoadSettings();
     Wh_Log(L"Console Quick Paste: %zu command(s), auto-enter=%s",
            g_settings.commands.size(),
@@ -358,5 +405,14 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModUninit() {
+    {
+        std::lock_guard<std::mutex> lock(g_injectedMutex);
+        for (HMENU hMenu : g_injectedMenus) {
+            if (IsMenu(hMenu)) {
+                RemoveQuickCommandsMenu(hMenu);
+            }
+        }
+        g_injectedMenus.clear();
+    }
     Wh_Log(L"Console Quick Paste: unloaded");
 }

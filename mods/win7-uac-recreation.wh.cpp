@@ -2,7 +2,7 @@
 // @id              win7-uac-recreation
 // @name            Windows 7/8.1/10 UAC Recreation
 // @description     This mod recreates the Windows 7, 8.1 and 10 UAC prompts on Windows 10/11 without changing UAC behavior or disabling the secure desktop
-// @version         1.1.0
+// @version         1.2.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         consent.exe
@@ -31,6 +31,16 @@ authentication, and the secure desktop.
 - It shows the requesting program's icon and native prompt details when available.
 - Optional Windows 7 background: the dimmed screenshot of the whole screen behind the prompt, instead of the
   wallpaper that Windows 8 and later leave there.
+
+## Prompt languages
+
+Button recognition uses a list of localized Yes/No labels. The list includes labels used in
+English, Italian, German, French, Spanish, Portuguese, Dutch, Polish, Czech, Hungarian, Bulgarian,
+Russian, Norwegian, Danish, Swedish, Icelandic, Latvian, Japanese, Korean, Chinese, Turkish, Arabic,
+Persian and Hindi. This is not a guarantee for every Windows version or prompt wording: replacement
+depends on the actual labels and a reliable match, not just the display language. If the buttons
+cannot be recognized confidently, the mod returns to the native prompt instead. Other languages or
+unlisted wordings generally keep the native prompt. The background setting may still apply.
 
 ## Emergency shortcut
 
@@ -349,7 +359,7 @@ typedef int CONTROLTYPEID;
 // two long stretches of reading (UiSessionRun, HarvestDetailsSafely, UiWndProc, WinEventProc and
 // the three thread entry points). If this compiler is built without them, the macro is 0 and those
 // blocks disappear: the same code then runs on plain return values alone. No structured exception
-// handling (no __try/__except), and nothing is ever caught silently.
+// handling is used, and nothing is ever caught silently.
 #if defined(__cpp_exceptions) || defined(__EXCEPTIONS) || defined(_CPPUNWIND)
 #define W7UAC_HAS_EXCEPTIONS 1
 #else
@@ -953,9 +963,21 @@ static void NoteBackgroundOutcome() {
 //------------------------------------------------------------------------------
 
 static std::wstring ToLower(const std::wstring& s) {
-    std::wstring r = s;
-    for (auto& c : r) c = towlower(c);
-    return r;
+    if (s.empty()) return {};
+    // Invariant Windows Unicode mapping does not depend on the CRT locale.
+    // Query the output length first: case mapping can change string length.
+    int required=LCMapStringEx(LOCALE_NAME_INVARIANT,LCMAP_LOWERCASE,s.data(),
+                               (int)s.size(),nullptr,0,nullptr,nullptr,0);
+    if (required>0) {
+        std::wstring result((size_t)required,L'\0');
+        int written=LCMapStringEx(LOCALE_NAME_INVARIANT,LCMAP_LOWERCASE,s.data(),
+                                  (int)s.size(),result.data(),required,nullptr,nullptr,0);
+        if(written==required)return result;
+    }
+    // Preserve the previous conservative behavior if Windows mapping fails.
+    std::wstring result=s;
+    for(auto& c:result)c=towlower(c);
+    return result;
 }
 
 static bool ContainsI(const std::wstring& haystack, const std::wstring& needle) {
@@ -1912,24 +1934,63 @@ struct PromptInfo {
 };
 
 static const WCHAR* kYesNames[] = {L"yes", L"s\u00ec", L"si", L"ja", L"oui", L"s\u00ed",
-                                   L"sim", L"tak", L"igen", L"j\u00e1", L"\u0434\u0430",
+                                   L"sim", L"tak", L"igen", L"j\u00e1", L"j\u0101", L"\u0434\u0430",
                                    L"\u306f\u3044", L"\uc608", L"\u662f", L"ano",
                                    L"evet", L"\u0646\u0639\u0645", L"\u0628\u0644\u0647", L"\u0939\u093e\u0901"};
-static const WCHAR* kNoNames[]  = {L"no", L"nein", L"non", L"n\u00e3o", L"nao", L"niet",
+static const WCHAR* kNoNames[]  = {L"no", L"nein", L"non", L"n\u00e3o", L"nao", L"nee", L"ne", L"nem", L"nei", L"\u043d\u0435",
                                    L"nie", L"n\u0113", L"nej", L"\u043d\u0435\u0442",
                                    L"\u3044\u3044\u3048", L"\uc544\ub2c8\uc694", L"\u5426",
                                    L"hay\u0131r", L"\u0644\u0627", L"\u062e\u06cc\u0631", L"\u0928\u0939\u0940\u0902"};
 
+// Compare whole button labels with Windows Unicode ordinal case folding rather
+// than the CRT's locale-sensitive towlower. In particular, a process in the C
+// locale can otherwise fail to match uppercase Cyrillic against lowercase names.
+// This does not infer an answer from position, order, or an undocumented ID.
+static bool ButtonLabelEquals(const std::wstring& label, const WCHAR* expected) {
+    return !label.empty() && expected && *expected &&
+        CompareStringOrdinal(label.c_str(), (int)label.size(), expected, -1, TRUE) == CSTR_EQUAL;
+}
 static bool NameIsYes(const std::wstring& name) {
-    std::wstring n = ToLower(Trim(name));
-    for (auto* t : kYesNames) if (n == t) return true;
+    const std::wstring n = Trim(name);
+    for (auto* t : kYesNames) if (ButtonLabelEquals(n, t)) return true;
     return false;
 }
 
 static bool NameIsNo(const std::wstring& name) {
-    std::wstring n = ToLower(Trim(name));
-    for (auto* t : kNoNames) if (n == t) return true;
+    const std::wstring n = Trim(name);
+    for (auto* t : kNoNames) if (ButtonLabelEquals(n, t)) return true;
     return false;
+}
+
+// user32's generic MessageBox labels are an undocumented implementation detail.
+// IDs 805/806 were observed in an Italian Windows 11 24H2 user32 MUI and in
+// public examples, but Microsoft does not promise their identity across builds.
+// They can only corroborate our existing named Yes/No dictionaries, never act
+// as an independent authority for an elevation decision.
+// LoadStringW uses the resource language selection of the current thread.
+static std::wstring UnmarkButtonMnemonic(const std::wstring& input) {
+    std::wstring out;
+    for (size_t i=0; i<input.size(); ++i) {
+        if (input[i]==L'&') {
+            if (i+1<input.size() && input[i+1]==L'&') { out.push_back(L'&'); ++i; }
+            // A single ampersand is an accelerator marker.
+        } else out.push_back(input[i]);
+    }
+    return Trim(out);
+}
+static bool LoadCorroboratedUser32Labels(std::wstring& yes, std::wstring& no) {
+    HMODULE module=GetModuleHandleW(L"user32.dll");
+    if(!module)return false;
+    WCHAR y[128]={}, n[128]={};
+    int yc=LoadStringW(module,805,y,(int)ARRAYSIZE(y));
+    int nc=LoadStringW(module,806,n,(int)ARRAYSIZE(n));
+    // Reject possibly truncated, empty, conflicting, or independently unknown
+    // resources. If Windows changes the IDs, this fallback simply remains off.
+    if(yc<=0 || nc<=0 || yc >= (int)ARRAYSIZE(y)-1 || nc >= (int)ARRAYSIZE(n)-1)return false;
+    yes=UnmarkButtonMnemonic(std::wstring(y,yc));
+    no=UnmarkButtonMnemonic(std::wstring(n,nc));
+    return !yes.empty() && !no.empty() && !ButtonLabelEquals(yes,no.c_str()) &&
+           NameIsYes(yes) && NameIsNo(no) && !NameIsNo(yes) && !NameIsYes(no);
 }
 
 // -- Source 1: plain Win32 child enumeration (no COM, works across processes) -----
@@ -2116,7 +2177,7 @@ static bool LooksLikePublisher(const std::wstring& t) {
         L"publisher", L"editore", L"autore", L"author", L"autor", L"auteur",
         L"verlag", L"\u00e9diteur", L"editor", L"verificato",
         L"verified", L"signiert", L"firmado", L"unknown", L"sconosciuto", L"unbekannt",
-        L"inconnu", L"desconocido", L"desconhecido",
+        L"inconnu", L"desconocido", L"desconhecido", L"\u0438\u0437\u0434\u0430\u0442\u0435\u043b\u044c",
     };
     std::wstring l = ToLower(t);
     for (const WCHAR* w : kWords) {
@@ -2204,7 +2265,7 @@ static const WCHAR* kAppRowWords[] = {
 static const WCHAR* kPubRowWords[] = {
     L"editore", L"autore", L"author", L"autor", L"auteur", L"publisher",
     L"herausgeber", L"\u00e9diteur", L"editeur", L"editor",
-    L"uitgever", L"wydawca",
+    L"uitgever", L"wydawca", L"\u0438\u0437\u0434\u0430\u0442\u0435\u043b\u044c",
 };
 static const WCHAR* kLinkWords[] = {
     L"show details", L"hide details", L"mostra dettagli", L"nascondi dettagli", L"dettagli",
@@ -3351,6 +3412,28 @@ static void ResolveButtons(PromptInfo& info) {
         if (!info.yes && NameIsYes(e.name)) info.yes = &e;
         else if (!info.no && NameIsNo(e.name)) info.no = &e;
     }
+    // Only a supplementary match. Require a uniquely matching native pair,
+    // existing-dictionary corroboration of BOTH resource labels, and agreement
+    // with any name-based match already found. No geometry or control order.
+    if (!info.yes || !info.no) {
+        std::wstring systemYes, systemNo;
+        if (LoadCorroboratedUser32Labels(systemYes, systemNo)) {
+            UiElement* muiYes=nullptr; UiElement* muiNo=nullptr;
+            unsigned yesCount=0, noCount=0;
+            for (auto& e : info.elements) {
+                if (e.type!=UIA_ButtonControlTypeId || e.name.empty()) continue;
+                std::wstring label=UnmarkButtonMnemonic(e.name);
+                if (ButtonLabelEquals(label,systemYes.c_str())) { muiYes=&e; ++yesCount; }
+                if (ButtonLabelEquals(label,systemNo.c_str())) { muiNo=&e; ++noCount; }
+            }
+            if (yesCount==1 && noCount==1 && muiYes!=muiNo &&
+                (!info.yes || info.yes==muiYes) && (!info.no || info.no==muiNo)) {
+                if (!info.yes) info.yes=muiYes;
+                if (!info.no) info.no=muiNo;
+                Dbg(L"buttons: corroborated user32 MUI labels used for native pair");
+            }
+        }
+    }
     if (!info.yes && !info.no) {
         for (auto& e : info.elements) {
             if (e.type != UIA_ButtonControlTypeId) continue;
@@ -3369,9 +3452,16 @@ static void ResolveButtons(PromptInfo& info) {
             Dbg(L"buttons: '%s' is not the native default button - the identity check disagrees",
                 info.no->name.c_str());
     }
-    if (!info.yes || !info.no)
+    if (!info.yes || !info.no) {
         Log(L"buttons: the native pair could not be identified by name (yes=%d no=%d) - the mod "
             L"fails open rather than guessing", info.yes ? 1 : 0, info.no ? 1 : 0);
+        // Debug log is opt-in: UIA names and identifiers can contain personal data.
+        for (const auto& e : info.elements) {
+            if (e.type == UIA_ButtonControlTypeId)
+                Dbg(L"button candidate: name='%s' automationId='%s' enabled=%d", e.name.c_str(),
+                    e.automationId.c_str(), e.enabled ? 1 : 0);
+        }
+    }
 }
 
 // The publisher shown is the one in the native publisher row. The only presentation exception is
@@ -9265,21 +9355,33 @@ static void RestoreNativePrompt() {
         Log(L"restoring the native prompt window");
         // The bypass was set under g_nativeCs before this move. All watcher state uses
         // that same recursive lock, so a late location event cannot start a new takeover.
-        BOOL restored;
-        if (g_nativeRectValid) {
-            restored = SetWindowPos(g_hNativePrompt, HWND_TOPMOST, g_nativeOriginalRect.left,
-                         g_nativeOriginalRect.top,
-                         g_nativeOriginalRect.right - g_nativeOriginalRect.left,
-                         g_nativeOriginalRect.bottom - g_nativeOriginalRect.top,
-                         SWP_SHOWWINDOW | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+        // The saved location can be an intermediate XAML host placement. Use it
+        // only to identify a monitor and as a size fallback, not as coordinates.
+        RECT cur={}, wa={}; GetWindowRect(g_hNativePrompt,&cur);
+        int width=cur.right-cur.left, height=cur.bottom-cur.top;
+        if ((width<160 || height<90) && g_nativeRectValid) {
+            width=g_nativeOriginalRect.right-g_nativeOriginalRect.left;
+            height=g_nativeOriginalRect.bottom-g_nativeOriginalRect.top;
+        }
+        POINT cursor{};
+        HMONITOR monitor=nullptr;
+        if(g_nativeRectValid)monitor=MonitorFromRect(&g_nativeOriginalRect,MONITOR_DEFAULTTONEAREST);
+        else if(GetCursorPos(&cursor))monitor=MonitorFromPoint(cursor,MONITOR_DEFAULTTONEAREST);
+        MONITORINFO mi{};mi.cbSize=sizeof(mi);
+        if(monitor && GetMonitorInfoW(monitor,&mi))wa=mi.rcWork;
+        else SystemParametersInfoW(SPI_GETWORKAREA,0,&wa,0);
+        BOOL restored=FALSE;
+        if(width>0 && height>0 && wa.right>wa.left && wa.bottom>wa.top) {
+            int x=wa.left+std::max(0,((int)(wa.right-wa.left)-width)/2);
+            int y=wa.top+std::max(0,((int)(wa.bottom-wa.top)-height)/2);
+            // Leave the current size alone when it is usable; if the host is
+            // still zero-sized, restore the last captured usable size instead.
+            UINT flags=SWP_SHOWWINDOW|SWP_NOACTIVATE|SWP_ASYNCWINDOWPOS;
+            if(cur.right-cur.left>=160 && cur.bottom-cur.top>=90)flags|=SWP_NOSIZE;
+            restored=SetWindowPos(g_hNativePrompt,HWND_TOPMOST,x,y,width,height,flags);
         } else {
-            RECT cur = {}, wa = {};
-            GetWindowRect(g_hNativePrompt, &cur);
-            SystemParametersInfoW(SPI_GETWORKAREA, 0, &wa, 0);
-            restored = SetWindowPos(g_hNativePrompt, HWND_TOPMOST,
-                         wa.left + ((wa.right - wa.left) - (cur.right - cur.left)) / 2,
-                         wa.top + ((wa.bottom - wa.top) - (cur.bottom - cur.top)) / 2, 0, 0,
-                         SWP_NOSIZE | SWP_SHOWWINDOW | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+            // No trustworthy geometry: show in place rather than invent a size.
+            restored=ShowWindowAsync(g_hNativePrompt,SW_SHOW);
         }
         SetForegroundWindow(g_hNativePrompt);
         if (restored) g_nativeMoved = false;
@@ -9691,6 +9793,9 @@ static DWORD WINAPI UiSessionRunInner() {
     bool haveInfo = false;
     bool infoOurs = false;
     bool confident = false;
+    bool shortFailOpen = false;
+    DWORD unresolvedSince = 0;
+    HWND unresolvedWindow = nullptr;
     DWORD overallDeadline = GetTickCount() + (DWORD)g_settings.detectTimeoutMs;
     int nDesktops = desktops.empty() ? 1 : (int)desktops.size();
     DWORD sliceMs = (DWORD)g_settings.detectTimeoutMs / (DWORD)nDesktops;
@@ -9707,7 +9812,7 @@ static DWORD WINAPI UiSessionRunInner() {
             Log(L"window not usable: hwnd=%p class='%s' (%s)", h, cls, why);
     };
 
-    for (size_t di = 0; di < desktops.size() && !confident && !StopRequested(); di++) {
+    for (size_t di = 0; di < desktops.size() && !confident && !shortFailOpen && !StopRequested(); di++) {
         DWORD sliceDeadline = GetTickCount() + sliceMs;
         if ((LONG)(sliceDeadline - overallDeadline) > 0) sliceDeadline = overallDeadline;
         if (!SetThreadDesktop(desktops[di])) {
@@ -9796,9 +9901,22 @@ static DWORD WINAPI UiSessionRunInner() {
                 }
                 FinishHarvest(attempt);
 
-                int btnCount = 0;
+                int btnCount = 0, namedButtons = 0;
                 for (const auto& e : attempt.elements)
-                    if (e.type == UIA_ButtonControlTypeId) btnCount++;
+                    if (e.type == UIA_ButtonControlTypeId) {
+                        ++btnCount; if (!Trim(e.name).empty()) ++namedButtons;
+                    }
+                // Once our known prompt has a populated but unrecognized pair,
+                // give the UIA tree a short grace period, then hand Windows back.
+                // Do not shorten observation/dump mode or unrelated windows.
+                if (ours && IsKnownPromptClass(it->cls) && !attempt.credentialVariant &&
+                    !attempt.buttonsConfident && namedButtons>=2 &&
+                    g_settings.relayMode==1 && !g_settings.dumpUiTree) {
+                    if (unresolvedWindow!=it->hwnd) {
+                        unresolvedWindow=it->hwnd;
+                        unresolvedSince=GetTickCount();
+                    }
+                }
                 bool usable = attempt.buttonsConfident ||
                               (btnCount >= 2 && attempt.texts.size() >= 2);
                 if (!usable) continue;
@@ -9820,6 +9938,12 @@ static DWORD WINAPI UiSessionRunInner() {
                 if (confident) break;
             }
             if (confident) break;
+            if (haveInfo && infoOurs && unresolvedWindow &&
+                info.hNative==unresolvedWindow && GetTickCount()-unresolvedSince>=1000) {
+                Log(L"buttons still unrecognized after grace period -> returning native prompt");
+                shortFailOpen=true;
+                break;
+            }
             if ((LONG)(GetTickCount() - overallDeadline) > 0) break;
             if (!haveInfo && (LONG)(GetTickCount() - sliceDeadline) > 0) {
                 Dbg(L"nothing usable on desktop '%s' in %lu ms -> next desktop",

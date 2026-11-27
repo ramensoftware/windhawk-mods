@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              restore-folder-menubar-25h2
 // @name            ExplorerFrame and menubar fixes fork
-// @description     Fixes explorer problems: menu bar, listview redraw, classic background color, Control Panel header/sidebar color for dark themes
-// @version         4.0
+// @description     Fixes explorer problems: menu bar, listview redraw, classic background color, classic search box colors, Control Panel header/sidebar color for dark themes
+// @version         4.2
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
@@ -15,7 +15,7 @@
 
 This is a fork of the mod `Explorerframe fixes for Win11 22H2+` by Waldemar made due to the author's apparent inactivity.
 It addresses several issues with the original mod. Additionally, it incorporates the `Control Panel Color Fix` mod version 1.0 by chip33
-because the version 1.0.1 does not support Classic Theme.
+because the version 1.0.1 does not support Classic Theme, and the `Classic Theme Explorer Search Fix` mod by aubymori so to make it support the Explorerframe spoofing.
 
 **The original mod description**
 
@@ -31,27 +31,24 @@ Black artifacts briefly visible in new file explorer windows under Classic theme
 **Changes from the original**
 
 * This mod restores the menubar in recent builds of 24H2 and in 25H2 with which the original mod was not compatible.
-**!Important!** On newer releases of Windows 11 24H2 and later, you may need to use the [ViVeTool](https://github.com/thebookisclosed/ViVe/releases) utility
-with the following command so to enable the menu:
-
-    `vivetool /disable /id:55063786`
-
-    Alternatively, you can use the [ViVeToolGUI](https://apps.microsoft.com/detail/9P1BW5WB82MH) from
-    Windows Store.
-
-    On even newer builds, replacing the file Explorerframe.dll with an older one may be required.
+**!Important!** On newer releases of Windows 11 24H2 and later, you may need to install the legacy Explorerframe.dll
+using this mod: [Classic Explorerframe for 24H2 and later](https://windhawk.net/mods/classic-explorerframe).
 
 * This mod fixes the compatibility with the mod ```Fluid Window Engine Pro```, in cases where the previous mod would
 whiten out the window content on restore after the minimized state if the option `Classic CabinetWClass background color` was enabled.
 
-* The fix for the folders' background in Classic theme is applied authomatically when Classic theme is detected.
-
-* This mod supports dynamic loading of masked explorerframe.dll for its spoofing.
+* The fix for the folders' background in Classic theme is applied automatically when Classic theme is detected.
 
 **Control Panel Color Fix**
 
 For custom dark themes, fixes white header and sidebar in Control Panel. This is compatible with dark-toned Classic Theme.
 Can be disabled in the mod settings.
+
+**Classic Theme Explorer Search Fix**
+
+When using Classic theme in Windows 7 and up, the colors of the placeholder text in Explorer's
+search box are hardcoded. This mod makes it use system colors instead. The fix is applied
+automatically when Classic theme is detected.
 
 */
 // ==/WindhawkModReadme==
@@ -71,6 +68,7 @@ Can be disabled in the mod settings.
 #include <Windows.h>
 #include <winternl.h>
 #include <tlhelp32.h>
+#include <psapi.h>
 #include <strsafe.h>
 #include <commctrl.h>
 #include <uxtheme.h>
@@ -124,60 +122,42 @@ bool IsExplorerFrameBaseNameW(LPCWSTR path)
             lstrcmpiW(base, L"explorerframe") == 0);
 }
 
-// Lock-free tail check on UNICODE_STRING (may be non-null-terminated).
-// Used as cheap pre-filter inside LdrLoadDll hook to avoid waking
-// the worker for unrelated DLLs.
+// Cheap tail check on UNICODE_STRING (may be non-null-terminated).
+// Used as a pre-filter inside the LdrLoadDll hook to avoid waking
+// the worker for unrelated DLLs. The hook calls GetModuleFileNameW
+// right after this check anyway, so API calls are fine here.
 bool IsExplorerFrameUnicodeName(PUNICODE_STRING s)
 {
-    if (!s || !s->Buffer || s->Length < 13 * (USHORT)sizeof(WCHAR))
+    if (!s || !s->Buffer)
         return false;
 
-    USHORT cch = (USHORT)(s->Length / sizeof(WCHAR));
-    int lastSlash = -1;
-    for (int i = 0; i < cch; i++)
+    int cch = (int)(s->Length / sizeof(WCHAR));
+
+    // Find the start of the file name (after the last path separator).
+    int start = 0;
+    for (int i = cch - 1; i >= 0; --i)
     {
         WCHAR c = s->Buffer[i];
         if (c == L'\\' || c == L'/')
-            lastSlash = i;
-        if (c == L'\0')
         {
-            cch = (USHORT)i;
+            start = i + 1;
             break;
         }
     }
 
-    int start = lastSlash + 1;
-    int len = (int)cch - start;
-    if (len != 13 && len != 17)
-        return false;
-
+    int len = cch - start;
     LPCWSTR tail = s->Buffer + start;
-    if (len == 13)
+
+    if (len == 17) // "explorerframe.dll"
     {
-        static const WCHAR k[] = L"explorerframe";
-        for (int i = 0; i < 13; i++)
-        {
-            WCHAR a = tail[i];
-            if (a >= L'A' && a <= L'Z')
-                a += 32;
-            if (a != k[i])
-                return false;
-        }
-        return true;
+        return CompareStringOrdinal(tail, len, L"explorerframe.dll", -1, TRUE) == CSTR_EQUAL;
     }
-    else
+    if (len == 13) // "explorerframe"
     {
-        static const WCHAR k[] = L"explorerframe.dll";
-        for (int i = 0; i < 17; i++)
-        {
-            WCHAR a = tail[i];
-            if (a >= L'A' && a <= L'Z')
-                a += 32;
-            if (a != k[i])
-                return false;
-        }
-        return true;
+        return CompareStringOrdinal(tail, len, L"explorerframe", -1, TRUE) == CSTR_EQUAL;
     }
+
+    return false;
 }
 
 bool NtPathToDosPath(LPCWSTR ntPath, LPWSTR dosPath, DWORD dosLen)
@@ -207,27 +187,12 @@ bool NtPathToDosPath(LPCWSTR ntPath, LPWSTR dosPath, DWORD dosLen)
 }
 
 // Real path via mapped file, bypasses LDR FullDllName spoofing.
-// Uses K32GetMappedFileNameW from kernel32, so no -lpsapi needed
-// (psapi.dll just forwards to kernel32 anyway).
+// K32GetMappedFileNameW is declared in <psapi.h> but exported by
+// kernel32, so it links without -lpsapi.
 bool GetRealModulePath(HMODULE hMod, WCHAR* dosPath, DWORD dosLen)
 {
-    using K32GetMappedFileNameW_t = DWORD (WINAPI *)(HANDLE, LPVOID, LPWSTR, DWORD);
-
-    static K32GetMappedFileNameW_t pK32 = nullptr;
-    static bool tried = false;
-    if (!tried)
-    {
-        tried = true;
-        HMODULE hK32 = GetModuleHandleW(L"kernel32.dll");
-        if (hK32)
-            pK32 = (K32GetMappedFileNameW_t)GetProcAddress(hK32, "K32GetMappedFileNameW");
-    }
-
-    if (!pK32)
-        return false;
-
     WCHAR ntPath[1024];
-    if (!pK32(GetCurrentProcess(), hMod, ntPath, ARRAYSIZE(ntPath)))
+    if (!K32GetMappedFileNameW(GetCurrentProcess(), hMod, ntPath, ARRAYSIZE(ntPath)))
         return false;
 
     return NtPathToDosPath(ntPath, dosPath, dosLen);
@@ -435,11 +400,13 @@ bool EnsureCabinetSubclassed(HWND h)
 // ---------------------------------------------------------------------------
 // explorerframe originals: per-copy slots.
 // Realistically 1-2 copies (system + redirected), 4 slots leave headroom.
-// Only Init + SetFlags need per-copy originals, frame is covered by HWND.
+// Init + SetFlags + SearchEditBox::_Draw need per-copy originals,
+// frame is covered by HWND.
 // ---------------------------------------------------------------------------
 
 typedef long (*__cdecl CBSInitialize_t)(void*, HWND);
 typedef long (*__cdecl CSBSetFlags_t)(void*, unsigned long, unsigned long);
+typedef void (*__cdecl CSEBDraw_t)(void*, HDC, LPRECT);
 
 static const int kMaxEFSlots = 4;
 
@@ -448,6 +415,7 @@ struct EFSlot {
     HMODULE hMod = nullptr;
     CBSInitialize_t initOrig = nullptr;
     CSBSetFlags_t setFlagsOrig = nullptr;
+    CSEBDraw_t drawOrig = nullptr;
     bool hookOk = false;
 };
 
@@ -477,6 +445,27 @@ long __cdecl CommonCSBSetFlagsHook(int slot, void* pThis, unsigned long a, unsig
     return orig ? orig(pThis, a, b) : 0;
 }
 
+// Classic Theme Explorer Search Fix: the placeholder text colors in the
+// search box are hardcoded, force system colors when Classic theme is active.
+void __cdecl CommonSearchDrawHook(int slot, void* pThis, HDC hdc, LPRECT prcDraw)
+{
+    CSEBDraw_t orig = g_efSlots[slot].drawOrig;
+    if (!orig)
+        return;
+
+    if (IsAppThemed())
+    {
+        orig(pThis, hdc, prcDraw);
+        return;
+    }
+
+    COLORREF crSave = SetTextColor(hdc, GetSysColor(COLOR_WINDOWTEXT));
+    COLORREF crBkSave = SetBkColor(hdc, GetSysColor(COLOR_WINDOW));
+    orig(pThis, hdc, prcDraw);
+    SetBkColor(hdc, crBkSave);
+    SetTextColor(hdc, crSave);
+}
+
 template<int S> __attribute__((noinline)) long __cdecl CBSInitializeHookT(void* pThis, HWND hWnd)
 {
     return CommonCBSInitializeHook(S, pThis, hWnd);
@@ -487,6 +476,11 @@ template<int S> __attribute__((noinline)) long __cdecl CSBSetFlagsHookT(void* pT
     return CommonCSBSetFlagsHook(S, pThis, a, b);
 }
 
+template<int S> __attribute__((noinline)) void __cdecl CSearchEditBoxDrawHookT(void* pThis, HDC hdc, LPRECT prcDraw)
+{
+    CommonSearchDrawHook(S, pThis, hdc, prcDraw);
+}
+
 void* g_CBSHooks[kMaxEFSlots] = {
     (void*)CBSInitializeHookT<0>, (void*)CBSInitializeHookT<1>,
     (void*)CBSInitializeHookT<2>, (void*)CBSInitializeHookT<3>,
@@ -495,6 +489,11 @@ void* g_CBSHooks[kMaxEFSlots] = {
 void* g_SetFlagsHooks[kMaxEFSlots] = {
     (void*)CSBSetFlagsHookT<0>, (void*)CSBSetFlagsHookT<1>,
     (void*)CSBSetFlagsHookT<2>, (void*)CSBSetFlagsHookT<3>,
+};
+
+void* g_DrawHooks[kMaxEFSlots] = {
+    (void*)CSearchEditBoxDrawHookT<0>, (void*)CSearchEditBoxDrawHookT<1>,
+    (void*)CSearchEditBoxDrawHookT<2>, (void*)CSearchEditBoxDrawHookT<3>,
 };
 
 bool InstallViaWindhawk(HMODULE hMod, int slot)
@@ -524,11 +523,23 @@ bool InstallViaWindhawk(HMODULE hMod, int slot)
             g_SetFlagsHooks[slot],
             true,
         },
+        {
+            {
+                L"private: void __cdecl CSearchEditBox::_Draw(struct HDC__ *,struct tagRECT *)",
+                L"protected: void __cdecl CSearchEditBox::_Draw(struct HDC__ *,struct tagRECT *)",
+                L"public: void __cdecl CSearchEditBox::_Draw(struct HDC__ *,struct tagRECT *)",
+            },
+            (void**)&g_efSlots[slot].drawOrig,
+            g_DrawHooks[slot],
+            true,
+        },
     };
 
     WindhawkUtils::HookSymbols(hMod, explorerframe_dll_hooks, ARRAYSIZE(explorerframe_dll_hooks));
 
-    bool ok = (g_efSlots[slot].initOrig != nullptr) || (g_efSlots[slot].setFlagsOrig != nullptr);
+    bool ok = (g_efSlots[slot].initOrig != nullptr) ||
+              (g_efSlots[slot].setFlagsOrig != nullptr) ||
+              (g_efSlots[slot].drawOrig != nullptr);
 
     // Hooks registered outside Wh_ModInit are not enabled until applied.
     if (ok && g_initDone.load() && !g_stopWorker.load())
@@ -595,6 +606,7 @@ bool InstallExplorerFrameHooks(HMODULE hMod)
         g_efSlots[slot].hMod = hMod;
         g_efSlots[slot].initOrig = nullptr;
         g_efSlots[slot].setFlagsOrig = nullptr;
+        g_efSlots[slot].drawOrig = nullptr;
         g_efSlots[slot].hookOk = false;
         g_efTried.insert(hMod);
     }
@@ -612,7 +624,8 @@ bool InstallExplorerFrameHooks(HMODULE hMod)
     if (!ok)
         Wh_Log(L"Symbol hooks failed for %p, HWND fallback covers", hMod);
     else
-        Wh_Log(L"Hooked %p slot %d init=%p flags=%p", hMod, slot, g_efSlots[slot].initOrig, g_efSlots[slot].setFlagsOrig);
+        Wh_Log(L"Hooked %p slot %d init=%p flags=%p draw=%p", hMod, slot,
+               g_efSlots[slot].initOrig, g_efSlots[slot].setFlagsOrig, g_efSlots[slot].drawOrig);
 
     return ok;
 }
@@ -663,6 +676,7 @@ void HookAllLoadedExplorerFrameCopies()
                 g_efSlots[i].hMod = nullptr;
                 g_efSlots[i].initOrig = nullptr;
                 g_efSlots[i].setFlagsOrig = nullptr;
+                g_efSlots[i].drawOrig = nullptr;
                 g_efSlots[i].hookOk = false;
             }
         }
@@ -709,7 +723,7 @@ LONG WINAPI LdrLoadDll_Hook(PWSTR SearchPath, PULONG DllCharacteristics, PUNICOD
     {
         if (g_hookEvent && !g_stopWorker.load())
         {
-            // Cheap pre-filter on the request name, no API calls.
+            // Cheap pre-filter on the request name.
             if (IsExplorerFrameUnicodeName(DllName))
             {
                 // Confirm against the loaded module. Redirector keeps
@@ -929,7 +943,7 @@ DWORD WINAPI HookWorkerThreadProc(LPVOID)
 
 BOOL Wh_ModInit()
 {
-    Wh_Log(L"Explorer Frame Fixes + Control Panel Color Fix Init");
+    Wh_Log(L"Explorer Frame Fixes + Control Panel Color Fix + Search Box Fix Init");
 
     g_settingDisplayMenuBar = Wh_GetIntSetting(L"DisplayMenuBar");
     g_settingControlPanelColorFix = Wh_GetIntSetting(L"ControlPanelColorFix");
@@ -1001,9 +1015,6 @@ BOOL Wh_ModInit()
     if (pCW)
         Wh_SetFunctionHook(pCW, (void*)CreateWindowExW_Hook, (void**)&pOriginalCreateWindowExW);
 
-    // One-time sweep for pre-existing windows, new ones via CreateWindow hook.
-    SubclassExistingWindows();
-
     g_hookEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
     if (!g_hookEvent)
     {
@@ -1029,6 +1040,14 @@ BOOL Wh_ModInit()
     return TRUE;
 }
 
+void Wh_ModAfterInit()
+{
+    // Runs after hooks are applied, so windows created between
+    // Wh_ModInit sweep point and hook activation are not missed.
+    // New windows are covered by CreateWindowExW hook.
+    SubclassExistingWindows();
+}
+
 void Wh_ModBeforeUninit()
 {
     g_stopWorker.store(true);
@@ -1046,7 +1065,7 @@ void Wh_ModBeforeUninit()
 
 void Wh_ModUninit()
 {
-    Wh_Log(L"Explorer Frame Fixes + Control Panel Color Fix Uninit");
+    Wh_Log(L"Explorer Frame Fixes + Control Panel Color Fix + Search Box Fix Uninit");
 
     // Take a snapshot of the vectors under the lock and clear the globals,
     // then remove the subclasses outside the lock. This is important because

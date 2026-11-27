@@ -2,12 +2,14 @@
 // @id              taskmgr-tab-slide-animation
 // @name            Task Manager Tab Slide Animation
 // @description     Smooth animated transition (crossfade or slide) when switching tabs (Processes, Performance, ...) in Task Manager.
-// @version         0.4.1
+// @version         0.4.2
 // @author          Abdullah Masood
 // @github          https://github.com/Abdullah-Masood-05
 // @include         Taskmgr.exe
+// @architecture    x86-64
 // @compilerOptions -ldwmapi -lgdi32 -lole32 -lmsimg32
 // @license         MIT
+// @donateUrl       https://buy.polar.sh/polar_cl_iccBChKQyqil3EgBBtV6qM3lfDpLk4sVu1OpK1j0jQ4
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -77,7 +79,7 @@ the animation always starts from the old frame.
   $description: How long the transition lasts. Clamped to 60-1500.
 - top_inset: 48
   $name: Top inset (px)
-  $description: Height of the top command bar to exclude from the animation.
+  $description: Height of the top command bar to exclude from the animation, at 100% display scaling. It's scaled automatically for other scaling levels.
 - capture_delay_ms: 140
   $name: Capture delay (ms)
   $description: Delay after the click before capturing the new view. Raise if it grabs the old view.
@@ -387,7 +389,7 @@ double TmChangedFraction(HBITMAP a, HBITMAP b, int w, int h) {
 // its right edge - i.e. where the content next to it begins. Walks a few ancestors
 // so we land on the whole item/list, not an inner icon/label.
 bool TmNavItemRight(IUIAutomation* uia, POINT pt, int clientLeft, int clientW,
-                    int* contentLeftScreen) {
+                    UINT dpi, int* contentLeftScreen) {
     if (!uia) return false;
 
     IUIAutomationElement* el = NULL;
@@ -398,6 +400,10 @@ bool TmNavItemRight(IUIAutomation* uia, POINT pt, int clientLeft, int clientW,
 
     const int leftMax  = (int)(clientW * 0.55);
     const int rightMax = (int)(clientW * 0.70);
+    // UIA rects are in physical pixels; the limits below are tuned at 96 DPI.
+    const int px8   = MulDiv(8,   dpi, 96);
+    const int px24  = MulDiv(24,  dpi, 96);
+    const int px360 = MulDiv(360, dpi, 96);
 
     int best = -1;
     IUIAutomationElement* cur = el;
@@ -407,9 +413,9 @@ bool TmNavItemRight(IUIAutomation* uia, POINT pt, int clientLeft, int clientW,
             int leftRel  = r.left  - clientLeft;
             int rightRel = r.right - clientLeft;
             int width    = rightRel - leftRel;
-            if (leftRel >= -8 && leftRel <= leftMax &&
-                width >= 24 && width <= 360 &&
-                rightRel >= 24 && rightRel <= rightMax &&
+            if (leftRel >= -px8 && leftRel <= leftMax &&
+                width >= px24 && width <= px360 &&
+                rightRel >= px24 && rightRel <= rightMax &&
                 rightRel > best) {
                 best = rightRel;
             }
@@ -731,7 +737,9 @@ DWORD WINAPI TmWorkerThread(LPVOID lpParam) {
     IUIAutomation* uia = NULL;
     if (SUCCEEDED(CoCreateInstance(kCLSID_CUIAutomation, NULL, CLSCTX_INPROC_SERVER,
                                    kIID_IUIAutomation, (void**)&uia)) && uia) {
-        located = TmNavItemRight(uia, d->clickPt, d->fullRect.left, clientW, &contentLeft);
+        UINT dpi = GetDpiForWindow(d->root);
+        if (!dpi) dpi = 96;
+        located = TmNavItemRight(uia, d->clickPt, d->fullRect.left, clientW, dpi, &contentLeft);
         uia->Release();
     }
     if (SUCCEEDED(hrCo)) CoUninitialize();
@@ -869,7 +877,10 @@ void TmOnClick(WPARAM msg, POINT pt) {
     int relX = pt.x - origin.x;
     int relY = pt.y - origin.y;
 
-    int topI = g_topInset.load(std::memory_order_relaxed);
+    // The inset setting is at 100% scaling; hook coordinates are physical pixels.
+    UINT dpi = GetDpiForWindow(root);
+    if (!dpi) dpi = 96;
+    int topI = MulDiv(g_topInset.load(std::memory_order_relaxed), dpi, 96);
     // Below the command bar, and in the left portion where the nav / sub-nav can be.
     if (relX < 0 || relY < topI || relX > (cw * 3) / 5 || relY >= ch) return;
 

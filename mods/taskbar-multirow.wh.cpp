@@ -2,7 +2,7 @@
 // @id              taskbar-multirow
 // @name            Multirow taskbar for Windows 11
 // @description     Span taskbar items across multiple rows, just like it was possible before Windows 11
-// @version         1.2
+// @version         1.2.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -263,38 +263,78 @@ double GetTaskbarFrameLength(FrameworkElement taskbarFrameElement,
                               : length;
 }
 
-// The length a single row of items can span, i.e. the taskbar frame length
-// without the part which is occupied by the system tray.
-bool GetLengthWithoutExtent(FrameworkElement xamlRootContent,
-                            bool vertical,
-                            double* result) {
-    auto taskbarFrameElement =
-        FindChildByName(xamlRootContent, L"TaskbarFrame");
-    if (!taskbarFrameElement) {
-        return false;
+// On newer builds, the taskbar frame is the XAML root content, not its child.
+FrameworkElement FindTaskbarFrame(FrameworkElement xamlRootContent) {
+    if (winrt::get_class_name(xamlRootContent) == L"Taskbar.TaskbarFrame") {
+        return xamlRootContent;
     }
 
-    auto systemTrayFrame =
-        FindChildByClassName(xamlRootContent, L"SystemTray.SystemTrayFrame");
-    if (!systemTrayFrame) {
-        return false;
-    }
-
-    *result = GetTaskbarFrameLength(taskbarFrameElement, vertical) -
-              GetElementLength(systemTrayFrame, vertical);
-    return true;
+    return FindChildByClassName(xamlRootContent, L"Taskbar.TaskbarFrame");
 }
 
 FrameworkElement FindTaskbarFrameRepeater(FrameworkElement xamlRootContent) {
     FrameworkElement child = xamlRootContent;
-    if (child &&
-        (child = FindChildByClassName(child, L"Taskbar.TaskbarFrame")) &&
+    if (child && (child = FindTaskbarFrame(child)) &&
         (child = FindChildByName(child, L"RootGrid")) &&
         (child = FindChildByName(child, L"TaskbarFrameRepeater"))) {
         return child;
     }
 
     return nullptr;
+}
+
+// On newer builds, the system tray is hosted in an item of the taskbar frame
+// repeater.
+bool IsSystemTrayItem(FrameworkElement item) {
+    if (winrt::get_class_name(item) != L"Taskbar.TaskbarExtensionElement") {
+        return false;
+    }
+
+    auto contentControl = item.try_as<Controls::ContentControl>();
+    auto content = contentControl ? contentControl.Content() : nullptr;
+    return content &&
+           winrt::get_class_name(content) == L"SystemTray.SystemTrayFrame";
+}
+
+FrameworkElement FindSystemTrayItem(FrameworkElement taskbarFrameRepeater) {
+    return EnumChildElements(taskbarFrameRepeater, IsSystemTrayItem);
+}
+
+// Unlike the actual size, the desired size includes the margin, which the
+// layout keeps clear before the system tray item.
+double GetSystemTrayItemLength(FrameworkElement systemTrayItem, bool vertical) {
+    auto size = systemTrayItem.DesiredSize();
+    return vertical ? size.Height : size.Width;
+}
+
+// The length a single row of items can span, i.e. the taskbar frame length
+// without the part which is occupied by the system tray.
+bool GetLengthWithoutExtent(FrameworkElement xamlRootContent,
+                            bool vertical,
+                            double* result) {
+    auto taskbarFrameElement = FindTaskbarFrame(xamlRootContent);
+    if (!taskbarFrameElement) {
+        return false;
+    }
+
+    double extent;
+    if (auto systemTrayFrame = FindChildByClassName(
+            xamlRootContent, L"SystemTray.SystemTrayFrame")) {
+        extent = GetElementLength(systemTrayFrame, vertical);
+    } else {
+        auto taskbarFrameRepeater = FindTaskbarFrameRepeater(xamlRootContent);
+        auto systemTrayItem = taskbarFrameRepeater
+                                  ? FindSystemTrayItem(taskbarFrameRepeater)
+                                  : nullptr;
+        if (!systemTrayItem) {
+            return false;
+        }
+
+        extent = GetSystemTrayItemLength(systemTrayItem, vertical);
+    }
+
+    *result = GetTaskbarFrameLength(taskbarFrameElement, vertical) - extent;
+    return true;
 }
 
 // The root element of a taskbar item, e.g. the icon panel of a taskbar button.
@@ -346,6 +386,10 @@ void LimitItemContentWidth(FrameworkElement item, double maxWidth) {
 
 void ClearItemContentWidthLimits(FrameworkElement taskbarFrameRepeater) {
     EnumChildElements(taskbarFrameRepeater, [](FrameworkElement item) {
+        if (IsSystemTrayItem(item)) {
+            return false;
+        }
+
         if (auto content = GetItemContent(item)) {
             content.ClearValue(FrameworkElement::MaxWidthProperty());
 
@@ -375,8 +419,7 @@ TaskbarState* GetTaskbarState(XamlRoot xamlRoot) {
 
     auto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();
     auto taskbarFrameElement =
-        xamlRootContent ? FindChildByName(xamlRootContent, L"TaskbarFrame")
-                        : nullptr;
+        xamlRootContent ? FindTaskbarFrame(xamlRootContent) : nullptr;
     if (taskbarFrameElement &&
         it->second.vertical != IsVerticalTaskbarFrame(taskbarFrameElement)) {
         it->second.vertical = !it->second.vertical;
@@ -497,6 +540,21 @@ winrt::Windows::Foundation::Rect MoveToDisplayedRow(
         rect.Y += rect.Height;
     }
 
+    return rect;
+}
+
+// Keeps the rect of the system tray item, with the axes of a horizontal
+// taskbar, within the part of the repeater that the taskbar frame shows. The
+// repeater extends past the end of the frame by its negative end margin.
+winrt::Windows::Foundation::Rect KeepWithinTaskbarFrame(
+    winrt::Windows::Foundation::Rect rect,
+    FrameworkElement taskbarFrameRepeater,
+    float layoutLength,
+    bool vertical) {
+    auto margin = taskbarFrameRepeater.Margin();
+    double visibleLength =
+        layoutLength + (vertical ? margin.Bottom : margin.Right);
+    rect.X = std::min(rect.X, static_cast<float>(visibleLength - rect.Width));
     return rect;
 }
 
@@ -999,8 +1057,7 @@ void MoveGroupBoundsToDisplayedRow(HWND hWnd,
     TaskbarState* taskbarState = GetTaskbarState(xamlRoot);
     bool vertical = taskbarState->vertical;
 
-    auto taskbarFrame =
-        FindChildByClassName(xamlRootContent, L"Taskbar.TaskbarFrame");
+    auto taskbarFrame = FindTaskbarFrame(xamlRootContent);
     auto taskbarFrameRepeater = FindTaskbarFrameRepeater(xamlRootContent);
     winrt::Windows::Foundation::Rect taskbarFrameBounds;
     double lengthWithoutExtent;
@@ -1253,18 +1310,34 @@ HRESULT WINAPI IUIElement_Arrange_Hook(void* pThis,
         return original();
     }
 
+    bool isSystemTrayItem = IsSystemTrayItem(element);
+
     int rows = static_cast<int>(taskbarState->rowOffsetAdjustment.size());
-    if (vertical && rows > 1 && layoutThickness > 0) {
+    if (vertical && rows > 1 && layoutThickness > 0 && !isSystemTrayItem) {
         LimitItemContentWidth(element, layoutThickness / rows);
     }
 
-    winrt::Windows::Foundation::Rect displayedRect = MoveToDisplayedRow(
-        SwapAxesIfVertical(rect, vertical), taskbarState, lengthWithoutExtent,
-        startButtonLength, /*updateRowOffsets=*/true);
+    winrt::Windows::Foundation::Rect displayedRect;
+    if (isSystemTrayItem) {
+        float layoutLength = vertical ? g_taskbarCollapsibleLayoutSize.Height
+                                      : g_taskbarCollapsibleLayoutSize.Width;
+        displayedRect = KeepWithinTaskbarFrame(
+            SwapAxesIfVertical(rect, vertical), taskbarFrameRepeater,
+            layoutLength, vertical);
 
-    if (displayedRect.X + displayedRect.Width > lengthWithoutExtent) {
+        // The system tray item is the last item, so the row offsets of this
+        // pass are up to date.
         UpdateTaskbarFrameRepeaterMargin(taskbarFrameRepeater, taskbarState,
                                          lengthWithoutExtent);
+    } else {
+        displayedRect = MoveToDisplayedRow(
+            SwapAxesIfVertical(rect, vertical), taskbarState,
+            lengthWithoutExtent, startButtonLength, /*updateRowOffsets=*/true);
+
+        if (displayedRect.X + displayedRect.Width > lengthWithoutExtent) {
+            UpdateTaskbarFrameRepeaterMargin(taskbarFrameRepeater, taskbarState,
+                                             lengthWithoutExtent);
+        }
     }
 
     winrt::Windows::Foundation::Rect newRect =
@@ -1549,8 +1622,13 @@ void WINAPI TaskbarFrame_SystemTrayExtent_Hook(void* pThis, double value) {
     TaskbarState* taskbarState =
         xamlRoot ? GetTaskbarState(xamlRoot) : &detachedState;
 
+    double extent = value;
+    if (auto systemTrayItem = FindSystemTrayItem(taskbarFrameRepeater)) {
+        extent = GetSystemTrayItemLength(systemTrayItem, vertical);
+    }
+
     double lengthWithoutExtent =
-        GetTaskbarFrameLength(taskbarFrameElement, vertical) - value;
+        GetTaskbarFrameLength(taskbarFrameElement, vertical) - extent;
 
     UpdateTaskbarFrameRepeaterMargin(taskbarFrameRepeater, taskbarState,
                                      lengthWithoutExtent);

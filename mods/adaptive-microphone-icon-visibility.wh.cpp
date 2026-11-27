@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              adaptive-microphone-icon-visibility
 // @name            Adaptive Microphone Icon Visibility
-// @description     Hides the system tray microphone icon if only whitelisted applications have active access.
-// @version         1.0
+// @description     Hides the system tray microphone icon if only whitelisted applications have an active capture stream.
+// @version         2.0
 // @author          Ikkecode
 // @github          https://github.com/ikkecode
 // @twitter         https://twitter.com/ikkenand
@@ -16,8 +16,10 @@
 # Adaptive Microphone Icon Visibility
 
 This mod hides the system tray microphone icon if only whitelisted applications
-(or no applications) have active access. If an unlisted application begins using
-the microphone, the icon is immediately shown to alert the user.
+(or no applications) are using the microphone. If an unlisted application starts
+using it, the icon is shown right away.
+
+Whitelist apps by executable name, e.g. `obs64.exe`.
 
 Only Windows 11 is supported.
 
@@ -37,27 +39,29 @@ https://windhawk.net/mods/taskbar-tray-system-icon-tweaks
 - WhitelistedApps: [""]
   $name: Whitelisted Apps
   $description: >-
-    List of allowed apps. Use executable names for desktop apps
-    (e.g., obs64.exe) or the package name before the first underscore
-    for Store apps (e.g., Microsoft.WindowsSoundRecorder).
+    List of allowed apps, by executable name (e.g., obs64.exe). The app's
+    name is shown in the mod log when it starts capturing audio.
 */
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
 #include <windows.h>
 
+#include <audiopolicy.h>
+#include <mmdeviceapi.h>
+
 #include <algorithm>
 #include <atomic>
 #include <functional>
 #include <list>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
 #undef GetCurrentTime
 
-#include <winrt/Windows.UI.Core.h>
-#include <winrt/Windows.UI.Xaml.Automation.h>
+#include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.h>
@@ -78,7 +82,9 @@ using FrameworkElementLoadedEventRevoker = winrt::impl::event_revoker<
     IFrameworkElement,
     &winrt::impl::abi<IFrameworkElement>::type::remove_Loaded>;
 
-std::list<FrameworkElementLoadedEventRevoker> g_autoRevokerList;
+[[clang::no_destroy]] std::optional<
+    std::list<FrameworkElementLoadedEventRevoker>> g_autoRevokerList{
+    std::in_place};
 
 winrt::weak_ref<Controls::TextBlock> g_mainStackInnerTextBlock;
 int64_t g_mainStackTextChangedToken;
@@ -278,7 +284,7 @@ void ApplyMainStackIconViewStyle(FrameworkElement notifyIconViewElement) {
         g_mainStackTextChangedToken =
             innerTextBlock.RegisterPropertyChangedCallback(
                 Controls::TextBlock::TextProperty(),
-                [notifyIconViewElementWeakRef, &shouldHide](
+                [notifyIconViewElementWeakRef, shouldHide](
                     DependencyObject sender, DependencyProperty property) {
                     auto innerTextBlock = sender.try_as<Controls::TextBlock>();
                     if (!innerTextBlock) {
@@ -372,6 +378,12 @@ void* WINAPI IconView_IconView_Hook(void* pThis) {
 
     void* ret = IconView_IconView_Original(pThis);
 
+    // A new icon view has nothing to restore, and the revoker list is released
+    // while unloading.
+    if (g_unloading) {
+        return ret;
+    }
+
     FrameworkElement iconView = nullptr;
     ((IUnknown**)pThis)[1]->QueryInterface(winrt::guid_of<FrameworkElement>(),
                                            winrt::put_abi(iconView));
@@ -379,8 +391,8 @@ void* WINAPI IconView_IconView_Hook(void* pThis) {
         return ret;
     }
 
-    g_autoRevokerList.emplace_back();
-    auto autoRevokerIt = g_autoRevokerList.end();
+    g_autoRevokerList->emplace_back();
+    auto autoRevokerIt = g_autoRevokerList->end();
     --autoRevokerIt;
 
     *autoRevokerIt = iconView.Loaded(
@@ -389,7 +401,7 @@ void* WINAPI IconView_IconView_Hook(void* pThis) {
                         RoutedEventArgs const& e) {
             Wh_Log(L">");
 
-            g_autoRevokerList.erase(autoRevokerIt);
+            g_autoRevokerList->erase(autoRevokerIt);
 
             auto iconView = sender.try_as<FrameworkElement>();
             if (!iconView) {
@@ -567,7 +579,9 @@ void ApplySettings() {
         [](void* pParam) {
             ApplySettingsParam& param = *(ApplySettingsParam*)pParam;
 
-            g_autoRevokerList.clear();
+            if (g_autoRevokerList) {
+                g_autoRevokerList->clear();
+            }
 
             if (auto mainStackInnerTextBlock =
                     g_mainStackInnerTextBlock.get()) {
@@ -581,18 +595,19 @@ void ApplySettings() {
             auto xamlRoot = GetTaskbarXamlRoot(param.hTaskbarWnd);
             if (!xamlRoot) {
                 Wh_Log(L"Getting XamlRoot failed");
-                return;
+            } else if (!ApplyStyle(xamlRoot)) {
+                Wh_Log(L"ApplyStyle failed");
             }
 
-            if (!ApplyStyle(xamlRoot)) {
-                Wh_Log(L"ApplyStyle failed");
+            if (g_unloading) {
+                g_autoRevokerList.reset();
             }
         },
         &param);
 }
 
 bool HookSystemTraySymbols(HMODULE module) {
-    // SystemTray.dll, Taskbar.View.dll
+    // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"},
@@ -636,16 +651,14 @@ VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
     return (VS_FIXEDFILEINFO*)pFixedFileInfo;
 }
 
-// Returns the module that hosts winrt::SystemTray::* in the current build.
-// Order matters: SystemTray.dll is the new home (Win11 Insider 26200+);
-// Taskbar.View.dll is kept as fallbacks so this still works on older builds.
 HMODULE GetSystemTrayModuleHandle() {
     HMODULE module = GetModuleHandle(L"SystemTray.dll");
     if (!module) {
         module = GetModuleHandle(L"Taskbar.View.dll");
         if (module) {
-            // First known module version without SystemTray is Taskbar.View.dll
-            // 2604.8002.200.6000.
+            // Starting with Taskbar.View.dll 2604.8002.200.6000, the SystemTray
+            // types moved out of Taskbar.View.dll into SystemTray.dll, so don't
+            // hook Taskbar.View.dll at this version and above.
             VS_FIXEDFILEINFO* fixedFileInfo =
                 GetModuleVersionInfo(module, nullptr);
             WORD moduleMajor =
@@ -655,6 +668,9 @@ HMODULE GetSystemTrayModuleHandle() {
                 module = nullptr;
             }
         }
+    }
+    if (!module) {
+        module = GetModuleHandle(L"ExplorerExtensions.dll");
     }
 
     return module;
@@ -719,190 +735,321 @@ bool HookTaskbarDllSymbols() {
 std::mutex g_whitelistMutex;
 std::vector<std::wstring> g_whitelist;
 HANDLE g_hShutdownEvent = NULL;
+HANDLE g_hChangeEvent = NULL;
 HANDLE g_hMonitorThread = NULL;
 
+constexpr DWORD kFallbackRescanMs = 30000;
+
+#ifndef AUDCLNT_S_NO_SINGLE_PROCESS
+#define AUDCLNT_S_NO_SINGLE_PROCESS ((HRESULT)0x0889000D)
+#endif
+
 void SetHideMicrophoneIcon(bool hide) {
+    if (g_unloading) {
+        return;
+    }
+
     if (g_hideMicrophoneIcon.exchange(hide) != hide) {
         Wh_Log(L"Microphone icon visibility updated: hide=%d", hide);
         ApplySettings();
     }
 }
 
-ULONGLONG GetQWORDValue(HKEY hKey, const wchar_t* valueName) {
-    ULONGLONG value = 0;
-    DWORD cbData = sizeof(value);
-    DWORD dwType = 0;
-    LSTATUS status = RegQueryValueExW(hKey, valueName, NULL, &dwType,
-                                      (LPBYTE)&value, &cbData);
-    if (status == ERROR_SUCCESS && dwType == REG_QWORD) {
-        return value;
+std::wstring StripExeSuffix(std::wstring name) {
+    if (name.size() > 4 &&
+        _wcsicmp(name.c_str() + name.size() - 4, L".exe") == 0) {
+        name.resize(name.size() - 4);
     }
-    return 0;
+    return name;
 }
 
-// Extract app name from path string (handles registry '#' format for
-// non-packaged apps)
-std::wstring GetAppNameFromPath(const std::wstring& fullPath) {
-    size_t lastHash = fullPath.find_last_of(L'#');
-    if (lastHash != std::wstring::npos) {
-        return fullPath.substr(lastHash + 1);
-    }
-    size_t lastSlash = fullPath.find_last_of(L'\\');
-    if (lastSlash != std::wstring::npos) {
-        return fullPath.substr(lastSlash + 1);
-    }
-    return fullPath;
-}
+bool IsAppWhitelisted(const std::wstring& exeName) {
+    std::wstring name = StripExeSuffix(exeName);
 
-std::wstring GetCleanPackagedName(const std::wstring& packageName) {
-    size_t firstUnderscore = packageName.find(L'_');
-    if (firstUnderscore != std::wstring::npos) {
-        return packageName.substr(0, firstUnderscore);
-    }
-    return packageName;
-}
-
-bool IsAppWhitelisted(const std::wstring& appName) {
     std::lock_guard<std::mutex> lock(g_whitelistMutex);
     for (const auto& whitelisted : g_whitelist) {
-        if (_wcsicmp(appName.c_str(), whitelisted.c_str()) == 0) {
+        if (_wcsicmp(name.c_str(), whitelisted.c_str()) == 0) {
             return true;
         }
     }
     return false;
 }
 
-void ScanMicrophoneKeys(const wchar_t* subKeyPath,
-                        bool isPackaged,
-                        std::vector<std::wstring>& activeApps) {
-    HKEY hParentKey = NULL;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, subKeyPath, 0, KEY_READ,
-                      &hParentKey) != ERROR_SUCCESS) {
-        return;
+std::wstring GetProcessExeName(DWORD pid) {
+    HANDLE hProcess =
+        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!hProcess) {
+        return L"";
     }
 
-    wchar_t szSubKeyName[MAX_PATH];
-    DWORD cbName = MAX_PATH;
-    DWORD dwIndex = 0;
+    WCHAR path[MAX_PATH * 2];
+    DWORD len = ARRAYSIZE(path);
+    std::wstring name;
+    if (QueryFullProcessImageNameW(hProcess, 0, path, &len)) {
+        const WCHAR* slash = wcsrchr(path, L'\\');
+        name = slash ? slash + 1 : path;
+    }
 
-    while (RegEnumKeyExW(hParentKey, dwIndex, szSubKeyName, &cbName, NULL, NULL,
-                         NULL, NULL) == ERROR_SUCCESS) {
-        if (isPackaged && _wcsicmp(szSubKeyName, L"NonPackaged") == 0) {
-            cbName = MAX_PATH;
-            dwIndex++;
-            continue;
+    CloseHandle(hProcess);
+    return name;
+}
+
+// Callbacks must not (un)register notifications, so they only wake the
+// monitor thread.
+struct AudioChangeListener : winrt::implements<AudioChangeListener,
+                                               IMMNotificationClient,
+                                               IAudioSessionNotification,
+                                               IAudioSessionEvents> {
+    // Changes that can affect which apps are capturing.
+    STDMETHODIMP OnDeviceAdded(LPCWSTR) { return Signal(); }
+    STDMETHODIMP OnDeviceRemoved(LPCWSTR) { return Signal(); }
+    STDMETHODIMP OnDeviceStateChanged(LPCWSTR, DWORD) { return Signal(); }
+    STDMETHODIMP OnSessionCreated(IAudioSessionControl*) { return Signal(); }
+    STDMETHODIMP OnStateChanged(AudioSessionState) { return Signal(); }
+    STDMETHODIMP OnSessionDisconnected(AudioSessionDisconnectReason) {
+        return Signal();
+    }
+
+    // Everything else is ignored.
+    STDMETHODIMP OnDefaultDeviceChanged(EDataFlow, ERole, LPCWSTR) {
+        return S_OK;
+    }
+    STDMETHODIMP OnPropertyValueChanged(LPCWSTR, const PROPERTYKEY) {
+        return S_OK;
+    }
+    STDMETHODIMP OnDisplayNameChanged(LPCWSTR, LPCGUID) { return S_OK; }
+    STDMETHODIMP OnIconPathChanged(LPCWSTR, LPCGUID) { return S_OK; }
+    STDMETHODIMP OnSimpleVolumeChanged(float, BOOL, LPCGUID) { return S_OK; }
+    STDMETHODIMP OnChannelVolumeChanged(DWORD, float[], DWORD, LPCGUID) {
+        return S_OK;
+    }
+    STDMETHODIMP OnGroupingParamChanged(LPCGUID, LPCGUID) { return S_OK; }
+
+   private:
+    static HRESULT Signal() {
+        SetEvent(g_hChangeEvent);
+        return S_OK;
+    }
+};
+
+class CaptureSessionWatcher {
+   public:
+    bool Init() {
+        if (FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
+                                    CLSCTX_ALL, __uuidof(IMMDeviceEnumerator),
+                                    m_enumerator.put_void()))) {
+            Wh_Log(L"Failed to create IMMDeviceEnumerator");
+            return false;
         }
 
-        HKEY hSubKey = NULL;
-        if (RegOpenKeyExW(hParentKey, szSubKeyName, 0, KEY_READ, &hSubKey) ==
-            ERROR_SUCCESS) {
-            ULONGLONG stop = GetQWORDValue(hSubKey, L"LastUsedTimeStop");
-            ULONGLONG start = GetQWORDValue(hSubKey, L"LastUsedTimeStart");
+        m_listener = winrt::make_self<AudioChangeListener>();
 
-            if (stop == 0 && start != 0) {
-                if (isPackaged) {
-                    activeApps.push_back(GetCleanPackagedName(szSubKeyName));
+        if (FAILED(m_enumerator->RegisterEndpointNotificationCallback(
+                m_listener.get()))) {
+            Wh_Log(L"Failed to register device notifications");
+            m_enumerator = nullptr;  // Nothing to unregister.
+            return false;
+        }
+
+        return true;
+    }
+
+    ~CaptureSessionWatcher() {
+        ClearRegistrations();
+        if (m_enumerator) {
+            m_enumerator->UnregisterEndpointNotificationCallback(
+                m_listener.get());
+        }
+    }
+
+    // Register before reading state, so no change in between is missed.
+    // Returns false if the capture sessions couldn't be read.
+    bool Rescan(std::vector<std::wstring>& activeApps) {
+        ClearRegistrations();
+
+        winrt::com_ptr<IMMDeviceCollection> devices;
+        if (FAILED(m_enumerator->EnumAudioEndpoints(
+                eCapture, DEVICE_STATE_ACTIVE, devices.put()))) {
+            return false;
+        }
+
+        UINT deviceCount = 0;
+        devices->GetCount(&deviceCount);
+
+        for (UINT i = 0; i < deviceCount; i++) {
+            winrt::com_ptr<IMMDevice> device;
+            if (FAILED(devices->Item(i, device.put()))) {
+                return false;
+            }
+
+            winrt::com_ptr<IAudioSessionManager2> manager;
+            if (FAILED(device->Activate(__uuidof(IAudioSessionManager2),
+                                        CLSCTX_ALL, nullptr,
+                                        manager.put_void()))) {
+                return false;
+            }
+
+            if (SUCCEEDED(
+                    manager->RegisterSessionNotification(m_listener.get()))) {
+                m_managers.push_back(manager);
+            }
+
+            // Also required for session-created notifications to start.
+            winrt::com_ptr<IAudioSessionEnumerator> sessions;
+            if (FAILED(manager->GetSessionEnumerator(sessions.put()))) {
+                return false;
+            }
+
+            int sessionCount = 0;
+            sessions->GetCount(&sessionCount);
+
+            for (int j = 0; j < sessionCount; j++) {
+                winrt::com_ptr<IAudioSessionControl> control;
+                if (FAILED(sessions->GetSession(j, control.put()))) {
+                    return false;
+                }
+
+                if (SUCCEEDED(control->RegisterAudioSessionNotification(
+                        m_listener.get()))) {
+                    m_sessions.push_back(control);
+                }
+
+                AudioSessionState state;
+                if (FAILED(control->GetState(&state))) {
+                    return false;
+                }
+                if (state != AudioSessionStateActive) {
+                    continue;
+                }
+
+                auto control2 = control.try_as<IAudioSessionControl2>();
+                if (control2 && control2->IsSystemSoundsSession() == S_OK) {
+                    continue;
+                }
+
+                activeApps.push_back(GetSessionAppName(control2));
+            }
+        }
+
+        return true;
+    }
+
+   private:
+    // A session that can't be attributed to a single process is reported as
+    // "unknown", which is never whitelisted.
+    static std::wstring GetSessionAppName(
+        const winrt::com_ptr<IAudioSessionControl2>& control2) {
+        if (!control2) {
+            return L"unknown";
+        }
+
+        DWORD pid = 0;
+        HRESULT hr = control2->GetProcessId(&pid);
+        if (FAILED(hr) || hr == AUDCLNT_S_NO_SINGLE_PROCESS || pid == 0) {
+            return L"unknown";
+        }
+
+        std::wstring name = GetProcessExeName(pid);
+        if (name.empty()) {
+            name = L"pid:" + std::to_wstring(pid);
+        }
+        return name;
+    }
+
+    void ClearRegistrations() {
+        for (auto& session : m_sessions) {
+            session->UnregisterAudioSessionNotification(m_listener.get());
+        }
+        m_sessions.clear();
+
+        for (auto& manager : m_managers) {
+            manager->UnregisterSessionNotification(m_listener.get());
+        }
+        m_managers.clear();
+    }
+
+    winrt::com_ptr<IMMDeviceEnumerator> m_enumerator;
+    winrt::com_ptr<AudioChangeListener> m_listener;
+    std::vector<winrt::com_ptr<IAudioSessionManager2>> m_managers;
+    std::vector<winrt::com_ptr<IAudioSessionControl>> m_sessions;
+};
+
+void UpdateMicrophoneIcon(std::vector<std::wstring> activeApps,
+                          std::vector<std::wstring>& lastLogged) {
+    std::sort(activeApps.begin(), activeApps.end());
+    activeApps.erase(std::unique(activeApps.begin(), activeApps.end()),
+                     activeApps.end());
+
+    if (activeApps != lastLogged) {
+        lastLogged = activeApps;
+        Wh_Log(L"Active capture apps: %zu", activeApps.size());
+        for (const auto& app : activeApps) {
+            Wh_Log(L"  %s (whitelisted=%d)", app.c_str(),
+                   IsAppWhitelisted(app));
+        }
+    }
+
+    bool allWhitelisted =
+        std::all_of(activeApps.begin(), activeApps.end(), IsAppWhitelisted);
+    SetHideMicrophoneIcon(allWhitelisted);
+}
+
+DWORD WINAPI MonitorThreadProc(LPVOID lpParam) {
+    HRESULT hrInit = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+
+    {
+        CaptureSessionWatcher watcher;
+        if (!watcher.Init()) {
+            Wh_Log(L"Microphone monitoring failed, showing the icon");
+            SetHideMicrophoneIcon(false);
+        } else {
+            std::vector<std::wstring> lastLogged;
+            HANDLE waitHandles[] = {g_hShutdownEvent, g_hChangeEvent};
+
+            while (true) {
+                std::vector<std::wstring> activeApps;
+                if (watcher.Rescan(activeApps)) {
+                    UpdateMicrophoneIcon(std::move(activeApps), lastLogged);
                 } else {
-                    activeApps.push_back(GetAppNameFromPath(szSubKeyName));
+                    Wh_Log(
+                        L"Failed to read capture sessions, showing the icon");
+                    SetHideMicrophoneIcon(false);
+                }
+
+                DWORD result =
+                    WaitForMultipleObjects(ARRAYSIZE(waitHandles), waitHandles,
+                                           FALSE, kFallbackRescanMs);
+                bool changed = result == WAIT_OBJECT_0 + 1;
+                bool timedOut = result == WAIT_TIMEOUT;
+                if (!changed && !timedOut) {
+                    break;  // Shutdown, or the wait failed.
                 }
             }
-            RegCloseKey(hSubKey);
-        }
-
-        cbName = MAX_PATH;
-        dwIndex++;
-    }
-
-    RegCloseKey(hParentKey);
-}
-
-void CheckMicrophoneStatus() {
-    const wchar_t* kPackagedPath =
-        L"Software\\Microsoft\\Windows\\CurrentVersion\\"
-        L"CapabilityAccessManager\\ConsentStore\\microphone";
-
-    const wchar_t* kNonPackagedPath =
-        L"Software\\Microsoft\\Windows\\CurrentVersion\\"
-        L"CapabilityAccessManager\\ConsentStore\\microphone\\NonPackaged";
-
-    std::vector<std::wstring> activeApps;
-    ScanMicrophoneKeys(kPackagedPath, true, activeApps);
-    ScanMicrophoneKeys(kNonPackagedPath, false, activeApps);
-
-    if (!activeApps.empty()) {
-        std::sort(activeApps.begin(), activeApps.end());
-        auto last = std::unique(activeApps.begin(), activeApps.end());
-        activeApps.erase(last, activeApps.end());
-    }
-
-    bool unauthorizedDetected = false;
-    for (const auto& app : activeApps) {
-        if (!IsAppWhitelisted(app)) {
-            unauthorizedDetected = true;
-            break;
         }
     }
 
-    SetHideMicrophoneIcon(!unauthorizedDetected);
-}
-
-DWORD WINAPI RegMonitorThreadProc(LPVOID lpParam) {
-    HKEY hKey = NULL;
-    const wchar_t* kPath =
-        L"Software\\Microsoft\\Windows\\CurrentVersion\\"
-        L"CapabilityAccessManager\\ConsentStore\\microphone";
-
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, kPath, 0, KEY_NOTIFY, &hKey) !=
-        ERROR_SUCCESS) {
-        Wh_Log(L"Failed to open registry key for notification");
-        return 0;
+    if (SUCCEEDED(hrInit)) {
+        CoUninitialize();
     }
 
-    HANDLE hRegEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
-    if (!hRegEvent) {
-        RegCloseKey(hKey);
-        return 0;
-    }
-
-    HANDLE hWaitHandles[2] = {g_hShutdownEvent, hRegEvent};
-    bool bRunning = true;
-
-    while (bRunning) {
-        // Watch subtree recursively to monitor NonPackaged application subkeys
-        LONG status = RegNotifyChangeKeyValue(
-            hKey, TRUE, REG_NOTIFY_CHANGE_NAME | REG_NOTIFY_CHANGE_LAST_SET,
-            hRegEvent, TRUE);
-
-        if (status != ERROR_SUCCESS) {
-            Wh_Log(L"RegNotifyChangeKeyValue failed: %d", status);
-            break;
-        }
-
-        CheckMicrophoneStatus();
-
-        DWORD dwWait = WaitForMultipleObjects(2, hWaitHandles, FALSE, INFINITE);
-        if (dwWait == WAIT_OBJECT_0) {
-            bRunning = false;
-        } else if (dwWait != WAIT_OBJECT_0 + 1) {
-            break;  // Break loop on wait failure or unexpected event
-        }
-    }
-
-    CloseHandle(hRegEvent);
-    RegCloseKey(hKey);
     return 0;
 }
 
-void StartRegistryMonitor() {
+void StartMonitor() {
     g_hShutdownEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
-    if (!g_hShutdownEvent) {
-        return;
+    g_hChangeEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
+    if (g_hShutdownEvent && g_hChangeEvent) {
+        g_hMonitorThread =
+            CreateThread(NULL, 0, MonitorThreadProc, NULL, 0, NULL);
     }
-    g_hMonitorThread =
-        CreateThread(NULL, 0, RegMonitorThreadProc, NULL, 0, NULL);
+
+    if (!g_hMonitorThread) {
+        Wh_Log(L"Failed to start microphone monitoring, showing the icon");
+        SetHideMicrophoneIcon(false);
+    }
 }
 
-void StopRegistryMonitor() {
+void StopMonitor() {
     if (g_hShutdownEvent) {
         SetEvent(g_hShutdownEvent);
     }
@@ -910,6 +1057,10 @@ void StopRegistryMonitor() {
         WaitForSingleObject(g_hMonitorThread, INFINITE);
         CloseHandle(g_hMonitorThread);
         g_hMonitorThread = NULL;
+    }
+    if (g_hChangeEvent) {
+        CloseHandle(g_hChangeEvent);
+        g_hChangeEvent = NULL;
     }
     if (g_hShutdownEvent) {
         CloseHandle(g_hShutdownEvent);
@@ -930,7 +1081,7 @@ void LoadSettings() {
             break;
         }
 
-        g_whitelist.emplace_back(appNameSetting);
+        g_whitelist.push_back(StripExeSuffix(appNameSetting.get()));
     }
 
     Wh_Log(L"Loaded %zu whitelisted apps total", g_whitelist.size());
@@ -959,6 +1110,7 @@ BOOL Wh_ModInit() {
     }
 
     if (!HookTaskbarDllSymbols()) {
+        Wh_Log(L"HookTaskbarDllSymbols failed");
         return FALSE;
     }
 
@@ -981,7 +1133,7 @@ void Wh_ModAfterInit() {
     }
 
     ApplySettings();
-    StartRegistryMonitor();
+    StartMonitor();
 }
 
 void Wh_ModBeforeUninit() {
@@ -989,13 +1141,20 @@ void Wh_ModBeforeUninit() {
 
     g_unloading = true;
 
-    StopRegistryMonitor();
+    StopMonitor();
     ApplySettings();
+}
+
+void Wh_ModUninit() {
+    Wh_Log(L">");
 }
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L"> Whitelist changed, reloading...");
 
     LoadSettings();
-    CheckMicrophoneStatus();
+
+    if (g_hChangeEvent) {
+        SetEvent(g_hChangeEvent);
+    }
 }

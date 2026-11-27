@@ -2,9 +2,15 @@
 // @id              taskbar-independent-per-monitor
 // @name            Independent taskbar per monitor
 // @name:de-DE      Eigenständige Taskleiste pro Monitor
+// @name:ru-RU     Независимая панель задач для каждого монитора
+// @name:fr-FR     Barre des tâches indépendante par écran
+// @name:es-ES     Barra de tareas independiente por monitor
 // @description     Each taskbar shows only the windows of its own monitor and has its own pinned items
 // @description:de-DE Jede Taskleiste zeigt nur die Fenster ihres Monitors und hat eigene angeheftete Apps
-// @version         1.6.0
+// @description:ru-RU Каждая панель задач показывает только окна своего монитора и имеет свои закреплённые приложения
+// @description:fr-FR Chaque barre des tâches affiche uniquement les fenêtres de son écran et a ses propres applications épinglées
+// @description:es-ES Cada barra de tareas muestra solo las ventanas de su monitor y tiene sus propias aplicaciones ancladas
+// @version         1.7.2
 // @author          2ndSky95
 // @github          https://github.com/2ndSky95
 // @license         MIT
@@ -19,14 +25,24 @@
 /*
 # Independent taskbar per monitor
 
+![Without the mod](https://raw.githubusercontent.com/2ndSky95/taskbar-independent-per-monitor/68d3b6ff905236f0b14d28841304371f5c39ec9a/images/without-mod.gif) \
+![GB](https://raw.githubusercontent.com/2ndSky95/taskbar-independent-per-monitor/ffbfed14f39f6c66687462cb35a0fd3d22e50295/images/flags/gb.png) *Without the mod*&emsp;&emsp;·&emsp;&emsp;![DE](https://raw.githubusercontent.com/2ndSky95/taskbar-independent-per-monitor/ffbfed14f39f6c66687462cb35a0fd3d22e50295/images/flags/de.png) *Ohne Mod*&emsp;&emsp;·&emsp;&emsp;![RU](https://raw.githubusercontent.com/2ndSky95/taskbar-independent-per-monitor/ffbfed14f39f6c66687462cb35a0fd3d22e50295/images/flags/ru.png) *Без мода*&emsp;&emsp;·&emsp;&emsp;![FR](https://raw.githubusercontent.com/2ndSky95/taskbar-independent-per-monitor/ffbfed14f39f6c66687462cb35a0fd3d22e50295/images/flags/fr.png) *Sans le mod*&emsp;&emsp;·&emsp;&emsp;![ES](https://raw.githubusercontent.com/2ndSky95/taskbar-independent-per-monitor/ffbfed14f39f6c66687462cb35a0fd3d22e50295/images/flags/es.png) *Sin el mod*
+
+&nbsp;
+
+![With the mod](https://raw.githubusercontent.com/2ndSky95/taskbar-independent-per-monitor/68d3b6ff905236f0b14d28841304371f5c39ec9a/images/with-mod.gif) \
+![GB](https://raw.githubusercontent.com/2ndSky95/taskbar-independent-per-monitor/ffbfed14f39f6c66687462cb35a0fd3d22e50295/images/flags/gb.png) *With the mod*&emsp;&emsp;·&emsp;&emsp;![DE](https://raw.githubusercontent.com/2ndSky95/taskbar-independent-per-monitor/ffbfed14f39f6c66687462cb35a0fd3d22e50295/images/flags/de.png) *Mit Mod*&emsp;&emsp;·&emsp;&emsp;![RU](https://raw.githubusercontent.com/2ndSky95/taskbar-independent-per-monitor/ffbfed14f39f6c66687462cb35a0fd3d22e50295/images/flags/ru.png) *С модом*&emsp;&emsp;·&emsp;&emsp;![FR](https://raw.githubusercontent.com/2ndSky95/taskbar-independent-per-monitor/ffbfed14f39f6c66687462cb35a0fd3d22e50295/images/flags/fr.png) *Avec le mod*&emsp;&emsp;·&emsp;&emsp;![ES](https://raw.githubusercontent.com/2ndSky95/taskbar-independent-per-monitor/ffbfed14f39f6c66687462cb35a0fd3d22e50295/images/flags/es.png) *Con el mod*
+
+---
+
+## ![GB](https://raw.githubusercontent.com/2ndSky95/taskbar-independent-per-monitor/ffbfed14f39f6c66687462cb35a0fd3d22e50295/images/flags/gb.png) English
+
 Each taskbar behaves like its own main taskbar.
 
-![Each taskbar shows only the windows of its own monitor](https://raw.githubusercontent.com/2ndSky95/taskbar-independent-per-monitor/ea374053f26cfbfe3865461bdd4adf86dce6b782/images/windows-per-monitor.png) \
-*Each taskbar shows only the windows of its own monitor*
+The pictures show: pinned items only, windows grouped and ungrouped, with and
+without labels, dragging a window to another monitor and pinning an app.
 
-![Separate pinned items for each taskbar](https://raw.githubusercontent.com/2ndSky95/taskbar-independent-per-monitor/ea374053f26cfbfe3865461bdd4adf86dce6b782/images/pins-per-taskbar.png) \
-*Separate pinned items for each taskbar*
-
+* Each taskbar shows only the windows of its own monitor.
 * Pin/unpin from the jump list applies to that taskbar only.
 * Pin *Properties* can differ per taskbar.
 * Clicking the pin of a running app brings its window to the front (Shift+click
@@ -35,17 +51,149 @@ Each taskbar behaves like its own main taskbar.
   are added at the end.
 * Drag a pin to another taskbar to move it there.
 
-Requires 64-bit Windows 10 or Windows 11 and *Show my taskbar on all displays*. Tested with
-*Combine taskbar buttons: Never*. Not compatible with *Disable grouping on the
-taskbar*.
+Requires 64-bit Windows 10 or Windows 11 and *Show my taskbar on all displays*.
+Tested with *Combine taskbar buttons: Never*.
+
+Note: other mods that change the taskbar buttons may get in the way. Please check
+the combination yourself, there is no guarantee.
+
+With *Disable grouping on the taskbar*, pinning from a window button pins the app's
+Start menu shortcut. This is a temporary workaround for [a bug in that mod](https://github.com/ramensoftware/windhawk-mods/issues/7900);
+existing pins are not changed.
+
+---
+
+## ![DE](https://raw.githubusercontent.com/2ndSky95/taskbar-independent-per-monitor/ffbfed14f39f6c66687462cb35a0fd3d22e50295/images/flags/de.png) Deutsch
+
+Jede Taskleiste verhält sich wie eine eigene Haupt-Taskleiste.
+
+Die Bilder zeigen: nur Pins, Fenster gruppiert und einzeln, mit und ohne
+Beschriftung, ein Fenster auf einen anderen Monitor ziehen und eine App anheften.
+
+* Jede Taskleiste zeigt nur die Fenster ihres eigenen Monitors.
+* Anheften/Lösen über die Sprungliste gilt nur für diese Taskleiste.
+* Die *Eigenschaften* eines Pins können je Taskleiste verschieden sein.
+* Ein Klick auf den Pin einer laufenden App holt ihr Fenster nach vorn
+  (Umschalt+Klick oder Mittelklick startet eine neue Instanz).
+* Jede Taskleiste behält ihre eigene Reihenfolge, auch nach einem Neustart.
+  Neue Fenster kommen ans Ende.
+* Einen Pin auf eine andere Taskleiste ziehen, um ihn dorthin zu verschieben.
+
+Benötigt 64-Bit-Windows 10 oder Windows 11 und *Taskleiste auf allen Anzeigen
+anzeigen*. Getestet mit *Taskleistenschaltflächen zusammenfassen: Nie*.
+
+Hinweis: Andere Mods, die die Taskleisten-Schaltflächen ändern, können sich in
+die Quere kommen. Bitte die Kombination selbst prüfen, keine Garantie.
+
+Mit *Disable grouping on the taskbar* heftet das Anheften über einen Fenster-Button
+die Startmenü-Verknüpfung der App an. Das ist eine vorübergehende Umgehung für
+[einen Fehler in dieser Mod](https://github.com/ramensoftware/windhawk-mods/issues/7900); vorhandene Pins bleiben unverändert.
+
+---
+
+## ![RU](https://raw.githubusercontent.com/2ndSky95/taskbar-independent-per-monitor/ffbfed14f39f6c66687462cb35a0fd3d22e50295/images/flags/ru.png) Русский
+
+Каждая панель задач работает как отдельная главная панель.
+
+На картинках: только закреплённые значки, окна сгруппированные и по отдельности,
+с подписями и без, перетаскивание окна на другой монитор и закрепление приложения.
+
+* Каждая панель задач показывает только окна своего монитора.
+* Закрепление/открепление через список переходов действует только для этой
+  панели.
+* *Свойства* закреплённого значка могут различаться для каждой панели.
+* Щелчок по значку запущенного приложения выводит его окно на передний план
+  (Shift+щелчок или щелчок средней кнопкой запускает новый экземпляр).
+* Каждая панель сохраняет свой порядок кнопок, в том числе после перезапуска.
+  Новые окна добавляются в конец.
+* Перетащите закреплённый значок на другую панель, чтобы переместить его туда.
+
+Требуется 64-разрядная Windows 10 или Windows 11 и параметр *Показывать панель
+задач на всех дисплеях*. Проверено с *Группировать кнопки на панели задач:
+Никогда*.
+
+Примечание: другие моды, изменяющие кнопки панели задач, могут мешать работе.
+Проверьте сочетание сами, гарантии нет.
+
+С модом *Disable grouping on the taskbar* закрепление через кнопку окна закрепляет
+ярлык приложения из меню «Пуск». Это временное решение [ошибки в том моде](https://github.com/ramensoftware/windhawk-mods/issues/7900);
+существующие закрепления не изменяются.
+
+---
+
+## ![FR](https://raw.githubusercontent.com/2ndSky95/taskbar-independent-per-monitor/ffbfed14f39f6c66687462cb35a0fd3d22e50295/images/flags/fr.png) Français
+
+Chaque barre des tâches se comporte comme sa propre barre principale.
+
+Les images montrent : éléments épinglés seuls, fenêtres regroupées ou séparées,
+avec et sans étiquettes, déplacement d'une fenêtre vers un autre écran et
+épinglage d'une application.
+
+* Chaque barre des tâches n'affiche que les fenêtres de son propre écran.
+* Épingler/désépingler depuis la liste de raccourcis ne s'applique qu'à cette
+  barre.
+* Les *Propriétés* d'un élément épinglé peuvent différer selon la barre.
+* Un clic sur l'élément épinglé d'une application en cours ramène sa fenêtre au
+  premier plan (Maj+clic ou clic du milieu lance une nouvelle instance).
+* Chaque barre conserve son propre ordre de boutons, même après un redémarrage.
+  Les nouvelles fenêtres sont ajoutées à la fin.
+* Faites glisser un élément épinglé vers une autre barre pour l'y déplacer.
+
+Nécessite Windows 10 ou Windows 11 64 bits et *Afficher ma barre des tâches sur
+tous les écrans*. Testé avec *Combiner les boutons de la barre des tâches :
+Jamais*.
+
+Remarque : d'autres mods qui modifient les boutons de la barre des tâches peuvent
+gêner. Vérifiez la combinaison vous-même, sans garantie.
+
+Avec *Disable grouping on the taskbar*, épingler depuis le bouton d'une fenêtre épingle
+le raccourci du menu Démarrer de l'application. C'est une solution temporaire à
+[un bug de ce mod](https://github.com/ramensoftware/windhawk-mods/issues/7900) ; les épingles existantes ne sont pas modifiées.
+
+---
+
+## ![ES](https://raw.githubusercontent.com/2ndSky95/taskbar-independent-per-monitor/ffbfed14f39f6c66687462cb35a0fd3d22e50295/images/flags/es.png) Español
+
+Cada barra de tareas funciona como su propia barra principal.
+
+Las imágenes muestran: solo elementos anclados, ventanas agrupadas y separadas,
+con y sin etiquetas, arrastrar una ventana a otro monitor y anclar una aplicación.
+
+* Cada barra de tareas muestra solo las ventanas de su propio monitor.
+* Anclar/desanclar desde la lista de accesos directos solo se aplica a esa barra.
+* Las *Propiedades* de un elemento anclado pueden ser distintas en cada barra.
+* Al hacer clic en el elemento anclado de una aplicación en ejecución, su ventana
+  pasa al frente (Mayús+clic o clic central abre una nueva instancia).
+* Cada barra conserva su propio orden de botones, también tras reiniciar. Las
+  ventanas nuevas se añaden al final.
+* Arrastra un elemento anclado a otra barra para moverlo allí.
+
+Requiere Windows 10 u 11 de 64 bits y *Mostrar mi barra de tareas en todas las
+pantallas*. Probado con *Combinar botones de la barra de tareas: Nunca*.
+
+Nota: otros mods que cambian los botones de la barra de tareas pueden interferir.
+Comprueba la combinación tú mismo, sin garantía.
+
+Con *Disable grouping on the taskbar*, anclar desde el botón de una ventana ancla el
+acceso directo del menú Inicio de la aplicación. Es una solución temporal para
+[un error de ese mod](https://github.com/ramensoftware/windhawk-mods/issues/7900); los anclajes existentes no se modifican.
+
+---
+
+![GB](https://raw.githubusercontent.com/2ndSky95/taskbar-independent-per-monitor/ffbfed14f39f6c66687462cb35a0fd3d22e50295/images/flags/gb.png) **Report a bug**&emsp;&emsp;·&emsp;&emsp;![DE](https://raw.githubusercontent.com/2ndSky95/taskbar-independent-per-monitor/ffbfed14f39f6c66687462cb35a0fd3d22e50295/images/flags/de.png) **Fehler melden**&emsp;&emsp;·&emsp;&emsp;![RU](https://raw.githubusercontent.com/2ndSky95/taskbar-independent-per-monitor/ffbfed14f39f6c66687462cb35a0fd3d22e50295/images/flags/ru.png) **Сообщить об ошибке**&emsp;&emsp;·&emsp;&emsp;![FR](https://raw.githubusercontent.com/2ndSky95/taskbar-independent-per-monitor/ffbfed14f39f6c66687462cb35a0fd3d22e50295/images/flags/fr.png) **Signaler un bug**&emsp;&emsp;·&emsp;&emsp;![ES](https://raw.githubusercontent.com/2ndSky95/taskbar-independent-per-monitor/ffbfed14f39f6c66687462cb35a0fd3d22e50295/images/flags/es.png) **Informar de un error**
+
+[github.com/ramensoftware/windhawk-mods/issues](https://github.com/ramensoftware/windhawk-mods/issues/new?template=bug_report.md&title=%5BIndependent%20taskbar%20per%20monitor%5D%20)
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
 - windowMode: monitor
-  $name: Windows on each taskbar
-  $name:de-DE: Fenster auf jeder Taskleiste
+  $name: Windows · Which windows each taskbar shows
+  $name:de-DE: Fenster · Welche Fenster jede Leiste zeigt
+  $name:ru-RU: Окна · Какие окна показывает каждая панель
+  $name:fr-FR: Fenêtres · Fenêtres affichées par chaque barre
+  $name:es-ES: Ventanas · Qué ventanas muestra cada barra
   $options:
   - monitor: Only the windows of its own monitor
   - primaryAll: Primary taskbar shows all windows
@@ -54,58 +202,141 @@ taskbar*.
   - monitor: Nur die Fenster des eigenen Monitors
   - primaryAll: Hauptleiste zeigt alle Fenster
   - all: Alle Fenster auf allen Taskleisten
+  $options:ru-RU:
+  - monitor: Только окна своего монитора
+  - primaryAll: Главная панель показывает все окна
+  - all: Все окна на всех панелях задач
+  $options:fr-FR:
+  - monitor: Seulement les fenêtres de son écran
+  - primaryAll: La barre principale affiche toutes les fenêtres
+  - all: Toutes les fenêtres sur toutes les barres
+  $options:es-ES:
+  - monitor: Solo las ventanas de su monitor
+  - primaryAll: La barra principal muestra todas las ventanas
+  - all: Todas las ventanas en todas las barras
 - alwaysOnAllTaskbars: [""]
-  $name: Programs shown on all taskbars
-  $name:de-DE: Programme auf allen Taskleisten
+  $name: Windows · Programs on all taskbars
+  $name:de-DE: Fenster · Programme auf allen Taskleisten
+  $name:ru-RU: Окна · Программы на всех панелях задач
+  $name:fr-FR: Fenêtres · Programmes sur toutes les barres des tâches
+  $name:es-ES: Ventanas · Programas en todas las barras de tareas
   $description: Process name or path, e.g. mspaint.exe
-  $description:de-DE: Prozessname oder Pfad, z.B. mspaint.exe
+  $description:de-DE: Prozessname oder Pfad, z. B. mspaint.exe
+  $description:ru-RU: Имя процесса или путь, например mspaint.exe
+  $description:fr-FR: Nom du processus ou chemin, p. ex. mspaint.exe
+  $description:es-ES: Nombre del proceso o ruta, p. ej. mspaint.exe
 - pinMode: perTaskbar
-  $name: Pinned items
-  $name:de-DE: Angeheftete Apps
+  $name: Pins · Mode
+  $name:de-DE: Pins · Modus
+  $name:ru-RU: Закрепления · Режим
+  $name:fr-FR: Épingles · Mode
+  $name:es-ES: Anclados · Modo
   $options:
   - perTaskbar: Separate for each taskbar
   - everywhere: Same on all taskbars
   $options:de-DE:
   - perTaskbar: Eigene pro Taskleiste
   - everywhere: Überall dieselben
+  $options:ru-RU:
+  - perTaskbar: Отдельные для каждой панели
+  - everywhere: Одинаковые на всех панелях
+  $options:fr-FR:
+  - perTaskbar: Séparées pour chaque barre
+  - everywhere: Identiques sur toutes les barres
+  $options:es-ES:
+  - perTaskbar: Propios en cada barra
+  - everywhere: Iguales en todas las barras
 - unassignedPins: primary
-  $name: Pinned items without an assigned taskbar
-  $name:de-DE: Angeheftete Apps ohne Zuordnung
-  $description: Pinned before the mod was installed, or by Windows or an installer
-  $description:de-DE: Vor der Mod oder von Windows bzw. einem Installer angeheftet
+  $name: Pins · Pins without an assigned taskbar
+  $name:de-DE: Pins · Pins ohne Zuordnung
+  $name:ru-RU: Закрепления · Закрепления без привязки
+  $name:fr-FR: Épingles · Épingles sans barre attribuée
+  $name:es-ES: Anclados · Anclajes sin barra asignada
+  $description: Pinned before the mod, or by Windows or an installer. Only with separate pins.
+  $description:de-DE: Vor der Mod oder von Windows bzw. einem Installer angeheftet. Nur bei eigenen Pins.
+  $description:ru-RU: Закреплены до установки мода, системой или установщиком. Только при отдельных закреплениях.
+  $description:fr-FR: Épinglées avant le mod, par Windows ou par un installateur. Uniquement avec des épingles séparées.
+  $description:es-ES: Ancladas antes del mod, por Windows o por un instalador. Solo con anclajes propios por barra.
   $options:
   - primary: Primary taskbar only
   - all: All taskbars
   $options:de-DE:
   - primary: Nur Hauptleiste
   - all: Alle Taskleisten
+  $options:ru-RU:
+  - primary: Только главная панель
+  - all: Все панели задач
+  $options:fr-FR:
+  - primary: Barre principale uniquement
+  - all: Toutes les barres des tâches
+  $options:es-ES:
+  - primary: Solo la barra principal
+  - all: Todas las barras de tareas
+- showAppsOnAllTaskbars: true
+  $name: Pins · Show apps on all taskbars
+  $name:de-DE: Pins · Apps auf allen Taskleisten anzeigen
+  $name:ru-RU: Закрепления · Показывать приложения на всех панелях
+  $name:fr-FR: Épingles · Afficher les applications sur toutes les barres
+  $name:es-ES: Anclados · Mostrar aplicaciones en todas las barras
+  $description: Needed for separate pins. Applied only while the mod runs; the Windows setting stays unchanged. If off, set it to "All taskbars" manually.
+  $description:de-DE: Nötig für eigene Pins. Gilt nur, solange die Mod läuft; die Windows-Einstellung bleibt unverändert. Wenn aus, von Hand auf „Alle Taskleisten“ stellen.
+  $description:ru-RU: Нужно для отдельных закреплений. Действует, пока работает мод; настройка Windows не меняется. Если выключено, выберите «Все панели задач» вручную.
+  $description:fr-FR: Nécessaire pour des épingles séparées. Actif tant que le mod tourne ; le réglage Windows reste inchangé. Si désactivé, choisissez « Toutes les barres des tâches » à la main.
+  $description:es-ES: Necesario para anclajes propios. Solo mientras el mod está activo; el ajuste de Windows no cambia. Si está desactivado, elija «Todas las barras de tareas» manualmente.
 - foregroundFix: true
-  $name: Bring running apps to the front
-  $name:de-DE: Laufende Apps nach vorn holen
-  $description: Clicking a pin brings the app's window to the front instead of starting it again. Middle-click or Shift+click starts a new window, e.g. a second Firefox window for another monitor
-  $description:de-DE: Klick auf einen Pin holt das Fenster der App nach vorn, statt sie neu zu starten. Mittelklick oder Umschalt+Klick startet ein neues Fenster, z. B. ein zweites Firefox-Fenster für einen anderen Monitor
+  $name: Click · Bring running apps to the front
+  $name:de-DE: Klick · Laufende Apps nach vorn holen
+  $name:ru-RU: Щелчок · Выводить запущенные приложения на передний план
+  $name:fr-FR: Clic · Mettre les applications en cours au premier plan
+  $name:es-ES: Clic · Traer al frente las aplicaciones abiertas
+  $description: Clicking a pin shows the running app instead of starting it again. Middle-click or Shift+click opens a new window.
+  $description:de-DE: Klick auf einen Pin zeigt die laufende App, statt sie neu zu starten. Mittelklick oder Umschalt+Klick öffnet ein neues Fenster.
+  $description:ru-RU: Щелчок по закреплению показывает уже запущенное приложение, а не запускает его снова. Средний щелчок или Shift+щелчок открывает новое окно.
+  $description:fr-FR: Un clic sur une épingle affiche l'application déjà lancée au lieu de la relancer. Un clic central ou Maj+clic ouvre une nouvelle fenêtre.
+  $description:es-ES: Un clic en un anclaje muestra la aplicación ya abierta en lugar de iniciarla de nuevo. Clic central o Mayús+clic abre una ventana nueva.
 - focusScope: anyMonitor
-  $name: Windows that are brought to the front
-  $name:de-DE: Fenster, die nach vorn geholt werden
+  $name: Click · Windows that are brought to the front
+  $name:de-DE: Klick · Fenster, die nach vorn kommen
+  $name:ru-RU: Щелчок · Какие окна выводить на передний план
+  $name:fr-FR: Clic · Fenêtres mises au premier plan
+  $name:es-ES: Clic · Ventanas que se traen al frente
+  $description: Only used if bringing apps to the front is on.
+  $description:de-DE: Nur wirksam, wenn „Laufende Apps nach vorn holen“ an ist.
+  $description:ru-RU: Действует только при включённом выводе на передний план.
+  $description:fr-FR: Uniquement si la mise au premier plan est activée.
+  $description:es-ES: Solo con «traer al frente» activado.
   $options:
   - anyMonitor: Windows on any monitor
   - thisMonitor: Only windows on the clicked taskbar's monitor
   $options:de-DE:
   - anyMonitor: Fenster auf jedem Monitor
   - thisMonitor: Nur Fenster auf dem Monitor der Taskleiste
+  $options:ru-RU:
+  - anyMonitor: Окна на любом мониторе
+  - thisMonitor: Только окна монитора этой панели
+  $options:fr-FR:
+  - anyMonitor: Fenêtres de n'importe quel écran
+  - thisMonitor: Seulement les fenêtres de l'écran de la barre cliquée
+  $options:es-ES:
+  - anyMonitor: Ventanas de cualquier monitor
+  - thisMonitor: Solo ventanas del monitor de la barra pulsada
 - launchOnClickedMonitor: true
-  $name: Open apps on the monitor of the clicked taskbar
-  $name:de-DE: Apps auf dem Monitor der angeklickten Taskleiste öffnen
-  $description: When a pinned app opens its window on another monitor, it is moved to the monitor of the taskbar that was clicked
-  $description:de-DE: Öffnet eine angeheftete App ihr Fenster auf einem anderen Monitor, wird es auf den Monitor der angeklickten Taskleiste verschoben
+  $name: Click · Open apps on the clicked taskbar's monitor
+  $name:de-DE: Klick · Apps auf dem Monitor der angeklickten Taskleiste öffnen
+  $name:ru-RU: Щелчок · Открывать на мониторе нажатой панели
+  $name:fr-FR: Clic · Ouvrir sur l'écran de la barre cliquée
+  $name:es-ES: Clic · Abrir en el monitor de la barra pulsada
+  $description: Moves a new app window to the monitor of the taskbar that was clicked.
+  $description:de-DE: Verschiebt ein neues App-Fenster auf den Monitor der angeklickten Taskleiste.
+  $description:ru-RU: Перемещает новое окно приложения на монитор панели задач, по которой щёлкнули.
+  $description:fr-FR: Déplace la nouvelle fenêtre vers l'écran de la barre des tâches cliquée.
+  $description:es-ES: Mueve la ventana nueva al monitor de la barra de tareas pulsada.
 - slideAnimation: true
-  $name: Slide animation when a window moves to another monitor (Windows 11)
-  $name:de-DE: Gleit-Animation beim Monitorwechsel (Windows 11)
-- showAppsOnAllTaskbars: true
-  $name: Show taskbar apps on all taskbars
-  $name:de-DE: Taskleisten-Apps auf allen Taskleisten anzeigen
-  $description: Required for separate pinned items per taskbar. Applied while the mod runs, the Windows setting isn't changed. If off, set it to "All taskbars" manually
-  $description:de-DE: Nötig für eigene angeheftete Apps pro Taskleiste. Gilt, solange die Mod läuft, die Windows-Einstellung bleibt unverändert. Wenn aus, von Hand auf „Alle Taskleisten“ stellen
+  $name: Animation · Slide when a window moves to another monitor (Windows 11)
+  $name:de-DE: Animation · Gleiten beim Monitorwechsel (Windows 11)
+  $name:ru-RU: Анимация · Скольжение при переносе на другой монитор (Windows 11)
+  $name:fr-FR: Animation · Glissement lors du passage à un autre écran (Windows 11)
+  $name:es-ES: Animación · Deslizar al pasar a otro monitor (Windows 11)
 */
 // ==/WindhawkModSettings==
 
@@ -121,6 +352,7 @@ taskbar*.
 #include <cstdio>
 #include <cwchar>
 #include <cwctype>
+#include <list>
 #include <map>
 #include <atomic>
 #include <mutex>
@@ -128,6 +360,7 @@ taskbar*.
 #include <string>
 #include <vector>
 #include <algorithm>
+#include <utility>
 
 #undef GetCurrentTime  // macro from windows.h collides with WinRT
 #include <winrt/Windows.UI.Xaml.h>
@@ -337,14 +570,27 @@ static bool InMask(unsigned mask, int mon) {
     return mon >= 1 && mon <= kMaxMon && (mask & (1u << (mon - 1)));
 }
 
+// "Disable grouping on the taskbar" (taskbar-grouping) gives window groups their own app ID:
+// the original app ID + "~Wh~" + type letter + 8 hex digits. Length of the app ID without it.
+static size_t BaseAppIdLen(PCWSTR id) {
+    size_t n = wcslen(id);
+    if (n <= 13) return n;
+    PCWSTR s = id + n - 13;
+    if (s[0] != L'~' || s[1] != L'W' || s[2] != L'h' || s[3] != L'~') return n;
+    for (int i = 5; i < 13; i++) {
+        wchar_t c = s[i];
+        if (!((c >= L'0' && c <= L'9') || (c >= L'A' && c <= L'F'))) return n;
+    }
+    return n - 13;
+}
+
 // 0 = no rule (default Windows behavior), otherwise a monitor bit mask
 static unsigned AssignedMonitor(void* g) {
     if (!g || !pGroupGetFlags || !pGroupGetAppID) return 0;
     if (!(pGroupGetFlags(g) & 0x1)) return 0;  // not pinned
     PCWSTR id = pGroupGetAppID(g);
     if (!id) return 0;
-    std::wstring lid;
-    for (const wchar_t* p = id; *p; p++) lid += (wchar_t)towlower(*p);
+    std::wstring lid = Lower(std::wstring(id, BaseAppIdLen(id)));
     std::lock_guard<std::mutex> l(g_rulesMx);
     for (auto& r : g_s.rules) {
         if (r.app == lid) return r.mask;
@@ -368,20 +614,44 @@ static const PROPERTYKEY kAumid = {
     {0x9F4C2855, 0x9F79, 0x4B39, {0xA8, 0xD0, 0xE1, 0xD4, 0x2D, 0xE1, 0xD5, 0xF3}},
     5};
 
-static std::wstring WindowAppId(HWND h) {
+// App ID (System.AppUserModel.ID) from a property store
+static std::wstring StoreAppId(IPropertyStore* ps) {
     std::wstring r;
-    IPropertyStore* ps = nullptr;
-    if (SUCCEEDED(SHGetPropertyStoreForWindow(h, IID_PPV_ARGS(&ps))) && ps) {
-        PROPVARIANT pv;
-        PropVariantInit(&pv);
-        if (SUCCEEDED(ps->GetValue(kAumid, &pv)) && pv.vt == VT_LPWSTR &&
-            pv.pwszVal) {
-            r = pv.pwszVal;
-        }
-        PropVariantClear(&pv);
-        ps->Release();
-    }
+    PROPVARIANT pv;
+    PropVariantInit(&pv);
+    if (ps && SUCCEEDED(ps->GetValue(kAumid, &pv)) && pv.vt == VT_LPWSTR && pv.pwszVal) r = pv.pwszVal;
+    PropVariantClear(&pv);
     return r;
+}
+
+static std::wstring WindowAppId(HWND h) {
+    winrt::com_ptr<IPropertyStore> ps;
+    if (FAILED(SHGetPropertyStoreForWindow(h, IID_PPV_ARGS(ps.put())))) return L"";
+    return StoreAppId(ps.get());
+}
+
+static std::wstring PidlAppId(PCIDLIST_ABSOLUTE pidl) {
+    winrt::com_ptr<IPropertyStore> ps;
+    if (!pidl || FAILED(SHGetPropertyStoreFromIDList(pidl, GPS_DEFAULT, IID_PPV_ARGS(ps.put())))) return L"";
+    return StoreAppId(ps.get());
+}
+
+// Shortcut file, loaded read-only (nullptr if that fails)
+static winrt::com_ptr<IShellLinkW> LoadLink(const std::wstring& path) {
+    winrt::com_ptr<IShellLinkW> sl;
+    winrt::com_ptr<IPersistFile> pf;
+    if (FAILED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(sl.put()))) ||
+        FAILED(sl->QueryInterface(IID_PPV_ARGS(pf.put()))) || FAILED(pf->Load(path.c_str(), STGM_READ))) {
+        return nullptr;
+    }
+    return sl;
+}
+
+static std::wstring FileAppId(const std::wstring& path) {
+    winrt::com_ptr<IPropertyStore> ps;
+    auto sl = LoadLink(path);
+    if (!sl || FAILED(sl->QueryInterface(IID_PPV_ARGS(ps.put())))) return L"";
+    return StoreAppId(ps.get());
 }
 
 // App ID of a packaged app (e.g. Windows Notepad) via its process
@@ -422,41 +692,29 @@ static void ResolveTarget(const std::wstring& path, Target& t) {
         t.exactPath = lp;
         return;
     }
-    IShellLinkW* sl = nullptr;
-    if (FAILED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER,
-                                IID_PPV_ARGS(&sl))) ||
-        !sl) {
-        return;
-    }
-    IPersistFile* pf = nullptr;
-    if (SUCCEEDED(sl->QueryInterface(IID_PPV_ARGS(&pf))) && pf) {
-        if (SUCCEEDED(pf->Load(path.c_str(), STGM_READ))) {
-            wchar_t raw[MAX_PATH] = {}, exp[MAX_PATH * 2] = {},
-                    args[1024] = {};
-            sl->GetPath(raw, MAX_PATH, nullptr, SLGP_RAWPATH);
-            ExpandEnvironmentStringsW(raw, exp, ARRAYSIZE(exp));
-            sl->GetArguments(args, ARRAYSIZE(args));
-            std::wstring target = Lower(exp);
-            std::wstring a = args;
-            size_t k = a.find(L"--processStart ");
-            if (FileName(target) == L"update.exe" && k != std::wstring::npos) {
-                std::wstring rest = a.substr(k + 15);
-                if (!rest.empty() && rest[0] == L'"') {
-                    rest = rest.substr(1);
-                    rest = rest.substr(0, rest.find(L'"'));
-                } else {
-                    rest = rest.substr(0, rest.find(L' '));
-                }
-                t.name = Lower(rest);
-                t.dirPrefix = DirOf(target);
-            } else {
-                t.exactPath = target;
-                t.hasArgs = args[0] != 0;
-            }
+    auto sl = LoadLink(path);
+    if (!sl) return;
+    wchar_t raw[MAX_PATH] = {}, exp[MAX_PATH * 2] = {}, args[1024] = {};
+    sl->GetPath(raw, MAX_PATH, nullptr, SLGP_RAWPATH);
+    ExpandEnvironmentStringsW(raw, exp, ARRAYSIZE(exp));
+    sl->GetArguments(args, ARRAYSIZE(args));
+    std::wstring target = Lower(exp);
+    std::wstring a = args;
+    size_t k = a.find(L"--processStart ");
+    if (FileName(target) == L"update.exe" && k != std::wstring::npos) {
+        std::wstring rest = a.substr(k + 15);
+        if (!rest.empty() && rest[0] == L'"') {
+            rest = rest.substr(1);
+            rest = rest.substr(0, rest.find(L'"'));
+        } else {
+            rest = rest.substr(0, rest.find(L' '));
         }
-        pf->Release();
+        t.name = Lower(rest);
+        t.dirPrefix = DirOf(target);
+    } else {
+        t.exactPath = target;
+        t.hasArgs = args[0] != 0;
     }
-    sl->Release();
 }
 
 struct FindCtx {
@@ -481,12 +739,90 @@ static bool PathMatches(FindCtx* c, DWORD pid) {
     return false;
 }
 
+// Monitor of a window. Windows parks minimized windows (and apps park hidden ones) at -32000,-32000:
+// "nearest" would then be the leftmost monitor, so a parked window keeps the monitor it was last seen on.
+// Only tracked windows (those with a taskbar button) are remembered; they are forgotten once the window
+// is destroyed (UntrackWindow/ReleaseWindows). The cache is a LRU list: above kLastMonMax the entries of windows that no
+// longer exist go first, then the least recently used ones. The mutex is a leaf lock: no other lock is
+// taken while it is held (IsWindow doesn't block), so it's safe to call with g_mx held or not.
+static const size_t kLastMonMax = 2000, kLastMonKeep = 1800;
+static std::mutex g_lastMonMx;
+static std::list<HWND> g_lastMonLru;  // most recently used first
+static std::map<HWND, std::pair<HMONITOR, std::list<HWND>::iterator>> g_lastMon;
+
+static void LastMonSet(HWND h, HMONITOR m) {
+    std::lock_guard<std::mutex> l(g_lastMonMx);
+    auto it = g_lastMon.find(h);
+    if (it != g_lastMon.end()) {
+        it->second.first = m;
+        g_lastMonLru.splice(g_lastMonLru.begin(), g_lastMonLru, it->second.second);
+        return;
+    }
+    g_lastMonLru.push_front(h);
+    g_lastMon.emplace(h, std::make_pair(m, g_lastMonLru.begin()));
+    if (g_lastMon.size() <= kLastMonMax) return;
+    for (auto e = g_lastMon.begin(); e != g_lastMon.end();) {
+        if (IsWindow(e->first)) {
+            ++e;
+        } else {
+            g_lastMonLru.erase(e->second.second);
+            e = g_lastMon.erase(e);
+        }
+    }
+    if (g_lastMon.size() <= kLastMonMax) return;
+    while (g_lastMon.size() > kLastMonKeep) {  // all alive: drop the least recently used
+        g_lastMon.erase(g_lastMonLru.back());
+        g_lastMonLru.pop_back();
+    }
+}
+
+static HMONITOR LastMonGet(HWND h) {
+    std::lock_guard<std::mutex> l(g_lastMonMx);
+    auto it = g_lastMon.find(h);
+    if (it == g_lastMon.end()) return nullptr;
+    g_lastMonLru.splice(g_lastMonLru.begin(), g_lastMonLru, it->second.second);
+    return it->second.first;
+}
+
+static void LastMonForget(HWND h) {
+    std::lock_guard<std::mutex> l(g_lastMonMx);
+    auto it = g_lastMon.find(h);
+    if (it == g_lastMon.end()) return;
+    g_lastMonLru.erase(it->second.second);
+    g_lastMon.erase(it);
+}
+
+static void LastMonClear() {
+    std::lock_guard<std::mutex> l(g_lastMonMx);
+    g_lastMon.clear();
+    g_lastMonLru.clear();
+}
+
+// remember: the window is tracked, so its monitor is stored for later (see above)
+static HMONITOR WinMonitor(HWND h, bool remember = false) {
+    if (!h) return nullptr;
+    // Touches a monitor, or minimized (then its restore rectangle counts)
+    HMONITOR m = MonitorFromWindow(h, MONITOR_DEFAULTTONULL);
+    if (m) {
+        if (remember) LastMonSet(h, m);
+        return m;
+    }
+    RECT r;
+    if (GetWindowRect(h, &r) && (r.left <= -30000 || r.top <= -30000)) {
+        HMONITOR last = LastMonGet(h);
+        MONITORINFO mi{.cbSize = sizeof(mi)};
+        if (last && GetMonitorInfoW(last, &mi)) return last;  // still connected
+        return MonitorFromWindow(h, MONITOR_DEFAULTTOPRIMARY);
+    }
+    return MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST);
+}
+
 static BOOL CALLBACK EnumProc(HWND h, LPARAM lp) {
     auto* c = (FindCtx*)lp;
     // Only visible windows: hidden ones (e.g. of tray apps) are left to the app itself, a normal
     // launch of a single-instance app shows them
     if (c->visible || !IsWindowVisible(h) || GetWindow(h, GW_OWNER)) return TRUE;
-    if (c->onlyMon && MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST) != c->onlyMon) return TRUE;
+    if (c->onlyMon && WinMonitor(h) != c->onlyMon) return TRUE;
     LONG ex = GetWindowLongW(h, GWL_EXSTYLE);
     LONG st = GetWindowLongW(h, GWL_STYLE);
     if (ex & WS_EX_TOOLWINDOW) return TRUE;
@@ -540,7 +876,7 @@ static bool TryActivateExisting(void* g, HMONITOR onlyMon = nullptr) {
            ctx.tgt.exactPath.c_str(), ctx.tgt.name.c_str(), (void*)h);
     if (!h) return false;
 
-    if (IsIconic(h)) ShowWindow(h, SW_RESTORE);
+    if (IsIconic(h)) ShowWindowAsync(h, SW_RESTORE);
     if (!SetForegroundWindow(h)) SwitchToThisWindow(h, TRUE);
     Wh_Log(L"  -> brought existing window %p to the front", (void*)h);
     return true;
@@ -622,6 +958,8 @@ static bool HandleExtraPin(const wchar_t* app, const wchar_t* path);
 static DWORD g_jumpTick = 0;
 static void* g_fakeGroup = nullptr;  // jump list showed "Pin" although pinned globally (AddRef)
 static std::wstring g_swallowAddKey;
+static std::wstring KeyOf(void* g);
+static std::wstring BaseKeyOf(void* g);
 static DWORD g_swallowAddTick = 0;
 static std::wstring g_swallowRemoveKey;
 static DWORD g_swallowRemoveTick = 0;
@@ -644,7 +982,7 @@ static HWND ItemWindow(void* item) {
 
 static HMONITOR ItemMonitor(void* item) {
     HWND h = ItemWindow(item);
-    return h ? MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST) : nullptr;
+    return WinMonitor(h);
 }
 
 // Windows doesn't report monitor changes of UWP frame windows to the taskbar: while one is
@@ -668,7 +1006,7 @@ static void TrackWindow(HWND h, void* g) {
             w.g = g;
             ((IUnknown*)g)->AddRef();
         }
-        w.mon = MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST);
+        w.mon = WinMonitor(h, true);
         w.frame = frame;
     }
     if (old) ((IUnknown*)old)->Release();
@@ -685,6 +1023,9 @@ static void UntrackWindow(HWND h) {
         if (it == g_wins.end()) return;
         old = it->second.g;
         g_wins.erase(it);
+        // A hidden window (e.g. an app closed to the tray) loses its button but may come back parked
+        // at -32000: keep its monitor until the window is destroyed (the LRU limit covers the rest)
+        if (!IsWindow(h)) LastMonForget(h);
     }
     if (old) ((IUnknown*)old)->Release();
 }
@@ -700,8 +1041,10 @@ static void ReleaseWindows(bool all) {
                 continue;
             }
             groups.push_back(it->second.g);
+            LastMonForget(it->first);
             it = g_wins.erase(it);
         }
+        if (all) LastMonClear();
     }
     for (void* g : groups) ((IUnknown*)g)->Release();
 }
@@ -763,7 +1106,7 @@ static bool ShouldShow(void* tl, void* g, void* item) {
     HMONITOR bar = GetMonitor_orig(tl);
     if (item) {
         HWND h = ItemWindow(item);
-        return WinAllowed(h, h ? MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST) : nullptr, bar);
+        return WinAllowed(h, WinMonitor(h), bar);
     }
     if (!(pGroupGetFlags && (pGroupGetFlags(g) & 0x1))) return true;  // not a pin
     if (g_s.pinsEverywhere) return true;
@@ -956,7 +1299,7 @@ static int PruneForeignItems(void* tl, void* g) {
         for (int k = 0; k < c; k++) {
             void* it = pBtnGetTaskItem(tbg, k);
             HWND h = ItemWindow(it);
-            HMONITOR m = h ? MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST) : nullptr;
+            HMONITOR m = WinMonitor(h);
             if (it && m && !WinAllowed(h, m, bar)) foreign.push_back({it, h});
         }
     }
@@ -1163,7 +1506,7 @@ static bool OtherWindowOnBar(void* tl, void* g, HWND exclude) {
             if (w.g == g && h != exclude) wins.push_back(h);
     }
     for (HWND h : wins) {
-        if (IsWindow(h) && WinAllowed(h, MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST), bar)) return true;
+        if (IsWindow(h) && WinAllowed(h, WinMonitor(h), bar)) return true;
     }
     return false;
 }
@@ -1176,7 +1519,7 @@ static void ReevalWindow(HWND h, void* g, const std::set<void*>& bars) {
     void* item = GroupItem(g, h);
     if (!item) return;
     bool pinned = Pinned(g);
-    HMONITOR now = MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST);
+    HMONITOR now = WinMonitor(h);
     std::set<HMONITOR> on, allowed;
     bool known = false;
     {
@@ -1257,7 +1600,7 @@ static void FrameTimerProc() {
         for (auto& [h, w] : g_wins) {
             if (!w.frame) continue;
             any = true;
-            HMONITOR now = MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST);
+            HMONITOR now = WinMonitor(h, true);
             if (now == w.mon) continue;
             MONITORINFO a{.cbSize = sizeof(a)}, b{.cbSize = sizeof(b)};
             if (w.mon && GetMonitorInfoW(w.mon, &a) && GetMonitorInfoW(now, &b)) {
@@ -1280,7 +1623,12 @@ static void FrameTimerProc() {
 // remember the direction for the sideways slide-in and re-evaluate the window
 // Before the original: remember the new monitor (and the direction). true = the window moved.
 static bool NoteMove(HWND h, HMONITOR& now) {
-    now = h ? MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST) : nullptr;
+    bool tracked;
+    {
+        std::lock_guard<std::mutex> l(g_mx);
+        tracked = g_wins.count(h) != 0;
+    }
+    now = WinMonitor(h, tracked);
     HMONITOR old = nullptr;
     bool moved = false;
     if (now) {
@@ -1378,7 +1726,7 @@ static LRESULT CALLBACK MsgWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
                     HandleExtraPin(aumid.c_str(), path.c_str())) ? 1 : 0;
         }
         if (cd->dwData == 0x534B4131) {  // "SKA1": re-append after HandleExtraPin?
-            if (g_fakeGroup && _wcsicmp(app.c_str(), AppOf(g_fakeGroup)) != 0) SetFakeGroup(nullptr);  // another app was pinned
+            if (g_fakeGroup && Lower(app) != BaseKeyOf(g_fakeGroup)) SetFakeGroup(nullptr);  // another app was pinned
             return !g_swallowAddKey.empty() && GetTickCount() - g_swallowAddTick < 3000 && Lower(app) == g_swallowAddKey
                        ? (g_swallowAddKey.clear(), 1) : 0;
         }
@@ -1530,8 +1878,11 @@ static void LoadRules();
 
 static void SetRule(const std::wstring& key, unsigned m) {
     auto rules = LoadPinRules();
-    if (m) rules[key] = m; else rules.erase(key);
-    SavePinRules(rules);
+    auto it = rules.find(key);
+    if (m ? (it == rules.end() || it->second != m) : it != rules.end()) {  // only write a change
+        if (m) rules[key] = m; else rules.erase(key);
+        SavePinRules(rules);
+    }
     LoadRules();
 }
 
@@ -1712,7 +2063,6 @@ static void GroupsOfBar(void* tl, std::set<void*>& groups) {
 // at its old place. The mod remembers the order of each taskbar (pins and window buttons) and sorts the
 // taskbar by it. New buttons go to the end.
 
-static std::wstring KeyOf(void* g);
 static std::mutex g_orderMx;
 static std::map<int, std::vector<std::wstring>> g_pinOrder;
 static bool g_orderLoaded = false;
@@ -2049,7 +2399,7 @@ static HWND TrayAt(POINT pt, HMONITOR* mon) {
     for (HWND h : TrayWindows()) {
         RECT r;
         if (IsWindowVisible(h) && GetWindowRect(h, &r) && PtInRect(&r, pt)) {
-            if (mon) *mon = MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST);
+            if (mon) *mon = WinMonitor(h);
             return h;
         }
     }
@@ -2126,19 +2476,16 @@ static const wchar_t kDragImgClass[] = L"TaskbarIndependentPerMonitorDragImage";
 
 // Icon of a pinned app: from its shortcut, or from the Apps folder by app ID (packaged apps)
 static HBITMAP GroupIcon(void* g, int size) {
-    IShellItemImageFactory* f = nullptr;
+    winrt::com_ptr<IShellItemImageFactory> f;
     std::wstring lnk = GroupLinkPath(g);
-    if (!lnk.empty()) SHCreateItemFromParsingName(lnk.c_str(), nullptr, IID_PPV_ARGS(&f));
+    if (!lnk.empty()) SHCreateItemFromParsingName(lnk.c_str(), nullptr, IID_PPV_ARGS(f.put()));
     PCWSTR id = pGroupGetAppID ? pGroupGetAppID(g) : nullptr;
     if (!f && id) {
         std::wstring p = std::wstring(L"shell:AppsFolder\\") + id;
-        SHCreateItemFromParsingName(p.c_str(), nullptr, IID_PPV_ARGS(&f));
+        SHCreateItemFromParsingName(p.c_str(), nullptr, IID_PPV_ARGS(f.put()));
     }
     HBITMAP bmp = nullptr;
-    if (f) {
-        f->GetImage(SIZE{size, size}, SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK, &bmp);
-        f->Release();
-    }
+    if (f) f->GetImage(SIZE{size, size}, SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK, &bmp);
     return bmp;
 }
 
@@ -2163,7 +2510,7 @@ static void CreateDragImage(void* g, HMONITOR from) {
     g_dragTrays.clear();
     UINT dpi = 96;
     for (HWND h : TrayWindows()) {
-        DragTray t{h, {}, MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST)};
+        DragTray t{h, {}, WinMonitor(h)};
         if (IsWindowVisible(h) && GetWindowRect(h, &t.r)) g_dragTrays.push_back(t);
         if (t.mon == from) dpi = GetDpiForWindow(h);
     }
@@ -2220,7 +2567,7 @@ static bool MovePinTo(void* g, HMONITOR from, HMONITOR target, int index) {
     if (a < 1 || b < 1) return false;
     unsigned m = (MaskOf(g) & ~(1u << (a - 1))) | (1u << (b - 1));
     if (index >= 0) PlacePin(BarOnMonitor(target), KeyOf(g), index);
-    SetRule(KeyOf(g), m);
+    SetRule(BaseKeyOf(g), m);
     Wh_Log(L"-> Pin moved from monitor %d to %d (mask 0x%X): %ls", a, b, m, AppOf(g));
     QueueApply(g);
     return true;
@@ -2349,28 +2696,23 @@ static std::atomic<bool> g_btnStarted{false};
 
 // The centers of the task buttons of a taskbar window (false if they can't be read)
 static bool ReadButtons(IUIAutomation* uia, HWND tray, std::vector<int>& centers) {
-    IUIAutomationElement* bar = nullptr;
-    IUIAutomationCondition* cond = nullptr;
-    IUIAutomationElementArray* all = nullptr;
+    winrt::com_ptr<IUIAutomationElement> bar;
+    winrt::com_ptr<IUIAutomationCondition> cond;
+    winrt::com_ptr<IUIAutomationElementArray> all;
     VARIANT cls;
     VariantInit(&cls);
     cls.vt = VT_BSTR;
     cls.bstrVal = SysAllocString(L"Taskbar.TaskListButtonAutomationPeer");
     int n = 0;
-    bool ok = cls.bstrVal && SUCCEEDED(uia->ElementFromHandle(tray, &bar)) && bar &&
-              SUCCEEDED(uia->CreatePropertyCondition(UIA_ClassNamePropertyId, cls, &cond)) &&
-              SUCCEEDED(bar->FindAll(TreeScope_Descendants, cond, &all)) && all && SUCCEEDED(all->get_Length(&n));
+    bool ok = cls.bstrVal && SUCCEEDED(uia->ElementFromHandle(tray, bar.put())) && bar &&
+              SUCCEEDED(uia->CreatePropertyCondition(UIA_ClassNamePropertyId, cls, cond.put())) &&
+              SUCCEEDED(bar->FindAll(TreeScope_Descendants, cond.get(), all.put())) && all && SUCCEEDED(all->get_Length(&n));
     for (int i = 0; ok && i < n; i++) {
-        IUIAutomationElement* e = nullptr;
+        winrt::com_ptr<IUIAutomationElement> e;
         RECT r{};
-        if (SUCCEEDED(all->GetElement(i, &e)) && e) {
-            if (SUCCEEDED(e->get_CurrentBoundingRectangle(&r))) centers.push_back((r.left + r.right) / 2);
-            e->Release();
-        }
+        if (SUCCEEDED(all->GetElement(i, e.put())) && e && SUCCEEDED(e->get_CurrentBoundingRectangle(&r)))
+            centers.push_back((r.left + r.right) / 2);
     }
-    if (all) all->Release();
-    if (cond) cond->Release();
-    if (bar) bar->Release();
     VariantClear(&cls);
     return ok;
 }
@@ -2378,18 +2720,19 @@ static bool ReadButtons(IUIAutomation* uia, HWND tray, std::vector<int>& centers
 // One reader for the whole session, waiting for requests
 static DWORD WINAPI ReadButtonsThread(LPVOID) {
     bool com = SUCCEEDED(CoInitializeEx(nullptr, COINIT_MULTITHREADED));
-    IUIAutomation* uia = nullptr;
-    if (com) CoCreateInstance(CLSID_CUIAutomation, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&uia));
-    while (WaitForSingleObject(g_btnEvent, INFINITE) == WAIT_OBJECT_0 && !g_unloading) {
-        HWND tray = g_btnRequest.exchange(nullptr);
-        std::vector<int> centers;
-        if (!tray || !uia || !ReadButtons(uia, tray, centers)) continue;
-        std::lock_guard<std::mutex> l(g_btnMx);
-        g_btnTray = tray;
-        g_btnCenters = centers;
-        g_btnTick = GetTickCount();
+    {
+        winrt::com_ptr<IUIAutomation> uia;  // released before CoUninitialize
+        if (com) CoCreateInstance(CLSID_CUIAutomation, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(uia.put()));
+        while (WaitForSingleObject(g_btnEvent, INFINITE) == WAIT_OBJECT_0 && !g_unloading) {
+            HWND tray = g_btnRequest.exchange(nullptr);
+            std::vector<int> centers;
+            if (!tray || !uia || !ReadButtons(uia.get(), tray, centers)) continue;
+            std::lock_guard<std::mutex> l(g_btnMx);
+            g_btnTray = tray;
+            g_btnCenters = centers;
+            g_btnTick = GetTickCount();
+        }
     }
-    if (uia) uia->Release();
     if (com) CoUninitialize();
     return 0;
 }
@@ -2509,7 +2852,7 @@ static void SyncAll() {
             void* item = GroupItem(g, h);
             if (!item) continue;
             TrackWindow(h, g);
-            HMONITOR now = MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST);
+            HMONITOR now = WinMonitor(h);
             std::set<HMONITOR> allowed;
             for (void* tl : bars) {
                 HMONITOR bm = GetMonitor_orig(tl);
@@ -2612,6 +2955,96 @@ static std::wstring GroupLinkPath(void* g) {
     return s;
 }
 
+// ---------- Pins with the app ID of a single window (TEMPORARY workaround)
+// "Disable grouping on the taskbar" gives each window its own app ID (app ID + "~Wh~w0012ABCD") once
+// the app already has a group (e.g. a pin). Pinning such a window from its jump list makes Windows
+// build the shortcut from the window: that ID and the EXE in the app's version folder
+// (com.squirrel.Discord.Discord~Wh~w001D0CB8, ...\app-1.0.9269\Discord.exe). After a restart the
+// window gets another ID, the pin no longer matches and the app can't be pinned again.
+// While the user pins such a window, the mod pins the app's Start menu shortcut instead, as pinning
+// from the Start menu does (Windows 11: PinTrusted_hook, Windows 10: PinModify_hook in RuntimeBroker).
+// Existing pin files are never changed. Reported in ramensoftware/windhawk-mods#7900; remove this
+// workaround once "Disable grouping on the taskbar" no longer writes the window's app ID.
+
+// Start menu shortcut with this app ID (searched recursively, a few levels deep)
+static std::wstring FindStartMenuLink(const std::wstring& dir, const std::wstring& appId, int depth) {
+    WIN32_FIND_DATAW fd;
+    HANDLE f = FindFirstFileW((dir + L"\\*").c_str(), &fd);
+    if (f == INVALID_HANDLE_VALUE) return L"";
+    std::wstring found;
+    std::vector<std::wstring> subs;
+    do {
+        std::wstring n = fd.cFileName;
+        if (n == L"." || n == L"..") continue;
+        std::wstring p = dir + L"\\" + n;
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) subs.push_back(p);
+        } else if (n.size() > 4 && _wcsicmp(n.c_str() + n.size() - 4, L".lnk") == 0 &&
+                   _wcsicmp(FileAppId(p).c_str(), appId.c_str()) == 0) {
+            found = p;
+        }
+    } while (found.empty() && FindNextFileW(f, &fd));
+    FindClose(f);
+    if (depth > 0) {
+        for (size_t i = 0; found.empty() && i < subs.size(); i++) found = FindStartMenuLink(subs[i], appId, depth - 1);
+    }
+    return found;
+}
+
+static std::wstring KnownFolder(REFKNOWNFOLDERID id) {
+    PWSTR p = nullptr;
+    std::wstring r;
+    if (SUCCEEDED(SHGetKnownFolderPath(id, 0, nullptr, &p)) && p) r = p;
+    CoTaskMemFree(p);
+    return r;
+}
+
+// For an app ID with a window suffix: the app's Start menu shortcut (empty if none or no suffix)
+static std::wstring StartMenuLinkForWindowId(const std::wstring& id) {
+    size_t n = id.empty() ? 0 : BaseAppIdLen(id.c_str());
+    if (!n || n == id.size()) return L"";
+    std::wstring b = id.substr(0, n);
+    // Remembered per app. A miss is kept for 5 minutes only, the app's shortcut may be added later.
+    struct Hit { std::wstring path; DWORD tick; };
+    static std::mutex cacheMx;
+    static std::map<std::wstring, Hit> cache;
+    std::wstring key = Lower(b);
+    {
+        std::lock_guard<std::mutex> l(cacheMx);
+        auto it = cache.find(key);
+        if (it != cache.end()) {
+            const Hit& h = it->second;
+            if (h.path.empty() ? GetTickCount() - h.tick < 5 * 60 * 1000
+                               : GetFileAttributesW(h.path.c_str()) != INVALID_FILE_ATTRIBUTES)
+                return h.path;
+        }
+    }
+    std::wstring found;
+    for (const KNOWNFOLDERID* k : {&FOLDERID_Programs, &FOLDERID_CommonPrograms}) {
+        std::wstring sm = KnownFolder(*k);
+        if (!sm.empty()) found = FindStartMenuLink(sm, b, 3);
+        if (!found.empty()) break;
+    }
+    std::lock_guard<std::mutex> l(cacheMx);
+    cache[key] = {found, GetTickCount()};
+    return found;
+}
+
+// Pinning a window of "Disable grouping on the taskbar" (app ID with suffix): ID list of the app's
+// Start menu shortcut to pin instead (free with ILFree), or nullptr. The item to pin is the window's
+// EXE; its name must match the shortcut's target, so that a different app is never pinned instead.
+static PIDLIST_ABSOLUTE StartMenuPidlForWindow(PCIDLIST_ABSOLUTE pidl, const std::wstring& id) {
+    std::wstring start = StartMenuLinkForWindowId(id);
+    wchar_t path[MAX_PATH] = {};
+    if (start.empty() || !pidl || !SHGetPathFromIDListW(pidl, path)) return nullptr;
+    Target t;
+    ResolveTarget(start, t);
+    if (Lower(FileName(path)) != (t.exactPath.empty() ? t.name : FileName(t.exactPath))) return nullptr;
+    PIDLIST_ABSOLUTE lnk = ILCreateFromPathW(start.c_str());
+    if (lnk) Wh_Log(L"-> Pinning the Start menu shortcut instead of window %ls: %ls", id.c_str(), start.c_str());
+    return lnk;
+}
+
 static std::wstring BarLinkPath(void* g, int mon, bool create) {
     if (mon < 1 || mon > kMaxMon) return L"";
     std::wstring orig = GroupLinkPath(g);
@@ -2701,7 +3134,7 @@ struct MoveJob {
 };
 
 static void MoveToMonitor(HWND h, HMONITOR to) {
-    HMONITOR from = MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST);
+    HMONITOR from = WinMonitor(h);
     MONITORINFO a{.cbSize = sizeof(a)}, b{.cbSize = sizeof(b)};
     if (from == to || !GetMonitorInfoW(from, &a) || !GetMonitorInfoW(to, &b)) return;
     // A per-monitor DPI aware app scales itself by the ratio of the monitors' scaling when it arrives:
@@ -2752,13 +3185,13 @@ static DWORD WINAPI MoveWindowThread(LPVOID p) {
         if (PrimaryButtonDown()) break;
         if (!IsWindowVisible(job.h)) continue;
         if (IsHungAppWindow(job.h)) break;  // it wouldn't follow anyway
-        if (MonitorFromWindow(job.h, MONITOR_DEFAULTTONEAREST) != job.to) {
+        if (WinMonitor(job.h) != job.to) {
             MoveToMonitor(job.h, job.to);
             moves++;
         }
     }
     Wh_Log(L"-> Launched window %p: moved %d time(s), now on monitor %d", (void*)job.h, moves,
-           MonNumber(MonitorFromWindow(job.h, MONITOR_DEFAULTTONEAREST)));
+           MonNumber(WinMonitor(job.h)));
     return 0;
 }
 
@@ -2767,7 +3200,7 @@ static void CheckLaunched(HWND h, void* g) {
     if (g_launchKey.empty() || GetTickCount() - g_launchTick > 15000 || g_unloading) return;
     if (KeyOf(g) != g_launchKey) return;
     g_launchKey.clear();
-    if (MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST) == g_launchMon) return;
+    if (WinMonitor(h) == g_launchMon) return;
     auto* job = new MoveJob{h, g_launchMon};
     if (StartWorker(MoveWindowThread, job)) {
         Wh_Log(L"-> Launched window %p: moving to monitor %d", (void*)h, MonNumber(g_launchMon));
@@ -2834,6 +3267,43 @@ static const wchar_t* AppOf(void* g) {
     return id ? id : L"?";
 }
 static std::wstring KeyOf(void* g) { return Lower(AppOf(g)); }
+// Key of the app without the suffix of "Disable grouping on the taskbar" (pin rules use it)
+static std::wstring BaseKeyOf(void* g) {
+    PCWSTR id = AppOf(g);
+    return Lower(std::wstring(id, BaseAppIdLen(id)));
+}
+
+// Pinned group of this app (key without suffix) on any taskbar, with a reference (or nullptr).
+// Compared without the suffix: a pin made from a window button can carry that window's suffixed
+// app ID (fault of "Disable grouping on the taskbar", see "Pins with the app ID of a single window").
+static void* FindPinnedGroup(const std::wstring& base, void* except) {
+    if (!pGroupGetAppID || !pGroupGetFlags) return nullptr;
+    std::set<void*> bars;
+    {
+        std::lock_guard<std::mutex> l(g_mx);
+        bars = g_bars;
+    }
+    std::set<void*> groups;
+    for (void* tl : bars) GroupsOfBar(tl, groups);
+    void* found = nullptr;
+    for (void* o : groups) {
+        if (!found && o != except && Pinned(o) && BaseKeyOf(o) == base) found = o;
+        else ((IUnknown*)o)->Release();
+    }
+    return found;
+}
+
+// Pinned group behind a window group of "Disable grouping on the taskbar" (pins stay in place):
+// the window has its own group with a suffixed app ID, the pin is a separate group. Returns the
+// pinned group with a reference (release with Release), or nullptr.
+// Not recognized by the suffix: while that mod builds a jump list (its ShowJumpView hook may run
+// around ours, depending on the load order) the group reports its app ID without it. Without that
+// mod an unpinned group next to a pinned one of the same app doesn't exist (Windows groups the
+// window with the pin), so this only finds the pin of a separate window group.
+static void* PinGroupFor(void* g) {
+    if (!g || Pinned(g)) return nullptr;
+    return FindPinnedGroup(BaseKeyOf(g), g);
+}
 
 // this of a CTaskListWnd call -> known tl pointer (or nullptr)
 static void* BarOf(void* self) {
@@ -2876,7 +3346,7 @@ static bool TakePinEvent(void* g, bool pin, std::wstring& key) {
     DWORD now = GetTickCount();
     LASTINPUTINFO li{.cbSize = sizeof(li)};
     if (now - g_initTick < 10000 || !GetLastInputInfo(&li) || now - li.dwTime > 8000) return false;
-    key = KeyOf(g);
+    key = BaseKeyOf(g);
     std::wstring tag = (pin ? L"+" : L"-") + key;
     if (tag == g_lastEvt && now - g_lastEvtTick < 3000) return false;
     g_lastEvt = tag;
@@ -2886,6 +3356,15 @@ static bool TakePinEvent(void* g, bool pin, std::wstring& key) {
 
 // Most recently opened jump list (taskbar + group)
 static HMONITOR g_jumpMon = nullptr;
+// Its group was not pinned and its app has no pin anywhere: key of the app. "Pin" there may make
+// Windows create a new pinned group without HandleTaskGroupPinned (window group of "Disable
+// grouping on the taskbar"); EnumPinned_hook then gives it the taskbar of the jump list.
+static std::wstring g_jumpWinKey;
+// Same jump list: full app ID of that unpinned group (with the window suffix, if any) and when it
+// was opened, for PinTrusted_hook, which runs on another thread of Explorer (both under the mutex)
+static std::mutex g_jumpWinIdMx;
+static std::wstring g_jumpWinId;
+static DWORD g_jumpWinIdTick = 0;
 
 // Monitor of the action: jump list of the last 20 s, otherwise the mouse cursor (e.g. Start menu)
 static int ActionMonitor() {
@@ -2905,7 +3384,7 @@ static void SetFakeGroup(void* g) {
 // unpins it right away), the follow-up removes it there again
 static DWORD g_newPinTick = 0;
 static bool IsNewPin(void* g) {
-    return !g_newPinKey.empty() && GetTickCount() - g_newPinTick < 3000 && KeyOf(g) == g_newPinKey;
+    return !g_newPinKey.empty() && GetTickCount() - g_newPinTick < 3000 && Pinned(g) && BaseKeyOf(g) == g_newPinKey;
 }
 
 using GroupEvt_t = void (*)(void*, void*);
@@ -2980,17 +3459,20 @@ static bool SamePinTarget(const std::wstring& path, void* g) {
 static bool HandleExtraPin(const wchar_t* app, const wchar_t* path) {
     void* g = g_fakeGroup;
     if (!g || GetTickCount() - g_jumpTick > 20000 || !Pinned(g)) return false;
-    if ((app && *app && _wcsicmp(app, AppOf(g)) != 0) ||
-        (path && *path && !SamePinTarget(path, g))) {  // another app was pinned
+    // Same app? By app ID if there is one (without the window suffix of "Disable grouping on the
+    // taskbar": its window runs from the EXE, the pin from the launcher), otherwise by target
+    bool other = (app && *app) ? Lower(std::wstring(app, BaseAppIdLen(app))) != BaseKeyOf(g)
+                               : (path && *path && !SamePinTarget(path, g));
+    if (other) {  // another app was pinned
         SetFakeGroup(nullptr);
         return false;
     }
     int mon = MonNumber(g_jumpMon);
     if (mon < 1 || mon > kMaxMon) return false;
     unsigned m = MaskOf(g) | (1u << (mon - 1));
-    SetRule(KeyOf(g), m);
+    SetRule(BaseKeyOf(g), m);
     Wh_Log(L"-> Additionally pinned on monitor %d (mask 0x%X, order kept): %ls", mon, m, AppOf(g));
-    g_swallowAddKey = KeyOf(g);
+    g_swallowAddKey = BaseKeyOf(g);  // SKA1 sends the app ID without suffix
     g_swallowAddTick = GetTickCount();
     if (g_win10) {  // Windows 10 removes the old pin afterwards
         g_swallowRemoveKey = KeyOf(g);
@@ -3019,7 +3501,7 @@ static LRESULT HandleUnpinOne(const wchar_t* app) {
     if (mon < 1 || mon > kMaxMon || !InMask(mask, mon)) return 0;
     unsigned rest = mask & ~(1u << (mon - 1));
     if (!rest) return 0;  // last taskbar: let it unpin normally
-    SetRule(KeyOf(g), rest);
+    SetRule(BaseKeyOf(g), rest);
     Wh_Log(L"-> Unpinned only from monitor %d, stays on mask 0x%X: %ls", mon, rest, AppOf(g));
     QueueApply(g);
     return 1;
@@ -3035,8 +3517,12 @@ static bool SetGroupShortcut(void* g, PIDLIST_ABSOLUTE pidl) {
 // Jump list: show as "not pinned" on taskbars where the pin isn't allowed
 using ShowJump_t = HRESULT (*)(void*, void*, void*, bool);
 static ShowJump_t ShowJump_orig;
-static HRESULT ShowJump_hook(void* self, void* g, void* item, bool b) {
+static HRESULT ShowJump_hook(void* self, void* wg, void* item, bool b) {
     void* tl = BarOf(self);
+    // Window button of "Disable grouping on the taskbar": its jump list shows the pin state of the
+    // separate pinned group (that mod switches to it) - so work on that group
+    void* pg = tl ? PinGroupFor(wg) : nullptr;
+    void* g = pg ? pg : wg;
     bool fake = false;
     if (tl && g && Pinned(g) && !ShouldShow(tl, g, nullptr) && pGroupUpdateFlags) {
         g_selfFlag = true;
@@ -3058,7 +3544,7 @@ static HRESULT ShowJump_hook(void* self, void* g, void* item, bool b) {
             ILFree(sw);
         }
     }
-    HRESULT hr = ShowJump_orig(self, g, item, b);
+    HRESULT hr = ShowJump_orig(self, wg, item, b);
     if (swapped) SetGroupShortcut(g, saved);
     else if (saved) ILFree(saved);
     if (fake) pGroupUpdateFlags(g, 0x1, 0x1);
@@ -3068,9 +3554,14 @@ static HRESULT ShowJump_hook(void* self, void* g, void* item, bool b) {
         g_jumpTick = GetTickCount();
         SetFakeGroup(fake ? g : nullptr);
         SetJumpGroup(g);
+        g_jumpWinKey = (!pg && !Pinned(wg)) ? BaseKeyOf(wg) : L"";
+        std::lock_guard<std::mutex> l(g_jumpWinIdMx);
+        g_jumpWinId = (!pg && !Pinned(wg)) ? AppOf(wg) : L"";
+        g_jumpWinIdTick = g_jumpTick;
     }
-    Wh_Log(L"-> Jump list on monitor %d%ls: %.40ls", tl ? MonNumber(GetMonitor_orig(tl)) : 0,
-         fake ? L" (as not pinned)" : L"", AppOf(g));
+    Wh_Log(L"-> Jump list on monitor %d%ls%ls: %.40ls", tl ? MonNumber(GetMonitor_orig(tl)) : 0,
+         fake ? L" (as not pinned)" : L"", pg ? L" (pin of a window group)" : L"", AppOf(g));
+    if (pg) ((IUnknown*)pg)->Release();
     return hr;
 }
 
@@ -3078,15 +3569,40 @@ static HRESULT ShowJump_hook(void* self, void* g, void* item, bool b) {
 using EnumPinned_t = HRESULT (*)(void*, bool, bool, bool);
 static EnumPinned_t EnumPinned_orig;
 static HRESULT EnumPinned_hook(void* self, bool a, bool b, bool c) {
-    HRESULT hr = EnumPinned_orig(self, a, b, c);
-    void* g = g_fakeGroup;
     LASTINPUTINFO li{.cbSize = sizeof(li)};
     DWORD now = GetTickCount();
+    // "Pin" in the jump list of a window group of "Disable grouping on the taskbar": Windows creates
+    // a new pinned group while rereading. Rule = taskbar of the jump list, set beforehand so that the
+    // filter already applies; the primary taskbar plays along briefly (otherwise Windows unpins it).
+    std::wstring winKey;
+    bool ruleSet = false;
+    if (!g_jumpWinKey.empty() && now - g_jumpTick < 20000 && GetLastInputInfo(&li) && now - li.dwTime < 8000) {
+        winKey = g_jumpWinKey;
+        g_jumpWinKey.clear();
+        int mon = MonNumber(g_jumpMon);
+        if (mon >= 1 && mon <= kMaxMon && !LoadPinRules().count(winKey)) {
+            SetRule(winKey, 1u << (mon - 1));
+            ruleSet = true;
+        }
+        g_newPinKey = winKey;
+        g_newPinTick = now;
+    }
+    HRESULT hr = EnumPinned_orig(self, a, b, c);
+    if (!winKey.empty()) {
+        if (void* pg = FindPinnedGroup(winKey, nullptr)) {
+            Wh_Log(L"-> Pinned from a window group on monitor %d: %ls", MonNumber(g_jumpMon), winKey.c_str());
+            QueueApply(pg);
+            ((IUnknown*)pg)->Release();
+        } else if (ruleSet) {
+            SetRule(winKey, 0);  // nothing was pinned
+        }
+    }
+    void* g = g_fakeGroup;
     if (g && now - g_jumpTick < 20000 && GetLastInputInfo(&li) && now - li.dwTime < 8000 && Pinned(g)) {
         int mon = MonNumber(g_jumpMon);
         if (mon >= 1 && mon <= kMaxMon) {
             unsigned m = MaskOf(g) | (1u << (mon - 1));
-            SetRule(KeyOf(g), m);
+            SetRule(BaseKeyOf(g), m);
             Wh_Log(L"-> Additionally pinned on monitor %d (mask 0x%X): %ls", mon, m, AppOf(g));
             QueueApply(g);
         }
@@ -3222,17 +3738,8 @@ static bool AskExtraPin(PCIDLIST_ABSOLUTE pidl) {
     if (pidl) {
         SHGetPathFromIDListW(pidl, path);
         data = path;
-        IPropertyStore* ps = nullptr;
-        if (SUCCEEDED(SHGetPropertyStoreFromIDList(pidl, GPS_DEFAULT, IID_PPV_ARGS(&ps))) && ps) {
-            PROPVARIANT pv;
-            PropVariantInit(&pv);
-            if (SUCCEEDED(ps->GetValue(kAumid, &pv)) && pv.vt == VT_LPWSTR && pv.pwszVal) {
-                data += L'|';
-                data += pv.pwszVal;
-            }
-            PropVariantClear(&pv);
-            ps->Release();
-        }
+        std::wstring id = PidlAppId(pidl);
+        if (!id.empty()) data += L'|' + id;
     }
     DWORD_PTR r = 0;
     COPYDATASTRUCT cd{0x534B5032, (DWORD)((data.size() + 1) * sizeof(wchar_t)), (void*)data.c_str()};  // "SKP2"
@@ -3264,16 +3771,25 @@ static HRESULT PinModify_hook(void* self, PCIDLIST_ABSOLUTE from, PCIDLIST_ABSOL
         }
         PWSTR app = nullptr;
         if (pGetAppIDForPinned) pGetAppIDForPinned(self, to, &app);
+        std::wstring id = app ? app : L"";
+        if (app) CoTaskMemFree(app);
+        std::wstring base = id.substr(0, BaseAppIdLen(id.c_str()));
         HWND w = FindWindowExW(HWND_MESSAGE, nullptr, kMsgClass, nullptr);
         DWORD_PTR r = 0;
         bool swallow = false;
-        if (w && app) {
-            COPYDATASTRUCT cd{0x534B4131, (DWORD)((wcslen(app) + 1) * sizeof(wchar_t)), (PVOID)app};
+        if (w && !base.empty()) {
+            COPYDATASTRUCT cd{0x534B4131, (DWORD)((base.size() + 1) * sizeof(wchar_t)), (PVOID)base.c_str()};
             swallow = SendMessageTimeoutW(w, WM_COPYDATA, 0, (LPARAM)&cd, SMTO_ABORTIFHUNG, 1500, &r) && r == 1;
         }
-        Wh_Log(L"-> Pin list: append %ls (caller %d)%ls", app ? app : L"?", caller, swallow ? L" - intercepted" : L"");
-        if (app) CoTaskMemFree(app);
+        Wh_Log(L"-> Pin list: append %ls (caller %d)%ls", id.empty() ? L"?" : id.c_str(), caller, swallow ? L" - intercepted" : L"");
         if (swallow) return S_OK;
+        // Windows 10 pins from the jump list here (RuntimeBroker), with the app ID of the window:
+        // a window of "Disable grouping on the taskbar" gets its app's Start menu shortcut instead
+        if (PIDLIST_ABSOLUTE lnk = StartMenuPidlForWindow(to, id)) {
+            HRESULT hr = PinModify_orig(self, from, lnk, caller, flags);
+            ILFree(lnk);
+            if (SUCCEEDED(hr)) return hr;
+        }
     }
     return PinModify_orig(self, from, to, caller, flags);
 }
@@ -3402,6 +3918,21 @@ static HRESULT PinTrusted_hook(void* self, PCIDLIST_ABSOLUTE pidl, int caller) {
     bool extra = AskExtraPin(pidl);
     Wh_Log(L"-> PinManager: pin (caller %d)%ls", caller, extra ? L" - additional taskbar only" : L"");
     if (extra) return S_OK;
+    // A window of "Disable grouping on the taskbar" (app ID with suffix): pin the app's Start menu
+    // shortcut instead (temporary, see "Pins with the app ID of a single window"). The item to pin is
+    // the window's EXE; its app ID comes from the jump list just opened (Explorer only), and the EXE
+    // name must match the shortcut's, so that a different app is never pinned instead.
+    std::wstring id = PidlAppId(pidl);
+    if (BaseAppIdLen(id.c_str()) == id.size()) {
+        std::lock_guard<std::mutex> l(g_jumpWinIdMx);  // taken once: one pin per jump list
+        std::wstring jump = std::exchange(g_jumpWinId, std::wstring());
+        if (!jump.empty() && GetTickCount() - g_jumpWinIdTick < 20000) id = std::move(jump);
+    }
+    if (PIDLIST_ABSOLUTE lnk = StartMenuPidlForWindow(pidl, id)) {
+        HRESULT hr = PinTrusted_orig(self, lnk, caller);
+        ILFree(lnk);
+        if (SUCCEEDED(hr)) return hr;
+    }
     return PinTrusted_orig(self, pidl, caller);
 }
 static bool InitPinListHooks() {
