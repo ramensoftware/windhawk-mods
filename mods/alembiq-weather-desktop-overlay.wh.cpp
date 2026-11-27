@@ -3860,29 +3860,112 @@ bool FetchSingleWeatherSource(const std::wstring& src, const Settings& cfg, Fore
 }
 
 void MergeMissingSnapshotFields(ForecastSnapshot& dst, const ForecastSnapshot& src) {
-    if (!dst.mCondition.available && src.mCondition.available) { dst.weatherCode = src.weatherCode; dst.mCondition = src.mCondition; }
-    if (!dst.mTemp.available && src.mTemp.available) { dst.tempC = src.tempC; dst.mTemp = src.mTemp; }
-    if (!dst.mTodayMinMax.available && src.mTodayMinMax.available) { dst.todayMinC = src.todayMinC; dst.todayMaxC = src.todayMaxC; dst.hasTodayMinMax = true; dst.mTodayMinMax = src.mTodayMinMax; }
-    if (!dst.mFeelsLike.available && src.mFeelsLike.available) { dst.apparentTempC = src.apparentTempC; dst.mFeelsLike = src.mFeelsLike; }
-    if (!dst.mHumidity.available && src.mHumidity.available) { dst.humidityPct = src.humidityPct; dst.mHumidity = src.mHumidity; }
-    if (!dst.mPressure.available && src.mPressure.available) { dst.pressureHpa = src.pressureHpa; dst.mPressure = src.mPressure; }
-    if (!dst.mWind.available && src.mWind.available) { dst.windSpeedKmh = src.windSpeedKmh; dst.windDirDeg = src.windDirDeg; dst.windDirSign = src.windDirSign; dst.mWind = src.mWind; }
-    if (!dst.mGusts.available && src.mGusts.available) { dst.windGustsKmh = src.windGustsKmh; dst.mGusts = src.mGusts; }
-    if (!dst.mClouds.available && src.mClouds.available) { dst.cloudCoverPct = src.cloudCoverPct; dst.mClouds = src.mClouds; }
-    if (!dst.mPrecip.available && src.mPrecip.available) { dst.precipMm = src.precipMm; dst.mPrecip = src.mPrecip; }
-    if (!dst.mUv.available && src.mUv.available) { dst.uvIndex = src.uvIndex; dst.mUv = src.mUv; }
-    if (!dst.mAqi.available && src.mAqi.available) { dst.aqiValue = src.aqiValue; dst.pm25Value = src.pm25Value; dst.mAqi = src.mAqi; }
-    if (!dst.mPollen.available && src.mPollen.available) { dst.pollenMaxValue = src.pollenMaxValue; dst.mPollen = src.mPollen; }
-    if (!dst.mVisibility.available && src.mVisibility.available) { dst.visibilityM = src.visibilityM; dst.mVisibility = src.mVisibility; }
-    if (!dst.mDewPoint.available && src.mDewPoint.available) { dst.dewPointC = src.dewPointC; dst.mDewPoint = src.mDewPoint; }
-    if (!dst.mDayNight.available && src.mDayNight.available) { dst.isDay = src.isDay; dst.mDayNight = src.mDayNight; }
-    if (!dst.hasSunTimes && src.hasSunTimes) { dst.hasSunTimes = true; dst.sunriseHour = src.sunriseHour; dst.sunsetHour = src.sunsetHour; dst.mSunTimes = src.mSunTimes; }
-    if (!dst.hasMoonTimes && src.hasMoonTimes) { dst.hasMoonTimes = true; dst.moonriseHour = src.moonriseHour; dst.moonsetHour = src.moonsetHour; dst.mMoonTimes = src.mMoonTimes; }
-    if (!dst.hasGoldenHour && src.hasGoldenHour) { dst.hasGoldenHour = true; dst.goldenHourText = src.goldenHourText; dst.mGoldenHour = src.mGoldenHour; }
-    if (!dst.hasNeoData && src.hasNeoData) { dst.hasNeoData = true; dst.neoCountToday = src.neoCountToday; dst.neoClosestLd = src.neoClosestLd; dst.mNeo = src.mNeo; }
-    if (!dst.hasSpaceWeather && src.hasSpaceWeather) { dst.hasSpaceWeather = true; dst.flareKpEst = src.flareKpEst; dst.spaceWeatherText = src.spaceWeatherText; dst.mSpaceWeather = src.mSpaceWeather; }
-    if (!dst.mHourly.available && !src.hourly.empty()) { dst.hourly = src.hourly; dst.mHourly = src.mHourly; }
-    if (!dst.mDaily.available && !src.daily.empty()) { dst.daily = src.daily; dst.mDaily = src.mDaily; }
+    if (!dst.mCondition.available && src.mCondition.available) {
+        dst.weatherCode = src.weatherCode;
+        dst.mCondition = src.mCondition;
+    }
+    if (!dst.mTemp.available && src.mTemp.available) {
+        dst.tempC = src.tempC;
+        dst.mTemp = src.mTemp;
+    }
+    if (!dst.mTodayMinMax.available && src.mTodayMinMax.available) {
+        dst.todayMinC = src.todayMinC;
+        dst.todayMaxC = src.todayMaxC;
+        dst.hasTodayMinMax = true;
+        dst.mTodayMinMax = src.mTodayMinMax;
+    }
+    if (!dst.mFeelsLike.available && src.mFeelsLike.available) {
+        dst.apparentTempC = src.apparentTempC;
+        dst.mFeelsLike = src.mFeelsLike;
+    }
+    if (!dst.mHumidity.available && src.mHumidity.available) {
+        dst.humidityPct = src.humidityPct;
+        dst.mHumidity = src.mHumidity;
+    }
+    if (!dst.mPressure.available && src.mPressure.available) {
+        dst.pressureHpa = src.pressureHpa;
+        dst.mPressure = src.mPressure;
+    }
+    if (!dst.mWind.available && src.mWind.available) {
+        dst.windSpeedKmh = src.windSpeedKmh;
+        dst.windDirDeg = src.windDirDeg;
+        dst.windDirSign = src.windDirSign;
+        dst.mWind = src.mWind;
+    }
+    if (!dst.mGusts.available && src.mGusts.available) {
+        dst.windGustsKmh = src.windGustsKmh;
+        dst.mGusts = src.mGusts;
+    }
+    if (!dst.mClouds.available && src.mClouds.available) {
+        dst.cloudCoverPct = src.cloudCoverPct;
+        dst.mClouds = src.mClouds;
+    }
+    if (!dst.mPrecip.available && src.mPrecip.available) {
+        dst.precipMm = src.precipMm;
+        dst.mPrecip = src.mPrecip;
+    }
+    if (!dst.mUv.available && src.mUv.available) {
+        dst.uvIndex = src.uvIndex;
+        dst.mUv = src.mUv;
+    }
+    if (!dst.mAqi.available && src.mAqi.available) {
+        dst.aqiValue = src.aqiValue;
+        dst.pm25Value = src.pm25Value;
+        dst.mAqi = src.mAqi;
+    }
+    if (!dst.mPollen.available && src.mPollen.available) {
+        dst.pollenMaxValue = src.pollenMaxValue;
+        dst.mPollen = src.mPollen;
+    }
+    if (!dst.mVisibility.available && src.mVisibility.available) {
+        dst.visibilityM = src.visibilityM;
+        dst.mVisibility = src.mVisibility;
+    }
+    if (!dst.mDewPoint.available && src.mDewPoint.available) {
+        dst.dewPointC = src.dewPointC;
+        dst.mDewPoint = src.mDewPoint;
+    }
+    if (!dst.mDayNight.available && src.mDayNight.available) {
+        dst.isDay = src.isDay;
+        dst.mDayNight = src.mDayNight;
+    }
+    if (!dst.hasSunTimes && src.hasSunTimes) {
+        dst.hasSunTimes = true;
+        dst.sunriseHour = src.sunriseHour;
+        dst.sunsetHour = src.sunsetHour;
+        dst.mSunTimes = src.mSunTimes;
+    }
+    if (!dst.hasMoonTimes && src.hasMoonTimes) {
+        dst.hasMoonTimes = true;
+        dst.moonriseHour = src.moonriseHour;
+        dst.moonsetHour = src.moonsetHour;
+        dst.mMoonTimes = src.mMoonTimes;
+    }
+    if (!dst.hasGoldenHour && src.hasGoldenHour) {
+        dst.hasGoldenHour = true;
+        dst.goldenHourText = src.goldenHourText;
+        dst.mGoldenHour = src.mGoldenHour;
+    }
+    if (!dst.hasNeoData && src.hasNeoData) {
+        dst.hasNeoData = true;
+        dst.neoCountToday = src.neoCountToday;
+        dst.neoClosestLd = src.neoClosestLd;
+        dst.mNeo = src.mNeo;
+    }
+    if (!dst.hasSpaceWeather && src.hasSpaceWeather) {
+        dst.hasSpaceWeather = true;
+        dst.flareKpEst = src.flareKpEst;
+        dst.spaceWeatherText = src.spaceWeatherText;
+        dst.mSpaceWeather = src.mSpaceWeather;
+    }
+    if (!dst.mHourly.available && !src.hourly.empty()) {
+        dst.hourly = src.hourly;
+        dst.mHourly = src.mHourly;
+    }
+    if (!dst.mDaily.available && !src.daily.empty()) {
+        dst.daily = src.daily;
+        dst.mDaily = src.mDaily;
+    }
 }
 
 bool HasAllSnapshotFields(const ForecastSnapshot& s) {
