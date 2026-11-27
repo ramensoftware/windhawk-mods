@@ -2648,7 +2648,7 @@ static bool HookChrome(HMODULE chromeDll) {
   // without a public symbol have only a private function record named without
   // a signature, and are matched by that name. Only the layout is required;
   // every other feature is disabled if its functions are missing.
-  WindhawkUtils::SYMBOL_HOOK hooks[] = {
+  WindhawkUtils::SYMBOL_HOOK chromeDllHooks[] = {
       {{LR"(VideoOverlayWindowViews::OnUpdateControlsBounds)"},
        &g_OnUpdateControlsBoundsOriginal,
        OnUpdateControlsBoundsHook},
@@ -2800,7 +2800,8 @@ static bool HookChrome(HMODULE chromeDll) {
   // pass per Chrome build fast; Windhawk caches the result.
   options.noUndecoratedSymbols = TRUE;
 
-  if (!WindhawkUtils::HookSymbols(chromeDll, hooks, ARRAYSIZE(hooks), &options)) {
+  if (!WindhawkUtils::HookSymbols(chromeDll, chromeDllHooks,
+                                  ARRAYSIZE(chromeDllHooks), &options)) {
     Wh_Log(L"ERROR: Failed to resolve Chrome functions");
     return false;
   }
