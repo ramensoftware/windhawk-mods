@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         1.0.12
+// @version         1.0.13
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -135,10 +135,10 @@ NetEase Cloud Music compatibility remains limited: the sessions exposed through 
     #! $min: 0
     #! $max: 100
     #! $format: slider
-  - AcrylicBlurStrength: 10
+  - AcrylicBlurStrength: 45
     $name: Acrylic blur strength
-    $description: Adjust how much Acrylic blurs the desktop behind the player.
-    #! $showIf: {Main.Material: acrylic}
+    $description: Adjust live desktop blur. The default matches the original Acrylic look. Static or fallback capture uses a fixed blur.
+    #! $showIf: {Main.Material: acrylic, Main.DisplayMode: [fullsize, compact]}
     #! $min: 0
     #! $max: 100
     #! $format: slider
@@ -348,7 +348,7 @@ NetEase Cloud Music compatibility remains limited: the sessions exposed through 
 #include <winrt/Windows.Foundation.Metadata.h>
 #include <winrt/Windows.Security.Authorization.AppCapabilityAccess.h>
 #include <winrt/Windows.Graphics.h>
-#include <winrt/Windows.Graphics.Effects.h>
+
 #include <winrt/Windows.Graphics.Capture.h>
 #include <winrt/Windows.Graphics.DirectX.h>
 #include <winrt/Windows.Graphics.DirectX.Direct3D11.h>
@@ -509,8 +509,8 @@ struct Settings {
     std::wstring popupBackdropCoverEffect = L"dark_only";
     bool compactAlbumBackground = true;
     int micaUpperBackgroundOpacity = 100;
-    int fullsizeShadowStrength = 100;
-    int acrylicBlurStrength = 10;
+    int albumWashBottomShade = 100;
+    int acrylicBlurStrength = 45;
     std::wstring artworkAbstractMode = L"browser_original";
     int height = 40;
     int marginLeft = 4;
@@ -854,7 +854,6 @@ bool g_playerUsesRow = false;
 [[clang::no_destroy]] controls::Canvas g_islandPlacementHost = nullptr;
 
 
-// measure the animated island, even when the island captures a pointer.
 bool g_islandEnvironmentSuppressed = false;
 void SyncIslandPlacementVisibility() {
     if (!g_islandPlacementHost) return;
@@ -3051,7 +3050,7 @@ Settings ReadSettings() {
     settings.popupBackdropCoverEffect =
         GetStringSetting(L"Main.PopupBackdropCoverEffect", L"dark_only");
     settings.compactAlbumBackground = Wh_GetIntSetting(L"Main.CompactAlbumBackground") != 0;
-    settings.fullsizeShadowStrength = Clamp(Wh_GetIntSetting(L"Main.AlbumWashBottomShade"),0,100);
+    settings.albumWashBottomShade = Clamp(Wh_GetIntSetting(L"Main.AlbumWashBottomShade"),0,100);
     settings.acrylicBlurStrength = Clamp(Wh_GetIntSetting(L"Main.AcrylicBlurStrength"), 0, 100);
     settings.micaUpperBackgroundOpacity =
         Clamp(Wh_GetIntSetting(L"Main.MicaUpperBackgroundOpacity"), 0, 130);
@@ -5761,7 +5760,7 @@ std::vector<uint8_t> FixedWashSource(std::vector<uint8_t> const& source,int stre
 }
 int EffectiveFixedWashStrength(Settings const& settings,bool dark) {
     if(settings.sideExpand || (settings.compact&&!dark))return 0;
-    return Clamp(settings.fullsizeShadowStrength,0,100);
+    return Clamp(settings.albumWashBottomShade,0,100);
 }
 void BuildFixedPopupWashes(PreparedArtwork& artwork,int strength) {
     artwork.fixedWashBlockStrength=strength;
