@@ -7156,6 +7156,35 @@
         "version": "4"
       }
     },
+    "explorer-extras": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795752107000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795752107000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "AristideBH",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi -luuid -ladvapi32 -lgdi32 -lcomctl32 -lpropsys -lmsimg32",
+        "description": "Additions for File Explorer, one switch per feature: Columns (Miller columns), a details and preview pane (PDF, text, Markdown, images, video, sound), and colour labels (tags) on files and folders.",
+        "donateUrl": "https://ko-fi.com/aristidebh",
+        "github": "https://github.com/AristideBH",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Explorer Extras",
+        "version": "1.0.22"
+      }
+    },
     "explorer-fast-navigation": {
       "details": {
         "defaultSorting": 8550,
@@ -12986,6 +13015,30 @@
         "version": "1.1.0"
       }
     },
+    "native-screen-recorder": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795752112000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795752112000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "caotu2005",
+        "compilerOptions": "-ld3d11 -ldxgi -lmfplat -lmfreadwrite -lmfuuid -lole32 -luuid -lgdi32 -luser32 -lshell32 -lshlwapi -ldwmapi -lwinmm -ld2d1 -ldwrite",
+        "description": "Lightweight native Windows screen recorder with 13 themes, a WinUI 3 Settings window, hardware-capped resolution & FPS, live screen drawing, custom multi-monitor layout, and 21 languages.",
+        "github": "https://github.com/caotu2005",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Native Windows Screen Recorder",
+        "version": "2.0.4"
+      }
+    },
     "native-shadow-tuner": {
       "details": {
         "defaultSorting": 3771,
@@ -18667,6 +18720,35 @@
         "version": "1.2"
       }
     },
+    "taskbar-badge-control": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795752117000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795752117000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "mobeigi",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lcomctl32",
+        "description": "Show or hide taskbar badges per application (Windows 11).",
+        "github": "https://github.com/mobeigi",
+        "homepage": "https://mobeigi.com/",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0-only",
+        "name": "Taskbar Badge Control",
+        "version": "1.0.0"
+      }
+    },
     "taskbar-blob-shape": {
       "details": {
         "defaultSorting": 5913,
@@ -20333,7 +20415,7 @@
         "ratingUsers": 6,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1791273807000,
+        "updated": 1795752122000,
         "users": 62
       },
       "metadata": {
@@ -20341,14 +20423,14 @@
           "x86-64"
         ],
         "author": "Jakub Vlášek",
-        "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lruntimeobject -luuid -lshell32 -ladvapi32",
-        "description": "Visually highlight the most recently focused running apps on the taskbar",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -luuid -lshell32 -ladvapi32",
+        "description": "Highlight the taskbar icons and window previews of the apps you used last",
         "github": "https://github.com/jvlasek",
         "include": [
           "explorer.exe"
         ],
         "name": "Taskbar Recent Focus Highlight",
-        "version": "0.11.1"
+        "version": "0.12.3"
       }
     },
     "taskbar-reorder-right-drag": {

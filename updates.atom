@@ -2,12 +2,245 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-27T03:00:29.000Z</updated>
+    <updated>2026-11-27T04:02:02.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Recent Focus Highlight 0.12.3]]></title>
+        <id>https://windhawk.net/mods/taskbar-recent-focus-highlight#a7ff207d21bf1f46785fbd1b30c14bd3fdce1dbb</id>
+        <link href="https://windhawk.net/mods/taskbar-recent-focus-highlight"/>
+        <updated>2026-11-27T04:02:02.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Highlights now last from when you last used an app (keyboard or mouse input while it was in front), not from when you switched to it, so the app you are working in keeps its highlight.</li>
+<li>taskbar.dll is no longer hooked (12 symbols instead of 26), and preview cards are matched to their windows through Explorer's own card data, improving reliability.</li>
+<li>New icon styles: Plate (the button's own plate, tinted) and Plate with accent (half tint plus an accent border, the look of Taskbar Active Window Highlight) replace Full and Frame. The side bar lost its halo. On multi-window buttons the plates also tint the stacked edge.</li>
+<li>Previews: separate styles for rank 1 and ranks 2+, new Title (a plate over the card's title row) and &quot;with accent&quot; variants (after Taskbar Active Window Highlight), and ranks 2+ can be left unmarked. A previously chosen preview style is kept until you save the settings.</li>
+<li>New option to also mark single-window previews (off by default).</li>
+<li>Ranks 4 and up fade further instead of repeating rank 3.</li>
+<li>Icons are matched by Explorer's own app ID, so two buttons of one program (e.g. Total Commander and its Lister) are told apart; the exclude list accepts app IDs too.</li>
+<li>No native taskbar element is modified any more (the icon size boost is gone), and highlights take no layout space: they follow Taskbar Styler themes that resize the buttons.</li>
+<li>Less work on the taskbar thread, nothing done in Explorer processes without a taskbar, and a quieter log.</li>
+<li>The settings page is reordered: the four Taskbar settings first, the exclude list last. Stored settings are kept.</li>
+<li>Removed settings: icon roundness, glow layers, size boost and &quot;Only apps on the taskbar&quot; (always on now).</li>
+</ul>
+]]></content>
+        <author>
+            <name>Jakub Vlášek</name>
+            <uri>https://github.com/jvlasek</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Badge Control 1.0.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-badge-control#c7a91b1ab37fdedb5a2859d187e6ece9ac09b037</id>
+        <link href="https://windhawk.net/mods/taskbar-badge-control"/>
+        <updated>2026-11-27T04:01:57.000Z</updated>
+        <content type="html"><![CDATA[<h1>Taskbar Badge Control</h1>
+<p>This mod lets you show or hide taskbar badges per application, instead of
+turning them all on or off through Windows. It's useful for apps that don't
+offer their own setting to disable taskbar badges.</p>
+<p><img src="https://i.imgur.com/x45aKkt.jpeg" alt="Taskbar before and after selectively hiding application badges"></p>
+<h2>Usage</h2>
+<p>Use the filtering mode to <strong>show badges by default</strong> or <strong>hide badges by
+default</strong>, then populate <strong>Applications</strong> with the apps that should behave
+differently.</p>
+<p>Add process names (<code>process.exe</code>), full executable paths, or AppUserModelIDs
+under <strong>Applications</strong>. Entries are case-insensitive exact matches; wildcards
+are not supported.</p>
+<h2>Required Windows setting</h2>
+<p>Enable <strong>Show badges on taskbar apps</strong> under <strong>Settings → Personalization →
+Taskbar → Taskbar behaviors</strong>.</p>
+<p>If this setting is disabled, Windows hides all taskbar badges regardless of the
+mod's rules. The mod cannot show badges for allowed applications while the
+global setting is off.</p>
+<p><img src="https://i.imgur.com/dBVwbWE.jpeg" alt="Windows taskbar settings with Show badges on taskbar apps enabled"></p>
+<h2>Limits</h2>
+<ul>
+<li>Only the native Windows 11 taskbar is supported (x64 and ARM64).</li>
+<li>Badges drawn into an application's base icon cannot be removed.</li>
+<li>Applications whose identity cannot be resolved keep their badges.</li>
+</ul>
+]]></content>
+        <author>
+            <name>mobeigi</name>
+            <uri>https://github.com/mobeigi</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Native Windows Screen Recorder 2.0.4]]></title>
+        <id>https://windhawk.net/mods/native-screen-recorder#9a25265d3328d9b1fe994490d1a4e8e7677c3d15</id>
+        <link href="https://windhawk.net/mods/native-screen-recorder"/>
+        <updated>2026-11-27T04:01:52.000Z</updated>
+        <content type="html"><![CDATA[<h1>Native Windows Screen Recorder</h1>
+<blockquote>
+<p>ℹ️ <strong>Compatibility Note (Smart App Control) / Lưu ý tương thích:</strong></p>
+<ul>
+<li><strong>🌐 English:</strong> Like all Windhawk mods, this mod is compiled locally into an unsigned <code>.dll</code> file. It runs in a dedicated Windhawk tool process. If Windows <strong>Smart App Control</strong> is active on your PC, Windows will block the compiled <code>.dll</code> and the mod will not load.</li>
+<li><strong>🇻🇳 Tiếng Việt:</strong> Giống như mọi bản mod trên Windhawk, mod này được biên dịch cục bộ thành tệp <code>.dll</code> không có chữ ký số và chạy trong một tiến trình công cụ độc lập của Windhawk. Nếu máy đang bật <strong>Smart App Control (Kiểm soát Ứng dụng Thông minh)</strong>, Windows sẽ chặn tệp <code>.dll</code> này khiến mod không thể hoạt động.</li>
+</ul>
+</blockquote>
+<p><img src="https://raw.githubusercontent.com/caotu2k5/windhawk-mods-resources/main/nativerecord/main.jpg" alt="Native Windows Screen Recorder Preview (Floating Pill Bar)"></p>
+<p><em>Floating Pill Bar (13 Themes &amp; Windows 11 Blur / Liquid Glass)</em></p>
+<p><img src="https://raw.githubusercontent.com/caotu2k5/windhawk-mods-resources/main/nativerecord/record.jpg" alt="Native Windows Screen Recorder Preview (Active Recording HUD)"></p>
+<p><em>Active Recording HUD</em></p>
+<p><img src="https://raw.githubusercontent.com/caotu2k5/windhawk-mods-resources/main/nativerecord/drawscreen.jpg" alt="Native Windows Screen Recorder Preview (Live Screen Drawing)"></p>
+<p><em>Live Screen Drawing / Annotation Toolbar &amp; Esc Hint Pill</em></p>
+<p><img src="https://raw.githubusercontent.com/caotu2k5/windhawk-mods-resources/main/nativerecord/settingsui.jpg" alt="Native Windows Screen Recorder Preview (WinUI 3 Settings Window)"></p>
+<p><em>Dedicated WinUI 3 Settings Window (Hosted in <code>windhawk.exe</code>)</em></p>
+<p><img src="https://raw.githubusercontent.com/caotu2k5/windhawk-mods-resources/main/nativerecord/monitor.jpg" alt="Native Windows Screen Recorder Preview (Multi-Monitor Layout Arranger)"></p>
+<p><em>Interactive Multi-Monitor Custom Layout Arranger</em></p>
+<hr>
+<h2>🌐 English</h2>
+<p>A lightweight, native Windows screen recorder running in an isolated Windhawk tool process (<code>windhawk.exe</code> / <code>windhawk-mod.exe</code> — never injecting into <code>explorer.exe</code>) with <strong>13 built-in visual themes</strong>, a <strong>dedicated WinUI 3 Settings window</strong>, <strong>hardware-capped resolution &amp; active refresh-rate FPS selector</strong>, <strong>live screen drawing/annotation toolbar</strong>, <strong>multi-monitor custom layout arranger</strong>, and <strong>21-language support</strong> — no third-party apps required.</p>
+<h3>Key Features</h3>
+<ul>
+<li>
+<p><strong>Dedicated WinUI 3 Settings Window &amp; Isolated Tool Process:</strong></p>
+<ul>
+<li>The entire recorder runs in its own isolated Windhawk tool process (<code>windhawk.exe</code> / <code>windhawk-mod.exe</code>), keeping <code>explorer.exe</code> completely untouched. Clicking <code>⚙️</code> on the floating pill bar opens the built-in <strong>Windows 11 Settings–style</strong> window for themes, resolution, FPS, monitor layout, audio, and language.</li>
+<li>Built end-to-end with Direct2D WinUI 3 controls: grouped SettingsExpander cards, WinUI 3 ComboBox flyouts with vertical accent indicators, and a native-style WinUI 3 HSV ColorPicker with 16 Fluent swatches. Changes apply immediately to the live pill bar.</li>
+</ul>
+</li>
+<li>
+<p><strong>13 Built-In Themes &amp; Full Visual Customization:</strong></p>
+<ul>
+<li>Defaults to <strong>Windows 11 Blur</strong> (authentic frosted Fluent Acrylic), with <strong>Liquid Glass</strong> (refractive 3D glass pill) and 11 more curated themes (<strong>Windows 11 Mica</strong>, <strong>Fluent Solid</strong>, <strong>Classic Win11</strong>, <strong>Midnight OLED</strong>, <strong>Nord Frost</strong>, <strong>Catppuccin Mocha</strong>, <strong>Dracula Velvet</strong>, <strong>Rosé Pine</strong>, <strong>Emerald Slate</strong>, <strong>Warm Paper</strong>, and <strong>Custom</strong>).</li>
+<li>Customize <strong>Background Color</strong>, <strong>Border Color</strong>, and <strong>Corner Radius (<code>0–28 px</code>)</strong> across the pill bar, drawing toolbar, and layout arranger, excluded from recorded video via <code>WDA_EXCLUDEFROMCAPTURE</code>.</li>
+</ul>
+</li>
+<li>
+<p><strong>Hardware-Capped Resolution &amp; Active Refresh-Rate FPS:</strong></p>
+<ul>
+<li>Automatically detects each monitor's native hardware resolution and active Windows display refresh rate (<code>ENUM_CURRENT_SETTINGS</code>), only exposing presets up to your current hardware limits (e.g., 60 Hz caps at 60 FPS; 144 Hz unlocks up to 144 FPS; 240 Hz unlocks up to 240 FPS) with automatic GPU H.264 encoder step-down fallback.</li>
+</ul>
+</li>
+<li>
+<p><strong>Multi-Monitor Capture &amp; Interactive Custom Layout Arranger:</strong></p>
+<ul>
+<li>Record the monitor under your cursor, pick any individual monitor (<code>Monitor 1</code>, <code>Monitor 2</code>, ...), record <strong>All Monitors Combined</strong>, or open the <strong>Custom Monitor Layout</strong> arranger directly from Settings to drag, snap, resize, and toggle monitors into any corner or Picture-in-Picture layout.</li>
+</ul>
+</li>
+<li>
+<p><strong>Live Screen Drawing / Annotation (<code>✏️</code>), WASAPI Audio &amp; 21 Languages:</strong></p>
+<ul>
+<li>Toggleable from the Idle Pill Bar or Active Recording HUD with <strong>Pen</strong>, <strong>Highlighter</strong>, <strong>Line</strong>, <strong>Arrow</strong>, <strong>Rectangle</strong>, <strong>Ellipse</strong>, <strong>Eraser</strong>, <strong>Mouse Pass-through</strong>, <strong>7 colors</strong>, <strong>3 sizes</strong>, <strong>Undo / Redo</strong>, <strong>Clear All</strong>, and a <code>&quot;Press Esc to exit&quot;</code> hint pill.</li>
+<li>DXGI Desktop Duplication with automatic GDI fallback, Media Foundation H.264 + AAC (192 kbps) direct MP4 encoding, WASAPI System Audio Loopback + Microphone mixing, automatic Explorer reveal on finish, and <strong>21 built-in languages</strong>.</li>
+</ul>
+</li>
+</ul>
+<h3>Default Hotkeys</h3>
+<ul>
+<li><strong>Ctrl + Alt + R:</strong> Open / Close the floating Pill Launcher bar (or Stop if currently recording)</li>
+<li><strong>Ctrl + Alt + S:</strong> Drag-select a custom screen region and start recording</li>
+<li><strong>Ctrl + Alt + P:</strong> Pause / Resume active recording</li>
+<li><strong>Esc:</strong> Exit Live Screen Drawing mode (or cancel region selection)</li>
+</ul>
+<hr>
+<h2>🇻🇳 Tiếng Việt</h2>
+<p>Trình quay màn hình native gọn nhẹ cho Windows chạy trong tiến trình công cụ độc lập của Windhawk (<code>windhawk.exe</code> / <code>windhawk-mod.exe</code>, không can thiệp vào <code>explorer.exe</code>) với <strong>13 chủ đề giao diện</strong>, <strong>cửa sổ Cài đặt WinUI 3 tích hợp</strong>, <strong>tùy chỉnh độ phân giải &amp; FPS giới hạn theo tần số quét thực tế của phần cứng</strong>, <strong>bộ công cụ vẽ trực tiếp lên màn hình khi quay</strong>, <strong>trình tự bố trí đa màn hình trực quan</strong> và <strong>hỗ trợ 21 ngôn ngữ</strong> — không cần cài thêm phần mềm bên thứ 3.</p>
+<h3>Tính năng chính</h3>
+<ul>
+<li>
+<p><strong>Cửa sổ Cài đặt WinUI 3 &amp; Tiến Trình Công Cụ Độc Lập:</strong></p>
+<ul>
+<li>Toàn bộ trình quay màn hình chạy tách biệt hoàn toàn trong tiến trình công cụ của Windhawk (<code>windhawk.exe</code> / <code>windhawk-mod.exe</code>), an toàn tuyệt đối cho <code>explorer.exe</code>. Bấm nút <code>⚙️</code> trên thanh viên thuốc để mở cửa sổ <strong>Cài đặt Quay Màn Hình</strong> phong cách Windows 11.</li>
+<li>Thiết kế đồng bộ chuẩn WinUI 3 với thẻ nhóm SettingsExpander, menu thả xuống ComboBox Flyout có thanh nhấn dọc và bảng chọn màu WinUI 3 ColorPicker 16 ô màu nhanh Fluent — mọi thay đổi áp dụng tức thì lên thanh viên thuốc.</li>
+</ul>
+</li>
+<li>
+<p><strong>13 Chủ Đề Giao Diện &amp; Tùy Chỉnh Màu Sắc, Bo Góc:</strong></p>
+<ul>
+<li>Mặc định <strong>Windows 11 Blur</strong> (Acrylic mờ dịu mắt chuẩn Windows 11), kèm <strong>Liquid Glass</strong> (kính trong suốt khúc xạ 3D) và 11 chủ đề tinh chọn khác (<strong>Windows 11 Mica</strong>, <strong>Fluent Solid</strong>, <strong>Classic Win11</strong>, <strong>Midnight OLED</strong>, <strong>Nord Frost</strong>, <strong>Catppuccin Mocha</strong>, <strong>Dracula Velvet</strong>, <strong>Rosé Pine</strong>, <strong>Emerald Slate</strong>, <strong>Warm Paper</strong> và <strong>Tự tùy chỉnh</strong>).</li>
+<li>Tự do đổi <strong>Màu nền</strong>, <strong>Màu viền</strong> và <strong>Bán kính bo góc (<code>0–28 px</code>)</strong> đồng bộ trên toàn bộ thanh viên thuốc, thanh vẽ và trình bố trí màn hình, tự ẩn khỏi video quay nhờ <code>WDA_EXCLUDEFROMCAPTURE</code>.</li>
+</ul>
+</li>
+<li>
+<p><strong>Độ Phân Giải &amp; FPS Giới Hạn Thông Minh Theo Phần Cứng:</strong></p>
+<ul>
+<li>Tự động nhận diện độ phân giải gốc và tần số quét Windows đang thiết lập (<code>ENUM_CURRENT_SETTINGS</code>), chỉ mở khóa mức FPS tương ứng (60Hz tối đa 60 FPS; 144Hz mở lên 144 FPS; 240Hz mở lên 240 FPS) kèm cơ chế tự hạ bậc an toàn theo bộ mã hóa H.264 của GPU.</li>
+</ul>
+</li>
+<li>
+<p><strong>Quay Đa Màn Hình &amp; Tự Bố Trí Màn Hình Trực Quan:</strong></p>
+<ul>
+<li>Chọn màn hình chứa con trỏ, từng màn hình riêng lẻ (<code>Màn hình 1</code>, <code>Màn hình 2</code>, ...), <strong>quay tất cả màn hình cùng lúc</strong>, hoặc mở trình <strong>Tự bố trí màn hình</strong> ngay từ cửa sổ Cài đặt để kéo thả, phóng to/thu nhỏ và sắp xếp các màn hình (Xếp ngang, Xếp dọc, Góc PiP).</li>
+</ul>
+</li>
+<li>
+<p><strong>Vẽ Trực Tiếp Lên Màn Hình (<code>✏️</code>), Thu Âm WASAPI &amp; 21 Ngôn Ngữ:</strong></p>
+<ul>
+<li>Trang bị đầy đủ <strong>Bút vẽ</strong>, <strong>Dạ quang</strong>, <strong>Đường thẳng</strong>, <strong>Mũi tên</strong>, <strong>Hình chữ nhật</strong>, <strong>Elip</strong>, <strong>Tẩy</strong>, <strong>Xuyên chuột</strong>, <strong>7 màu</strong>, <strong>3 cỡ nét</strong>, <strong>Hoàn tác / Làm lại</strong>, <strong>Xóa hết</strong> kèm viên thuốc nhắc <code>&quot;Đang vẽ • Ấn Esc để thoát&quot;</code>.</li>
+<li>Ghi hình DXGI Desktop Duplication (tự chuyển GDI dự phòng), xuất MP4 H.264 + AAC (192 kbps), thu âm thanh hệ thống &amp; Micro, tự mở thư mục chọn tệp video khi xong và hỗ trợ <strong>21 ngôn ngữ phổ biến</strong>.</li>
+</ul>
+</li>
+</ul>
+<h3>Phím tắt mặc định</h3>
+<ul>
+<li><strong>Ctrl + Alt + R:</strong> Mở / Ẩn thanh viên thuốc quay màn hình (hoặc Dừng nếu đang quay)</li>
+<li><strong>Ctrl + Alt + S:</strong> Kéo chuột chọn vùng màn hình và quay ngay</li>
+<li><strong>Ctrl + Alt + P:</strong> Tạm dừng / Tiếp tục quay</li>
+<li><strong>Esc:</strong> Thoát chế độ vẽ lên màn hình (hoặc hủy chọn vùng)</li>
+</ul>
+]]></content>
+        <author>
+            <name>caotu2005</name>
+            <uri>https://github.com/caotu2005</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Explorer Extras 1.0.22]]></title>
+        <id>https://windhawk.net/mods/explorer-extras#c44e9030efb09301e7bdb292775d575faf1ab17c</id>
+        <link href="https://windhawk.net/mods/explorer-extras"/>
+        <updated>2026-11-27T04:01:47.000Z</updated>
+        <content type="html"><![CDATA[<h1>Explorer Extras</h1>
+<p><strong>Extra features for File Explorer on Windows 11, one switch per feature.</strong></p>
+<p><img src="https://raw.githubusercontent.com/AristideBH/windhawk-lib/main/explorer-extras/assets/captures/hero.png" alt="Explorer Extras: the Columns layout, the details pane and colour labels in File Explorer"></p>
+<p>A 40-second tour is at the top of the project page: https://github.com/AristideBH/windhawk-lib/tree/main/explorer-extras#readme</p>
+<p>Explorer Extras adds three independent features to File Explorer. Each has its own section and its own off switch on this page: turn on what you like, and the rest stays out of the way.</p>
+<h2>Columns</h2>
+<p>Browse folders the way you do on a Mac: one column per folder level, side by side. Open the <strong>View</strong> menu of a File Explorer window and choose <strong>Columns</strong>.</p>
+<ul>
+<li><strong>It feels like Explorer.</strong> Sorting, grouping, icons, thumbnails and the right-click menu all come from Windows itself. The menu is tidied up: quick actions on top, &quot;Show more options&quot; for the full list.</li>
+<li><strong>Keyboard, selection and undo.</strong> Arrow keys, type to jump, F2 (also for several items at once), Delete, copy and paste, a rubber band, and Ctrl+Z to take back a delete, a rename or a new folder.</li>
+<li><strong>Drag and drop, and touch.</strong> Between columns, into the navigation pane, to other windows and apps, and back. Tap, hold, drag and select with a finger.</li>
+<li><strong>Tabs and memory.</strong> Each tab keeps its own columns, and each folder remembers its sort, its grouping, its column widths and whether you showed it in Columns.</li>
+<li><strong>Archives.</strong> Zip, 7z, rar and tar files open like folders.</li>
+</ul>
+<h2>Details pane</h2>
+<p>One pane that replaces Explorer's Details and Preview panes, in Columns and in every view. Press <strong>Alt+P</strong>, or use the View menu or the toolbar button, to show or hide it.</p>
+<ul>
+<li><strong>Real previews.</strong> PDF, text and code, Markdown, images (zoom, pan, animated GIF), video and sound.</li>
+<li><strong>Details by type.</strong> A folder's size and contents are counted when you press <strong>Calculate</strong>, or by themselves if you turn that on.</li>
+<li><strong>Several files at once.</strong> A fanned stack of thumbnails.</li>
+<li><strong>You stay in control.</strong> Each kind of preview can be switched off, and has a size limit.</li>
+</ul>
+<h2>Labels</h2>
+<p>Colour labels, like the tags of macOS, on files and folders.</p>
+<ul>
+<li><strong>Colours and names.</strong> Seven colours and a neutral gray, an optional name, up to 16 on an item. Give each colour a meaning in the settings, such as &quot;Red = Urgent&quot;.</li>
+<li><strong>Seen everywhere.</strong> A dot after the name, in every view of Explorer's list and in Columns, in step with the light or dark theme.</li>
+<li><strong>Easy to set.</strong> In the <strong>Tags</strong> section of the details pane, or from the right-click menu: a <strong>Tags</strong> entry with the colours, <strong>Add tag</strong> and <strong>Clear tags</strong>. The last eight names you typed are listed, so you type each one once.</li>
+<li><strong>Sort and group.</strong> Explorer's own <strong>Group by</strong> and <strong>Sort by</strong> use them: choose <strong>Tags</strong> (<strong>Étiquettes</strong> in French; under <strong>More</strong> for Sort by) and each label becomes a group. An item with two labels is in both groups.</li>
+<li><strong>They follow the file.</strong> A label is stored in the file itself, so it survives copying or moving on NTFS drives, and the file's dates do not change. See &quot;Good to know&quot; below.</li>
+</ul>
+<h2>Good to know</h2>
+<ul>
+<li><strong>Labels stay in your files.</strong> Labels are off by default, because they are the one part of the mod that changes files: turn on <strong>Show labels</strong> to use them. They are written into the files themselves (an NTFS stream), so they stay there after the mod is disabled or uninstalled, and also on a network share that supports named streams. To take them off, use <strong>Clear tags</strong> (in the pane or the right-click menu) while the mod is still running.</li>
+<li><strong>Removing the mod</strong> leaves Explorer as it was, apart from those labels.</li>
+<li><strong>Works with QuickLook.</strong> Explorer's own view follows the active column, so <a href="https://github.com/QL-Win/QuickLook">QuickLook</a> previews the selected item as it does anywhere else.</li>
+<li><strong>Tested</strong> daily on Windows 11 24H2 (build 26100) on ARM64, in French and English. x86-64 was tested up to version 0.55.</li>
+<li><strong>Built with AI assistance</strong> (Claude Code) under the author's direction, and tested by hand. It has not had an independent code audit, so please report anything odd.</li>
+</ul>
+<p>Bug reports and ideas: https://github.com/AristideBH/windhawk-lib/issues (the issue forms ask for the mod's version and the log).</p>
+<p>If you like it, you can support the work on Ko-fi: https://ko-fi.com/aristidebh</p>
+]]></content>
+        <author>
+            <name>AristideBH</name>
+            <uri>https://github.com/AristideBH</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Super Topmost Windows 1.0]]></title>
         <id>https://windhawk.net/mods/super-topmost-windows#c04d34828d9cb1a8f398bb36ff648f8846a4f606</id>
@@ -733,294 +966,6 @@ label is not shown on them.</li>
         <author>
             <name>DavidHiFi</name>
             <uri>https://github.com/DavidHiFi</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Extra Dim 1.0.0]]></title>
-        <id>https://windhawk.net/mods/extra-dim#2dfb44c5d376a01d2952572278d396d1b24bea75</id>
-        <link href="https://windhawk.net/mods/extra-dim"/>
-        <updated>2026-11-26T06:00:25.000Z</updated>
-        <content type="html"><![CDATA[<h1>Extra Dim</h1>
-<p>Dims the screen further than the brightness slider goes, and adds a warm tint
-for the evening. A flyout, a tray icon and global hotkeys.</p>
-<p><img src="https://raw.githubusercontent.com/DeepakBalaraman/extra-dim/master/assets/screenshot.png" alt="Extra Dim Mod Sample Screenshot"></p>
-<p>Open it with <strong>Ctrl+Alt+Shift+D</strong>, or by clicking the tray icon. The same controls
-are in the icon's right-click menu.</p>
-<h2>Dimming</h2>
-<ul>
-<li><strong>Extra dim</strong> goes darker than the bottom of the brightness slider. The slider
-stops at the ceiling you set, so the screen can't be dimmed to black by
-accident. Switching the toggle off keeps the level for next time.</li>
-<li><strong>Overlay</strong> (default) puts a click-through black layer over each display. Works
-with any GPU and driver, doesn't touch HDR, and costs nothing while it's off.
-It can't reach exclusive-fullscreen games, because those skip the desktop.</li>
-<li><strong>Gamma</strong> lowers the display's own gamma ramp instead, which does reach
-exclusive fullscreen. It depends on the driver: some games and most resolution
-changes reset it, and if the driver refuses, the mod falls back to the overlay
-by itself and says so under the Displays card.</li>
-</ul>
-<h2>Warm tint</h2>
-<p>A second layer, with its own color and strength, on top of dimming or on its
-own. It needs no driver support. The panel keeps showing the strength while the
-tint is off, so the number you see is the level the switch brings back.</p>
-<p><strong>Ctrl+Alt+T</strong> switches it from anywhere.</p>
-<h2>Good to know</h2>
-<ul>
-<li>Every hotkey can be changed or cleared. The panel, dim and tint chords start
-bound; dim more and dim less start empty, because a global chord is a chord
-taken from every other program, and the panel, the tray menu and the wheel
-already change the level.</li>
-<li>By default the dim layer covers the panel too, so the panel shows what the
-screen looks like. Turn on <strong>Keep the panel above the dim layer</strong> to read it at
-full brightness; the controls work either way, because the layer lets clicks
-through.</li>
-<li>Under the overlay the pointer stays bright, because Windows draws it above
-every window. <strong>Dim the mouse pointer too</strong>, under Settings &gt; Dim, swaps the
-system cursors for darkened copies while dimming is on and puts them back
-afterwards. Gamma dims the pointer already. A run that ends without its
-shutdown leaves the swap behind, and the next start undoes it before anything
-else.</li>
-<li>The layer sits with ordinary topmost windows, so what Windows raises above them
-is not covered: the Alt+Tab switcher, shell flyouts that go topmost. Gamma does
-reach those, because it dims the scanout rather than the desktop.</li>
-<li>Gamma is the lighter of the two at the same percentage. Drivers limit how far
-the ramp may go, so the two methods look their most alike at low levels and
-drift apart as the level rises.</li>
-<li>Windows never dims the secure desktop, so the UAC prompt and the sign-in screen
-stay bright. That's the platform, not the mod.</li>
-<li>Levels, toggles, the method and the display choice are remembered unless you
-switch that off. The method and display chosen in the panel are kept beside the
-setting they replaced, so changing that setting in Windhawk wins them back.</li>
-<li>Everything is stored in the mod's own Windhawk storage, one set per user
-account. The mod doesn't read or write Windows' Night light setting, and sends
-nothing anywhere.</li>
-</ul>
-<h2>Settings</h2>
-<ul>
-<li><strong>Startup</strong> - start dimmed, the level to start at, remember changes.</li>
-<li><strong>Appearance</strong> - theme, accent color, panel opacity, panel scale.</li>
-<li><strong>Placement</strong> - corner, monitor, fine offsets, close on focus loss, tray icon.</li>
-<li><strong>Dim</strong> - step, maximum, method, all displays, exclude from captures, keep the
-panel bright, smooth changes, dim the pointer.</li>
-<li><strong>Tint</strong> - color and starting strength.</li>
-<li><strong>Shortcuts</strong> - one chord per action, written as on a keyboard: <code>ctrl+alt+d</code>.
-A chord needs Ctrl, Alt, Shift or Win; a lone key is ignored unless it is an
-F-key, so a stray letter can't be taken from every other program.</li>
-</ul>
-]]></content>
-        <author>
-            <name>DpakB</name>
-            <uri>https://github.com/DeepakBalaraman</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Quick Link Menu 1.1.2]]></title>
-        <id>https://windhawk.net/mods/quick-link-menu#efe1aca07232aa38c9ea732618c4d3108cf4b4f7</id>
-        <link href="https://windhawk.net/mods/quick-link-menu"/>
-        <updated>2026-11-26T06:00:19.000Z</updated>
-        <content type="html"><![CDATA[<h1>Quick Link Menu</h1>
-<p><strong>English</strong> · <a href="https://github.com/CTravkin/DSN_Windhawk_Mods/blob/main/Quick_Link_Menu/README.ru.md">Русский</a></p>
-<p>Quick Link Menu customizes the native Windows 11 menu opened by <strong>Win+X</strong> or by
-right-clicking the Start button.</p>
-<h2>Features</h2>
-<p><img src="https://raw.githubusercontent.com/CTravkin/DSN_Windhawk_Mods/3b4e177fc36ebff3d3904821c6b85d9e9032583d/Quick_Link_Menu/Assets/Previews/Comparison.png" alt="Windows 11 Win+X and three Quick Link Menu configurations showing the System, Shut down, and Event Viewer submenus"></p>
-<h3>Customization and command availability</h3>
-<ul>
-<li><strong>Menu contents.</strong> Hide individual rows, submenu commands, or entire sections.
-Turning off a section preserves its settings. Turning off a row hides its submenu.</li>
-<li><strong>Automatic filtering.</strong> The mod hides unavailable commands based on the Windows
-edition, installed components, hardware, and system policies. If a main action is
-unavailable, its available shortcuts remain. An empty menu falls back to standard Win+X.</li>
-<li><strong>User permissions.</strong> An optional filter hides administrator commands that require
-credentials or whose elevation is blocked. Commands that only need UAC consent stay visible.</li>
-<li><strong>Submenu controls.</strong> Open submenus on hover, after a delay, on arrow hover, or by
-clicking the arrow. A hand cursor can mark areas that run a command.</li>
-<li><strong>Terminal.</strong> The main Terminal action can run as administrator.</li>
-</ul>
-<h3>Menu sections</h3>
-<ul>
-<li><strong>Settings.</strong> Open Windows Settings categories and pages such as Display,
-Sound, VPN, Default apps, and Windows Update.</li>
-<li><strong>Control Panel.</strong> Open classic tools such as Device Manager, Network
-Connections, Power Options, and Programs and Features.</li>
-<li><strong>Administration.</strong> Open Computer Management, Services, Event Viewer,
-Registry Editor, Terminal, and related tools such as Task Scheduler and
-Command Prompt.</li>
-<li><strong>Basic commands.</strong> Open Run, Task Manager, Search, and File Explorer, show
-the desktop, or access power and sign-in options. File Explorer opens its
-configured start page, with a submenu for locations such as This PC,
-Downloads, and the Recycle Bin.</li>
-</ul>
-<h3>Quick access to power actions</h3>
-<p>The main power row shuts down Windows in one click by default. It can run another
-action, such as Restart or Lock. Choose <strong>None</strong> to open the power submenu without
-running a command. When Windows offers <strong>Update and shut down</strong> or <strong>Update and
-restart</strong> in Win+X, the corresponding Shut down or Restart switch also controls
-that entry.</p>
-<h3>Labels and icons</h3>
-<p>The menu uses Windows labels in the system display language and Segoe Fluent Icons.
-Settings shortcuts use the matching Windows icons where available.</p>
-<p>Windhawk settings are available in English, Russian, Spanish, German, Brazilian
-Portuguese, and Simplified Chinese.</p>
-<h2>Platforms</h2>
-<p>Requires Windows 11 x64 or ARM64. GitHub Actions verified native ARM64
-compilation and automated command availability tests. Win+X interaction was
-tested on x64.</p>
-<h3>Compatibility</h3>
-<p>Quick Link Menu works with the standard Windows 11 Win+X menu. Mods that replace
-it are incompatible. One example is <a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/windows-10-winx-restorer.wh.cpp">Windows 10 Win+X restorer on Win11 24H2</a>.</p>
-<h2>Usage</h2>
-<p>Click a row's label or press <strong>Enter</strong> to run its main action. Click the arrow
-or press <strong>→</strong> to open the submenu. Click the label if a row only has a submenu.</p>
-<p>To change the menu, open <strong>Quick Link Menu → Settings</strong> in Windhawk. Section
-switches are below their descriptions. Row and submenu switches follow the menu
-order. Find submenu behavior and the administrator filter under <strong>General settings</strong>,
-and Terminal and power actions under <strong>Command settings</strong>.</p>
-<h2>Links</h2>
-<ul>
-<li><a href="https://github.com/CTravkin/DSN_Windhawk_Mods/tree/main/Quick_Link_Menu">Quick Link Menu on GitHub</a></li>
-<li><a href="https://github.com/CTravkin/DSN_Windhawk_Mods/blob/main/README.md">DSN Windhawk Mods</a></li>
-</ul>
-]]></content>
-        <author>
-            <name>CTravkin</name>
-            <uri>https://github.com/CTravkin</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Enable Preview Pane for Downloaded Files 1.0.0]]></title>
-        <id>https://windhawk.net/mods/enable-preview-pane-for-downloads#9aa89adc4abf51d510fcd800e510ccc5854fb73c</id>
-        <link href="https://windhawk.net/mods/enable-preview-pane-for-downloads"/>
-        <updated>2026-11-26T06:00:14.000Z</updated>
-        <content type="html"><![CDATA[<h1>Enable Preview Pane for Downloaded Files</h1>
-<p>Files saved from a browser, an email client or a chat app usually get a
-<code>Zone.Identifier</code> NTFS alternate data stream, known as the Mark of the Web
-(MOTW), which places them in the Internet security zone. File Explorer refuses
-to show such files in the preview pane: &quot;The file you are attempting to preview
-could harm your computer.&quot;</p>
-<p>This mod lets the preview pane show files in the Internet zone for the file
-extensions you choose. By default only <code>pdf</code> is affected.</p>
-<p>Before, a PDF with the Mark of the Web shows the warning:</p>
-<p><img src="https://raw.githubusercontent.com/javierpetrucci/windhawk-enable-preview-pane-for-downloads/main/images/before.png" alt="Preview pane showing the warning"></p>
-<p>After, the same PDF is previewed:</p>
-<p><img src="https://raw.githubusercontent.com/javierpetrucci/windhawk-enable-preview-pane-for-downloads/main/images/after.png" alt="Preview pane showing the PDF"></p>
-<p>The Mark of the Web is <strong>not</strong> removed or modified. Files keep their
-<code>Zone.Identifier</code> stream, so SmartScreen, Office Protected View, Microsoft
-Defender and every other program that checks the mark behave as before.</p>
-<h2>How it works</h2>
-<p>Before the preview pane loads a preview handler, File Explorer asks the URL
-security manager (<code>IInternetSecurityManager::ProcessUrlAction</code>) whether the
-<code>URLACTION_SHELL_PREVIEW</code> action is allowed for the file. In the Internet zone
-the answer is &quot;disallow&quot;, and the warning is shown instead of the preview.</p>
-<p>The mod hooks that method inside <code>explorer.exe</code>. When the original answer is
-not &quot;allow&quot;, the answer is changed to &quot;allow&quot; only if all of these are true:</p>
-<ul>
-<li>The action is <code>URLACTION_SHELL_PREVIEW</code>. No other security action is changed.</li>
-<li>The file is on a local fixed, removable or RAM drive (<code>C:\...</code>). Network
-shares (<code>\\server\...</code>) and mapped network drives are never exempted.</li>
-<li>The path has no alternate data stream, the file itself is not a symbolic
-link or another type of reparse point, and no folder in the path is a
-directory symbolic link. Cloud placeholder files, such as OneDrive files,
-and directory junctions are allowed.</li>
-<li>The extension is in the list from the settings.</li>
-<li>The security manager maps the file to the Internet zone (zone 3). Files in
-the Restricted Sites zone, or in any other zone, are left alone.</li>
-</ul>
-<h2>Settings</h2>
-<ul>
-<li><strong>Extensions</strong>: comma-separated list without the dot, for example
-<code>pdf, txt, png</code>. A leading dot is accepted too. Matching is not case
-sensitive.</li>
-<li><strong>Only when the path contains</strong> (optional): only exempt files whose path
-contains this text, not case sensitive. For example <code>\Downloads\</code>.</li>
-</ul>
-<h2>Types that are never exempted</h2>
-<p>The following extensions are ignored even if they are listed in the settings:</p>
-<ul>
-<li>Executables, libraries and installers: <code>exe</code>, <code>com</code>, <code>scr</code>, <code>pif</code>, <code>cpl</code>,
-<code>dll</code>, <code>ocx</code>, <code>sys</code>, <code>drv</code>, <code>efi</code>, <code>msi</code>, <code>msp</code>, <code>mst</code>, <code>msu</code>, <code>appx</code>,
-<code>appxbundle</code>, <code>msix</code>, <code>msixbundle</code>, <code>appinstaller</code>, <code>application</code>,
-<code>appref-ms</code>, <code>xbap</code>, <code>gadget</code>, <code>jar</code>, <code>msc</code>.</li>
-<li>Scripts and command files: <code>bat</code>, <code>cmd</code>, <code>ps1</code>, <code>psm1</code>, <code>psd1</code>, <code>ps1xml</code>,
-<code>pssc</code>, <code>psc1</code>, <code>vb</code>, <code>vbs</code>, <code>vbe</code>, <code>js</code>, <code>jse</code>, <code>ws</code>, <code>wsf</code>, <code>wsc</code>, <code>wsh</code>,
-<code>hta</code>, <code>sct</code>, <code>inf</code>, <code>ins</code>, <code>isp</code>, <code>reg</code>, <code>scf</code>, <code>shb</code>, <code>shs</code>, <code>mof</code>, <code>hlp</code>,
-<code>chm</code>, <code>diagcab</code>, <code>diagcfg</code>, <code>diagpkg</code>, <code>rdp</code>, <code>py</code>, <code>pyw</code>.</li>
-<li>Shortcuts and shell links: <code>lnk</code>, <code>url</code>, <code>website</code>, <code>library-ms</code>,
-<code>search-ms</code>, <code>searchconnector-ms</code>, <code>settingcontent-ms</code>.</li>
-<li>Office files with macros, including legacy formats that can carry VBA:
-<code>docm</code>, <code>dotm</code>, <code>xlsm</code>, <code>xltm</code>, <code>xlsb</code>, <code>xlam</code>, <code>pptm</code>, <code>potm</code>, <code>ppsm</code>,
-<code>ppam</code>, <code>sldm</code>, <code>doc</code>, <code>dot</code>, <code>xls</code>, <code>xlt</code>, <code>xla</code>, <code>ppt</code>, <code>pot</code>, <code>pps</code>,
-<code>ppa</code>, <code>mdb</code>, <code>mde</code>, <code>accdb</code>, <code>accde</code>, <code>ade</code>, <code>adp</code>, <code>xll</code>, <code>wll</code>, <code>one</code>.</li>
-<li>Archives: <code>zip</code>, <code>7z</code>, <code>rar</code>, <code>cab</code>, <code>tar</code>, <code>gz</code>, <code>tgz</code>, <code>bz2</code>, <code>tbz2</code>, <code>xz</code>,
-<code>txz</code>, <code>zst</code>, <code>lzh</code>, <code>lha</code>, <code>arj</code>, <code>z</code>, <code>wim</code>.</li>
-<li>Disk images: <code>iso</code>, <code>img</code>, <code>vhd</code>, <code>vhdx</code>, <code>vmdk</code>.</li>
-</ul>
-<p>This list is a safety net, not a complete security policy. Only add file types
-that you are comfortable previewing from untrusted sources.</p>
-<h2>Notes and limitations</h2>
-<ul>
-<li>Windows blocks these previews because they can leak credentials. A file
-that refers to a remote resource (<code>\\server\...</code>) can make the preview
-handler connect to that server and send it the user's NTLM hash. PDFs can
-do this, and <code>pdf</code> is the default. See Microsoft's
-<a href="https://support.microsoft.com/help/5070960">note on the change</a>. With the
-mod, previewing a listed file can leak the hash this way, just like opening
-it would.</li>
-<li>The preview handler registered for the type (for example the PDF previewer
-of Microsoft Edge, Adobe Acrobat or SumatraPDF) also parses the file, so a
-vulnerable preview handler can be exploited by a malicious file.</li>
-<li>A preview handler can opt in to previewing untrusted files with the
-<code>AutomaticallyPreviewUntrustedFiles</code> value on its CLSID key. Windows then
-shows the preview without this mod. The PDF previewer of Microsoft Edge does
-this. The PDF preview handlers of Adobe Acrobat Reader and SumatraPDF don't,
-so they need the mod.</li>
-<li>Tested by the author on Windows 11 build 26300 with the PDF preview handlers
-of SumatraPDF, Adobe Acrobat Reader and Microsoft Edge.</li>
-<li>Only the File Explorer preview pane in <code>explorer.exe</code> is covered. The preview
-pane in the Open and Save dialogs of other programs runs inside those
-programs. To cover one, add it under <code>Details</code> -&gt; <code>Advanced</code> -&gt;
-<code>Custom process inclusion list</code>. This was tested with the Open dialog of a
-program added to that list.</li>
-<li>Files reached through a directory symbolic link are never exempted, because
-the link can point to a network share. Directory junctions can only point to
-local folders, so they are allowed. Hard links are the same file. File
-Explorer doesn't preview file symbolic links at all, with or without the
-mod.</li>
-<li>The mod overrides the &quot;disallow&quot; answer for the listed types even when it
-comes from a Group Policy setting for the Internet zone.</li>
-<li>This targets the standard URL security manager of Windows (<code>urlmon.dll</code>). If
-a Windows update makes the preview pane use a different check, the mod has no
-effect and the warning is shown as usual.</li>
-<li>Disable the mod to restore the default behavior. Nothing on disk or in the
-registry is modified.</li>
-</ul>
-]]></content>
-        <author>
-            <name>javierpetrucci</name>
-            <uri>https://github.com/javierpetrucci</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Tab Memory Saver 0.3.0]]></title>
-        <id>https://windhawk.net/mods/explorer-tab-memory#772f4cfe06ba1530dbb828841994b7994ee59fd3</id>
-        <link href="https://windhawk.net/mods/explorer-tab-memory"/>
-        <updated>2026-11-26T06:00:08.000Z</updated>
-        <content type="html"><![CDATA[<h1>Explorer Tab Memory Saver</h1>
-<p>Close the last File Explorer window with its tabs still open. The next time
-you open Explorer to Home or This PC, the mod reopens the saved folders as tabs
-and selects the one you were using. If you open a specific folder instead,
-that folder stays selected alongside the restored tabs.</p>
-<p>Windows supplies the tab order, which can differ from an order you set by
-dragging tabs. Each Windows user has a separate saved session.</p>
-<p>This mod restores the last window with Explorer's own tab commands. The
-similarly named <a href="https://windhawk.net/mods/explorer-tabs-session-saver">Explorer Tabs Session Saver</a>
-uses shell launches and recommends a companion utility for grouping tabs.
-Enable only one session-restoration mod at a time.</p>
-<p>Requires Windows 11 File Explorer with native tabs. Tested on x64 build 26300.9974.</p>
-]]></content>
-        <author>
-            <name>Maxxwell Quinn</name>
-            <uri>https://github.com/MXXQN</uri>
         </author>
     </entry>
 </feed>

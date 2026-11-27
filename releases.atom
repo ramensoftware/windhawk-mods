@@ -2,12 +2,221 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-27T03:00:29.000Z</updated>
+    <updated>2026-11-27T04:01:57.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Badge Control 1.0.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-badge-control#c7a91b1ab37fdedb5a2859d187e6ece9ac09b037</id>
+        <link href="https://windhawk.net/mods/taskbar-badge-control"/>
+        <updated>2026-11-27T04:01:57.000Z</updated>
+        <content type="html"><![CDATA[<h1>Taskbar Badge Control</h1>
+<p>This mod lets you show or hide taskbar badges per application, instead of
+turning them all on or off through Windows. It's useful for apps that don't
+offer their own setting to disable taskbar badges.</p>
+<p><img src="https://i.imgur.com/x45aKkt.jpeg" alt="Taskbar before and after selectively hiding application badges"></p>
+<h2>Usage</h2>
+<p>Use the filtering mode to <strong>show badges by default</strong> or <strong>hide badges by
+default</strong>, then populate <strong>Applications</strong> with the apps that should behave
+differently.</p>
+<p>Add process names (<code>process.exe</code>), full executable paths, or AppUserModelIDs
+under <strong>Applications</strong>. Entries are case-insensitive exact matches; wildcards
+are not supported.</p>
+<h2>Required Windows setting</h2>
+<p>Enable <strong>Show badges on taskbar apps</strong> under <strong>Settings → Personalization →
+Taskbar → Taskbar behaviors</strong>.</p>
+<p>If this setting is disabled, Windows hides all taskbar badges regardless of the
+mod's rules. The mod cannot show badges for allowed applications while the
+global setting is off.</p>
+<p><img src="https://i.imgur.com/dBVwbWE.jpeg" alt="Windows taskbar settings with Show badges on taskbar apps enabled"></p>
+<h2>Limits</h2>
+<ul>
+<li>Only the native Windows 11 taskbar is supported (x64 and ARM64).</li>
+<li>Badges drawn into an application's base icon cannot be removed.</li>
+<li>Applications whose identity cannot be resolved keep their badges.</li>
+</ul>
+]]></content>
+        <author>
+            <name>mobeigi</name>
+            <uri>https://github.com/mobeigi</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Native Windows Screen Recorder 2.0.4]]></title>
+        <id>https://windhawk.net/mods/native-screen-recorder#9a25265d3328d9b1fe994490d1a4e8e7677c3d15</id>
+        <link href="https://windhawk.net/mods/native-screen-recorder"/>
+        <updated>2026-11-27T04:01:52.000Z</updated>
+        <content type="html"><![CDATA[<h1>Native Windows Screen Recorder</h1>
+<blockquote>
+<p>ℹ️ <strong>Compatibility Note (Smart App Control) / Lưu ý tương thích:</strong></p>
+<ul>
+<li><strong>🌐 English:</strong> Like all Windhawk mods, this mod is compiled locally into an unsigned <code>.dll</code> file. It runs in a dedicated Windhawk tool process. If Windows <strong>Smart App Control</strong> is active on your PC, Windows will block the compiled <code>.dll</code> and the mod will not load.</li>
+<li><strong>🇻🇳 Tiếng Việt:</strong> Giống như mọi bản mod trên Windhawk, mod này được biên dịch cục bộ thành tệp <code>.dll</code> không có chữ ký số và chạy trong một tiến trình công cụ độc lập của Windhawk. Nếu máy đang bật <strong>Smart App Control (Kiểm soát Ứng dụng Thông minh)</strong>, Windows sẽ chặn tệp <code>.dll</code> này khiến mod không thể hoạt động.</li>
+</ul>
+</blockquote>
+<p><img src="https://raw.githubusercontent.com/caotu2k5/windhawk-mods-resources/main/nativerecord/main.jpg" alt="Native Windows Screen Recorder Preview (Floating Pill Bar)"></p>
+<p><em>Floating Pill Bar (13 Themes &amp; Windows 11 Blur / Liquid Glass)</em></p>
+<p><img src="https://raw.githubusercontent.com/caotu2k5/windhawk-mods-resources/main/nativerecord/record.jpg" alt="Native Windows Screen Recorder Preview (Active Recording HUD)"></p>
+<p><em>Active Recording HUD</em></p>
+<p><img src="https://raw.githubusercontent.com/caotu2k5/windhawk-mods-resources/main/nativerecord/drawscreen.jpg" alt="Native Windows Screen Recorder Preview (Live Screen Drawing)"></p>
+<p><em>Live Screen Drawing / Annotation Toolbar &amp; Esc Hint Pill</em></p>
+<p><img src="https://raw.githubusercontent.com/caotu2k5/windhawk-mods-resources/main/nativerecord/settingsui.jpg" alt="Native Windows Screen Recorder Preview (WinUI 3 Settings Window)"></p>
+<p><em>Dedicated WinUI 3 Settings Window (Hosted in <code>windhawk.exe</code>)</em></p>
+<p><img src="https://raw.githubusercontent.com/caotu2k5/windhawk-mods-resources/main/nativerecord/monitor.jpg" alt="Native Windows Screen Recorder Preview (Multi-Monitor Layout Arranger)"></p>
+<p><em>Interactive Multi-Monitor Custom Layout Arranger</em></p>
+<hr>
+<h2>🌐 English</h2>
+<p>A lightweight, native Windows screen recorder running in an isolated Windhawk tool process (<code>windhawk.exe</code> / <code>windhawk-mod.exe</code> — never injecting into <code>explorer.exe</code>) with <strong>13 built-in visual themes</strong>, a <strong>dedicated WinUI 3 Settings window</strong>, <strong>hardware-capped resolution &amp; active refresh-rate FPS selector</strong>, <strong>live screen drawing/annotation toolbar</strong>, <strong>multi-monitor custom layout arranger</strong>, and <strong>21-language support</strong> — no third-party apps required.</p>
+<h3>Key Features</h3>
+<ul>
+<li>
+<p><strong>Dedicated WinUI 3 Settings Window &amp; Isolated Tool Process:</strong></p>
+<ul>
+<li>The entire recorder runs in its own isolated Windhawk tool process (<code>windhawk.exe</code> / <code>windhawk-mod.exe</code>), keeping <code>explorer.exe</code> completely untouched. Clicking <code>⚙️</code> on the floating pill bar opens the built-in <strong>Windows 11 Settings–style</strong> window for themes, resolution, FPS, monitor layout, audio, and language.</li>
+<li>Built end-to-end with Direct2D WinUI 3 controls: grouped SettingsExpander cards, WinUI 3 ComboBox flyouts with vertical accent indicators, and a native-style WinUI 3 HSV ColorPicker with 16 Fluent swatches. Changes apply immediately to the live pill bar.</li>
+</ul>
+</li>
+<li>
+<p><strong>13 Built-In Themes &amp; Full Visual Customization:</strong></p>
+<ul>
+<li>Defaults to <strong>Windows 11 Blur</strong> (authentic frosted Fluent Acrylic), with <strong>Liquid Glass</strong> (refractive 3D glass pill) and 11 more curated themes (<strong>Windows 11 Mica</strong>, <strong>Fluent Solid</strong>, <strong>Classic Win11</strong>, <strong>Midnight OLED</strong>, <strong>Nord Frost</strong>, <strong>Catppuccin Mocha</strong>, <strong>Dracula Velvet</strong>, <strong>Rosé Pine</strong>, <strong>Emerald Slate</strong>, <strong>Warm Paper</strong>, and <strong>Custom</strong>).</li>
+<li>Customize <strong>Background Color</strong>, <strong>Border Color</strong>, and <strong>Corner Radius (<code>0–28 px</code>)</strong> across the pill bar, drawing toolbar, and layout arranger, excluded from recorded video via <code>WDA_EXCLUDEFROMCAPTURE</code>.</li>
+</ul>
+</li>
+<li>
+<p><strong>Hardware-Capped Resolution &amp; Active Refresh-Rate FPS:</strong></p>
+<ul>
+<li>Automatically detects each monitor's native hardware resolution and active Windows display refresh rate (<code>ENUM_CURRENT_SETTINGS</code>), only exposing presets up to your current hardware limits (e.g., 60 Hz caps at 60 FPS; 144 Hz unlocks up to 144 FPS; 240 Hz unlocks up to 240 FPS) with automatic GPU H.264 encoder step-down fallback.</li>
+</ul>
+</li>
+<li>
+<p><strong>Multi-Monitor Capture &amp; Interactive Custom Layout Arranger:</strong></p>
+<ul>
+<li>Record the monitor under your cursor, pick any individual monitor (<code>Monitor 1</code>, <code>Monitor 2</code>, ...), record <strong>All Monitors Combined</strong>, or open the <strong>Custom Monitor Layout</strong> arranger directly from Settings to drag, snap, resize, and toggle monitors into any corner or Picture-in-Picture layout.</li>
+</ul>
+</li>
+<li>
+<p><strong>Live Screen Drawing / Annotation (<code>✏️</code>), WASAPI Audio &amp; 21 Languages:</strong></p>
+<ul>
+<li>Toggleable from the Idle Pill Bar or Active Recording HUD with <strong>Pen</strong>, <strong>Highlighter</strong>, <strong>Line</strong>, <strong>Arrow</strong>, <strong>Rectangle</strong>, <strong>Ellipse</strong>, <strong>Eraser</strong>, <strong>Mouse Pass-through</strong>, <strong>7 colors</strong>, <strong>3 sizes</strong>, <strong>Undo / Redo</strong>, <strong>Clear All</strong>, and a <code>&quot;Press Esc to exit&quot;</code> hint pill.</li>
+<li>DXGI Desktop Duplication with automatic GDI fallback, Media Foundation H.264 + AAC (192 kbps) direct MP4 encoding, WASAPI System Audio Loopback + Microphone mixing, automatic Explorer reveal on finish, and <strong>21 built-in languages</strong>.</li>
+</ul>
+</li>
+</ul>
+<h3>Default Hotkeys</h3>
+<ul>
+<li><strong>Ctrl + Alt + R:</strong> Open / Close the floating Pill Launcher bar (or Stop if currently recording)</li>
+<li><strong>Ctrl + Alt + S:</strong> Drag-select a custom screen region and start recording</li>
+<li><strong>Ctrl + Alt + P:</strong> Pause / Resume active recording</li>
+<li><strong>Esc:</strong> Exit Live Screen Drawing mode (or cancel region selection)</li>
+</ul>
+<hr>
+<h2>🇻🇳 Tiếng Việt</h2>
+<p>Trình quay màn hình native gọn nhẹ cho Windows chạy trong tiến trình công cụ độc lập của Windhawk (<code>windhawk.exe</code> / <code>windhawk-mod.exe</code>, không can thiệp vào <code>explorer.exe</code>) với <strong>13 chủ đề giao diện</strong>, <strong>cửa sổ Cài đặt WinUI 3 tích hợp</strong>, <strong>tùy chỉnh độ phân giải &amp; FPS giới hạn theo tần số quét thực tế của phần cứng</strong>, <strong>bộ công cụ vẽ trực tiếp lên màn hình khi quay</strong>, <strong>trình tự bố trí đa màn hình trực quan</strong> và <strong>hỗ trợ 21 ngôn ngữ</strong> — không cần cài thêm phần mềm bên thứ 3.</p>
+<h3>Tính năng chính</h3>
+<ul>
+<li>
+<p><strong>Cửa sổ Cài đặt WinUI 3 &amp; Tiến Trình Công Cụ Độc Lập:</strong></p>
+<ul>
+<li>Toàn bộ trình quay màn hình chạy tách biệt hoàn toàn trong tiến trình công cụ của Windhawk (<code>windhawk.exe</code> / <code>windhawk-mod.exe</code>), an toàn tuyệt đối cho <code>explorer.exe</code>. Bấm nút <code>⚙️</code> trên thanh viên thuốc để mở cửa sổ <strong>Cài đặt Quay Màn Hình</strong> phong cách Windows 11.</li>
+<li>Thiết kế đồng bộ chuẩn WinUI 3 với thẻ nhóm SettingsExpander, menu thả xuống ComboBox Flyout có thanh nhấn dọc và bảng chọn màu WinUI 3 ColorPicker 16 ô màu nhanh Fluent — mọi thay đổi áp dụng tức thì lên thanh viên thuốc.</li>
+</ul>
+</li>
+<li>
+<p><strong>13 Chủ Đề Giao Diện &amp; Tùy Chỉnh Màu Sắc, Bo Góc:</strong></p>
+<ul>
+<li>Mặc định <strong>Windows 11 Blur</strong> (Acrylic mờ dịu mắt chuẩn Windows 11), kèm <strong>Liquid Glass</strong> (kính trong suốt khúc xạ 3D) và 11 chủ đề tinh chọn khác (<strong>Windows 11 Mica</strong>, <strong>Fluent Solid</strong>, <strong>Classic Win11</strong>, <strong>Midnight OLED</strong>, <strong>Nord Frost</strong>, <strong>Catppuccin Mocha</strong>, <strong>Dracula Velvet</strong>, <strong>Rosé Pine</strong>, <strong>Emerald Slate</strong>, <strong>Warm Paper</strong> và <strong>Tự tùy chỉnh</strong>).</li>
+<li>Tự do đổi <strong>Màu nền</strong>, <strong>Màu viền</strong> và <strong>Bán kính bo góc (<code>0–28 px</code>)</strong> đồng bộ trên toàn bộ thanh viên thuốc, thanh vẽ và trình bố trí màn hình, tự ẩn khỏi video quay nhờ <code>WDA_EXCLUDEFROMCAPTURE</code>.</li>
+</ul>
+</li>
+<li>
+<p><strong>Độ Phân Giải &amp; FPS Giới Hạn Thông Minh Theo Phần Cứng:</strong></p>
+<ul>
+<li>Tự động nhận diện độ phân giải gốc và tần số quét Windows đang thiết lập (<code>ENUM_CURRENT_SETTINGS</code>), chỉ mở khóa mức FPS tương ứng (60Hz tối đa 60 FPS; 144Hz mở lên 144 FPS; 240Hz mở lên 240 FPS) kèm cơ chế tự hạ bậc an toàn theo bộ mã hóa H.264 của GPU.</li>
+</ul>
+</li>
+<li>
+<p><strong>Quay Đa Màn Hình &amp; Tự Bố Trí Màn Hình Trực Quan:</strong></p>
+<ul>
+<li>Chọn màn hình chứa con trỏ, từng màn hình riêng lẻ (<code>Màn hình 1</code>, <code>Màn hình 2</code>, ...), <strong>quay tất cả màn hình cùng lúc</strong>, hoặc mở trình <strong>Tự bố trí màn hình</strong> ngay từ cửa sổ Cài đặt để kéo thả, phóng to/thu nhỏ và sắp xếp các màn hình (Xếp ngang, Xếp dọc, Góc PiP).</li>
+</ul>
+</li>
+<li>
+<p><strong>Vẽ Trực Tiếp Lên Màn Hình (<code>✏️</code>), Thu Âm WASAPI &amp; 21 Ngôn Ngữ:</strong></p>
+<ul>
+<li>Trang bị đầy đủ <strong>Bút vẽ</strong>, <strong>Dạ quang</strong>, <strong>Đường thẳng</strong>, <strong>Mũi tên</strong>, <strong>Hình chữ nhật</strong>, <strong>Elip</strong>, <strong>Tẩy</strong>, <strong>Xuyên chuột</strong>, <strong>7 màu</strong>, <strong>3 cỡ nét</strong>, <strong>Hoàn tác / Làm lại</strong>, <strong>Xóa hết</strong> kèm viên thuốc nhắc <code>&quot;Đang vẽ • Ấn Esc để thoát&quot;</code>.</li>
+<li>Ghi hình DXGI Desktop Duplication (tự chuyển GDI dự phòng), xuất MP4 H.264 + AAC (192 kbps), thu âm thanh hệ thống &amp; Micro, tự mở thư mục chọn tệp video khi xong và hỗ trợ <strong>21 ngôn ngữ phổ biến</strong>.</li>
+</ul>
+</li>
+</ul>
+<h3>Phím tắt mặc định</h3>
+<ul>
+<li><strong>Ctrl + Alt + R:</strong> Mở / Ẩn thanh viên thuốc quay màn hình (hoặc Dừng nếu đang quay)</li>
+<li><strong>Ctrl + Alt + S:</strong> Kéo chuột chọn vùng màn hình và quay ngay</li>
+<li><strong>Ctrl + Alt + P:</strong> Tạm dừng / Tiếp tục quay</li>
+<li><strong>Esc:</strong> Thoát chế độ vẽ lên màn hình (hoặc hủy chọn vùng)</li>
+</ul>
+]]></content>
+        <author>
+            <name>caotu2005</name>
+            <uri>https://github.com/caotu2005</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Explorer Extras 1.0.22]]></title>
+        <id>https://windhawk.net/mods/explorer-extras#c44e9030efb09301e7bdb292775d575faf1ab17c</id>
+        <link href="https://windhawk.net/mods/explorer-extras"/>
+        <updated>2026-11-27T04:01:47.000Z</updated>
+        <content type="html"><![CDATA[<h1>Explorer Extras</h1>
+<p><strong>Extra features for File Explorer on Windows 11, one switch per feature.</strong></p>
+<p><img src="https://raw.githubusercontent.com/AristideBH/windhawk-lib/main/explorer-extras/assets/captures/hero.png" alt="Explorer Extras: the Columns layout, the details pane and colour labels in File Explorer"></p>
+<p>A 40-second tour is at the top of the project page: https://github.com/AristideBH/windhawk-lib/tree/main/explorer-extras#readme</p>
+<p>Explorer Extras adds three independent features to File Explorer. Each has its own section and its own off switch on this page: turn on what you like, and the rest stays out of the way.</p>
+<h2>Columns</h2>
+<p>Browse folders the way you do on a Mac: one column per folder level, side by side. Open the <strong>View</strong> menu of a File Explorer window and choose <strong>Columns</strong>.</p>
+<ul>
+<li><strong>It feels like Explorer.</strong> Sorting, grouping, icons, thumbnails and the right-click menu all come from Windows itself. The menu is tidied up: quick actions on top, &quot;Show more options&quot; for the full list.</li>
+<li><strong>Keyboard, selection and undo.</strong> Arrow keys, type to jump, F2 (also for several items at once), Delete, copy and paste, a rubber band, and Ctrl+Z to take back a delete, a rename or a new folder.</li>
+<li><strong>Drag and drop, and touch.</strong> Between columns, into the navigation pane, to other windows and apps, and back. Tap, hold, drag and select with a finger.</li>
+<li><strong>Tabs and memory.</strong> Each tab keeps its own columns, and each folder remembers its sort, its grouping, its column widths and whether you showed it in Columns.</li>
+<li><strong>Archives.</strong> Zip, 7z, rar and tar files open like folders.</li>
+</ul>
+<h2>Details pane</h2>
+<p>One pane that replaces Explorer's Details and Preview panes, in Columns and in every view. Press <strong>Alt+P</strong>, or use the View menu or the toolbar button, to show or hide it.</p>
+<ul>
+<li><strong>Real previews.</strong> PDF, text and code, Markdown, images (zoom, pan, animated GIF), video and sound.</li>
+<li><strong>Details by type.</strong> A folder's size and contents are counted when you press <strong>Calculate</strong>, or by themselves if you turn that on.</li>
+<li><strong>Several files at once.</strong> A fanned stack of thumbnails.</li>
+<li><strong>You stay in control.</strong> Each kind of preview can be switched off, and has a size limit.</li>
+</ul>
+<h2>Labels</h2>
+<p>Colour labels, like the tags of macOS, on files and folders.</p>
+<ul>
+<li><strong>Colours and names.</strong> Seven colours and a neutral gray, an optional name, up to 16 on an item. Give each colour a meaning in the settings, such as &quot;Red = Urgent&quot;.</li>
+<li><strong>Seen everywhere.</strong> A dot after the name, in every view of Explorer's list and in Columns, in step with the light or dark theme.</li>
+<li><strong>Easy to set.</strong> In the <strong>Tags</strong> section of the details pane, or from the right-click menu: a <strong>Tags</strong> entry with the colours, <strong>Add tag</strong> and <strong>Clear tags</strong>. The last eight names you typed are listed, so you type each one once.</li>
+<li><strong>Sort and group.</strong> Explorer's own <strong>Group by</strong> and <strong>Sort by</strong> use them: choose <strong>Tags</strong> (<strong>Étiquettes</strong> in French; under <strong>More</strong> for Sort by) and each label becomes a group. An item with two labels is in both groups.</li>
+<li><strong>They follow the file.</strong> A label is stored in the file itself, so it survives copying or moving on NTFS drives, and the file's dates do not change. See &quot;Good to know&quot; below.</li>
+</ul>
+<h2>Good to know</h2>
+<ul>
+<li><strong>Labels stay in your files.</strong> Labels are off by default, because they are the one part of the mod that changes files: turn on <strong>Show labels</strong> to use them. They are written into the files themselves (an NTFS stream), so they stay there after the mod is disabled or uninstalled, and also on a network share that supports named streams. To take them off, use <strong>Clear tags</strong> (in the pane or the right-click menu) while the mod is still running.</li>
+<li><strong>Removing the mod</strong> leaves Explorer as it was, apart from those labels.</li>
+<li><strong>Works with QuickLook.</strong> Explorer's own view follows the active column, so <a href="https://github.com/QL-Win/QuickLook">QuickLook</a> previews the selected item as it does anywhere else.</li>
+<li><strong>Tested</strong> daily on Windows 11 24H2 (build 26100) on ARM64, in French and English. x86-64 was tested up to version 0.55.</li>
+<li><strong>Built with AI assistance</strong> (Claude Code) under the author's direction, and tested by hand. It has not had an independent code audit, so please report anything odd.</li>
+</ul>
+<p>Bug reports and ideas: https://github.com/AristideBH/windhawk-lib/issues (the issue forms ask for the mod's version and the log).</p>
+<p>If you like it, you can support the work on Ko-fi: https://ko-fi.com/aristidebh</p>
+]]></content>
+        <author>
+            <name>AristideBH</name>
+            <uri>https://github.com/AristideBH</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Super Topmost Windows 1.0]]></title>
         <id>https://windhawk.net/mods/super-topmost-windows#c04d34828d9cb1a8f398bb36ff648f8846a4f606</id>
@@ -1049,129 +1258,6 @@ to leave it.</li>
         <author>
             <name>eprilx</name>
             <uri>https://github.com/eprilx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Volume Key Step 1.0]]></title>
-        <id>https://windhawk.net/mods/volume-key-step#ad86ce3a5b546f545af49f4430c7b002be48c4bb</id>
-        <link href="https://windhawk.net/mods/volume-key-step"/>
-        <updated>2026-11-25T08:02:43.000Z</updated>
-        <content type="html"><![CDATA[<h1>Volume Key Step</h1>
-<p>Windows raises or lowers the volume by 2% per volume key press. This mod lets you
-pick any step from 1% to 100%. The Windows volume flyout still shows as usual.</p>
-<p>The step also applies to anything else that steps the volume through Explorer, such as
-scrolling with the Windows 11 indicator in the Taskbar Volume Control mod.</p>
-<p>At least one audio device (speaker or mic) must be connected when Explorer starts. If
-none was, reload the mod after connecting one.</p>
-]]></content>
-        <author>
-            <name>Artistro08</name>
-            <uri>https://github.com/artistro08</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Notepad Pro 1.0.0]]></title>
-        <id>https://windhawk.net/mods/notepad-pro#f25ef647911aa78ccd08b23778d2e96b51dd3de1</id>
-        <link href="https://windhawk.net/mods/notepad-pro"/>
-        <updated>2026-11-25T08:02:37.000Z</updated>
-        <content type="html"><![CDATA[<h1>Notepad Pro</h1>
-<p><img src="https://raw.githubusercontent.com/armaninyow/Remove-Context-Menu-Items/refs/heads/main/Don't%20Touch/NP.png" alt="Notepad Pro"></p>
-<p>Upgrade the standard Windows Notepad with modern code-editor features while keeping it fast and lightweight.</p>
-<h2>Line-Number Gutter</h2>
-<p>Adds a clean line-number margin to the left side of the editor.</p>
-<ul>
-<li><code>Smart wrapping</code>: Only displays numbers on the first row of wrapped lines.</li>
-<li><code>Dynamic sizing</code>: Automatically adjusts its width as your document grows.</li>
-<li><code>Theme-aware</code>: Seamlessly adapts to light and dark modes in real time.</li>
-<li><code>Editor sync</code>: Matches your current font, size, zoom level, and display scaling, with highlighting for the active line.</li>
-<li><code>Markers</code>: Colors the left edge of the gutter next to every line you changed, added, or removed.</li>
-</ul>
-<h2>Minimap</h2>
-<p>Adds a high-level visual overview of your entire file right alongside the scrollbar.</p>
-<ul>
-<li><code>Visual preview</code>: Represents your text as clean, color-coded blocks for easy scanning.</li>
-<li><code>Smooth navigation</code>: Click anywhere to jump directly to that section, drag the viewport slider, or scroll smoothly with your mouse wheel.</li>
-<li><code>Responsive layout</code>: Automatically scales with the window size and hides itself when the window becomes too narrow.</li>
-<li><code>Universal support</code>: Works across all open documents and file types.</li>
-</ul>
-<h2>Syntax Highlighting</h2>
-<p>Automatically brings color and readability to popular programming and data files based on the open file type.</p>
-<ul>
-<li><code>Rich color coding</code>: Highlights keywords, types, strings, numbers, and directives while keeping plain text and unsaved tabs clean.</li>
-<li><code>Non-destructive</code>: Purely visual, never alters your underlying files.</li>
-<li><code>Theme-aware</code>: Uses tailored color palettes that automatically switch between light and dark themes.</li>
-</ul>
-<blockquote>
-<p>Note: Very large files may cause slight delays, slower rendering, or higher memory usage when calculating line numbers, drawing the minimap, or running syntax highlighting.</p>
-</blockquote>
-<h3>More Features Soon</h3>
-<p>This mod is under active development, with additional quality-of-life improvements and editor tools planned for future updates.</p>
-]]></content>
-        <author>
-            <name>Armaninyow</name>
-            <uri>https://github.com/armaninyow</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Battery Icon Customizer 1.0]]></title>
-        <id>https://windhawk.net/mods/battery-icon-customizer#0c5b0772f221271b77e91b75c36fb82acd0baf38</id>
-        <link href="https://windhawk.net/mods/battery-icon-customizer"/>
-        <updated>2026-11-25T08:02:31.000Z</updated>
-        <content type="html"><![CDATA[<h1>Taskbar Battery Icon Customizer</h1>
-<p>Give the Windows 11 taskbar battery icon a new look - no coding needed.</p>
-<p><img src="https://raw.githubusercontent.com/LoneFaizaan/battery-icon-customizer/8c7af22c99a4fc36276e0a709ddfc13248930a09/images/preview.png" alt="Preview of the available looks"></p>
-<p><img src="https://raw.githubusercontent.com/LoneFaizaan/battery-icon-customizer/8c7af22c99a4fc36276e0a709ddfc13248930a09/images/animations.gif" alt="Charger and charging animations"></p>
-<ul>
-<li><strong>Apple iOS style</strong> - a solid pill with the percentage cut out of it, green
-while charging, yellow in battery saver and red when low.</li>
-<li><strong>Classic style</strong> - the older, compact single-color Windows 11 battery.</li>
-<li><strong>Percentage only</strong> - replace the icon with just the number, with your
-choice of size, weight, font, % sign, charging bolt and an optional colored
-or outlined pill behind it.</li>
-<li><strong>Your own colors</strong> - pick a color for every state (on battery, charging,
-plugged in, battery saver, low, very low) from simple lists.</li>
-<li><strong>Battery percentage</strong> - next to the icon or inside the battery.</li>
-<li><strong>Animations</strong> - bounce, zoom or flash when you plug in; shake, drop or
-flash when you unplug; a &quot;filling up&quot; or breathing effect while charging;
-and a pulse or blink when the battery is low.</li>
-<li><strong>Size and spacing</strong> - make it bigger or line it up with the Wi-Fi and
-volume icons.</li>
-</ul>
-<h2>Getting started</h2>
-<ol>
-<li>Open the <strong>Settings</strong> tab.</li>
-<li>Choose a look from <strong>Quick look</strong> (for example <em>Apple iOS</em>) and click
-<strong>Save settings</strong>. The taskbar updates right away.</li>
-</ol>
-<p>Want something else? Set <strong>Quick look</strong> to <strong>Build my own</strong>, then choose:</p>
-<ul>
-<li><strong>Icon style</strong> - Windows 11, Classic Windows 11, Apple iOS, or Percentage
-only (then fine-tune it under <strong>Percentage-only style</strong>).</li>
-<li><strong>Color mode</strong> - <em>Automatic</em>, <em>Single color</em>, or <em>My own colors</em> (then pick a
-color for each battery state from the lists under <strong>Colors</strong>).</li>
-<li><strong>Show battery percentage</strong> - off, next to the icon, or inside it.</li>
-<li><strong>Size and spacing</strong> and <strong>Animations</strong> - these apply to every look,
-including Quick looks. Turn on &quot;Preview the charger animations&quot; to see the
-plug-in and unplug animations each time you save.</li>
-</ul>
-<p>Need an exact shade? Pick <strong>Custom</strong> in a color list and type a hex code such
-as <code>#FF4545</code> in the matching field of <strong>Exact colors</strong> at the bottom.</p>
-<h2>Tips</h2>
-<ul>
-<li>Single color but red when the battery is low: Color mode <em>My own colors</em>,
-set every color to <em>Same as the taskbar text</em>, and <strong>Low battery</strong> to <em>Red</em>.</li>
-<li><em>Automatic</em> colors in the Apple style follow iOS: white (or black on a light
-taskbar) normally, green when charging, yellow in battery saver and red at or
-below the low battery level.</li>
-<li>If Windows' own &quot;Battery percentage&quot; option is on, the mod hides it while it
-shows its own percentage, so it never appears twice.</li>
-</ul>
-<p>Requires a Windows 11 build with the new colored battery icon (Windows 11
-24H2/25H2 builds from late 2025 onwards).</p>
-]]></content>
-        <author>
-            <name>Faizaan</name>
-            <uri>https://github.com/LoneFaizaan</uri>
         </author>
     </entry>
 </feed>

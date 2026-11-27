@@ -399,39 +399,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/b5ff8c1c5e3932db133fce85e2a99b34db5602f3/mods/disable-usb-scan-fix.wh.cpp"
       }
     },
-    "explorer-extras": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795471852872,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795626308581,
-        "users": 0
-      },
-      "metadata": {
-        "architecture": [
-          "x86-64"
-        ],
-        "author": "AristideBH",
-        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi -luuid -ladvapi32 -lgdi32 -lcomctl32 -lpropsys -lmsimg32",
-        "description": "Additions for File Explorer, one switch per feature: Columns (Miller columns), a details and preview pane (PDF, text, Markdown, images, video, sound), and colour labels (tags) on files and folders.",
-        "donateUrl": "https://ko-fi.com/aristidebh",
-        "github": "https://github.com/AristideBH",
-        "include": [
-          "explorer.exe"
-        ],
-        "license": "MIT",
-        "name": "Explorer Extras",
-        "version": "1.0.22"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7530",
-      "source": {
-        "sha256": "38fa62bdc07e7a736617c17914ed29491fff27dbd977965cc554affd39619a8c",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/36b00d423db1452e8b1429c7ae84787e33817991/mods/explorer-extras.wh.cpp"
-      }
-    },
     "explorer-font-size-changer": {
       "details": {
         "defaultSorting": 0,
@@ -772,38 +739,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/6dbedd5cbee58eb9afcc1bd2b9bb671fd1aa6fb2/mods/native-audio-router.wh.cpp"
       }
     },
-    "native-screen-recorder": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795545412441,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795626308581,
-        "users": 0
-      },
-      "metadata": {
-        "author": "caotu2005",
-        "compilerOptions": "-ld3d11 -ldxgi -lmfplat -lmfreadwrite -lmfuuid -lole32 -luuid -lgdi32 -luser32 -lshell32 -lshlwapi -ldwmapi -lwinmm -ld2d1 -ldwrite",
-        "description": "Trình quay màn hình native cho Windows với 13 chủ đề, cửa sổ Cài đặt WinUI 3, độ phân giải & FPS theo phần cứng, vẽ trực tiếp lên màn hình, tự bố trí đa màn hình và 21 ngôn ngữ.",
-        "github": "https://github.com/caotu2005",
-        "include": [
-          "windhawk.exe"
-        ],
-        "name": "Trình Quay Màn Hình Native cho Windows",
-        "version": "2.0.4"
-      },
-      "metadataEnglish": {
-        "description": "Lightweight native Windows screen recorder with 13 themes, a WinUI 3 Settings window, hardware-capped resolution & FPS, live screen drawing, custom multi-monitor layout, and 21 languages.",
-        "name": "Native Windows Screen Recorder"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7772",
-      "source": {
-        "sha256": "cc703a9d0976754c146f7dde8adde969920ad616694ae8d1408480146d5cf42d",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/e4ff408e60ebef92cbff58b7b73e1d16d5e10136/mods/native-screen-recorder.wh.cpp"
-      }
-    },
     "split-layouts-radial-switcher": {
       "details": {
         "defaultSorting": 0,
@@ -992,39 +927,6 @@
       "source": {
         "sha256": "86ccb4cdd5677c1c9efdcd09386e924efc3e9541c6c5f7744b040ebcee20b840",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/14cf534db315314c0f8954750c966049036530e3/mods/taskbar-audio-media-suite.wh.cpp"
-      }
-    },
-    "taskbar-badge-control": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795626308581,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795626308581,
-        "users": 0
-      },
-      "metadata": {
-        "architecture": [
-          "x86-64"
-        ],
-        "author": "mobeigi",
-        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lcomctl32",
-        "description": "Show or hide taskbar badges per application (Windows 11).",
-        "github": "https://github.com/mobeigi",
-        "homepage": "https://mobeigi.com/",
-        "include": [
-          "explorer.exe"
-        ],
-        "license": "GPL-3.0-only",
-        "name": "Taskbar Badge Control",
-        "version": "1.0.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7945",
-      "source": {
-        "sha256": "8d3f692c0f09465ea65edbb9ca65ad8c7774b4e213c9a38c220f3d04a0505051",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/c3a5fbe736ffb10eddce36be149d781558dceafd/mods/taskbar-badge-control.wh.cpp"
       }
     },
     "taskbar-edge-color-match": {
