@@ -9,7 +9,7 @@
 // @homepage        https://dan13.me/
 // @include         chrome.exe
 // @architecture    x86-64
-// @compilerOptions -lshell32 -lcomctl32 -luser32 -ldwmapi
+// @compilerOptions -lshell32 -lcomctl32 -ldwmapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -59,8 +59,11 @@ picture-in-picture button). Document PiP windows that websites build
 themselves are regular web pages and are not affected.
 
 The mod hooks functions in `chrome.dll` by their debug symbols. The first
-start on a new Chrome version downloads Chrome's symbol file, which can take a
-while; later starts use Windhawk's cache.
+start on a new Chrome version downloads `chrome.dll.pdb` (several GB) from
+Google's Chromium symbol server,
+`chromium-browser-symsrv.commondatastorage.googleapis.com`, unless Windhawk's
+online symbol cache already has it. This can take a while; later starts use
+Windhawk's cache.
 */
 // ==/WindhawkModReadme==
 
@@ -137,13 +140,13 @@ while; later starts use Windhawk's cache.
   $description: Windows draws a 1 px border and rounds the corners of the PiP window. Turn on to remove both while the window is in full screen, so the video reaches the screen's edges and corners.
 - middleClickClose: true
   $name: Middle click or Ctrl+click closes the window
+- showFullscreenButton: true
+  $name: Show the full screen button
+  $description: A button left of the volume button that makes the window fill its screen, like double-clicking the video. Click it again to restore the window.
+- showCropButton: true
+  $name: Show the crop button
+  $description: In full screen, a button in the top right, left of the pin button, that enlarges the video to fill the whole screen, cutting off its edges, so there are no black bars. Click it again to show the whole video.
 - hide:
-  - showFullscreenButton: true
-    $name: Show the full screen button
-    $description: A button left of the volume button that makes the window fill its screen, like double-clicking the video. Click it again to restore the window.
-  - showCropButton: true
-    $name: Show the crop button
-    $description: In full screen, a button in the top right, left of the pin button, that enlarges the video to fill the whole screen, cutting off its edges, so there are no black bars. Click it again to show the whole video.
   - minimize: true
     $name: Hide the minimize button
     $description: Used when the pin button is off. Minimize closes the PiP window and keeps the video playing in its tab.
@@ -245,8 +248,14 @@ static std::mutex g_settingsMutex;
 // its applied generation is older.
 static std::atomic<int> g_settingsGeneration{1};
 
-static bool StringSettingIs(PCWSTR value, PCWSTR expected) {
-  return wcscmp(value, expected) == 0;
+// Set in Wh_ModBeforeUninit. Windhawk removes the hooks right after it
+// returns, so from then on the trampolines must not be called and no new
+// hooks or subclasses may be added.
+static std::atomic<bool> g_unloading{false};
+
+static bool StringSettingIs(const WindhawkUtils::StringSetting& value,
+                            PCWSTR expected) {
+  return wcscmp(value.get(), expected) == 0;
 }
 
 static void LoadSettings() {
@@ -255,7 +264,8 @@ static void LoadSettings() {
   s.hideTopShade = Wh_GetIntSetting(L"shading.hideTopShade");
   s.hideBottomShade = Wh_GetIntSetting(L"shading.hideBottomShade");
 
-  PCWSTR position = Wh_GetStringSetting(L"controlsPosition");
+  WindhawkUtils::StringSetting position =
+      WindhawkUtils::StringSetting::make(L"controlsPosition");
   if (StringSettingIs(position, L"center")) {
     s.controlsPosition = ControlsPosition::Center;
   } else if (StringSettingIs(position, L"bottomLeft")) {
@@ -267,16 +277,15 @@ static void LoadSettings() {
   } else if (StringSettingIs(position, L"progressRight")) {
     s.controlsPosition = ControlsPosition::ProgressRight;
   }
-  Wh_FreeStringSetting(position);
 
   s.singleRow = Wh_GetIntSetting(L"singleRow");
 
-  PCWSTR playSize = Wh_GetStringSetting(L"bottomPlayButtonSize");
-  int size = _wtoi(playSize);
-  Wh_FreeStringSetting(playSize);
+  int size = _wtoi(
+      WindhawkUtils::StringSetting::make(L"bottomPlayButtonSize").get());
   s.bottomPlayButtonSize = (size >= 24 && size <= 40) ? size : 28;
 
-  PCWSTR style = Wh_GetStringSetting(L"playButtonStyle");
+  WindhawkUtils::StringSetting style =
+      WindhawkUtils::StringSetting::make(L"playButtonStyle");
   if (StringSettingIs(style, L"subtle")) {
     s.playButtonStyle = PlayButtonStyle::Subtle;
   } else if (StringSettingIs(style, L"dark")) {
@@ -284,18 +293,17 @@ static void LoadSettings() {
   } else if (StringSettingIs(style, L"chrome")) {
     s.playButtonStyle = PlayButtonStyle::Chrome;
   }
-  Wh_FreeStringSetting(style);
 
   s.showPinButton = Wh_GetIntSetting(L"showPinButton");
   s.unrestrictedSize = Wh_GetIntSetting(L"unrestrictedSize");
 
-  PCWSTR closeAction = Wh_GetStringSetting(L"closeAction");
+  WindhawkUtils::StringSetting closeAction =
+      WindhawkUtils::StringSetting::make(L"closeAction");
   if (StringSettingIs(closeAction, L"pause")) {
     s.closeAction = CloseAction::Pause;
   } else if (StringSettingIs(closeAction, L"keepPlaying")) {
     s.closeAction = CloseAction::KeepPlaying;
   }
-  Wh_FreeStringSetting(closeAction);
 
   s.clickToPlayPause = Wh_GetIntSetting(L"clickToPlayPause");
   s.doubleClickFullscreen = Wh_GetIntSetting(L"doubleClickFullscreen");
@@ -306,8 +314,8 @@ static void LoadSettings() {
   s.showSiteName = Wh_GetIntSetting(L"title.showSiteName");
   s.showTabTitle = Wh_GetIntSetting(L"title.showTabTitle");
 
-  s.showFullscreenButton = Wh_GetIntSetting(L"hide.showFullscreenButton");
-  s.showCropButton = Wh_GetIntSetting(L"hide.showCropButton");
+  s.showFullscreenButton = Wh_GetIntSetting(L"showFullscreenButton");
+  s.showCropButton = Wh_GetIntSetting(L"showCropButton");
   s.hideMinimize = Wh_GetIntSetting(L"hide.minimize");
   s.hideBackToTab = Wh_GetIntSetting(L"hide.backToTab");
   s.hideClose = Wh_GetIntSetting(L"hide.close");
@@ -393,7 +401,6 @@ using LabelSetTextFn = void (*)(void* label, const U16StringView* text);
 using LabelGetTextFn = U16StringView* (*)(const void* label,
                                           U16StringView* result);
 using HwndForWidgetFn = HWND (*)(const void* widget);
-// gfx::Size is passed by value as one 8-byte register: width, then height.
 using LayerAsSurfaceFn = void* (*)(void* layer);
 // std::vector<ui::Layer*>, returned through a hidden result pointer; its
 // buffer is freed with Chrome's operator delete. Chrome's libc++ (ABI v2,
@@ -409,6 +416,7 @@ using ViewGetLayersInOrderFn = LayerVector* (*)(void* view, LayerVector* result,
 using OperatorDeleteFn = void (*)(void* memory);
 using ViewAddChildViewAtImplFn = void (*)(void* parent, void* child,
                                           size_t index);
+// gfx::Size is passed by value as one 8-byte register: width, then height.
 using LayerSurfaceSetSurfaceSizeFn = void (*)(void* surface,
                                               unsigned long long size);
 using InkDropGetFn = void* (*)(const void* view);
@@ -692,13 +700,15 @@ static bool LocateViews(void* window) {
 
 // Returns the view in `slot`, or nullptr if it's missing or isn't of the
 // expected class.
+// A class whose vtable symbol wasn't found can't be verified, so its view is
+// treated as unavailable and the features that use it are skipped.
 static void* ViewAt(void* window, int slot, void* expectedVtable) {
+  if (!expectedVtable) {
+    return nullptr;  // Symbol unavailable; the class can't be verified.
+  }
   int offset = g_closeSlotOffset.load() + slot * 8;
   void* view = *reinterpret_cast<void**>(static_cast<BYTE*>(window) + offset);
-  if (!view) {
-    return nullptr;
-  }
-  if (expectedVtable && *reinterpret_cast<void**>(view) != expectedVtable) {
+  if (!view || SafeVtableOf(view) != expectedVtable) {
     return nullptr;
   }
   return view;
@@ -1499,14 +1509,12 @@ static void SetWindowBorderRemoved(HWND hwnd, WindowState& state, bool removed) 
     return;
   }
   state.borderRemoved = removed;
-  // DWMWA_WINDOW_CORNER_PREFERENCE (33) and DWMWA_BORDER_COLOR (34), named
-  // here in case the SDK headers predate them.
-  const DWORD corners = removed ? 1 /* DWMWCP_DONOTROUND */
-                                : 0 /* DWMWCP_DEFAULT */;
-  const COLORREF border = removed ? 0xFFFFFFFE /* DWMWA_COLOR_NONE */
-                                  : 0xFFFFFFFF /* DWMWA_COLOR_DEFAULT */;
-  DwmSetWindowAttribute(hwnd, 33, &corners, sizeof(corners));
-  DwmSetWindowAttribute(hwnd, 34, &border, sizeof(border));
+  const DWM_WINDOW_CORNER_PREFERENCE corners =
+      removed ? DWMWCP_DONOTROUND : DWMWCP_DEFAULT;
+  const COLORREF border = removed ? DWMWA_COLOR_NONE : DWMWA_COLOR_DEFAULT;
+  DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corners,
+                        sizeof(corners));
+  DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, &border, sizeof(border));
 }
 
 // Makes the window cover its monitor, or restores it. The video is
@@ -1563,6 +1571,12 @@ static bool IsFullscreen(void* window) {
 static LRESULT CALLBACK PipWindowSubclassProc(HWND hwnd, UINT msg, WPARAM wParam,
                                               LPARAM lParam, DWORD_PTR refData) {
   void* window = reinterpret_cast<void*>(refData);
+
+  // The hooks are being removed, and their trampolines with them; pass
+  // everything to Chrome. WM_NCDESTROY only does bookkeeping.
+  if (g_unloading && msg != WM_NCDESTROY) {
+    return DefSubclassProc(hwnd, msg, wParam, lParam);
+  }
 
   switch (msg) {
     case WM_NCLBUTTONDOWN:
@@ -1740,7 +1754,7 @@ static LRESULT CALLBACK PipWindowSubclassProc(HWND hwnd, UINT msg, WPARAM wParam
 }
 
 static void SubclassPipWindow(void* window, WindowState& state) {
-  if (state.hwnd) {
+  if (state.hwnd || g_unloading) {
     return;
   }
   HWND hwnd = HwndOf(window);
@@ -1779,9 +1793,6 @@ static constexpr int kTimestampHeight = 16;
 
 // Spacing used by this mod's layouts.
 static constexpr int kRowGap = 8;
-// The progress bar leaves 8 px empty inside each end, so nothing more is
-// added between it and its neighbours.
-static constexpr int kProgressBarGap = 0;
 // The bottom controls sit higher than Chrome's, with less space at the
 // sides.
 static constexpr int kBottomMargin = 10;
@@ -1977,7 +1988,8 @@ static void LayOutSingleRow(const BottomViews& v, const Settings& s,
       state.lastTimeWidth = width;
     }
   }
-  left += kProgressBarGap;
+  // The progress bar leaves 8 px empty inside each end, so no gap is added
+  // between it and its neighbours.
 
   int right = w - kSideMargin;
   auto placeButton = [&](void* view) {
@@ -2003,7 +2015,6 @@ static void LayOutSingleRow(const BottomViews& v, const Settings& s,
   if (controlsMoved && controlsRight && row.count) {
     right -= row.width;
     row.Place(right, centerY);
-    right -= kProgressBarGap;
   }
 
   if (v.progress && !s.hideProgressBar) {
@@ -2080,12 +2091,11 @@ static void LayOutTwoRows(const BottomViews& v, const Settings& s,
 
   if (s.controlsPosition == ControlsPosition::ProgressLeft && row.count) {
     row.Place(barLeft, progressCenterY);
-    barLeft += row.width + kProgressBarGap;
+    barLeft += row.width;
   } else if (s.controlsPosition == ControlsPosition::ProgressRight &&
              row.count) {
     barRight -= row.width;
     row.Place(barRight, progressCenterY);
-    barRight -= kProgressBarGap;
   }
 
   if (v.progress && !s.hideProgressBar) {
@@ -2147,8 +2157,6 @@ static void LayOutBottom(const BottomViews& v, const Settings& s,
 
   LayOutTwoRows(v, s, row, state, w, h);
 }
-
-static void SetCropped(void* window, WindowState& state, bool cropped);
 
 static void ApplyLayout(void* window) {
   if (!LocateViews(window)) {
@@ -2825,12 +2833,15 @@ using LoadLibraryExWFn = decltype(&LoadLibraryExW);
 static LoadLibraryExWFn g_LoadLibraryExWOriginal;
 
 static std::atomic<bool> g_setupThreadStarted{false};
+// Guards g_setupThread and the check of g_unloading before the thread starts.
+static std::mutex g_setupMutex;
 static HANDLE g_setupThread;
 
 // Resolving symbols can take long the first time a Chrome version runs, so
-// at Chrome startup it happens off the loader thread.
+// at Chrome startup it happens off the loader thread. Wh_ModBeforeUninit waits
+// for it, so hooks are never applied once unloading has started.
 static DWORD WINAPI SetupThreadProc(LPVOID param) {
-  if (HookChrome(static_cast<HMODULE>(param))) {
+  if (HookChrome(static_cast<HMODULE>(param)) && !g_unloading) {
     Wh_ApplyHookOperations();
   }
   return 0;
@@ -2844,11 +2855,13 @@ static HMODULE WINAPI LoadLibraryExWHook(LPCWSTR fileName, HANDLE file,
   }
 
   HMODULE chromeDll = GetModuleHandleW(L"chrome.dll");
-  if (chromeDll && chromeDll == module &&
-      !g_setupThreadStarted.exchange(true)) {
-    Wh_Log(L"chrome.dll loaded");
-    g_setupThread =
-        CreateThread(nullptr, 0, SetupThreadProc, chromeDll, 0, nullptr);
+  if (chromeDll && chromeDll == module) {
+    std::lock_guard<std::mutex> lock(g_setupMutex);
+    if (!g_unloading && !g_setupThreadStarted.exchange(true)) {
+      Wh_Log(L"chrome.dll loaded");
+      g_setupThread =
+          CreateThread(nullptr, 0, SetupThreadProc, chromeDll, 0, nullptr);
+    }
   }
   return module;
 }
@@ -2903,13 +2916,22 @@ void Wh_ModSettingsChanged() {
   LoadSettings();
 }
 
-void Wh_ModUninit() {
-  if (g_setupThread) {
-    WaitForSingleObject(g_setupThread, INFINITE);
-    CloseHandle(g_setupThread);
+void Wh_ModBeforeUninit() {
+  HANDLE thread;
+  {
+    std::lock_guard<std::mutex> lock(g_setupMutex);
+    g_unloading = true;
+    thread = g_setupThread;
     g_setupThread = nullptr;
   }
+  if (thread) {
+    // HookSymbols can't be cancelled; wait while hooks may still be applied.
+    WaitForSingleObject(thread, INFINITE);
+    CloseHandle(thread);
+  }
+}
 
+void Wh_ModUninit() {
   std::vector<HWND> windows;
   {
     std::lock_guard<std::mutex> lock(g_subclassedMutex);
