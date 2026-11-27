@@ -1,0 +1,1520 @@
+// ==WindhawkMod==
+// @id              enhanced-alt-f4
+// @name            Enhanced Alt+F4
+// @description     Hold Alt+F4 (or optionally multi-tap) to safely close all open apps and open the Shut Down Windows dialog.
+// @author          Ashix
+// @version         1.2026.1711
+// @github          https://github.com/k-ashix
+// @twitter         https://x.com/k_ashix
+// @donateUrl       https://ko-fi.com/kashix
+// @include         windhawk.exe
+// @include         windhawk-mod.exe
+// @compilerOptions -lole32 -loleaut32 -luuid -lshell32 -ldwmapi -ladvapi32 -luser32
+// ==/WindhawkMod==
+
+// ==WindhawkModReadme==
+/*
+# Enhanced Alt+F4
+
+**Enhanced Alt+F4** keeps normal `Alt+F4` taps 100% native. Holding `Alt+F4` continuously past the hold threshold (default **1500 ms**, minimum **500 ms**) safely closes all open user apps and opens the native **Shut Down Windows** dialog—without ever auto-shutting down, restarting, or signing out.
+
+An optional **Multi-Tap** mode can also be enabled independently or alongside **Hold** mode. Runs as an isolated Windhawk Tool Mod (`windhawk.exe` / `windhawk-mod.exe`), compatible with both **Windhawk 1.7.3** and **Windhawk 2.0**, with zero UI. To view diagnostic logs, use Windhawk's built-in **Advanced → Debug logging** option.
+
+## Triggers
+
+| Trigger | Default | Behaviour |
+|---|---|---|
+| **Hold `Alt+F4`** | **ON** (`1500 ms`) | Hold `Alt+F4` continuously to close all open apps. Releasing early or pressing `Space` / any other key cancels immediately. |
+| **Multi-Tap `Alt+F4`** | **OFF** (`3` taps / `1500 ms`) | Optional: press `Alt+F4` multiple times quickly to close all open apps. Auto-repeat while holding is ignored, and pressing `Space` / any other key resets the count. |
+
+## Safety
+
+- **Never swallows `Alt+F4`**: Always calls `CallNextHookEx` immediately.
+- **Protected system & critical apps**: Never touches `explorer.exe`, `dwm.exe`, `csrss.exe`, `winlogon.exe`, `services.exe`, `lsass.exe`, `svchost.exe`, Windows Security / AV, Windhawk, or Explorer file copy/move dialogs.
+- **Update & installer aware**: Detects active Windows Update servicing (`TrustedInstaller`, `TiWorker`, `MoUsoCoreWorker`, `wuauclt`, `UsoClient`, CBS `RebootInProgress`) and active installers (`msiexec`, setup windows), disabling force-termination while they run.
+- **Unsaved work protection (optional, OFF by default)**: Generically detects dirty title markers (`*`, `•`, `[Modified]`) and active "Save?" modal dialogs without hardcoding app names.
+*/
+// ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- holdTrigger:
+  - enabled: true
+    $name: Enable Hold Alt+F4
+    $description: Trigger panic close when Alt+F4 is held continuously.
+  - durationMs: 1500
+    $name: Hold duration (ms)
+    $description: Continuous hold time required to trigger (500 to 5000 ms).
+  $name: Hold Trigger (Primary)
+- multiTapTrigger:
+  - enabled: false
+    $name: Enable Multi-Tap Alt+F4
+    $description: Also trigger when Alt+F4 is pressed multiple times quickly (auto-repeat ignored).
+  - presses: 3
+    $name: Required presses
+    $description: Fresh Alt+F4 presses needed inside the window (2 to 6).
+  - windowMs: 1500
+    $name: Time window (ms)
+    $description: Rolling window for counting multi-tap presses (500 to 3000 ms).
+  $name: Multi-Tap Trigger (Optional)
+- closingBehavior:
+  - graceTimeoutMs: 1500
+    $name: Grace timeout (ms)
+    $description: Wait time after WM_CLOSE before optional force termination.
+  - forceTerminate: false
+    $name: Force terminate remaining apps
+    $description: Terminate non-protected apps still running after the grace timeout. Disabled during active updates/installers.
+  - protectUnsavedWork: false
+    $name: Protect unsaved work
+    $description: Generically skip apps with unsaved title markers (*, •, [Modified]) or active "Save?" modal dialogs.
+  - respectUpdatesAndInstallers: true
+    $name: Respect Windows Updates & installers
+    $description: Skip force termination whenever Windows Update servicing or an installer is active.
+  - showShutdownDialog: true
+    $name: Show Shut Down Windows dialog
+    $description: Open the native Shut Down Windows dialog after closing apps.
+  - captureBehavior: ignore
+    $name: Screen capture & recording
+    $options:
+    - ignore: Ignore (always active)
+    - pause: Pause while capture/recording is active
+    $description: Control whether panic close triggers while a screenshot tool or screen recorder is active.
+  - protectedProcesses: ""
+    $name: Protected processes
+    $description: Comma-separated process names to never close (e.g. obs64.exe, blender.exe).
+  $name: Closing & Safety
+*/
+// ==/WindhawkModSettings==
+
+#include <windows.h>
+#include <dwmapi.h>
+#include <shldisp.h>
+#include <tlhelp32.h>
+#include <winsvc.h>
+
+#include <algorithm>
+#include <atomic>
+#include <cwctype>
+#include <mutex>
+#include <string>
+#include <unordered_set>
+#include <vector>
+
+#ifndef DWMWA_CLOAKED
+#define DWMWA_CLOAKED 14
+#endif
+
+namespace {
+
+constexpr ULONG_PTR kMagicExtraInfo = 0x45414634ULL; // 'EAF4'
+constexpr ULONGLONG kCooldownMs = 2000ULL;
+
+enum class CaptureBehavior {
+    Ignore,
+    Pause
+};
+
+struct ModSettings {
+    bool holdEnabled = true;
+    int holdDurationMs = 1500;
+
+    bool multiTapEnabled = false;
+    int multiTapPresses = 3;
+    int multiTapWindowMs = 1500;
+
+    int graceTimeoutMs = 1500;
+    bool forceTerminate = false;
+    bool protectUnsavedWork = false;
+    bool respectUpdatesAndInstallers = true;
+    bool showShutdownDialog = true;
+    CaptureBehavior captureBehavior = CaptureBehavior::Ignore;
+    std::unordered_set<std::wstring> protectedSet;
+};
+
+std::mutex g_settingsMutex;
+ModSettings g_settings;
+
+std::mutex g_triggerMutex;
+bool g_f4Down = false;
+bool g_holdArmed = false;
+bool g_suppressRepeatF4WhileHeld = false;
+std::vector<ULONGLONG> g_tapTimestamps;
+ULONGLONG g_cooldownUntilTick = 0;
+
+std::atomic<bool> g_stopping{false};
+HANDLE g_stopEvent = nullptr;
+HANDLE g_holdTimer = nullptr;
+HANDLE g_panicEvent = nullptr;
+HANDLE g_hookThread = nullptr;
+DWORD g_hookThreadId = 0;
+HANDLE g_workerThread = nullptr;
+HHOOK g_keyboardHook = nullptr;
+DWORD g_currentSessionId = 0;
+DWORD g_selfPid = 0;
+
+std::wstring ToLowerTrim(std::wstring s) {
+    auto isSpace = [](wchar_t ch) { return std::iswspace(ch) != 0; };
+    while (!s.empty() && isSpace(s.front())) {
+        s.erase(s.begin());
+    }
+    while (!s.empty() && isSpace(s.back())) {
+        s.pop_back();
+    }
+    for (wchar_t& ch : s) {
+        ch = static_cast<wchar_t>(std::towlower(ch));
+    }
+    return s;
+}
+
+void ParseProcessList(const wchar_t* raw, std::unordered_set<std::wstring>& out) {
+    out.clear();
+    if (!raw || !*raw) {
+        return;
+    }
+    std::wstring input(raw);
+    size_t start = 0;
+    while (start <= input.size()) {
+        size_t comma = input.find(L',', start);
+        std::wstring token = (comma == std::wstring::npos)
+                                 ? input.substr(start)
+                                 : input.substr(start, comma - start);
+        token = ToLowerTrim(std::move(token));
+        if (!token.empty()) {
+            out.insert(token);
+        }
+        if (comma == std::wstring::npos) {
+            break;
+        }
+        start = comma + 1;
+    }
+}
+
+void CancelHoldLocked() {
+    if (g_holdArmed && g_holdTimer) {
+        CancelWaitableTimer(g_holdTimer);
+    }
+    g_holdArmed = false;
+}
+
+void LoadSettings() {
+    ModSettings next{};
+
+    next.holdEnabled = Wh_GetIntSetting(L"holdTrigger.enabled") != 0;
+    next.holdDurationMs = std::clamp(Wh_GetIntSetting(L"holdTrigger.durationMs"), 500, 5000);
+
+    next.multiTapEnabled = Wh_GetIntSetting(L"multiTapTrigger.enabled") != 0;
+    next.multiTapPresses = std::clamp(Wh_GetIntSetting(L"multiTapTrigger.presses"), 2, 6);
+    next.multiTapWindowMs = std::clamp(Wh_GetIntSetting(L"multiTapTrigger.windowMs"), 500, 3000);
+
+    next.graceTimeoutMs = std::clamp(Wh_GetIntSetting(L"closingBehavior.graceTimeoutMs"), 250, 15000);
+    next.forceTerminate = Wh_GetIntSetting(L"closingBehavior.forceTerminate") != 0;
+    next.protectUnsavedWork = Wh_GetIntSetting(L"closingBehavior.protectUnsavedWork") != 0;
+    next.respectUpdatesAndInstallers = Wh_GetIntSetting(L"closingBehavior.respectUpdatesAndInstallers") != 0;
+    next.showShutdownDialog = Wh_GetIntSetting(L"closingBehavior.showShutdownDialog") != 0;
+
+    PCWSTR capStr = Wh_GetStringSetting(L"closingBehavior.captureBehavior");
+    if (capStr && wcscmp(capStr, L"pause") == 0) {
+        next.captureBehavior = CaptureBehavior::Pause;
+    } else {
+        next.captureBehavior = CaptureBehavior::Ignore;
+    }
+    Wh_FreeStringSetting(capStr);
+
+    PCWSTR protStr = Wh_GetStringSetting(L"closingBehavior.protectedProcesses");
+    ParseProcessList(protStr, next.protectedSet);
+    Wh_FreeStringSetting(protStr);
+
+    Wh_Log(L"[Settings] hold=%d (%dms), multiTap=%d (%d taps/%dms), grace=%dms, "
+           L"forceTerminate=%d, protectUnsaved=%d, respectUpdates=%d, "
+           L"showShutdownDialog=%d, capture=%s, customProtected=%zu",
+           next.holdEnabled ? 1 : 0, next.holdDurationMs,
+           next.multiTapEnabled ? 1 : 0, next.multiTapPresses, next.multiTapWindowMs,
+           next.graceTimeoutMs, next.forceTerminate ? 1 : 0,
+           next.protectUnsavedWork ? 1 : 0, next.respectUpdatesAndInstallers ? 1 : 0,
+           next.showShutdownDialog ? 1 : 0,
+           next.captureBehavior == CaptureBehavior::Pause ? L"pause" : L"ignore",
+           next.protectedSet.size());
+
+    {
+        std::lock_guard<std::mutex> lock(g_settingsMutex);
+        g_settings = std::move(next);
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_triggerMutex);
+        CancelHoldLocked();
+        g_tapTimestamps.clear();
+        g_f4Down = false;
+    }
+}
+
+bool IsAltVk(DWORD vk) {
+    return vk == VK_MENU || vk == VK_LMENU || vk == VK_RMENU;
+}
+
+bool IsNonAltModifierVk(DWORD vk) {
+    switch (vk) {
+        case VK_CONTROL:
+        case VK_LCONTROL:
+        case VK_RCONTROL:
+        case VK_SHIFT:
+        case VK_LSHIFT:
+        case VK_RSHIFT:
+        case VK_LWIN:
+        case VK_RWIN:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool IsAltOnlyPressed(const KBDLLHOOKSTRUCT* kb = nullptr) {
+    bool altDown = ((GetAsyncKeyState(VK_MENU) & 0x8000) != 0) ||
+                   ((GetAsyncKeyState(VK_LMENU) & 0x8000) != 0) ||
+                   ((GetAsyncKeyState(VK_RMENU) & 0x8000) != 0) ||
+                   (kb != nullptr && (kb->flags & LLKHF_ALTDOWN) != 0);
+    bool ctrlDown = ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0) ||
+                    ((GetAsyncKeyState(VK_LCONTROL) & 0x8000) != 0) ||
+                    ((GetAsyncKeyState(VK_RCONTROL) & 0x8000) != 0);
+    bool shiftDown = ((GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0) ||
+                     ((GetAsyncKeyState(VK_LSHIFT) & 0x8000) != 0) ||
+                     ((GetAsyncKeyState(VK_RSHIFT) & 0x8000) != 0);
+    bool winDown = ((GetAsyncKeyState(VK_LWIN) & 0x8000) != 0) ||
+                   ((GetAsyncKeyState(VK_RWIN) & 0x8000) != 0);
+    return altDown && !ctrlDown && !shiftDown && !winDown;
+}
+
+LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode == HC_ACTION && lParam != 0) {
+        const auto* kb = reinterpret_cast<const KBDLLHOOKSTRUCT*>(lParam);
+        if (kb->dwExtraInfo != kMagicExtraInfo) {
+            bool isKeyDown = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
+            bool isKeyUp = (wParam == WM_KEYUP || wParam == WM_SYSKEYUP);
+
+            bool holdEnabled = true;
+            int holdMs = 1500;
+            bool multiEnabled = false;
+            int multiPresses = 3;
+            int multiWindowMs = 1500;
+            {
+                std::lock_guard<std::mutex> lock(g_settingsMutex);
+                holdEnabled = g_settings.holdEnabled;
+                holdMs = g_settings.holdDurationMs;
+                multiEnabled = g_settings.multiTapEnabled;
+                multiPresses = g_settings.multiTapPresses;
+                multiWindowMs = g_settings.multiTapWindowMs;
+            }
+
+            if (kb->vkCode == VK_F4) {
+                bool fireMultiTap = false;
+                bool swallowRepeatF4 = false;
+                bool logHoldArmed = false;
+                int tapCountNow = 0;
+                {
+                    std::lock_guard<std::mutex> lock(g_triggerMutex);
+                    if (isKeyUp) {
+                        g_f4Down = false;
+                        g_suppressRepeatF4WhileHeld = false;
+                        CancelHoldLocked();
+                    } else if (isKeyDown) {
+                        bool altOnly = IsAltOnlyPressed(kb);
+                        if (!g_f4Down) {
+                            g_f4Down = true;
+                            g_suppressRepeatF4WhileHeld = false;
+                            ULONGLONG now = GetTickCount64();
+                            if (now >= g_cooldownUntilTick && altOnly) {
+                                if (holdEnabled && g_holdTimer) {
+                                    LARGE_INTEGER due{};
+                                    due.QuadPart = -static_cast<LONGLONG>(holdMs) * 10000LL;
+                                    if (SetWaitableTimer(g_holdTimer, &due, 0, nullptr, nullptr, FALSE)) {
+                                        g_holdArmed = true;
+                                        g_suppressRepeatF4WhileHeld = true;
+                                        logHoldArmed = true;
+                                    }
+                                }
+                                if (multiEnabled) {
+                                    ULONGLONG cutoff = (now > static_cast<ULONGLONG>(multiWindowMs))
+                                                           ? (now - static_cast<ULONGLONG>(multiWindowMs))
+                                                           : 0;
+                                    g_tapTimestamps.erase(
+                                        std::remove_if(g_tapTimestamps.begin(), g_tapTimestamps.end(),
+                                                       [cutoff](ULONGLONG t) { return t < cutoff; }),
+                                        g_tapTimestamps.end());
+                                    g_tapTimestamps.push_back(now);
+                                    tapCountNow = static_cast<int>(g_tapTimestamps.size());
+
+                                    if (tapCountNow >= multiPresses) {
+                                        g_tapTimestamps.clear();
+                                        CancelHoldLocked();
+                                        g_suppressRepeatF4WhileHeld = true;
+                                        g_cooldownUntilTick = now + kCooldownMs;
+                                        fireMultiTap = true;
+                                    }
+                                }
+                            } else {
+                                g_tapTimestamps.clear();
+                                CancelHoldLocked();
+                            }
+                        } else {
+                            // Auto-repeat VK_F4 while holding F4 down:
+                            if (!altOnly) {
+                                CancelHoldLocked();
+                                g_suppressRepeatF4WhileHeld = false;
+                            } else if (g_suppressRepeatF4WhileHeld) {
+                                // Swallow OS hardware key-repeat of Alt+F4 while Hold is armed/firing
+                                // so Windows does not spam Alt+F4 to the Desktop before all apps close.
+                                swallowRepeatF4 = true;
+                            }
+                        }
+                    }
+                }
+                if (logHoldArmed) {
+                    Wh_Log(L"[Trigger] Alt+F4 hold armed (%d ms threshold)", holdMs);
+                }
+                if (tapCountNow > 0 && !fireMultiTap) {
+                    Wh_Log(L"[Trigger] Alt+F4 multi-tap progress: %d/%d", tapCountNow, multiPresses);
+                }
+                if (fireMultiTap && g_panicEvent) {
+                    Wh_Log(L"[Trigger] Multi-Tap threshold reached (%d presses); signaling panic close", multiPresses);
+                    SetEvent(g_panicEvent);
+                }
+                if (swallowRepeatF4) {
+                    return 1;
+                }
+            } else if (IsAltVk(kb->vkCode)) {
+                if (isKeyUp) {
+                    std::lock_guard<std::mutex> lock(g_triggerMutex);
+                    g_suppressRepeatF4WhileHeld = false;
+                    if (g_holdArmed) {
+                        CancelHoldLocked();
+                        Wh_Log(L"[Trigger] Hold cancelled (Alt released early)");
+                    }
+                }
+            } else if (IsNonAltModifierVk(kb->vkCode)) {
+                if (isKeyDown || isKeyUp) {
+                    std::lock_guard<std::mutex> lock(g_triggerMutex);
+                    g_suppressRepeatF4WhileHeld = false;
+                    CancelHoldLocked();
+                    if (isKeyDown) {
+                        g_tapTimestamps.clear();
+                    }
+                }
+            } else if (isKeyDown) {
+                // Gesture Guard: Space, Enter, Tab, Backspace, Esc, or any other key resets state.
+                std::lock_guard<std::mutex> lock(g_triggerMutex);
+                g_suppressRepeatF4WhileHeld = false;
+                CancelHoldLocked();
+                g_tapTimestamps.clear();
+            }
+        }
+    }
+    return CallNextHookEx(nullptr, nCode, wParam, lParam);
+}
+
+std::wstring GetProcessBaseNameLower(DWORD pid) {
+    if (pid == 0) {
+        return L"";
+    }
+    HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!hProc) {
+        return L"";
+    }
+    wchar_t path[MAX_PATH * 2]{};
+    DWORD size = _countof(path);
+    std::wstring name;
+    if (QueryFullProcessImageNameW(hProc, 0, path, &size)) {
+        std::wstring full(path, size);
+        size_t slash = full.find_last_of(L"\\/");
+        name = ToLowerTrim((slash == std::wstring::npos) ? full : full.substr(slash + 1));
+    }
+    CloseHandle(hProc);
+    return name;
+}
+
+bool IsSystemCriticalProcess(const std::wstring& exe) {
+    static const std::unordered_set<std::wstring> kCritical = {
+        L"dwm.exe",
+        L"csrss.exe",
+        L"winlogon.exe",
+        L"wininit.exe",
+        L"services.exe",
+        L"lsass.exe",
+        L"svchost.exe",
+        L"sihost.exe",
+        L"searchhost.exe",
+        L"searchapp.exe",
+        L"startmenuexperiencehost.exe",
+        L"shellexperiencehost.exe",
+        L"textinputhost.exe",
+        L"lockapp.exe",
+        L"logonui.exe",
+        L"windhawk.exe",
+        L"windhawk-mod.exe",
+        L"windhawk-mod-uiaccess.exe",
+        L"windhawk-mod-elevated.exe",
+        L"windhawk-ui.exe",
+        L"msmpeng.exe",
+        L"sechealthui.exe",
+        L"securityhealthsystray.exe",
+        L"smartscreen.exe",
+        L"audiodg.exe",
+        L"fontdrvhost.exe",
+        L"ctfmon.exe",
+        L"runtimebroker.exe",
+        L"dllhost.exe",
+        L"wlanext.exe",
+        L"spoolsv.exe"
+    };
+    return kCritical.find(exe) != kCritical.end();
+}
+
+// Processes that must NEVER be passed to TerminateProcess (shell & system hosts),
+// even when their user-facing windows (e.g., Explorer folders or UWP frames) are closed via WM_CLOSE.
+bool IsNeverTerminateProcess(const std::wstring& exe) {
+    static const std::unordered_set<std::wstring> kNeverKill = {
+        L"explorer.exe",
+        L"applicationframehost.exe",
+        L"systemsettings.exe"
+    };
+    return kNeverKill.find(exe) != kNeverKill.end() || IsSystemCriticalProcess(exe);
+}
+
+bool IsUpdateOrInstallerProcessName(const std::wstring& exe) {
+    static const std::unordered_set<std::wstring> kUpdateProcs = {
+        L"tiworker.exe",
+        L"trustedinstaller.exe",
+        L"mousocoreworker.exe",
+        L"wuauclt.exe",
+        L"usoclient.exe",
+        L"waasmedicagent.exe",
+        L"sihclient.exe",
+        L"dismhost.exe",
+        L"pkgmgr.exe",
+        L"msiexec.exe"
+    };
+    if (kUpdateProcs.find(exe) != kUpdateProcs.end()) {
+        return true;
+    }
+    return exe.find(L"setup") != std::wstring::npos ||
+           exe.find(L"install") != std::wstring::npos ||
+           exe.find(L"unins") != std::wstring::npos;
+}
+
+bool IsCaptureProcessName(const std::wstring& exe) {
+    static const std::unordered_set<std::wstring> kCaptureProcs = {
+        L"screenclippinghost.exe",
+        L"snippingtool.exe",
+        L"gamebar.exe",
+        L"obs64.exe",
+        L"obs32.exe",
+        L"sharex.exe"
+    };
+    return kCaptureProcs.find(exe) != kCaptureProcs.end();
+}
+
+bool IsScreenCaptureActive() {
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    PROCESSENTRY32W pe{};
+    pe.dwSize = sizeof(pe);
+    bool found = false;
+    if (Process32FirstW(snap, &pe)) {
+        do {
+            if (IsCaptureProcessName(ToLowerTrim(pe.szExeFile))) {
+                found = true;
+                break;
+            }
+        } while (Process32NextW(snap, &pe));
+    }
+    CloseHandle(snap);
+    return found;
+}
+
+bool IsServiceActivelyRunning(const wchar_t* serviceName) {
+    SC_HANDLE scm = OpenSCManagerW(nullptr, nullptr, SC_MANAGER_CONNECT);
+    if (!scm) {
+        return false;
+    }
+    SC_HANDLE svc = OpenServiceW(scm, serviceName, SERVICE_QUERY_STATUS);
+    bool running = false;
+    if (svc) {
+        SERVICE_STATUS_PROCESS ssp{};
+        DWORD bytesNeeded = 0;
+        if (QueryServiceStatusEx(svc, SC_STATUS_PROCESS_INFO,
+                                 reinterpret_cast<LPBYTE>(&ssp), sizeof(ssp), &bytesNeeded)) {
+            running = (ssp.dwCurrentState == SERVICE_RUNNING ||
+                       ssp.dwCurrentState == SERVICE_START_PENDING);
+        }
+        CloseServiceHandle(svc);
+    }
+    CloseServiceHandle(scm);
+    return running;
+}
+
+bool RegKeyExists(HKEY root, const wchar_t* subKey) {
+    HKEY hKey = nullptr;
+    if (RegOpenKeyExW(root, subKey, 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+        RegCloseKey(hKey);
+        return true;
+    }
+    return false;
+}
+
+bool IsUpdateOrInstallInProgress() {
+    if (IsServiceActivelyRunning(L"TrustedInstaller")) {
+        return true;
+    }
+    if (RegKeyExists(HKEY_LOCAL_MACHINE,
+                     L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Component Based Servicing\\RebootInProgress")) {
+        return true;
+    }
+
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    PROCESSENTRY32W pe{};
+    pe.dwSize = sizeof(pe);
+    bool found = false;
+    if (Process32FirstW(snap, &pe)) {
+        do {
+            if (IsUpdateOrInstallerProcessName(ToLowerTrim(pe.szExeFile))) {
+                found = true;
+                break;
+            }
+        } while (Process32NextW(snap, &pe));
+    }
+    CloseHandle(snap);
+    return found;
+}
+
+bool IsProtectedShellWindowClass(const std::wstring& cls) {
+    return cls == L"progman" ||
+           cls == L"workerw" ||
+           cls == L"shell_traywnd" ||
+           cls == L"shell_secondarytraywnd" ||
+           cls == L"operationstatuswindow" ||
+           cls == L"msidialogcloseclass" ||
+           cls == L"tasklistthumbnailwnd" ||
+           cls == L"thumbnaildevicehelperwnd" ||
+           cls == L" xamlexplorerhostislandwindow" ||
+           cls == L"xamlexplorerhostislandwindow" ||
+           cls == L"toplevelwindowforoverflowxamlisland" ||
+           cls == L"windows.ui.core.corewindow";
+}
+
+bool IsExplorerFolderWindowClass(const std::wstring& cls) {
+    return cls == L"cabinetwclass" || cls == L"explorewclass";
+}
+
+std::wstring GetWindowTitleSafe(HWND hwnd) {
+    wchar_t titleBuf[256]{};
+    DWORD_PTR result = 0;
+    if (SendMessageTimeoutW(hwnd, WM_GETTEXT, _countof(titleBuf),
+                            reinterpret_cast<LPARAM>(titleBuf),
+                            SMTO_ABORTIFHUNG | SMTO_BLOCK, 80, &result) &&
+        result > 0) {
+        return std::wstring(titleBuf, static_cast<size_t>(result));
+    }
+    int len = GetWindowTextW(hwnd, titleBuf, _countof(titleBuf));
+    return (len > 0) ? std::wstring(titleBuf, static_cast<size_t>(len)) : L"";
+}
+
+std::wstring QueryWindowShutdownBlockReason(HWND hwnd) {
+    DWORD cch = 0;
+    if (!ShutdownBlockReasonQuery(hwnd, nullptr, &cch) || cch == 0 || cch > 1024) {
+        return L"";
+    }
+    std::wstring buf(cch, L'\0');
+    if (!ShutdownBlockReasonQuery(hwnd, buf.data(), &cch)) {
+        return L"";
+    }
+    while (!buf.empty() && buf.back() == L'\0') {
+        buf.pop_back();
+    }
+    return buf;
+}
+
+struct UwpChildQuery {
+    DWORD hostPid = 0;
+    DWORD realPid = 0;
+    HWND coreHwnd = nullptr;
+};
+
+BOOL CALLBACK FindUwpChildCoreWindowProc(HWND child, LPARAM lParam) {
+    auto* q = reinterpret_cast<UwpChildQuery*>(lParam);
+    wchar_t classBuf[128]{};
+    int len = GetClassNameW(child, classBuf, _countof(classBuf));
+    if (len <= 0) {
+        return TRUE;
+    }
+    std::wstring cls = ToLowerTrim(std::wstring(classBuf, len));
+    DWORD childPid = 0;
+    GetWindowThreadProcessId(child, &childPid);
+    if (childPid != 0 && childPid != q->hostPid &&
+        (cls == L"windows.ui.core.corewindow" || IsWindowVisible(child))) {
+        q->realPid = childPid;
+        q->coreHwnd = child;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+bool HasUnsavedOrBlockingWork(HWND hwnd) {
+    HWND enabledPopup = GetWindow(hwnd, GW_ENABLEDPOPUP);
+    if (enabledPopup && enabledPopup != hwnd && IsWindowVisible(enabledPopup)) {
+        return true;
+    }
+    if (!IsWindowEnabled(hwnd)) {
+        return true;
+    }
+
+    std::wstring title = GetWindowTitleSafe(hwnd);
+    if (!title.empty()) {
+        if (title.front() == L'*' || title.back() == L'*' ||
+            title.find(L"* ") == 0 || title.find(L" *") != std::wstring::npos ||
+            title.find(L'\u2022') != std::wstring::npos ||
+            title.find(L'\u25CF') != std::wstring::npos) {
+            return true;
+        }
+        std::wstring lower = ToLowerTrim(std::move(title));
+        if (lower.find(L"[modified]") != std::wstring::npos ||
+            lower.find(L"(modified)") != std::wstring::npos ||
+            lower.find(L"[unsaved]") != std::wstring::npos ||
+            lower.find(L"(unsaved)") != std::wstring::npos ||
+            lower.find(L"unsaved changes") != std::wstring::npos) {
+            return true;
+        }
+    }
+    return false;
+}
+
+struct TargetWindow {
+    HWND hwnd = nullptr;
+    DWORD pid = 0;           // Effective process ID (resolved to inner CoreWindow PID for UWP)
+    DWORD windowPid = 0;     // Direct HWND owner PID (e.g. ApplicationFrameHost.exe)
+    std::wstring exe;        // Effective process executable name (lowercase)
+    std::wstring cls;        // Window class name (lowercase)
+    std::wstring title;      // Window title for diagnostics
+    std::wstring blockReason;// OS ShutdownBlockReasonQuery string if registered
+    bool neverTerminate = false;
+};
+
+struct EnumContext {
+    ModSettings settings;
+    std::vector<TargetWindow> targets;
+};
+
+BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
+    auto* ctx = reinterpret_cast<EnumContext*>(lParam);
+    if (!IsWindowVisible(hwnd)) {
+        return TRUE;
+    }
+
+    LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+    if ((style & WS_CHILD) != 0) {
+        return TRUE;
+    }
+
+    LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+    bool hasAppWindow = (exStyle & WS_EX_APPWINDOW) != 0;
+    bool hasToolWindow = (exStyle & WS_EX_TOOLWINDOW) != 0;
+    bool hasNoActivate = (exStyle & WS_EX_NOACTIVATE) != 0;
+    HWND owner = GetWindow(hwnd, GW_OWNER);
+
+    // Per Microsoft Learn Taskbar specification:
+    // A window appears on the taskbar if it has WS_EX_APPWINDOW (even when owned),
+    // OR if it is unowned and does not have WS_EX_TOOLWINDOW / WS_EX_NOACTIVATE.
+    if (!hasAppWindow) {
+        if (owner != nullptr || hasToolWindow || hasNoActivate) {
+            return TRUE;
+        }
+    }
+
+    wchar_t classBuf[256]{};
+    int classLen = GetClassNameW(hwnd, classBuf, _countof(classBuf));
+    std::wstring cls = ToLowerTrim(std::wstring(classBuf, classLen));
+    if (IsProtectedShellWindowClass(cls)) {
+        return TRUE;
+    }
+
+    // Skip native Shut Down Windows dialog (#32770 owned by Explorer) if already open
+    if (cls == L"#32770") {
+        std::wstring dlgTitle = ToLowerTrim(GetWindowTitleSafe(hwnd));
+        if (dlgTitle == L"shut down windows") {
+            return TRUE;
+        }
+    }
+
+    DWORD cloaked = 0;
+    if (SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked != 0) {
+        // DWM_CLOAKED_APP (0x1) and DWM_CLOAKED_INHERITED (0x4) are hidden background frames.
+        // DWM_CLOAKED_SHELL (0x2) indicates another Virtual Desktop for standard Win32 apps,
+        // or a suspended UWP ApplicationFrameWindow.
+        if ((cloaked & 0x5) != 0 || cls == L"applicationframewindow") {
+            return TRUE;
+        }
+    }
+
+    DWORD windowPid = 0;
+    GetWindowThreadProcessId(hwnd, &windowPid);
+    if (windowPid == 0 || windowPid == g_selfPid) {
+        return TRUE;
+    }
+
+    DWORD sessionId = 0;
+    if (!ProcessIdToSessionId(windowPid, &sessionId) || sessionId != g_currentSessionId) {
+        return TRUE;
+    }
+
+    std::wstring windowExe = GetProcessBaseNameLower(windowPid);
+    if (windowExe.empty()) {
+        return TRUE;
+    }
+
+    DWORD effectivePid = windowPid;
+    std::wstring effectiveExe = windowExe;
+
+    // Resolve UWP / WinUI ApplicationFrameWindow to its hosted CoreWindow process
+    if (cls == L"applicationframewindow" || windowExe == L"applicationframehost.exe") {
+        UwpChildQuery uwp{windowPid, 0, nullptr};
+        EnumChildWindows(hwnd, FindUwpChildCoreWindowProc, reinterpret_cast<LPARAM>(&uwp));
+        if (uwp.realPid == 0) {
+            // Empty/suspended UWP frame with no hosted CoreWindow process
+            return TRUE;
+        }
+        effectivePid = uwp.realPid;
+        std::wstring innerExe = GetProcessBaseNameLower(effectivePid);
+        if (!innerExe.empty()) {
+            effectiveExe = std::move(innerExe);
+        }
+    }
+
+    // Special handling for explorer.exe:
+    // Close open File Explorer folder windows (CabinetWClass / ExploreWClass) via WM_CLOSE,
+    // but skip all other Explorer shell windows and NEVER force-terminate explorer.exe.
+    if (effectiveExe == L"explorer.exe") {
+        if (!IsExplorerFolderWindowClass(cls)) {
+            return TRUE;
+        }
+    } else if (IsSystemCriticalProcess(effectiveExe) || IsUpdateOrInstallerProcessName(effectiveExe)) {
+        return TRUE;
+    }
+
+    if (ctx->settings.protectedSet.find(effectiveExe) != ctx->settings.protectedSet.end() ||
+        ctx->settings.protectedSet.find(windowExe) != ctx->settings.protectedSet.end()) {
+        Wh_Log(L"[Enum] Skipping user-protected app '%s' (hwnd=0x%p, pid=%lu)",
+               effectiveExe.c_str(), hwnd, effectivePid);
+        return TRUE;
+    }
+
+    std::wstring title = GetWindowTitleSafe(hwnd);
+    std::wstring blockReason = QueryWindowShutdownBlockReason(hwnd);
+
+    if (ctx->settings.protectUnsavedWork && (HasUnsavedOrBlockingWork(hwnd) || !blockReason.empty())) {
+        Wh_Log(L"[Enum] Skipping '%s' (hwnd=0x%p, pid=%lu, title=\"%s\", blockReason=\"%s\") due to unsaved/blocking work",
+               effectiveExe.c_str(), hwnd, effectivePid, title.c_str(), blockReason.c_str());
+        return TRUE;
+    }
+
+    bool neverKill = IsNeverTerminateProcess(effectiveExe) || IsNeverTerminateProcess(windowExe);
+    ctx->targets.push_back(TargetWindow{
+        hwnd,
+        effectivePid,
+        windowPid,
+        std::move(effectiveExe),
+        std::move(cls),
+        std::move(title),
+        std::move(blockReason),
+        neverKill
+    });
+    return TRUE;
+}
+
+bool IsTargetWindowStillOpen(HWND hwnd) {
+    if (!IsWindow(hwnd) || !IsWindowVisible(hwnd)) {
+        return false;
+    }
+    DWORD cloaked = 0;
+    if (SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) &&
+        (cloaked & 0x5) != 0) {
+        return false;
+    }
+    return true;
+}
+
+bool RequestGracefulWindowClose(const TargetWindow& t, bool protectUnsavedWork) {
+    if (!IsWindow(t.hwnd)) {
+        return true;
+    }
+
+    // If an enabled modal popup exists and unsaved protection is OFF, close the popup first
+    if (!protectUnsavedWork) {
+        HWND popup = GetWindow(t.hwnd, GW_ENABLEDPOPUP);
+        if (popup && popup != t.hwnd && IsWindowVisible(popup)) {
+            PostMessageW(popup, WM_SYSCOMMAND, SC_CLOSE, 0);
+            PostMessageW(popup, WM_CLOSE, 0, 0);
+        }
+    }
+
+    SetLastError(0);
+    BOOL sysOk = SendNotifyMessageW(t.hwnd, WM_SYSCOMMAND, SC_CLOSE, 0);
+    DWORD sysErr = GetLastError();
+
+    SetLastError(0);
+    BOOL closeOk = PostMessageW(t.hwnd, WM_CLOSE, 0, 0);
+    DWORD closeErr = GetLastError();
+
+    if (!sysOk && !closeOk) {
+        if (sysErr == ERROR_ACCESS_DENIED || closeErr == ERROR_ACCESS_DENIED) {
+            Wh_Log(L"[Close] UIPI ACCESS_DENIED closing elevated window '%s' (hwnd=0x%p, pid=%lu, title=\"%s\")",
+                   t.exe.c_str(), t.hwnd, t.pid, t.title.c_str());
+        } else {
+            Wh_Log(L"[Close] PostMessage/SendNotifyMessage failed for '%s' (hwnd=0x%p, pid=%lu, sysErr=%lu, closeErr=%lu)",
+                   t.exe.c_str(), t.hwnd, t.pid, sysErr, closeErr);
+        }
+        return false;
+    }
+    return true;
+}
+
+bool IsShutdownWindowsDialogVisible() {
+    HWND dlg = FindWindowW(L"#32770", L"Shut Down Windows");
+    if (dlg && IsWindowVisible(dlg)) {
+        return true;
+    }
+    return false;
+}
+
+void WaitBrieflyForF4ReleaseBeforeDialog() {
+    // If the user is still holding F4 when all apps finish closing, wait up to 600ms
+    // for key release (while LowLevelKeyboardProc suppresses auto-repeat F4) so the
+    // newly opened Shut Down Windows dialog is not immediately dismissed by key repeat.
+    constexpr DWORD kMaxReleaseWaitMs = 600;
+    constexpr DWORD kStepMs = 25;
+    DWORD waited = 0;
+    while (waited < kMaxReleaseWaitMs && !g_stopping.load()) {
+        bool f4StillDown = false;
+        {
+            std::lock_guard<std::mutex> lock(g_triggerMutex);
+            f4StillDown = g_f4Down;
+        }
+        if (!f4StillDown && (GetAsyncKeyState(VK_F4) & 0x8000) == 0) {
+            break;
+        }
+        if (WaitForSingleObject(g_stopEvent, kStepMs) == WAIT_OBJECT_0) {
+            return;
+        }
+        waited += kStepMs;
+    }
+}
+
+void ShowNativeShutdownDialog() {
+    WaitBrieflyForF4ReleaseBeforeDialog();
+    if (g_stopping.load()) {
+        return;
+    }
+
+    if (IsShutdownWindowsDialogVisible()) {
+        Wh_Log(L"[ShutdownDialog] Native 'Shut Down Windows' dialog is already open");
+        return;
+    }
+
+    bool comOk = false;
+    HRESULT hrInit = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    if (SUCCEEDED(hrInit) || hrInit == RPC_E_CHANGED_MODE) {
+        IShellDispatch* pShell = nullptr;
+        HRESULT hr = CoCreateInstance(CLSID_Shell, nullptr, CLSCTX_INPROC_SERVER,
+                                      IID_IShellDispatch, reinterpret_cast<void**>(&pShell));
+        if (SUCCEEDED(hr) && pShell) {
+            hr = pShell->ShutdownWindows();
+            pShell->Release();
+            comOk = SUCCEEDED(hr);
+        }
+        if (SUCCEEDED(hrInit)) {
+            CoUninitialize();
+        }
+    }
+
+    if (comOk) {
+        // Give Explorer up to 200ms to materialize the #32770 Shut Down Windows dialog
+        for (int i = 0; i < 8; ++i) {
+            if (IsShutdownWindowsDialogVisible()) {
+                Wh_Log(L"[ShutdownDialog] Verified native Shut Down Windows dialog opened via IShellDispatch");
+                return;
+            }
+            Sleep(25);
+        }
+        Wh_Log(L"[ShutdownDialog] IShellDispatch::ShutdownWindows returned S_OK (dialog dispatched to Shell)");
+        return;
+    }
+
+    Wh_Log(L"[ShutdownDialog] IShellDispatch unavailable; focusing Desktop/Tray and injecting clean Alt+F4");
+    HWND shellTarget = FindWindowW(L"Progman", nullptr);
+    if (!shellTarget) {
+        shellTarget = FindWindowW(L"Shell_TrayWnd", nullptr);
+    }
+    if (shellTarget) {
+        SetForegroundWindow(shellTarget);
+        Sleep(60);
+    }
+
+    INPUT inputs[4]{};
+    inputs[0].type = INPUT_KEYBOARD;
+    inputs[0].ki.wVk = VK_MENU;
+    inputs[0].ki.dwExtraInfo = kMagicExtraInfo;
+
+    inputs[1].type = INPUT_KEYBOARD;
+    inputs[1].ki.wVk = VK_F4;
+    inputs[1].ki.dwExtraInfo = kMagicExtraInfo;
+
+    inputs[2].type = INPUT_KEYBOARD;
+    inputs[2].ki.wVk = VK_F4;
+    inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
+    inputs[2].ki.dwExtraInfo = kMagicExtraInfo;
+
+    inputs[3].type = INPUT_KEYBOARD;
+    inputs[3].ki.wVk = VK_MENU;
+    inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
+    inputs[3].ki.dwExtraInfo = kMagicExtraInfo;
+
+    SendInput(_countof(inputs), inputs, sizeof(INPUT));
+}
+
+bool PollTargetsAndProcessesUntilSettled(const std::vector<TargetWindow>& targets,
+                                         int timeoutMs,
+                                         bool protectUnsavedWork) {
+    if (targets.empty() || timeoutMs <= 0) {
+        return true;
+    }
+
+    // Open SYNCHRONIZE handles to non-shell user processes so we can verify both
+    // window destruction AND process exit/flush completion (preventing Windows'
+    // "Apps are preventing shutdown" screen when apps hide HWND before flushing disk state).
+    std::vector<HANDLE> procHandles;
+    std::unordered_set<DWORD> trackedPids;
+    for (const auto& t : targets) {
+        if (!t.neverTerminate && trackedPids.insert(t.pid).second) {
+            HANDLE hProc = OpenProcess(SYNCHRONIZE, FALSE, t.pid);
+            if (hProc) {
+                procHandles.push_back(hProc);
+            }
+        }
+    }
+
+    ULONGLONG startTick = GetTickCount64();
+    ULONGLONG deadlineTick = startTick + static_cast<ULONGLONG>(timeoutMs);
+    bool resentMidway = false;
+    bool allWindowsClosed = false;
+
+    while (!g_stopping.load()) {
+        size_t openCount = 0;
+        for (const auto& t : targets) {
+            if (IsTargetWindowStillOpen(t.hwnd)) {
+                ++openCount;
+            }
+        }
+
+        size_t runningProcs = 0;
+        for (HANDLE hProc : procHandles) {
+            if (WaitForSingleObject(hProc, 0) == WAIT_TIMEOUT) {
+                ++runningProcs;
+            }
+        }
+
+        if (openCount == 0) {
+            allWindowsClosed = true;
+            // Once all taskbar windows are gone, wait up to 350ms (within deadline)
+            // for background process exit flush so Windows Shutdown sees zero active blockers.
+            ULONGLONG now = GetTickCount64();
+            if (runningProcs == 0 || now >= deadlineTick || (now - startTick) >= 400ULL) {
+                break;
+            }
+        }
+
+        ULONGLONG now = GetTickCount64();
+        if (now >= deadlineTick) {
+            break;
+        }
+
+        // Re-post close halfway through grace window for stubborn windows
+        if (!resentMidway && (now - startTick) >= static_cast<ULONGLONG>(timeoutMs / 2)) {
+            resentMidway = true;
+            for (const auto& t : targets) {
+                if (IsTargetWindowStillOpen(t.hwnd)) {
+                    if (protectUnsavedWork && HasUnsavedOrBlockingWork(t.hwnd)) {
+                        continue;
+                    }
+                    RequestGracefulWindowClose(t, protectUnsavedWork);
+                }
+            }
+        }
+
+        if (WaitForSingleObject(g_stopEvent, 50) == WAIT_OBJECT_0) {
+            break;
+        }
+    }
+
+    for (HANDLE hProc : procHandles) {
+        CloseHandle(hProc);
+    }
+    return allWindowsClosed;
+}
+
+void ExecutePanicClose(const wchar_t* sourceLabel) {
+    ULONGLONG panicStartTick = GetTickCount64();
+    ModSettings cfg{};
+    {
+        std::lock_guard<std::mutex> lock(g_settingsMutex);
+        cfg = g_settings;
+    }
+
+    if (cfg.captureBehavior == CaptureBehavior::Pause && IsScreenCaptureActive()) {
+        Wh_Log(L"[Panic] Trigger (%s) paused: screen capture/recording active", sourceLabel);
+        return;
+    }
+
+    EnumContext wave1{};
+    wave1.settings = cfg;
+    EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(&wave1));
+
+    Wh_Log(L"[Panic] Triggered via %s: discovered %zu open taskbar window(s) in Wave 1",
+           sourceLabel, wave1.targets.size());
+
+    for (size_t i = 0; i < wave1.targets.size(); ++i) {
+        if (g_stopping.load()) {
+            return;
+        }
+        const auto& t = wave1.targets[i];
+        Wh_Log(L"[Wave1 %zu/%zu] Closing '%s' (hwnd=0x%p, pid=%lu, class='%s', title=\"%s\"%s%s)",
+               i + 1, wave1.targets.size(), t.exe.c_str(), t.hwnd, t.pid, t.cls.c_str(),
+               t.title.c_str(),
+               t.blockReason.empty() ? L"" : L", shutdownBlocker=",
+               t.blockReason.empty() ? L"" : t.blockReason.c_str());
+        RequestGracefulWindowClose(t, cfg.protectUnsavedWork);
+    }
+
+    if (!wave1.targets.empty()) {
+        PollTargetsAndProcessesUntilSettled(wave1.targets, cfg.graceTimeoutMs, cfg.protectUnsavedWork);
+    }
+    if (g_stopping.load()) {
+        return;
+    }
+
+    // Wave 2: Re-enumerate to catch any secondary/child windows or slow taskbar windows
+    EnumContext wave2{};
+    wave2.settings = cfg;
+    EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(&wave2));
+
+    if (!wave2.targets.empty()) {
+        Wh_Log(L"[Panic] Wave 2 discovered %zu remaining/newly-surfaced taskbar window(s)",
+               wave2.targets.size());
+        for (const auto& t : wave2.targets) {
+            if (g_stopping.load()) {
+                return;
+            }
+            if (cfg.protectUnsavedWork && (HasUnsavedOrBlockingWork(t.hwnd) || !t.blockReason.empty())) {
+                Wh_Log(L"[Wave2] Sparing '%s' (pid=%lu, title=\"%s\") due to unsaved/modal prompt",
+                       t.exe.c_str(), t.pid, t.title.c_str());
+                continue;
+            }
+            RequestGracefulWindowClose(t, cfg.protectUnsavedWork);
+        }
+        int wave2WaitMs = std::clamp(cfg.graceTimeoutMs / 2, 250, 1500);
+        PollTargetsAndProcessesUntilSettled(wave2.targets, wave2WaitMs, cfg.protectUnsavedWork);
+    }
+
+    // Check which windows remain open after Wave 1 + Wave 2
+    std::vector<TargetWindow> combined = std::move(wave1.targets);
+    for (auto& w2 : wave2.targets) {
+        bool exists = std::any_of(combined.begin(), combined.end(),
+                                  [&](const TargetWindow& e) { return e.hwnd == w2.hwnd; });
+        if (!exists) {
+            combined.push_back(std::move(w2));
+        }
+    }
+
+    size_t closedGracefully = 0;
+    size_t forceTerminated = 0;
+    size_t stillOpenCount = 0;
+
+    bool updateActive = cfg.forceTerminate && cfg.respectUpdatesAndInstallers && IsUpdateOrInstallInProgress();
+    if (updateActive) {
+        Wh_Log(L"[Panic] Active Windows Update or installer detected; skipping forceTerminate");
+    }
+
+    std::unordered_set<DWORD> terminatedPids;
+    for (const auto& t : combined) {
+        if (g_stopping.load()) {
+            return;
+        }
+        if (!IsTargetWindowStillOpen(t.hwnd)) {
+            ++closedGracefully;
+            continue;
+        }
+
+        std::wstring postReason = QueryWindowShutdownBlockReason(t.hwnd);
+        if (cfg.protectUnsavedWork && (HasUnsavedOrBlockingWork(t.hwnd) || !postReason.empty())) {
+            Wh_Log(L"[Panic] Sparing '%s' (hwnd=0x%p, pid=%lu, reason=\"%s\") due to unsaved work protection",
+                   t.exe.c_str(), t.hwnd, t.pid, postReason.c_str());
+            ++stillOpenCount;
+            continue;
+        }
+
+        if (cfg.forceTerminate && !updateActive && !t.neverTerminate) {
+            if (terminatedPids.find(t.pid) == terminatedPids.end()) {
+                HANDLE hProc = OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, FALSE, t.pid);
+                if (hProc) {
+                    if (WaitForSingleObject(hProc, 0) == WAIT_TIMEOUT && TerminateProcess(hProc, 1)) {
+                        WaitForSingleObject(hProc, 300);
+                        Wh_Log(L"[Panic] Force-terminated '%s' (pid=%lu, title=\"%s\")",
+                               t.exe.c_str(), t.pid, t.title.c_str());
+                        terminatedPids.insert(t.pid);
+                        ++forceTerminated;
+                        CloseHandle(hProc);
+                        continue;
+                    }
+                    CloseHandle(hProc);
+                } else {
+                    Wh_Log(L"[Panic] OpenProcess(PROCESS_TERMINATE) failed for '%s' (pid=%lu, err=%lu)",
+                           t.exe.c_str(), t.pid, GetLastError());
+                }
+            } else {
+                ++forceTerminated;
+                continue;
+            }
+        }
+
+        ++stillOpenCount;
+        Wh_Log(L"[Panic] Window still open after grace period: '%s' (hwnd=0x%p, pid=%lu, title=\"%s\", shutdownBlockReason=\"%s\")",
+               t.exe.c_str(), t.hwnd, t.pid, t.title.c_str(), postReason.c_str());
+    }
+
+    ULONGLONG elapsedMs = GetTickCount64() - panicStartTick;
+    Wh_Log(L"[Panic] Summary (%s, %llums): total=%zu, closedGracefully=%zu, forceTerminated=%zu, remainingOpen=%zu",
+           sourceLabel, elapsedMs, combined.size(), closedGracefully, forceTerminated, stillOpenCount);
+
+    if (cfg.showShutdownDialog && !g_stopping.load()) {
+        ShowNativeShutdownDialog();
+    }
+}
+
+DWORD WINAPI WorkerThreadProc(LPVOID) {
+    HANDLE waitHandles[3] = {g_stopEvent, g_holdTimer, g_panicEvent};
+    while (!g_stopping.load()) {
+        DWORD res = WaitForMultipleObjects(3, waitHandles, FALSE, INFINITE);
+        if (res == WAIT_OBJECT_0 || g_stopping.load()) {
+            break;
+        }
+        if (res == WAIT_OBJECT_0 + 1) {
+            bool shouldFire = false;
+            {
+                std::lock_guard<std::mutex> lock(g_triggerMutex);
+                ULONGLONG now = GetTickCount64();
+                if (g_holdArmed && g_f4Down && now >= g_cooldownUntilTick && IsAltOnlyPressed()) {
+                    g_holdArmed = false;
+                    g_tapTimestamps.clear();
+                    g_cooldownUntilTick = now + kCooldownMs;
+                    shouldFire = true;
+                } else {
+                    g_holdArmed = false;
+                }
+            }
+            if (shouldFire) {
+                try {
+                    ExecutePanicClose(L"Hold");
+                } catch (...) {
+                    Wh_Log(L"Unhandled exception in ExecutePanicClose (Hold)");
+                }
+            }
+        } else if (res == WAIT_OBJECT_0 + 2) {
+            try {
+                ExecutePanicClose(L"Multi-Tap");
+            } catch (...) {
+                Wh_Log(L"Unhandled exception in ExecutePanicClose (Multi-Tap)");
+            }
+        }
+    }
+    return 0;
+}
+
+DWORD WINAPI HookThreadProc(LPVOID) {
+    g_keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, nullptr, 0);
+    if (!g_keyboardHook) {
+        Wh_Log(L"SetWindowsHookExW(WH_KEYBOARD_LL) failed: %lu", GetLastError());
+        return 1;
+    }
+
+    MSG msg;
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+
+    if (g_keyboardHook) {
+        UnhookWindowsHookEx(g_keyboardHook);
+        g_keyboardHook = nullptr;
+    }
+    return 0;
+}
+
+} // namespace
+
+BOOL WhTool_ModInit() {
+    g_selfPid = GetCurrentProcessId();
+    ProcessIdToSessionId(g_selfPid, &g_currentSessionId);
+    g_stopping.store(false);
+
+    LoadSettings();
+
+    g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_holdTimer = CreateWaitableTimerW(nullptr, FALSE, nullptr);
+    g_panicEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!g_stopEvent || !g_holdTimer || !g_panicEvent) {
+        Wh_Log(L"Event/Timer creation failed");
+        return FALSE;
+    }
+
+    g_workerThread = CreateThread(nullptr, 0, WorkerThreadProc, nullptr, 0, nullptr);
+    g_hookThread = CreateThread(nullptr, 0, HookThreadProc, nullptr, 0, &g_hookThreadId);
+    if (!g_workerThread || !g_hookThread) {
+        Wh_Log(L"CreateThread failed (err=%lu)", GetLastError());
+        return FALSE;
+    }
+
+    Wh_Log(L"[Init] Enhanced Alt+F4 v1.2026.1711 active (pid=%lu, session=%lu, hookTid=%lu)",
+           g_selfPid, g_currentSessionId, g_hookThreadId);
+    return TRUE;
+}
+
+void WhTool_ModSettingsChanged() {
+    LoadSettings();
+}
+
+void WhTool_ModUninit() {
+    g_stopping.store(true);
+    {
+        std::lock_guard<std::mutex> lock(g_triggerMutex);
+        CancelHoldLocked();
+        g_tapTimestamps.clear();
+    }
+    if (g_stopEvent) {
+        SetEvent(g_stopEvent);
+    }
+    if (g_hookThreadId != 0) {
+        PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0);
+    }
+    if (g_hookThread) {
+        WaitForSingleObject(g_hookThread, 3000);
+        CloseHandle(g_hookThread);
+        g_hookThread = nullptr;
+    }
+    if (g_workerThread) {
+        WaitForSingleObject(g_workerThread, 3000);
+        CloseHandle(g_workerThread);
+        g_workerThread = nullptr;
+    }
+    if (g_stopEvent) {
+        CloseHandle(g_stopEvent);
+        g_stopEvent = nullptr;
+    }
+    if (g_holdTimer) {
+        CloseHandle(g_holdTimer);
+        g_holdTimer = nullptr;
+    }
+    if (g_panicEvent) {
+        CloseHandle(g_panicEvent);
+        g_panicEvent = nullptr;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutexW(nullptr, FALSE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutexW failed (err=%lu)", GetLastError());
+            ExitProcess(1);
+        }
+
+        DWORD waitRes = WaitForSingleObject(g_toolModProcessMutex, 5000);
+        if (waitRes != WAIT_OBJECT_0 && waitRes != WAIT_ABANDONED) {
+            Wh_Log(L"Tool mod mutex handoff timed out (%s, waitRes=%lu)", WH_MOD_ID, waitRes);
+            CloseHandle(g_toolModProcessMutex);
+            g_toolModProcessMutex = nullptr;
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ReleaseMutex(g_toolModProcessMutex);
+            CloseHandle(g_toolModProcessMutex);
+            g_toolModProcessMutex = nullptr;
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR commandLine[MAX_PATH + 2 +
+                      (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") /
+                       sizeof(WCHAR)) -
+                      1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    if (g_toolModProcessMutex) {
+        ReleaseMutex(g_toolModProcessMutex);
+        CloseHandle(g_toolModProcessMutex);
+        g_toolModProcessMutex = nullptr;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
+}
