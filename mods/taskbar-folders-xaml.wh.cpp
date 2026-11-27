@@ -3042,7 +3042,7 @@ struct FolderPanel : FolderPalette {
     ULONGLONG choicesUpdated = 0;
     AppSearch search;
     int cellWidth = 0, cellHeight = 0, iconSize = 0, lineHeight = 0;
-    bool browsing = false, searchLayout = false;
+    bool browsing = false, chooserLayout = false;
     com_ptr<IDropTarget> registeredDropTarget;
     bool dropHover = false, waitForDrag = false;
     int pressed = -1, dropTarget = -1, contextItem = -1;
@@ -3072,9 +3072,10 @@ struct FolderPanel : FolderPalette {
     wstring hoverFolder;
     POINT dragPoint{};
     HBRUSH searchBrush{};
-    RECT rest{}, searchRect{};
+    RECT rest{}, morphFrom{}, searchRect{};
+    SIZE childLayout{};
     bool motion = false, frame = false, layered = false, closing = false;
-    Ease reveal, arrival;
+    Ease reveal, arrival, morph;
     int slide = 0, hot = -1, columns = 1, capacity = 1, page = 0, wheel = 0,
         edgeDir = 0;
     std::vector<TileMotion> tiles;
@@ -4828,20 +4829,99 @@ static void arrangeDrag(int dest) {
     if (!panel->motion || !panel->frame)
         InvalidateRect(panel->list, nullptr, FALSE);
 }
-static void panelPosition(double now, UINT flags = 0) {
+static int panelGridTop() {
+    return px(panel->choosing || panel->filtering ? 88 : 44);
+}
+static int panelFooter() {
+    return px(panel->choosing || pageCount() > 1 ? 36 : 10);
+}
+static void layoutPanelChildren(int w, int h) {
+    panel->childLayout = {w, h};
+    const int pad = px(12), side = px(28), gap = px(4);
+    const int last = w - pad - side, addX = last - side - gap;
+    MoveWindow(panel->title, pad + px(2), px(8), std::max(1, addX - pad - gap),
+               side, FALSE);
+    MoveWindow(panel->add, addX, px(8), side, side, FALSE);
+    MoveWindow(panel->more, last, px(8), side, side, FALSE);
+    panel->searchRect = {pad, px(44), w - pad, px(76)};
+    if (panel->filter && (panel->choosing || panel->filtering)) {
+        MoveWindow(panel->lens, pad + px(4), px(47), px(27), px(26), FALSE);
+        MoveWindow(panel->filter, pad + px(33),
+                   px(44) + (px(32) - panel->lineHeight) / 2,
+                   std::max(1, w - 2 * pad - px(42)), panel->lineHeight + 1,
+                   FALSE);
+    }
+    const int top = panelGridTop();
+    const int gridHeight = std::max(1, h - top - panelFooter());
+    const int listWidth =
+        std::max(1, std::min(w, panel->columns * panel->cellWidth));
+    MoveWindow(panel->empty, pad, top, std::max(1, w - 2 * pad), gridHeight, FALSE);
+    MoveWindow(panel->list, (w - listWidth) / 2, top, listWidth, gridHeight, FALSE);
+    if (pageCount() > 1 && panel->pager) {
+        const int y = h - px(32), ind = px(76), btn = px(26);
+        MoveWindow(panel->prev, (w - ind) / 2 - btn, y, btn, btn, FALSE);
+        MoveWindow(panel->pager, (w - ind) / 2, y, ind, btn, FALSE);
+        MoveWindow(panel->next, (w + ind) / 2, y, btn, btn, FALSE);
+    }
+}
+static int panelRevealShift(double now) {
+    const int sign = panel->rest.bottom <= panel->anchor.top ? 1 : -1;
+    return int(std::lround(sign * px(7) * (1 - panel->reveal.value(now))));
+}
+static void panelPosition(double now, bool layout = false) {
     RECT r = panel->rest;
-    if (r.right <= r.left)
+    if (IsRectEmpty(&r))
         return;
-    int sign = panel->rest.bottom <= panel->anchor.top ? 1 : -1;
-    double reveal = panel->reveal.value(now);
-    int shift = int(std::lround(sign * px(7) * (1 - reveal)));
-    // Keep the surface outside the taskbar even during the first frame.
-    SetWindowPos(panel->window, nullptr, r.left, r.top + shift, r.right - r.left,
-                 r.bottom - r.top, SWP_NOZORDER | SWP_NOACTIVATE | flags);
-    if (panel->layered)
-        SetLayeredWindowAttributes(
-            panel->window, 0,
-            (BYTE)std::lround(255 * std::clamp(reveal, 0.0, 1.0)), LWA_ALPHA);
+    if (panel->morph.active(now)) {
+        double t = std::clamp((now - panel->morph.since) / panel->morph.duration,
+                              0., 1.);
+        t = t * t * (3 - 2 * t);
+        auto edge = [t](LONG from, LONG to) {
+            return std::lround(from + (to - from) * t);
+        };
+        const auto& from = panel->morphFrom;
+        r = {edge(from.left, r.left), edge(from.top, r.top),
+             edge(from.right, r.right), edge(from.bottom, r.bottom)};
+    }
+    const int w = r.right - r.left, h = r.bottom - r.top;
+    const bool resized = panel->childLayout.cx != w || panel->childLayout.cy != h;
+    SetWindowPos(panel->window, nullptr, r.left, r.top + panelRevealShift(now), w, h,
+                 SWP_NOZORDER | SWP_NOACTIVATE | (resized ? SWP_NOCOPYBITS : 0));
+    if (layout || resized)
+        layoutPanelChildren(w, h);
+    if (resized && !layout)
+        RedrawWindow(panel->window, nullptr, nullptr, RDW_INVALIDATE | RDW_ALLCHILDREN);
+    if (panel->layered && (panel->reveal.duration || layout || !panel->morph.duration))
+        SetLayeredWindowAttributes(panel->window, 0,
+            (BYTE)std::lround(255 * std::clamp(panel->reveal.value(now), 0.0, 1.0)),
+            LWA_ALPHA);
+}
+static void sizePanel(RECT dest, bool modeChanged) {
+    const bool sameTarget = EqualRect(&dest, &panel->rest);
+    if (sameTarget && panel->morph.duration && !modeChanged) {
+        // Typing and arriving suggestions update the content, never the motion clock.
+        layoutPanelChildren(panel->childLayout.cx, panel->childLayout.cy);
+        return;
+    }
+    const auto now = motionTime();
+    panel->rest = dest;
+    RECT from{};
+    panel->morph.set(1);
+    if (modeChanged && panel->motion && !panel->closing && !panel->browsing &&
+        IsWindowVisible(panel->window) && GetWindowRect(panel->window, &from)) {
+        OffsetRect(&from, 0, -panelRevealShift(now));
+        const auto distance = std::max({
+            std::abs(dest.left - from.left), std::abs(dest.top - from.top),
+            std::abs(dest.right - from.right), std::abs(dest.bottom - from.bottom)});
+        if (distance) {
+            panel->morphFrom = from;
+            panel->morph.set(0);
+            const auto ms = static_cast<unsigned>(
+                std::clamp(120. + .38 * distance * 96. / panel->dpi, 120., 240.));
+            target(panel->morph, 1, ms, now);
+        }
+    }
+    panelPosition(now, true);
 }
 static void layered(bool enabled) {
     if (panel->layered == enabled)
@@ -4894,18 +4974,19 @@ static void releasePreviousPage() {
 }
 static void tickPanel() {
     auto now = panel->frameSample = motionTime();
-    bool active = panel->reveal.active(now);
-    if (panel->reveal.duration) {
+    const bool revealing = panel->reveal.active(now);
+    bool active = revealing;
+    const bool resizing = panel->morph.damage(now, active);
+    if (panel->reveal.duration || resizing)
         panelPosition(now);
-        if (!active) {
-            if (panel->closing) {
-                closePanel();
-                return;
-            }
-            // Keep the composited surface for the next reveal. Tile-only
-            // animation frames do not reposition or reblend the window.
-            panel->reveal.set(1);
+    if (panel->reveal.duration && !revealing) {
+        if (panel->closing) {
+            closePanel();
+            return;
         }
+        // Keep the composited surface for the next reveal. Tile-only
+        // animation frames do not reposition or reblend the window.
+        panel->reveal.set(1);
     }
     bool full = panel->arrival.damage(now, active);
     if (!panel->arrival.active(now))
@@ -4943,8 +5024,13 @@ static void tickPanel() {
                 active = true;
         }
     }
-    if (!active || !schedulePanelFrame())
+    if (!active || !schedulePanelFrame()) {
+        if (panel->morph.duration) {
+            panel->morph.set(1);
+            panelPosition(now);
+        }
         stopPanelFrames();
+    }
 }
 static int appImage(int);
 static void changePage(int, bool = false);
@@ -6388,21 +6474,31 @@ static void paintGrid(HWND h) {
     if (r.right > 0 && r.bottom > 0) {
         if (!panel->buffer)
             panel->buffer = CreateCompatibleDC(screen);
-        if (panel->buffer && (!panel->bitmap || panel->bufferWidth != r.right ||
-                             panel->bufferHeight != r.bottom)) {
-            if (auto bmp = CreateCompatibleBitmap(screen, r.right, r.bottom)) {
+        // A resize can present a different extent each refresh. Allocate for its
+        // destination once and reuse the visible portion of that bitmap.
+        if (panel->buffer && (!panel->bitmap || panel->bufferWidth < r.right ||
+                             panel->bufferHeight < r.bottom)) {
+            LONG w = std::max<LONG>(r.right, panel->bufferWidth);
+            LONG h = std::max<LONG>(r.bottom, panel->bufferHeight);
+            if (panel->morph.duration) {
+                w = std::max(w, std::min<LONG>(panel->rest.right - panel->rest.left,
+                                               panel->columns * panel->cellWidth));
+                h = std::max(h, panel->rest.bottom - panel->rest.top -
+                                    panelGridTop() - panelFooter());
+            }
+            if (auto bmp = CreateCompatibleBitmap(screen, w, h)) {
                 auto old = SelectObject(panel->buffer, bmp);
                 if (panel->bitmap)
                     DeleteObject(old);
                 else
                     panel->stockBitmap = old;
                 panel->bitmap = bmp;
-                panel->bufferWidth = r.right;
-                panel->bufferHeight = r.bottom;
+                panel->bufferWidth = w;
+                panel->bufferHeight = h;
             }
         }
-        if (panel->bitmap && panel->bufferWidth == r.right &&
-            panel->bufferHeight == r.bottom) {
+        if (panel->bitmap && panel->bufferWidth >= r.right &&
+            panel->bufferHeight >= r.bottom) {
             int saved = SaveDC(panel->buffer);
             if (saved) {
                 if (regionType != COMPLEXREGION ||
@@ -6676,22 +6772,8 @@ static void refreshPanel() {
     releasePreviousPage();
     ++panel->viewSerial;
     const bool searchField = panel->choosing || panel->filtering;
-    // A mode change moves both the native edit and the grid. Keep the previous
-    // frame on screen until both have their final bounds, colors and contents.
-    struct LayoutRedraw {
-        HWND window;
-        ~LayoutRedraw() {
-            if (window) {
-                SendMessageW(window, WM_SETREDRAW, TRUE, 0);
-                RedrawWindow(window, nullptr, nullptr,
-                             RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
-            }
-        }
-    } redraw{panel->searchLayout != searchField && IsWindowVisible(panel->window)
-                 ? panel->window : nullptr};
-    if (redraw.window)
-        SendMessageW(redraw.window, WM_SETREDRAW, FALSE, 0);
-    panel->searchLayout = searchField;
+    const bool modeChanged = panel->chooserLayout != panel->choosing;
+    panel->chooserLayout = panel->choosing;
     wstring query = searchField ? windowText(panel->filter) : L"";
     auto terms = searchTerms(query);
     bool searching = !terms.empty();
@@ -6753,7 +6835,7 @@ static void refreshPanel() {
         count = (int)panel->apps.size();
     int cols = searchField ? available : std::clamp(count, 1, available);
     int rows = (count + cols - 1) / cols,
-        gridTop = searchField ? px(88) : px(44);
+        gridTop = panelGridTop();
     int room =
         (int)std::max(
             mi.rcWork.bottom - std::max(panel->bar.bottom, panel->anchor.bottom),
@@ -6777,40 +6859,15 @@ static void refreshPanel() {
     int width = std::min(monitorW, std::max(px(190), 2 * pad + cols * cellW));
     // Reserve the chooser's grid and pager once so incoming suggestions and
     // typed queries never move the search box or the button under the pointer.
-    const int footer = (chooser || pageCount() > 1) ? px(36) : px(10);
+    const int footer = panelFooter();
     int wanted = gridTop + (shown ? shown * panel->cellHeight : px(41)) + footer;
-    panel->rest =
-        placePanel(mi.rcWork, panel->bar, panel->anchor, width, wanted, px(8));
-    panelPosition(motionTime(), redraw.window ? SWP_NOCOPYBITS : 0);
-    RECT client{};
-    GetClientRect(panel->window, &client);
-    int w = client.right, h = client.bottom, side = px(28), gap = px(4);
-    int last = w - pad - side, addX = last - side - gap;
-    MoveWindow(panel->title, pad + px(2), px(8), std::max(1, addX - pad - gap),
-               side, FALSE);
-    MoveWindow(panel->add, addX, px(8), side, side, FALSE);
-    MoveWindow(panel->more, last, px(8), side, side, FALSE);
-    panel->searchRect = {pad, px(44), w - pad, px(76)};
+    if (pageCount() > 1)
+        ensurePager();
+    sizePanel(placePanel(mi.rcWork, panel->bar, panel->anchor, width, wanted, px(8)),
+              modeChanged);
     if (panel->filter) {
-        MoveWindow(panel->lens, pad + px(4), px(47), px(27), px(26), FALSE);
-        MoveWindow(panel->filter, pad + px(33),
-                   px(44) + (px(32) - panel->lineHeight) / 2,
-                   std::max(1, w - 2 * pad - px(42)), panel->lineHeight + 1,
-                   FALSE);
         ShowWindow(panel->lens, searchField ? SW_SHOWNA : SW_HIDE);
         ShowWindow(panel->filter, searchField ? SW_SHOWNA : SW_HIDE);
-    }
-    int gridHeight = std::max(1, h - gridTop - footer);
-    MoveWindow(panel->empty, pad, gridTop, std::max(1, w - 2 * pad), gridHeight,
-               FALSE);
-    int listWidth = std::max(1, std::min(w, cols * cellW));
-    MoveWindow(panel->list, (w - listWidth) / 2, gridTop, listWidth, gridHeight,
-               FALSE);
-    if (pageCount() > 1 && ensurePager()) {
-        int footerY = h - px(32), ind = px(76), btn = px(26);
-        MoveWindow(panel->prev, (w - ind) / 2 - btn, footerY, btn, btn, FALSE);
-        MoveWindow(panel->pager, (w - ind) / 2, footerY, ind, btn, FALSE);
-        MoveWindow(panel->next, (w + ind) / 2, footerY, btn, btn, FALSE);
     }
     auto heading =
         panel->choosing ? formatUi(UiString::AddTo, f->name) : f->name;
@@ -6852,8 +6909,7 @@ static void refreshPanel() {
     populatePage();
     ShowWindow(panel->empty, rows ? SW_HIDE : SW_SHOWNA);
     panel->rendered = revision;
-    if (!redraw.window)
-        RedrawWindow(panel->window, nullptr, nullptr, RDW_INVALIDATE | RDW_ALLCHILDREN);
+    RedrawWindow(panel->window, nullptr, nullptr, RDW_INVALIDATE | RDW_ALLCHILDREN);
 }
 static void syncPanel() {
     if (panel->window && panel->rendered != revision)
@@ -7503,6 +7559,7 @@ static void registerPanelDrop(HWND window) {
         OleUninitialize();
 }
 static void stopPanelInteraction(HWND w) {
+    panel->morph.set(1);
     panel->closing = true;
     panel->motion = false;
     panel->renaming = false;
@@ -7662,6 +7719,7 @@ static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
                             return 0;
                         }
                         panel->reveal.set(1);
+                        panel->morph.set(1);
                         panelPosition(motionTime());
                         panel->arrival.set(0);
                         for (auto& t : panel->tiles)
@@ -7838,6 +7896,13 @@ static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
                                    panel->anchor)) {
                             panel->browsing = true;
                             ShowWindow(w, SW_HIDE);
+                            if (panel->reveal.duration || panel->morph.duration) {
+                                // Return from the picker to the fully open chooser even
+                                // if Browse was clicked during its first resize.
+                                panel->reveal.set(1);
+                                panel->morph.set(1);
+                                panelPosition(motionTime());
+                            }
                         }
                     } else
                         beginAdding(panel->folder);
@@ -11154,6 +11219,19 @@ static void collectDrops() {
     syncPanel();
 }
 static FrameworkElement buttonOf(X::DependencyObject);
+static void trackNativePress(X::DependencyObject const& source,
+                             FrameworkElement const& button) {
+    if (!projection->start)
+        return;
+    auto slot = repeaterChild(button ? button : source.try_as<FrameworkElement>());
+    // Start animates its glyph on press, but its slot never enters shell reorder.
+    // Switching coordinate spaces here would apply the existing Dock hover twice.
+    if (slot == projection->start || (!button && !slot))
+        return;
+    projection->pointerDown = true;
+    watchPlacementMotion(Slide::settleMs);
+    requestLayout();
+}
 static wstring projectedFolderAt(X::DependencyObject node) {
     while (node && node != ui->root) {
         if (auto b = node.try_as<Button>())
@@ -11249,13 +11327,7 @@ static void watchFrame() {
                    auto button = buttonOf(source);
                    if (button)
                        ui->drag = {appKey(button), screen, p.PointerId()};
-                   if (projection->start &&
-                       (button ||
-                        repeaterChild(source.try_as<FrameworkElement>()))) {
-                       projection->pointerDown = true;
-                       watchPlacementMotion(Slide::settleMs);
-                       requestLayout();
-                   }
+                   trackNativePress(source, button);
                    if (ui->drag.app.empty() || prefix(ui->drag.app, kPinPrefix))
                        dismissOutside(screen);
                } catch (...) {
