@@ -1675,6 +1675,18 @@ BOOL CALLBACK EnumAndAttachWin10Proc(HWND hwnd, LPARAM lParam) {
     return TRUE;
 }
 
+HWND FindCurrentProcessTaskbarWnd() {
+    HWND hWnd = nullptr;
+    while ((hWnd = FindWindowExW(nullptr, hWnd, L"Shell_TrayWnd", nullptr)) != nullptr) {
+        DWORD processId = 0;
+        if (GetWindowThreadProcessId(hWnd, &processId) &&
+            processId == GetCurrentProcessId()) {
+            return hWnd;
+        }
+    }
+    return nullptr;
+}
+
 void ScanAndAttachWin10Indicators() {
     {
         std::unique_lock lock(g_stateLock);
@@ -1817,18 +1829,6 @@ wux::FrameworkElement GetFrameworkElementFromImplThis(void* pThis) {
         return nullptr;
     }
     return element;
-}
-
-HWND FindCurrentProcessTaskbarWnd() {
-    HWND hWnd = nullptr;
-    while ((hWnd = FindWindowExW(nullptr, hWnd, L"Shell_TrayWnd", nullptr)) != nullptr) {
-        DWORD processId = 0;
-        if (GetWindowThreadProcessId(hWnd, &processId) &&
-            processId == GetCurrentProcessId()) {
-            return hWnd;
-        }
-    }
-    return nullptr;
 }
 
 HWND FindTaskbarHwndForCurrentThread() {
