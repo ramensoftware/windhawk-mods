@@ -6,7 +6,7 @@
 // @author          khorkovenko
 // @github          https://github.com/khorkovenko
 // @include         windhawk.exe
-// @compilerOptions -ldwmapi -lshcore -lgdi32 -lgdiplus -lshell32 -ladvapi32
+// @compilerOptions -ldwmapi -lshcore -lgdi32 -lgdiplus -lshell32 -ladvapi32 -ldxgi
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -75,12 +75,16 @@ up as soon as one of its windows is moved, resized or minimized.
   in a row; the wheel updates as soon as the window is gone. If a window asks a
   question before closing, for example about unsaved changes, the view closes
   and switches to that question. With "Force-close windows that ask before
-  closing" enabled, such an app is ended without asking instead.
+  closing" enabled, such an app is ended without asking instead. Only a
+  question that opens as its own dialog window after the right click counts: an
+  app that just takes long to close, asks inside its own window, or is a
+  Microsoft Store app whose own process can't be told apart is never ended.
   **Esc** cancels and leaves all windows as they are.
 
 The bar, the previews and the Alt+Tab view appear instantly, without animations.
-Dragging feedback and the thumbstick are updated once per screen refresh, at the
-refresh rate of the monitor in use (for example 60, 120 or 144 Hz).
+Dragging feedback and the thumbstick are drawn once per screen refresh, in sync
+with the vertical blank of the monitor in use, whatever its refresh rate (for
+example 60, 144 or 240 Hz).
 
 ## Scrolling split windows together
 When the mouse is over a window that fills a split layout together with other
@@ -89,12 +93,13 @@ Hold **Ctrl + Shift** to scroll them horizontally (tilting the wheel with Ctrl
 held works too). Each window is scrolled at the same relative position as the
 mouse, and the apps don't zoom.
 
-Ctrl can be pressed before or after the mouse reaches the split. While it is
-used for scrolling, the mod hides the key from the apps, so they scroll instead
-of zooming. With any other key, a click, or once the mouse leaves the split, the
-apps get Ctrl as usual, so shortcuts like Ctrl+C and Ctrl+click keep working. A
-single Ctrl tap is passed on too. Over other windows Ctrl + mouse wheel keeps
-its usual meaning, such as zooming in a browser.
+Ctrl can be pressed before or after the mouse reaches the split, and it works
+as usual until the wheel is turned over a split. Only from that moment the mod
+hides the key from the apps, so they scroll instead of zooming. With any other
+key, a click, or once the mouse leaves the split, the apps get Ctrl back, so
+shortcuts like Ctrl+C and Ctrl+click keep working. Over other windows Ctrl +
+mouse wheel keeps its usual meaning, such as zooming in a browser. The mod
+watches the mouse only while a Ctrl key is down.
 
 The window under the mouse gets the wheel as usual. For the other windows the
 mod repeats the wheel at the matching position: the mouse pointer jumps there
@@ -125,6 +130,9 @@ don't appear in Alt+Tab, like in Windows.
   split view with a large preview, keeps every window in a fixed place on the
   wheel with Alt+Tab numbers, is steered with the mouse like a thumbstick and
   treats split groups as one item.
+- Scrolling the windows of a split arrangement together isn't offered by
+  Windows or by another mod. It uses the same detection of split windows as the
+  Alt+Tab grouping.
 
 ## Limitations
 Windows doesn't let programs move or close windows of programs running as
@@ -172,7 +180,9 @@ administrator window is in the foreground.
     When a window closed with a right click asks a question, for example about
     unsaved changes, end its app without asking. This ends the whole app: all
     of its windows close and unsaved work is lost. File Explorer is never
-    forced. When off, the Alt+Tab view closes and switches to the question.
+    forced, and neither is an app that doesn't open a question dialog (one
+    that is slow to close or asks inside its own window). When off, the Alt+Tab
+    view closes and switches to the question.
 - openDelay: 150
   $name: Delay before the Alt+Tab view opens (ms)
   $description: >-
@@ -186,16 +196,14 @@ administrator window is in the foreground.
 
 #include <atomic>
 #include <dwmapi.h>
+#include <dxgi.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <shellscalingapi.h>
 #include <gdiplus.h>
 #include <sddl.h>
-
-#ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
-#define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
-#endif
+#include <windhawk_utils.h>
 
 #ifndef SPI_GETMOUSEWHEELROUTING
 #define SPI_GETMOUSEWHEELROUTING 0x201C
@@ -249,12 +257,14 @@ bool StartThread(LPTHREAD_START_ROUTINE proc, HANDLE& thread, DWORD& threadId) {
     return thread != nullptr;
 }
 
+// Waits until the thread is gone: a new instance of a feature must never start
+// while the old thread still uses the same globals.
 void StopThread(HANDLE thread, DWORD threadId) {
-    DWORD start = GetTickCount();
+    // Posting fails until the thread has created its message queue.
     while (!PostThreadMessage(threadId, WM_QUIT, 0, 0) &&
-           WaitForSingleObject(thread, 10) == WAIT_TIMEOUT && GetTickCount() - start < 1000) {
+           WaitForSingleObject(thread, 10) == WAIT_TIMEOUT) {
     }
-    WaitForSingleObject(thread, 1000);
+    WaitForSingleObject(thread, INFINITE);
     CloseHandle(thread);
 }
 
@@ -376,54 +386,82 @@ int RefreshRate(HMONITOR mon) {
     return 60;
 }
 
+IDXGIOutput* FindOutput(HMONITOR mon) {
+    IDXGIFactory1* factory = nullptr;
+    if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void**)&factory)))
+        return nullptr;
+    IDXGIOutput* found = nullptr;
+    IDXGIAdapter1* adapter = nullptr;
+    for (UINT a = 0; !found && SUCCEEDED(factory->EnumAdapters1(a, &adapter)); a++) {
+        IDXGIOutput* output = nullptr;
+        for (UINT o = 0; !found && SUCCEEDED(adapter->EnumOutputs(o, &output)); o++) {
+            DXGI_OUTPUT_DESC desc;
+            if (SUCCEEDED(output->GetDesc(&desc)) && desc.Monitor == mon)
+                found = output;
+            else
+                output->Release();
+        }
+        adapter->Release();
+    }
+    factory->Release();
+    return found;
+}
+
+// Paces the frames of an animation with the vertical blank of one monitor, so
+// each screen refresh shows exactly one new frame at any refresh rate. Falls
+// back to the DWM composition clock, then to a plain sleep.
 struct FrameClock {
-    HANDLE timer = nullptr;
-    LONGLONG interval = 10000000 / 60;
+    IDXGIOutput* output = nullptr;
+    DWORD interval = 16;
+    int shortWaits = 0;
     bool active = false;
 
-    void Create() {
-        timer = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
-                                       TIMER_ALL_ACCESS);
-        if (!timer)
-            timer = CreateWaitableTimerExW(nullptr, nullptr, 0, TIMER_ALL_ACCESS);
-    }
+    void Create() {}
 
-    void Destroy() {
-        Stop();
-        if (timer)
-            CloseHandle(timer);
-        timer = nullptr;
-    }
-
-    void Arm() {
-        LARGE_INTEGER due;
-        due.QuadPart = -interval;
-        if (timer)
-            SetWaitableTimer(timer, &due, 0, nullptr, nullptr, FALSE);
-    }
+    void Destroy() { Stop(); }
 
     void Start(HMONITOR mon) {
-        interval = 10000000 / RefreshRate(mon);
+        Stop();
+        output = FindOutput(mon);
+        interval = 1000 / RefreshRate(mon);
+        if (interval < 1)
+            interval = 1;
+        shortWaits = 0;
         active = true;
-        Arm();
     }
 
     void Stop() {
         active = false;
-        if (timer)
-            CancelWaitableTimer(timer);
+        if (output)
+            output->Release();
+        output = nullptr;
+    }
+
+    void Wait() {
+        LARGE_INTEGER t0, t1, freq;
+        QueryPerformanceCounter(&t0);
+        if (!(output && SUCCEEDED(output->WaitForVBlank())) && FAILED(DwmFlush()))
+            Sleep(interval);
+        QueryPerformanceCounter(&t1);
+        QueryPerformanceFrequency(&freq);
+        // A display that is off or remote can report a blank right away; don't
+        // let the loop spin then.
+        bool isShort = (t1.QuadPart - t0.QuadPart) * 4000 < freq.QuadPart;
+        shortWaits = isShort ? shortWaits + 1 : 0;
+        if (shortWaits >= 3)
+            Sleep(interval);
     }
 };
 
+// While the clock is active: wait for the vertical blank, handle the input that
+// arrived meanwhile, draw one frame.
 template <typename Callback>
 void RunMessageLoop(FrameClock& clock, Callback onFrame) {
     for (;;) {
-        DWORD r = MsgWaitForMultipleObjectsEx(clock.timer ? 1 : 0, &clock.timer, INFINITE,
-                                              QS_ALLINPUT, MWMO_INPUTAVAILABLE);
-        if (clock.timer && r == WAIT_OBJECT_0 && clock.active) {
-            clock.Arm();
-            onFrame();
-        }
+        if (clock.active)
+            clock.Wait();
+        else
+            MsgWaitForMultipleObjectsEx(0, nullptr, INFINITE, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
         MSG msg;
         while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
             if (msg.message == WM_QUIT)
@@ -431,6 +469,8 @@ void RunMessageLoop(FrameClock& clock, Callback onFrame) {
             TranslateMessage(&msg);
             DispatchMessage(&msg);
         }
+        if (clock.active)
+            onFrame();
     }
 }
 
@@ -1109,9 +1149,13 @@ bool g_dirty;
 RECT g_mon, g_preview;
 POINT g_center, g_savedPos;
 float g_ro, g_ri, g_wx, g_wy, g_jx, g_jy;
-HDC g_mem;
-HBITMAP g_bmp;
+// g_mem holds the scene without the thumbstick; it is redrawn only when the
+// items or the selection change. Each frame copies the thumbstick area from it
+// to g_frame, draws the stick there and copies that area to the screen.
+HDC g_mem, g_frame;
+HBITMAP g_bmp, g_frameBmp;
 SIZE g_bmpSize;
+bool g_sceneDirty;
 bool g_swallowed[256], g_unhookPending;
 WPARAM g_upToSwallow;
 
@@ -1162,12 +1206,36 @@ bool AltReleased() {
 HWND g_pendingPrimary, g_pendingOthers[MAXMEMBERS];
 int g_pendingCount, g_pendingTicks;
 
+// Brings a window to the top without activating it. A plain z-order change is
+// ignored when it comes from a process that isn't in the foreground; switching
+// "always on top" on and off is not.
+void Raise(HWND hwnd) {
+    if (GetWindowLongPtr(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST)
+        return;
+    UINT flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS;
+    SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, flags);
+    SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, flags);
+}
+
+bool IsOnTop(HWND hwnd) {
+    RECT f;
+    if (FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &f, sizeof(f))))
+        return true;
+    return RootAt({(f.left + f.right) / 2, (f.top + f.bottom) / 2}) == hwnd;
+}
+
+// Shows all windows of the item: the others are raised first, then the primary
+// one is activated. A timer checks afterwards that none of them stayed behind.
 void ActivateItem(const Item& it) {
-    Activate(it.w[it.primary]);
     g_pendingCount = 0;
     for (int m = 0; m < it.n; m++)
-        if (m != it.primary)
+        if (m != it.primary) {
+            if (IsIconic(it.w[m]))
+                ShowWindowAsync(it.w[m], SW_SHOWNOACTIVATE);
+            Raise(it.w[m]);
             g_pendingOthers[g_pendingCount++] = it.w[m];
+        }
+    Activate(it.w[it.primary]);
     if (!g_pendingCount)
         return;
     g_pendingPrimary = it.w[it.primary];
@@ -1391,6 +1459,7 @@ void Refresh() {
             g_sel = i;
     if (g_open)
         UpdatePreview();
+    g_sceneDirty = true;
     InvalidateRect(g_wnd, nullptr, FALSE);
 }
 
@@ -1400,6 +1469,7 @@ void Select(int sel) {
     g_sel = sel;
     if (g_open)
         UpdatePreview();
+    g_sceneDirty = true;
     InvalidateRect(g_wnd, nullptr, FALSE);
 }
 
@@ -1418,6 +1488,7 @@ void Open() {
     g_wy = h * 0.75f;
     g_jx = g_jy = 0;
     g_dirty = false;
+    g_sceneDirty = true;
 
     SetWindowPos(g_wnd, HWND_TOPMOST, g_mon.left, g_mon.top, w, h, SWP_NOACTIVATE);
     g_open = true;
@@ -1462,6 +1533,32 @@ float IconSize() {
     return fmaxf(Sc(20), fminf(s, Sc(40)));
 }
 
+// Windows 11 dark theme: neutral dark surfaces, soft white text and the light
+// blue accent of dark mode. Nothing is pure black or saturated, so the view is
+// easy on the eyes at night.
+namespace theme {
+using Gdiplus::Color;
+const Color base(255, 32, 32, 32);          // #202020, window background
+const Color baseLow(255, 28, 28, 28);       // #1C1C1C, lower band
+const Color divider(255, 48, 48, 48);
+const Color card(255, 44, 44, 44);          // #2C2C2C, cards and wheel slices
+const Color cardStroke(255, 62, 62, 62);
+const Color selected(255, 57, 84, 97);      // accent at 25% over a card
+const Color text(255, 255, 255, 255);
+const Color textSecondary(255, 204, 204, 204);
+const Color textTertiary(255, 154, 154, 154);
+const Color accent(255, 96, 205, 255);      // #60CDFF
+const Color stickRim(255, 44, 44, 44);
+const Color stickDisc(255, 52, 52, 52);
+const Color stickWell(255, 38, 38, 38);
+}  // namespace theme
+
+// Segoe UI Variable is the Windows 11 font; Windows 10 doesn't have it.
+const WCHAR* FontName(const WCHAR* preferred, const WCHAR* fallback) {
+    Gdiplus::FontFamily family(preferred);
+    return family.IsAvailable() ? preferred : fallback;
+}
+
 void Paint(HDC dc, int w, int h) {
     using namespace Gdiplus;
     float span = 360.f / (g_count ? g_count : 1), rm = (g_ri + g_ro) / 2, rh = g_ri - Sc(16);
@@ -1470,16 +1567,17 @@ void Paint(HDC dc, int w, int h) {
         Graphics g(dc);
         g.SetSmoothingMode(SmoothingModeAntiAlias);
         g.SetTextRenderingHint(TextRenderingHintClearTypeGridFit);
-        SolidBrush top(Color(255, 22, 22, 22)), bottom(Color(255, 16, 16, 16));
+        SolidBrush top(theme::base), bottom(theme::baseLow);
         g.FillRectangle(&top, 0, 0, w, h / 2);
         g.FillRectangle(&bottom, 0, h / 2, w, h - h / 2);
-        Pen divider(Color(255, 54, 54, 54), Sc(1));
+        Pen divider(theme::divider, Sc(1));
         g.DrawLine(&divider, 0.f, h / 2.f, (float)w, h / 2.f);
         if (!g_count || g_sel < 0 || g_sel >= g_count)
             return;
 
-        SolidBrush white(Color(255, 255, 255, 255)), dim(Color(255, 185, 185, 185));
-        Color accent(255, 0, 150, 255);
+        SolidBrush white(theme::text), dim(theme::textSecondary), faint(theme::textTertiary);
+        const WCHAR* regular = FontName(L"Segoe UI Variable Text", L"Segoe UI");
+        const WCHAR* semibold = FontName(L"Segoe UI Variable Text Semibold", L"Segoe UI Semibold");
         StringFormat center;
         center.SetAlignment(StringAlignmentCenter);
         center.SetLineAlignment(StringAlignmentCenter);
@@ -1489,14 +1587,17 @@ void Paint(HDC dc, int w, int h) {
         WCHAR title[TITLE_LEN], text[TITLE_LEN + 20];
         ItemTitle(g_sel, title, TITLE_LEN);
         _snwprintf_s(text, _TRUNCATE, L"%d  \u00B7  %s", g_sel + 1, title);
-        Font titleFont(L"Segoe UI Semibold", Sc(20), FontStyleRegular, UnitPixel);
+        Font titleFont(FontName(L"Segoe UI Variable Display Semib", L"Segoe UI Semibold"), Sc(20),
+                       FontStyleRegular, UnitPixel);
         RectF titleRect(Sc(80), Sc(40), w - Sc(160), Sc(40)), measured;
         g.MeasureString(text, -1, &titleFont, titleRect, &center, &measured);
         headerIconX = measured.X - hsz - Sc(10);
         headerIconY = titleRect.Y + (titleRect.Height - hsz) / 2;
         g.DrawString(text, -1, &titleFont, titleRect, &center, &white);
 
-        SolidBrush frame(accent);
+        // The preview sits on a card, like the surfaces of the Start menu.
+        SolidBrush frame(theme::card);
+        Pen frameStroke(theme::cardStroke, Sc(1));
         GraphicsPath framePath;
         AddRoundRect(framePath,
                      RectF(g_preview.left - Sc(4), g_preview.top - Sc(4),
@@ -1504,14 +1605,15 @@ void Paint(HDC dc, int w, int h) {
                            g_preview.bottom - g_preview.top + Sc(8)),
                      Sc(10));
         g.FillPath(&frame, &framePath);
+        g.DrawPath(&frameStroke, &framePath);
 
-        SolidBrush slice(Color(255, 40, 40, 40)), selFill(Color(255, 0, 95, 184));
+        SolidBrush slice(theme::card), selFill(theme::selected);
         float cr = Sc(8), gap = Sc(4), ro = g_ro - cr, ri = g_ri + cr;
         float go = (gap / 2 + cr) / ro * 180 / PI, gi = (gap / 2 + cr) / ri * 180 / PI;
         int fs = g_count <= 6 ? 14 : g_count <= 10 ? 12 : 11;
-        Font labelFont(L"Segoe UI", Sc(fs), FontStyleRegular, UnitPixel);
-        Font labelBold(L"Segoe UI Semibold", Sc(fs), FontStyleRegular, UnitPixel);
-        Font numFont(L"Segoe UI", Sc(11), FontStyleRegular, UnitPixel);
+        Font labelFont(regular, Sc(fs), FontStyleRegular, UnitPixel);
+        Font labelBold(semibold, Sc(fs), FontStyleRegular, UnitPixel);
+        Font numFont(regular, Sc(11), FontStyleRegular, UnitPixel);
         StringFormat wrap;
         wrap.SetAlignment(StringAlignmentCenter);
         wrap.SetLineAlignment(StringAlignmentCenter);
@@ -1544,7 +1646,7 @@ void Paint(HDC dc, int w, int h) {
             swprintf_s(num, L"%d", i + 1);
             g.DrawString(num, -1, &numFont,
                          RectF(g_wx + rm * c - Sc(20), g_wy + rm * sn + isz / 2, Sc(40), Sc(16)),
-                         &center, i == g_sel ? &white : &dim);
+                         &center, i == g_sel ? &white : &faint);
 
             WCHAR label[TITLE_LEN];
             ItemTitle(i, label, TITLE_LEN);
@@ -1562,28 +1664,15 @@ void Paint(HDC dc, int w, int h) {
             PointF(g_wx + base * tc - half * ts, g_wy + base * ts + half * tc),
             PointF(g_wx + base * tc + half * ts, g_wy + base * ts - half * tc),
         };
-        SolidBrush pointer(accent);
+        SolidBrush pointer(theme::accent);
         g.FillPolygon(&pointer, tri, 3);
 
-        SolidBrush rim(Color(255, 72, 72, 72)), disc(Color(255, 122, 122, 122));
-        SolidBrush well(Color(255, 98, 98, 98)), knob(Color(255, 16, 58, 250));
-        float rd = rh * 0.9f, rw = rh * 0.62f, kr = rh * 0.26f;
+        SolidBrush rim(theme::stickRim), disc(theme::stickDisc);
+        SolidBrush well(theme::stickWell);
+        float rd = rh * 0.9f, rw = rh * 0.62f;
         g.FillEllipse(&rim, g_wx - rh, g_wy - rh, 2 * rh, 2 * rh);
         g.FillEllipse(&disc, g_wx - rd, g_wy - rd, 2 * rd, 2 * rd);
         g.FillEllipse(&well, g_wx - rw, g_wy - rw, 2 * rw, 2 * rw);
-
-        float R = Sc(80), travel = rh - kr * 0.55f;
-        float kx = g_wx + g_jx / R * travel, ky = g_wy + g_jy / R * travel;
-        Pen shaft(Color(110, 210, 210, 210), Sc(3));
-        shaft.SetStartCap(LineCapRound);
-        shaft.SetEndCap(LineCapRound);
-        g.DrawLine(&shaft, g_wx, g_wy, kx, ky);
-        if (g_jx * g_jx + g_jy * g_jy >= R * R * 0.9f) {
-            SolidBrush halo(Color(70, 255, 255, 255));
-            float hr = kr * 1.6f;
-            g.FillEllipse(&halo, kx - hr, ky - hr, 2 * hr, 2 * hr);
-        }
-        g.FillEllipse(&knob, kx - kr, ky - kr, 2 * kr, 2 * kr);
     }
 
     for (int k = 0; k < g_count; k++) {
@@ -1602,9 +1691,35 @@ void Paint(HDC dc, int w, int h) {
                    (int)hsz, 0, nullptr, DI_NORMAL);
 }
 
+// The area the thumbstick can reach, with its halo.
+RECT StickRect() {
+    float r = (g_ri - Sc(16)) * 1.3f + Sc(4);
+    return {(LONG)(g_wx - r), (LONG)(g_wy - r), (LONG)(g_wx + r) + 1, (LONG)(g_wy + r) + 1};
+}
+
+void PaintStick(HDC dc) {
+    using namespace Gdiplus;
+    Graphics g(dc);
+    g.SetSmoothingMode(SmoothingModeAntiAlias);
+    float rh = g_ri - Sc(16), kr = rh * 0.26f;
+    float R = Sc(80), travel = rh - kr * 0.55f;
+    float kx = g_wx + g_jx / R * travel, ky = g_wy + g_jy / R * travel;
+    Pen shaft(Color(90, 255, 255, 255), Sc(3));
+    shaft.SetStartCap(LineCapRound);
+    shaft.SetEndCap(LineCapRound);
+    g.DrawLine(&shaft, g_wx, g_wy, kx, ky);
+    if (g_jx * g_jx + g_jy * g_jy >= R * R * 0.9f) {
+        SolidBrush halo(Color(60, 96, 205, 255));
+        float hr = kr * 1.6f;
+        g.FillEllipse(&halo, kx - hr, ky - hr, 2 * hr, 2 * hr);
+    }
+    SolidBrush knob(theme::accent);
+    g.FillEllipse(&knob, kx - kr, ky - kr, 2 * kr, 2 * kr);
+}
+
 LRESULT CALLBACK KeyboardProc(int code, WPARAM wp, LPARAM lp) {
     auto* k = (KBDLLHOOKSTRUCT*)lp;
-    if (code != HC_ACTION || (k->flags & LLKHF_INJECTED))
+    if (code != HC_ACTION || k->dwExtraInfo == INPUT_TAG)
         return CallNextHookEx(nullptr, code, wp, lp);
 
     bool down = wp == WM_KEYDOWN || wp == WM_SYSKEYDOWN;
@@ -1707,12 +1822,24 @@ struct Closing {
     HWND w;
     DWORD start;
     bool forced;
+    HWND popup;    // last active popup before the window was asked to close
+    bool enabled;  // whether the window took input before that
 };
 
 Closing g_closing[MAXRAW];
 int g_closingCount;
 
 bool ForceClose(HWND hwnd) {
+    // The frame of a Microsoft Store app belongs to ApplicationFrameHost.exe,
+    // which hosts the frames of all such apps. The app itself owns the core
+    // window inside the frame.
+    WCHAR cls[64] = L"";
+    GetClassName(hwnd, cls, 64);
+    if (!lstrcmpW(cls, L"ApplicationFrameWindow")) {
+        hwnd = FindWindowEx(hwnd, nullptr, L"Windows.UI.Core.CoreWindow", nullptr);
+        if (!hwnd)
+            return false;
+    }
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
     if (!pid || pid == GetCurrentProcessId())
@@ -1726,7 +1853,8 @@ bool ForceClose(HWND hwnd) {
     if (QueryFullProcessImageNameW(process, 0, path, &len)) {
         PCWSTR name = wcsrchr(path, L'\\');
         name = name ? name + 1 : path;
-        if (lstrcmpiW(name, L"explorer.exe") && lstrcmpiW(name, L"windhawk.exe"))
+        if (lstrcmpiW(name, L"explorer.exe") && lstrcmpiW(name, L"windhawk.exe") &&
+            lstrcmpiW(name, L"ApplicationFrameHost.exe"))
             ok = TerminateProcess(process, 1);
     }
     CloseHandle(process);
@@ -1753,10 +1881,18 @@ void CheckClosing() {
         if (IsWindow(c.w))
             DwmGetWindowAttribute(c.w, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
         bool gone = !IsWindow(c.w) || !IsWindowVisible(c.w) || cloaked;
-        bool asks = !gone && (!IsWindowEnabled(c.w) || GetLastActivePopup(c.w) != c.w);
+        HWND popup = gone ? nullptr : GetLastActivePopup(c.w);
+        bool blocked = !gone && !IsWindowEnabled(c.w);
+        bool asks = !gone && (blocked || popup != c.w);
+        // Only a question that appeared because of the close request ends the
+        // app: a dialog window that wasn't there before, or the window being
+        // blocked by one since then. A popup that was already open, such as a
+        // Find dialog, or a window that is just slow to close doesn't.
+        bool question = asks && ((blocked && c.enabled) ||
+                                 (popup != c.w && popup != c.popup && IsWindowVisible(popup)));
         DWORD age = now - c.start;
         bool act = !c.forced && ((asks && age > 300) || (!asks && age > 5000));
-        if (act && settings.force && ForceClose(c.w)) {
+        if (act && question && settings.force && ForceClose(c.w)) {
             c.forced = true;
             c.start = now;
             i++;
@@ -1798,7 +1934,8 @@ void OnFrame() {
     }
     if (g_dirty) {
         g_dirty = false;
-        RedrawWindow(g_wnd, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW);
+        RECT stick = StickRect();
+        RedrawWindow(g_wnd, &stick, nullptr, RDW_INVALIDATE | RDW_UPDATENOW);
     }
 }
 
@@ -1831,8 +1968,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     return 0;
                 KillTimer(hwnd, 3);
                 for (int k = 0; k < g_pendingCount; k++)
-                    SetWindowPos(g_pendingOthers[k], g_pendingPrimary, 0, 0, 0, 0,
-                                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+                    if (!IsOnTop(g_pendingOthers[k]))
+                        Raise(g_pendingOthers[k]);
                 return 0;
             }
             if (wp != 1)
@@ -1885,9 +2022,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     bool known = false;
                     for (int k = 0; k < g_closingCount; k++)
                         known |= g_closing[k].w == w;
-                    PostMessage(w, WM_CLOSE, 0, 0);
                     if (!known && g_closingCount < MAXRAW)
-                        g_closing[g_closingCount++] = {w, GetTickCount(), false};
+                        g_closing[g_closingCount++] = {w, GetTickCount(), false,
+                                                       GetLastActivePopup(w),
+                                                       IsWindowEnabled(w) != FALSE};
+                    PostMessage(w, WM_CLOSE, 0, 0);
                 }
                 SetTimer(hwnd, 4, 100, nullptr);
             }
@@ -1911,18 +2050,34 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             HDC dc = BeginPaint(hwnd, &ps);
             RECT rc;
             GetClientRect(hwnd, &rc);
-            if (!g_mem)
+            if (!g_mem) {
                 g_mem = CreateCompatibleDC(dc);
+                g_frame = CreateCompatibleDC(dc);
+            }
             if (rc.right != g_bmpSize.cx || rc.bottom != g_bmpSize.cy) {
                 HBITMAP bmp = CreateCompatibleBitmap(dc, rc.right, rc.bottom);
+                HBITMAP frameBmp = CreateCompatibleBitmap(dc, rc.right, rc.bottom);
                 SelectObject(g_mem, bmp);
+                SelectObject(g_frame, frameBmp);
                 if (g_bmp)
                     DeleteObject(g_bmp);
+                if (g_frameBmp)
+                    DeleteObject(g_frameBmp);
                 g_bmp = bmp;
+                g_frameBmp = frameBmp;
                 g_bmpSize = {rc.right, rc.bottom};
+                g_sceneDirty = true;
             }
-            Paint(g_mem, rc.right, rc.bottom);
-            BitBlt(dc, 0, 0, rc.right, rc.bottom, g_mem, 0, 0, SRCCOPY);
+            if (g_sceneDirty) {
+                g_sceneDirty = false;
+                Paint(g_mem, rc.right, rc.bottom);
+            }
+            const RECT& p = ps.rcPaint;
+            int pw = p.right - p.left, ph = p.bottom - p.top;
+            BitBlt(g_frame, p.left, p.top, pw, ph, g_mem, p.left, p.top, SRCCOPY);
+            if (g_count && g_sel >= 0 && g_sel < g_count)
+                PaintStick(g_frame);
+            BitBlt(dc, p.left, p.top, pw, ph, g_frame, p.left, p.top, SRCCOPY);
             EndPaint(hwnd, &ps);
             return 0;
         }
@@ -1962,10 +2117,14 @@ DWORD WINAPI ThreadProc(LPVOID) {
     DestroyWindow(g_wnd);
     if (g_mem)
         DeleteDC(g_mem);
+    if (g_frame)
+        DeleteDC(g_frame);
     if (g_bmp)
         DeleteObject(g_bmp);
-    g_mem = nullptr;
-    g_bmp = nullptr;
+    if (g_frameBmp)
+        DeleteObject(g_frameBmp);
+    g_mem = g_frame = nullptr;
+    g_bmp = g_frameBmp = nullptr;
     g_bmpSize = {};
     UnregisterClass(wc.lpszClassName, g_inst);
     Gdiplus::GdiplusShutdown(gdiplusToken);
@@ -1999,8 +2158,8 @@ using namespace common;
 
 enum { MODE_OFF, MODE_INPUT, MODE_MESSAGES };
 constexpr UINT WM_APP_SCROLL = WM_APP + 1;
+constexpr UINT WM_APP_MOUSEHOOK = WM_APP + 2;
 constexpr WORD CTRL_KEYS[2] = {VK_LCONTROL, VK_RCONTROL};
-constexpr DWORD ALTGR_CTRL_SCAN = 0x21D;
 
 struct Job {
     int n, src, delta;
@@ -2014,9 +2173,13 @@ HANDLE g_thread, g_worker;
 DWORD g_threadId, g_workerId;
 HINSTANCE g_inst;
 
-// Used by the hook thread only. g_held: the key is physically down, but the
-// apps were told (or never knew otherwise) that it is up.
-bool g_held[2], g_used;
+// Used by the hook thread only.
+// g_ctrl: the Ctrl keys that are down, as the keyboard hook saw them.
+// g_held: the key is down, but the apps were told that it is up (HideCtrl).
+// The mouse hook is installed only while a Ctrl key is down.
+bool g_ctrl[2], g_held[2], g_wantMouse;
+HHOOK g_mouse;
+DWORD g_lastCheck;
 int g_n;
 HWND g_members[MAXMEMBERS];
 RECT g_zones[MAXMEMBERS], g_area;
@@ -2242,9 +2405,16 @@ void PostJob(const MSLLHOOKSTRUCT* m, bool horizontal, int src) {
         delete job;
 }
 
+void WantMouseHook(bool on) {
+    if (on == g_wantMouse)
+        return;
+    g_wantMouse = on;
+    PostThreadMessage(GetCurrentThreadId(), WM_APP_MOUSEHOOK, 0, 0);
+}
+
 // The hooks only decide and hand the scrolling over to the worker thread, so
-// they return quickly: a slow low-level hook delays all input, and Windows
-// removes it without notice.
+// they return quickly. Ctrl itself always reaches the apps: it is taken away
+// from them (HideCtrl) only at the first Ctrl + wheel over a split.
 LRESULT CALLBACK KeyboardProc(int code, WPARAM wp, LPARAM lp) {
     auto* kb = (KBDLLHOOKSTRUCT*)lp;
     if (code != HC_ACTION || kb->dwExtraInfo == INPUT_TAG)
@@ -2252,34 +2422,15 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM wp, LPARAM lp) {
     bool down = wp == WM_KEYDOWN || wp == WM_SYSKEYDOWN;
     int ctrl = kb->vkCode == VK_LCONTROL ? 0 : kb->vkCode == VK_RCONTROL ? 1 : -1;
 
-    if (ctrl >= 0 && down) {
-        if (g_held[ctrl])
-            return 1;
-        // Not held back: key repeats, the Ctrl that Windows adds to AltGr, Ctrl
-        // pressed together with Alt or Win or during a drag.
-        if (AnyHeld() || radial::g_open || kb->scanCode == ALTGR_CTRL_SCAN ||
-            Down(VK_CONTROL) || Down(VK_MENU) || Down(VK_LWIN) || Down(VK_RWIN) ||
-            Down(VK_LBUTTON) || Down(VK_RBUTTON) || Down(VK_MBUTTON))
-            return CallNextHookEx(nullptr, code, wp, lp);
-        POINT pt;
-        if (!GetCursorPos(&pt) || !FindGroup(pt))
-            return CallNextHookEx(nullptr, code, wp, lp);
-        g_held[ctrl] = true;
-        g_used = false;
-        return 1;
-    }
-
     if (ctrl >= 0) {
+        g_ctrl[ctrl] = down;
+        WantMouseHook(g_ctrl[0] || g_ctrl[1]);
         if (!g_held[ctrl])
             return CallNextHookEx(nullptr, code, wp, lp);
-        g_held[ctrl] = false;
-        if (!g_used) {
-            INPUT in[2];
-            int k = 0;
-            AddKey(in, k, CTRL_KEYS[ctrl], false, ctrl == 1);
-            AddKey(in, k, CTRL_KEYS[ctrl], true, ctrl == 1);
-            SendInput(k, in, sizeof(INPUT));
-        }
+        // The apps already think the key is up: its key repeats and its
+        // release aren't for them.
+        if (!down)
+            g_held[ctrl] = false;
         return 1;
     }
 
@@ -2294,10 +2445,22 @@ LRESULT CALLBACK MouseProc(int code, WPARAM wp, LPARAM lp) {
     if (code != HC_ACTION || m->dwExtraInfo == INPUT_TAG)
         return CallNextHookEx(nullptr, code, wp, lp);
 
+    bool held = AnyHeld();
+    if (!held && !Down(VK_CONTROL)) {
+        // No Ctrl key is down after all, for example because its release went
+        // to the lock screen: stop watching the mouse.
+        if (GetTickCount() - g_lastCheck > 1000) {
+            g_lastCheck = GetTickCount();
+            g_ctrl[0] = g_ctrl[1] = false;
+            WantMouseHook(false);
+        }
+        return CallNextHookEx(nullptr, code, wp, lp);
+    }
+
     if (wp == WM_MOUSEWHEEL || wp == WM_MOUSEHWHEEL) {
-        bool held = AnyHeld();
-        if (radial::g_open || (!held && (!Down(VK_CONTROL) || Down(VK_MENU) || Down(VK_LWIN) ||
-                                         Down(VK_RWIN))))
+        // Not with Alt or Win: that includes AltGr, which Windows reports as
+        // Ctrl + Alt.
+        if (radial::g_open || (!held && (Down(VK_MENU) || Down(VK_LWIN) || Down(VK_RWIN))))
             return CallNextHookEx(nullptr, code, wp, lp);
         int src = held ? SourceZone(m->pt, true) : -1;
         if (src < 0 && FindGroup(m->pt))
@@ -2306,12 +2469,11 @@ LRESULT CALLBACK MouseProc(int code, WPARAM wp, LPARAM lp) {
             ShowCtrl();
             return CallNextHookEx(nullptr, code, wp, lp);
         }
-        g_used = true;
         PostJob(m, wp == WM_MOUSEHWHEEL, src);
         return CallNextHookEx(nullptr, code, wp, lp);
     }
 
-    if (!AnyHeld())
+    if (!held)
         return CallNextHookEx(nullptr, code, wp, lp);
     bool button = wp == WM_LBUTTONDOWN || wp == WM_RBUTTONDOWN || wp == WM_MBUTTONDOWN ||
                   wp == WM_XBUTTONDOWN;
@@ -2325,16 +2487,25 @@ DWORD WINAPI ThreadProc(LPVOID) {
     GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                       (LPCWSTR)ThreadProc, &g_inst);
-    g_held[0] = g_held[1] = g_used = false;
+    g_ctrl[0] = g_ctrl[1] = g_held[0] = g_held[1] = g_wantMouse = false;
+    g_mouse = nullptr;
     g_n = 0;
     HHOOK keyboard = SetWindowsHookEx(WH_KEYBOARD_LL, KeyboardProc, g_inst, 0);
-    HHOOK mouse = SetWindowsHookEx(WH_MOUSE_LL, MouseProc, g_inst, 0);
-    Wh_Log(L"Sync scroll hooks %s", keyboard && mouse ? L"installed" : L"failed");
+    Wh_Log(L"Sync scroll keyboard hook %s", keyboard ? L"installed" : L"failed");
     MSG msg;
-    while (GetMessage(&msg, nullptr, 0, 0) > 0)
-        DispatchMessage(&msg);
-    if (mouse)
-        UnhookWindowsHookEx(mouse);
+    while (GetMessage(&msg, nullptr, 0, 0) > 0) {
+        if (msg.message != WM_APP_MOUSEHOOK)
+            continue;
+        if (g_wantMouse && !g_mouse) {
+            g_mouse = SetWindowsHookEx(WH_MOUSE_LL, MouseProc, g_inst, 0);
+        } else if (!g_wantMouse && g_mouse) {
+            UnhookWindowsHookEx(g_mouse);
+            g_mouse = nullptr;
+        }
+    }
+    if (g_mouse)
+        UnhookWindowsHookEx(g_mouse);
+    g_mouse = nullptr;
     if (keyboard)
         UnhookWindowsHookEx(keyboard);
     ShowCtrl();
@@ -2342,11 +2513,10 @@ DWORD WINAPI ThreadProc(LPVOID) {
 }
 
 void LoadSettings() {
-    PCWSTR value = Wh_GetStringSetting(L"syncScroll");
-    g_mode = !lstrcmpW(value, L"disabled")   ? MODE_OFF
-             : !lstrcmpW(value, L"messages") ? MODE_MESSAGES
-                                             : MODE_INPUT;
-    Wh_FreeStringSetting(value);
+    auto value = WindhawkUtils::StringSetting::make(L"syncScroll");
+    g_mode = !lstrcmpW(value.get(), L"disabled")   ? MODE_OFF
+             : !lstrcmpW(value.get(), L"messages") ? MODE_MESSAGES
+                                                   : MODE_INPUT;
 }
 
 bool Start() {
@@ -2409,7 +2579,6 @@ void WhTool_ModUninit() {
     if (g_splitRunning)
         split::Stop();
     Wh_Log(L"Stopped");
-    TerminateProcess(GetCurrentProcess(), 0);
 }
 
 void WhTool_ModSettingsChanged() {
