@@ -2,7 +2,7 @@
 // @id              macos-minimize-animation
 // @name            MacOS Minimize Animation
 // @description     Smooth macOS-style genie minimize, restore (open) and optional close animations for every window.
-// @version         3.2.2
+// @version         3.3.0
 // @author          Abdullah Masood
 // @github          https://github.com/Abdullah-Masood-05
 // @include         *
@@ -16,10 +16,17 @@
 # MacOS Minimize Animation
 
 Brings the classic macOS **genie** effect to Windows. When you minimize a window
-it warps and flows down into the taskbar; when you restore it, it flows back out.
+it flows into its taskbar button or WinMac Dock icon and flows back out when restored.
 Apps opening and windows closing get a genie too.
 
 Definitely not inspired from MacOS.
+
+## WinMac Dock support
+
+With a compatible WinMac Dock running, animations target the matching Dock icon and prefer 
+the Dock on the window's monitor. If no icon is available, the Dock center is used. 
+Without a Dock, animations use the Windows taskbar. 
+Set **Animation end width (pixels)** to 0 for automatic sizing or 1–64 for a fixed width.
 
 ## Animation style
 There are two genie styles, selectable in the settings (**Animation style**):
@@ -65,6 +72,11 @@ The Firefox-family first-window check in the app-launch animation (v3.1.7) is
 ported from **ReDrag**'s [Windows Animations](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/windows-animations.wh.cpp)
 mod, which found that hiding a Gecko browser's first window with a DWM cloak can
 make it open a second window. Thanks!
+
+WinMac Dock support (v3.3.0) - Dock icon targeting, side-dock genie, the Dock
+reveal and the animation end width setting - was contributed by **Asteski** -
+<https://github.com/Asteski> - the author of [WinMac Dock](https://github.com/Asteski/WinMac-Dock).
+Thanks!
 
 ## Known issues
 - On multi-monitor setups (especially the secondary display), the genie can
@@ -154,10 +166,10 @@ minimize behind it without the system's own animation getting in the way.
   window is on, targeting that monitor's taskbar edge, instead of always the
   primary monitor's. **Experimental and off by default.** (The close genie always
   plays on the window's own monitor.)
-- **Unhide taskbar (for taskbar auto-hide)** - if your taskbar is set to
+- **Unhide taskbar or Dock during animation** - if your taskbar is set to
   auto-hide, briefly reveal it during the minimize so the genie has a visible dock
-  to flow into, then let it slide back once the animation finishes.
-- **Taskbar unhide duration** - how long (ms) to keep the taskbar revealed before
+  to flow into. With WinMac Dock, reveal the target Dock during minimize and restore.
+- **Taskbar or Dock unhide duration** - how long (ms) to keep the taskbar revealed before
   performing the deferred minimize on the auto-hide path.
 - **Animation style** - Classic (this mod's original renderer, default) or
   Modern (Potassiumuncher's Direct2D engine).
@@ -231,15 +243,15 @@ Check out the documentation
     Play the genie on the monitor the window is on and target that monitor's
     taskbar edge, instead of always the primary monitor's.
 - unhide_taskbar: true
-  $name: Unhide taskbar (for taskbar auto-hide)
+  $name: Unhide taskbar or Dock during animation
   $description: >-
     If the taskbar is set to auto-hide, briefly reveal it during the minimize so
-    the genie has a visible dock to flow into, then let it slide back afterwards.
+    the genie has a visible target. When targeting WinMac Dock, reveal the Dock during minimize and restore instead.
 - unhide_duration_ms: 450
-  $name: Taskbar unhide duration (ms)
+  $name: Taskbar or Dock unhide duration (ms)
   $description: >-
     How long to keep the taskbar revealed before performing the deferred minimize
-    on the auto-hide path. Clamped to 0-5000.
+    on the auto-hide path. WinMac Dock stays visible for at least the animation duration. Clamped to 0-5000.
 - engine: classic
   $name: Animation style
   $description: >-
@@ -250,6 +262,9 @@ Check out the documentation
   $options:
   - modern: Modern genie (Direct2D engine by Potassiumuncher)
   - classic: Classic genie (original)
+- end_width_px: 0
+  $name: Animation end width (pixels)
+  $description: Set 0 to match the WinMac Dock icon size automatically. Set 1-64 for a fixed width in screen pixels. Without an icon size, automatic uses the original engine width.
 - tile_count: 35
   $name: Animation tile count (modern style)
   $description: >-
@@ -343,7 +358,63 @@ SetWindowPos_t SetWindowPos_Original;
 // once). Ported from Potassiumuncher's genie engine.
 ID2D1Factory* g_d2dFactory = nullptr;
 
+static HANDLE dockEngineActive;
+struct DockLocation {
+    HWND window{};
+    POINT point{};
+    int edge{};
+    int iconPixels{};
+    HMONITOR preferred{};
+    wchar_t itemKey[64]{};
+};
+
+static BOOL CALLBACK FindWinMacDock(HWND candidate, LPARAM param) {
+    auto& result = *reinterpret_cast<DockLocation*>(param);
+    int edge = (int)(INT_PTR)GetPropW(candidate, L"WinMac.Dock.GenieEdge.v2");
+    if (edge < 1 || edge > 4) return TRUE;
+    DWORD center = (DWORD)(UINT_PTR)GetPropW(candidate, L"WinMac.Dock.GenieCenter.v2");
+    if (!center) return TRUE;
+    POINT midpoint{(short)LOWORD(center), (short)HIWORD(center)};
+    bool preferred = MonitorFromPoint(midpoint, MONITOR_DEFAULTTONEAREST) == result.preferred;
+    if (result.window && !preferred) return TRUE;
+    DWORD item = (DWORD)(UINT_PTR)GetPropW(candidate, result.itemKey);
+    result.window = candidate;
+    result.edge = edge;
+    result.iconPixels = std::clamp((int)(INT_PTR)GetPropW(candidate, L"WinMac.Dock.GenieIconPixels.v2"), 0, 256);
+    result.point = item ? POINT{(short)LOWORD(item), (short)HIWORD(item)} : midpoint;
+    return !preferred;
+}
+
+static void PlaceGenieFrame(HWND ghost, const DockLocation& dock, bool firstFrame) {
+    HWND material = dock.window ? (HWND)GetPropW(dock.window, L"WinMac.Dock.GenieMaterial.v3") : nullptr;
+    DWORD artworkPid = 0, materialPid = 0;
+    if (material && GetWindowThreadProcessId(dock.window, &artworkPid) &&
+        GetWindowThreadProcessId(material, &materialPid) && artworkPid == materialPid &&
+        IsWindowVisible(dock.window) && IsWindowVisible(material)) {
+        // Insert only our own HWND; both Dock windows keep their relative order.
+        if (firstFrame || GetWindow(ghost, GW_HWNDPREV) != dock.window)
+            if (!SetWindowPos(ghost, dock.window, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE |
+                              SWP_NOACTIVATE | SWP_NOOWNERZORDER | (firstFrame ? SWP_SHOWWINDOW : 0)) && firstFrame)
+                ShowWindow(ghost, SW_SHOWNOACTIVATE);
+    } else if (firstFrame) {
+        ShowWindow(ghost, SW_SHOWNOACTIVATE);
+    }
+}
+
+static DockLocation GetWinMacDock(HWND app) {
+    DockLocation result{};
+    // SetPropW with a string name registers a global atom, so if this atom does
+    // not exist no window carries the Dock property: skip the window scan and
+    // keep the taskbar path exactly as it was without WinMac Dock.
+    if (!GlobalFindAtomW(L"WinMac.Dock.GenieEdge.v2")) return result;
+    result.preferred = MonitorFromWindow(app, MONITOR_DEFAULTTONEAREST);
+    swprintf_s(result.itemKey, L"WinMac.Dock.GenieItem.%llX", (unsigned long long)(UINT_PTR)app);
+    EnumWindows(FindWinMacDock, (LPARAM)&result);
+    return result;
+}
+
 struct MacGenieAnimData {
+    DockLocation dock;
     HWND hRealWnd;
     HBITMAP hBitmap;      // 32-bit top-down premultiplied DIB snapshot (w x h)
     void* pBits;          // its bits (fed straight to D2D CreateBitmap)
@@ -409,6 +480,14 @@ std::atomic<bool> g_unhideEnabled{true};
 // v2.2.0 strip-based GDI genie ("classic", the default style).
 std::atomic<bool> g_classicEngine{true};
 // Mesh resolution of the modern engine (Potassiumuncher's tile-count setting).
+static std::atomic<int> g_endWidth{0};
+
+static float EndWidth(const DockLocation& dock, float original) {
+    int width = g_endWidth.load(std::memory_order_relaxed);
+    if (!width) width = dock.iconPixels;
+    return width > 0 ? (float)width : original;
+}
+
 std::atomic<int> g_tileCount{TILE_COUNT_DEFAULT};
 // Close animation (MrCrustyToast): on by default; hide-as-close off by default.
 std::atomic<bool> g_closeAnimation{true};
@@ -471,6 +550,7 @@ void MacGenieLoadSettings() {
     g_classicEngine.store(wcscmp(engine, L"classic") == 0, std::memory_order_relaxed);
     Wh_FreeStringSetting(engine);
 
+    g_endWidth.store(std::clamp(Wh_GetIntSetting(L"end_width_px"), 0, 64), std::memory_order_relaxed);
     int tiles = Wh_GetIntSetting(L"tile_count");
     if (tiles < TILE_COUNT_MIN) tiles = TILE_COUNT_MIN;
     if (tiles > TILE_COUNT_MAX) tiles = TILE_COUNT_MAX;
@@ -1092,6 +1172,17 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
         22.0f,
         scaledIconSize
     };
+    if (!data->isClosing) {
+        if (data->dock.edge == 2 || data->dock.edge == 3)
+            iGeom.height = EndWidth(data->dock, iGeom.height);
+        else
+            iGeom.width = EndWidth(data->dock, iGeom.width);
+        iGeom.x = data->targetDockX - iGeom.width * 0.5f;
+    }
+    if (data->dock.window) {
+        iGeom.x = data->dock.point.x - iGeom.width * 0.5f;
+        iGeom.y = data->dock.point.y - iGeom.height * 0.5f;
+    }
     // Close animation: flow to the middle of the chosen screen edge instead of
     // the taskbar button (MrCrustyToast's close targets).
     if (data->isClosing) {
@@ -1140,6 +1231,8 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
     // with no band below the taskbar top ever wasted.
     int boundLeft   = ((origLeftB < dockXB) ? origLeftB : dockXB) - padX;
     int boundRight  = (((origLeftB + wB) > dockXB) ? (origLeftB + wB) : dockXB) + padX;
+    boundLeft = std::min(boundLeft, (int)floorf(iGeom.x));
+    boundRight = std::max(boundRight, (int)ceilf(iGeom.x + iGeom.width));
     int boundTop    = (int)fminf(wGeom.y, iGeom.y);
     int boundBottom = (int)fmaxf(wGeom.y + wGeom.height, iGeom.y + iGeom.height);
 
@@ -1287,7 +1380,13 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
                     // subtraction below - vLeft/vTop are negative on monitors left of
                     // / above the primary. Every mesh coordinate passes through here
                     // exactly once; nothing downstream re-offsets.
-                    CalculateLampVertex(tx, ty, t, wGeom, iGeom, &px, &py);
+                    if (data->dock.edge == 2 || data->dock.edge == 3) {
+                        Geometry w = {wGeom.y, wGeom.x, wGeom.height, wGeom.width};
+                        Geometry i = {iGeom.y, iGeom.x, iGeom.height, iGeom.width};
+                        CalculateLampVertex(ty, tx, t, w, i, &py, &px);
+                    } else {
+                        CalculateLampVertex(tx, ty, t, wGeom, iGeom, &px, &py);
+                    }
                     grid[y][x] = D2D1::Point2F(px - vLeft, py - vTop);
                 }
             }
@@ -1438,9 +1537,7 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
                 BLENDFUNCTION bf = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
                 UpdateLayeredWindow(hGhost, hScreenDC, &ptDst, &sz, hMemDC, &ptSrc, 0, &bf, ULW_ALPHA);
 
-                if (firstFrame) {
-                    ShowWindow(hGhost, SW_SHOWNOACTIVATE);
-                }
+                PlaceGenieFrame(hGhost, data->dock, firstFrame);
             }
 
             if (lastFrame) break;
@@ -1651,6 +1748,11 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
             dockY = (float)mon.top;
         }
     }
+    if (data->dock.window) {
+        dockX = data->dock.point.x;
+        dockY = (float)data->dock.point.y;
+    }
+    float desiredY = dockY;
     const float dockXf = (float)dockX;
     // Which end leads the morph. Taken from the window's mid-line so a dock that
     // lands exactly on the window edge still picks a sane direction, and kept
@@ -1660,9 +1762,13 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
     const bool dockAbove = dockY < ((float)origTop + origBottomF) * 0.5f;
     if (dockAbove) { if (dockY > (float)origTop) dockY = (float)origTop; }
     else           { if (dockY < origBottomF)    dockY = origBottomF; }
+    // Only a WinMac Dock icon may sit inside the window's vertical span; the
+    // taskbar and close targets keep the v3.2.2 clamped endpoint.
+    const float dockOffsetY = data->dock.window ? desiredY - dockY : 0.0f;
     float neckW = W * 0.03f;
     if (neckW < 12.0f) neckW = 12.0f;
     if (neckW > 60.0f) neckW = 60.0f;
+    if (!data->isClosing) neckW = EndWidth(data->dock, neckW);
 
     // Bounding box the funnel can occupy. Both the window's own monitor and the
     // monitor it funnels to are unioned; the box is trimmed to them but never
@@ -1673,8 +1779,13 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
     int boundRight  = ((origLeft + W) > dockX ? (origLeft + W) : dockX) + W / 2;
     // Span from the dock edge up/down to the window so a top taskbar (dock above
     // the window) is inside the canvas instead of below the box.
+    boundLeft = std::min(boundLeft, (int)floorf(dockX - neckW * 0.5f));
+    boundRight = std::max(boundRight, (int)ceilf(dockX + neckW * 0.5f));
     int boundTop    = std::min<int>(origTop, (int)dockY);
     int boundBottom = std::max<int>(origTop + H, (int)dockY);
+    // The Dock endpoint offset moves every row by up to dockOffsetY.
+    if (dockOffsetY < 0.0f) boundTop    += (int)floorf(dockOffsetY);
+    if (dockOffsetY > 0.0f) boundBottom += (int)ceilf(dockOffsetY);
     RECT monUnion = GetGenieMonitorUnion(data->targetRect, data->hMon);
     ClampGenieCanvas(boundLeft, boundTop, boundRight, boundBottom,
                      data->targetRect, dockX, monUnion);
@@ -1797,7 +1908,7 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
                 float v = (float)k / (float)H;
                 float e = morphAt(dockAbove ? (1.0f - v) : v, tt);
                 float idY = (float)origTop + (float)H * v;
-                yb[k] = idY + (dockY - idY) * e;
+                yb[k] = idY + (dockY - idY) * e + dockOffsetY * tt;
             }
 
             int kSeg = 0;
@@ -1857,9 +1968,7 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
             bf.AlphaFormat = AC_SRC_ALPHA;
             UpdateLayeredWindow(hGhost, hScreenDC, &ptDst, &sz, hCanvasDC, &ptSrc, 0, &bf, ULW_ALPHA);
 
-            if (firstFrame) {
-                ShowWindow(hGhost, SW_SHOWNOACTIVATE);
-            }
+            PlaceGenieFrame(hGhost, data->dock, firstFrame);
 
             if (lastFrame) break;
             if (g_unloading.load(std::memory_order_relaxed)) break;
@@ -2096,8 +2205,15 @@ bool StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle,
     // taskbars start near the monitor's left, centered ones at its middle.
     // A close doesn't target the taskbar (the render thread picks the edge from the
     // close-direction setting), so it skips the registry, cursor and UIA lookups.
-    int learnedTargetX = mi.rcMonitor.left + monWidth / 2;
-    if (!isClosing) {
+    DockLocation dock = isClosing ? DockLocation{} : GetWinMacDock(hWnd);
+    if (dock.window && g_unhideEnabled.load(std::memory_order_relaxed)) {
+        static const UINT revealDock = RegisterWindowMessageW(L"WinMac.Dock.GenieReveal.v1");
+        int holdMs = std::max(g_durationMs.load(std::memory_order_relaxed),
+                              g_unhideDurationMs.load(std::memory_order_relaxed));
+        if (revealDock) PostMessageW(dock.window, revealDock, (WPARAM)holdMs, 0);
+    }
+    int learnedTargetX = dock.window ? dock.point.x : mi.rcMonitor.left + monWidth / 2;
+    if (!dock.window && !isClosing) {
         DWORD alignVal = 1, dataSize = sizeof(alignVal);
         RegGetValueW(HKEY_CURRENT_USER,
                      L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
@@ -2147,6 +2263,8 @@ bool StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle,
 
     MacGenieAnimData* data = new MacGenieAnimData();
     data->hRealWnd = hWnd;
+    data->dock = dock;
+    if (dock.window) hMon = MonitorFromPoint(dock.point, MONITOR_DEFAULTTONEAREST);
     data->targetRect = rect;
     data->hMon = hMon;
     data->width = w;
@@ -2853,7 +2971,7 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
                 // (Potassiumuncher's engine, reconciled with MINE's cloak hide.)
                 BOOL requestedUnhide = FALSE;
                 HWND hNext = NULL;
-                if (g_unhideEnabled.load(std::memory_order_relaxed)) {
+                if (g_unhideEnabled.load(std::memory_order_relaxed) && !GetWinMacDock(hWnd).window) {
                     HWND hTray = FindTaskbarForMonitor(MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST));
                     if (hTray) {
                         APPBARDATA abd = { sizeof(APPBARDATA) };
@@ -3035,6 +3153,7 @@ DWORD WINAPI MacGenieLaunchThread(LPVOID lpParam) {
 }
 
 BOOL Wh_ModInit() {
+    dockEngineActive = CreateEventW(nullptr, TRUE, TRUE, L"Local\\WinMac.Dock.OriginalGenie.v2");
     MacGenieLoadSettings();
 
     // Direct2D factory for the genie renderer (Potassiumuncher's engine). Released
@@ -3067,6 +3186,7 @@ void Wh_ModBeforeUninit() {
 }
 
 void Wh_ModUninit() {
+    if (dockEngineActive) CloseHandle(dockEngineActive);
     {
         // Normally already set by Wh_ModBeforeUninit; cheap insurance.
         std::lock_guard<std::mutex> lock(g_WorkerThreadsMutex);
