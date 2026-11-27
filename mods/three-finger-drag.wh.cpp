@@ -2,7 +2,7 @@
 // @id              three-finger-drag
 // @name            Three Finger Drag
 // @description     Move and snap any window by dragging three fingers on a precision touchpad, like on macOS
-// @version         1.1.0
+// @version         1.2.0
 // @author          rodrigothomazi
 // @github          https://github.com/RodrigoThomazi
 // @include         *
@@ -44,7 +44,10 @@ PowerToys FancyZones, the way a title bar drag does:
   where the window will go.
 - A maximized or snapped window goes back to its previous size as you drag it,
   keeping the spot you grabbed under the cursor, the way a title bar drag does.
-- Acceleration: faster finger movements take the cursor farther.
+- The cursor goes as fast as with one finger, following the touchpad cursor
+  speed set in Windows, and faster finger movements take it farther.
+- A palm resting on the touchpad, e.g. while two fingers scroll, is ignored:
+  it neither starts a drag nor ends one.
 - Between monitors, the cursor stops at the shared edge for a moment, so that
   a window can be snapped there too.
 - Press **Esc** while dragging to put the window back where it was.
@@ -52,7 +55,8 @@ PowerToys FancyZones, the way a title bar drag does:
 - Optional: macOS drag mode, where the fingers hold the left mouse button
   instead, to select text, drag files or move a window by its title bar.
 - Lifting and putting your fingers back within a configurable delay keeps
-  dragging the same window.
+  dragging the same window, while fewer fingers used meanwhile, e.g. one to
+  move the cursor, drop it right away.
 
 ## Windows touchpad gestures
 
@@ -122,11 +126,12 @@ itself runs. Both mods are under the GPL v3.
   - auto: Automatic
   - "3": Three fingers
   - "4": Four fingers
-- speed: 150
+- relativeSpeed: 100
   $name: Speed (%)
   $description: >-
-    At 100, moving across the whole touchpad moves across the whole width of
-    the main screen.
+    Relative to the touchpad cursor speed set in Windows, which the mod
+    follows as it changes. At 100, the cursor goes as fast as it does with one
+    finger.
 - acceleration: medium
   $name: Acceleration
   $description: Faster finger movements take the cursor farther.
@@ -144,7 +149,9 @@ itself runs. Both mods are under the GPL v3.
   $name: Release delay (ms)
   $description: >-
     How long the window stays grabbed after you lift your fingers. Putting
-    them back within this time keeps dragging it. 0 drops it right away.
+    them back within this time keeps dragging it, while using fewer fingers,
+    e.g. one to move the cursor or two to scroll, drops it right away. 0
+    drops it as soon as you lift them.
 - window:
   - activate: true
     $name: Bring the window to the front
@@ -254,10 +261,10 @@ itself runs. Both mods are under the GPL v3.
 // Without an answer, e.g. from a thread which stopped responding, the window
 // is moved directly.
 //
-// The Windows swipe settings are read from the registry, which the Settings app
-// writes them to, and watched for changes. There's no API to change them, and
-// the registry alone is only read at sign in, so a conflict is pointed out
-// rather than fixed.
+// The Windows touchpad settings, the swipes and the cursor speed, are read from
+// the registry, which the Settings app writes them to, and watched for
+// changes. There's no API to change the swipes, and the registry alone is only
+// read at sign in, so a conflict is pointed out rather than fixed.
 //
 // All coordinates are physical: the worker thread is per monitor DPI aware.
 
@@ -284,7 +291,8 @@ struct {
     std::atomic<int> acceleration;
     // 0 for automatic.
     std::atomic<int> fingers;
-    std::atomic<int> speed;
+    // In percent of the touchpad cursor speed set in Windows.
+    std::atomic<int> relativeSpeed;
     std::atomic<int> startDistance;
     std::atomic<int> releaseDelay;
     std::atomic<bool> activate;
@@ -311,11 +319,20 @@ constexpr USAGE kUsageY = 0x31;
 constexpr USAGE kPageDigitizer = 0x0D;
 constexpr USAGE kUsageTouchPad = 0x05;
 constexpr USAGE kUsageTipSwitch = 0x42;
+constexpr USAGE kUsageConfidence = 0x47;
 constexpr USAGE kUsageContactId = 0x51;
 constexpr USAGE kUsageContactCount = 0x54;
 
 constexpr UINT_PTR kReleaseTimerId = 1;
 constexpr UINT_PTR kNativeTimerId = 2;
+
+// How long fingers landing within the release delay have to make up the
+// count of the drag, one landing after the other, before they're taken for
+// fewer fingers doing something else, which drops the window.
+constexpr UINT kReleaseLandingMs = 100;
+
+// No set of fingers: the keys of the sets take 24 bits.
+constexpr DWORD kNoIdsKey = 0xFFFFFFFF;
 
 // How long a native move waits for the loop to start before the window is
 // moved directly. It's only a safeguard, e.g. for a thread which stopped
@@ -364,8 +381,11 @@ constexpr int kLoopBehindMoves = 4;
 constexpr int kNativeCursorAhead = 3;
 constexpr int kNativeCursorPaced = 1;
 
-// How long a loop which takes nothing, because it's busy or because it's
-// over, holds the cursor back before the moves on their way are written off.
+// How long a loop which takes nothing holds the cursor back before the moves
+// on their way are written off: one which is still running and only busy, and
+// one whose state can't be asked, see LoopState. One which is over lets go of
+// the cursor at once.
+constexpr ULONGLONG kNativeCursorBusyMs = 500;
 constexpr ULONGLONG kNativeCursorStallMs = 200;
 
 // Finger speeds, in touchpad widths per second, between which acceleration
@@ -548,6 +568,8 @@ struct Device {
     std::vector<USHORT> fingerCollections;
     bool hasContactCount;
     USHORT contactCountCollection;
+    // Whether contacts say if they're a finger, rather than e.g. a palm.
+    bool hasConfidence;
     double rangeX;
     double rangeY;
     // In the device's physical unit, 0 if it doesn't report one.
@@ -562,6 +584,7 @@ struct Contact {
     LONG x;
     LONG y;
     bool tip;
+    bool confident;
 };
 
 std::vector<Contact> g_frame;
@@ -575,6 +598,8 @@ struct {
 
 HKEY g_touchpadKey;
 HANDLE g_touchpadKeyEvent;
+// The gain of the touchpad cursor speed set in Windows.
+double g_windowsCursorGain = 1;
 bool g_noticeRequested;
 
 // The windows this mod snapped, with the rect it gave them and the size they
@@ -622,11 +647,21 @@ struct {
     // The drag is on, and the release delay, if any, is running.
     bool dragging;
     bool releasePending;
+    // While the release delay runs: whether all the fingers came up since the
+    // drag let go, whether fewer fingers landed since, and the set of fingers
+    // down, with where it started.
+    bool releaseLifted;
+    bool releaseLanding;
+    DWORD releaseIdsKey;
+    double releaseStartX;
+    double releaseStartY;
     // Drag mode: the left button is held.
     bool buttonDown;
     // Where the cursor is being taken. Tracked here rather than read back,
-    // SendInput being processed asynchronously.
+    // SendInput being processed asynchronously. And where it was last sent,
+    // which differs while a position is held back for a slow loop.
     POINT cursor;
+    POINT cursorSent;
     double fracX;
     double fracY;
     // Move mode: the window being moved or resized, the helper of its
@@ -864,6 +899,7 @@ HWND ForegroundHelper() {
 }
 
 void MoveCursorTo(POINT pt) {
+    g_state.cursorSent = pt;
     HWND hHelperWnd = ForegroundHelper();
     if (hHelperWnd && PostMessage(hHelperWnd, g_helperCursorMessage, 0,
                                   PackPair(pt.x, pt.y))) {
@@ -918,7 +954,7 @@ bool AreSwipesOn(HKEY key, PCWSTR fingers) {
 }
 
 // Reads the settings and asks to be told of the next change.
-void ReadWindowsSwipes() {
+void ReadTouchpadSettings() {
     if (!g_touchpadKey) {
         g_windowsSwipes = {};
         return;
@@ -929,6 +965,19 @@ void ReadWindowsSwipes() {
     Wh_Log(L"Windows swipes: three fingers %s, four fingers %s",
            g_windowsSwipes.three ? L"on" : L"off",
            g_windowsSwipes.four ? L"on" : L"off");
+
+    // The cursor speed goes from 1 to 20, 10 by default, and scales the way
+    // the pointer speed of a mouse does: an eighth less for each step below
+    // 10 down to 3, halving below that, and a quarter more for each above.
+    DWORD speed;
+    if (!ReadDword(g_touchpadKey, L"CursorSpeed", &speed)) {
+        speed = 10;
+    }
+    speed = std::clamp<DWORD>(speed, 1, 20);
+    g_windowsCursorGain = speed >= 10  ? 1 + (speed - 10) * 0.25
+                          : speed >= 3 ? (speed - 2) / 8.0
+                                       : 1.0 / (speed == 2 ? 16 : 32);
+    Wh_Log(L"Windows cursor speed: %u, gain %.3f", speed, g_windowsCursorGain);
 
     LONG error = RegNotifyChangeKeyValue(g_touchpadKey, FALSE,
                                          REG_NOTIFY_CHANGE_LAST_SET,
@@ -946,7 +995,7 @@ void OpenTouchpadSettings() {
         Wh_Log(L"Can't watch the touchpad settings");
     }
 
-    ReadWindowsSwipes();
+    ReadTouchpadSettings();
 }
 
 void CloseTouchpadSettings() {
@@ -1975,9 +2024,28 @@ void ArmNativeDrag() {
 // dropped, the way the system itself drops the moves a busy window doesn't
 // get to.
 //
-// A loop which stops taking them, because it's busy or because it's over,
-// doesn't hold the cursor back for longer than kNativeCursorStallMs: what's
-// written off here are moves it never took.
+// A loop which stops taking them, because it's over or busy, doesn't hold the
+// cursor back for long: what's written off here are moves it never took.
+enum class LoopState { kUnknown, kOver, kRunning };
+
+// The system flags the thread of a window it moves or sizes, which any
+// process can read, whatever its level. A native move's loop counts from the
+// press, holding the capture until the cursor leaves the drag threshold, like
+// IsLoopActive; a drag mode loop only once flagged, the capture alone being
+// just as likely a text selection.
+LoopState NativeLoopState() {
+    HWND hWnd = g_state.native ? g_state.target : g_state.dragWatch;
+    DWORD threadId = hWnd ? GetWindowThreadProcessId(hWnd, nullptr) : 0;
+    GUITHREADINFO info{.cbSize = sizeof(info)};
+    if (!threadId || !GetGUIThreadInfo(threadId, &info)) {
+        return LoopState::kUnknown;
+    }
+
+    bool running = (info.flags & GUI_INMOVESIZE) ||
+                   (g_state.native && info.hwndCapture);
+    return running ? LoopState::kRunning : LoopState::kOver;
+}
+
 bool NativeCursorOnItsWay() {
     if (g_state.nativeCursorOut <= 0) {
         return false;
@@ -1986,10 +2054,16 @@ bool NativeCursorOnItsWay() {
     ULONGLONG last = g_state.nativeCursorTaken > g_state.nativeCursorTime
                          ? g_state.nativeCursorTaken
                          : g_state.nativeCursorTime;
-    if (GetTickCount64() - last >= kNativeCursorStallMs) {
-        // A loop which takes nothing for that long is one which ended, e.g.
-        // with Esc, or one which stopped reading its queue: the moves go at
-        // the pace of the fingers again until it says otherwise.
+    ULONGLONG quiet = GetTickCount64() - last;
+    LoopState state = NativeLoopState();
+    ULONGLONG limit = state == LoopState::kRunning ? kNativeCursorBusyMs
+                                                   : kNativeCursorStallMs;
+    if (state == LoopState::kOver || quiet >= limit) {
+        // A loop which ended, e.g. with Esc, or one which stopped reading its
+        // queue: the moves go at the pace of the fingers again until it says
+        // otherwise.
+        Wh_Log(L"The loop took nothing for %llu ms, %d on the way, state %d",
+               quiet, g_state.nativeCursorOut, (int)state);
         g_state.nativeCursorOut = 0;
         g_state.nativeCursorReports = false;
         return false;
@@ -2312,9 +2386,12 @@ void ResyncDrag() {
     PlaceCursorOverlay();
 }
 
-// Fractions of the touchpad's width, which positions are in, to screen pixels.
+// Fractions of the touchpad's width, which positions are in, to screen pixels:
+// at the Windows default, moving across the whole touchpad moves across the
+// whole width of the main screen.
 double PixelScale() {
-    return GetSystemMetrics(SM_CXSCREEN) * g_settings.speed / 100.0;
+    return GetSystemMetrics(SM_CXSCREEN) * g_windowsCursorGain *
+           g_settings.relativeSpeed / 100.0;
 }
 
 // Snapping at an edge shared by two monitors takes the cursor staying there,
@@ -2467,7 +2544,76 @@ void OnFingers(double u, double v, DWORD idsKey) {
     UpdatePreview();
 }
 
-void OnOtherFingerCount(int count, int fingers) {
+// Fewer fingers may have moved the cursor before they were told apart, with
+// the button still held: Windows moves it for one finger, and the window, or
+// what a drag mode press holds, goes along. It's dropped where the drag's
+// fingers left it instead, e.g. so that a file doesn't land on the item next
+// to it, and the cursor then goes back to where the finger took it.
+void EndDragWhereLeft() {
+    // By the time fewer fingers are told apart, the cursor is where it was
+    // last sent, unless something else moved it.
+    POINT finger;
+    POINT sent = g_state.cursorSent;
+    bool moved = (g_state.native || g_state.buttonDown) &&
+                 GetCursorPos(&finger) &&
+                 (finger.x != sent.x || finger.y != sent.y);
+    if (moved) {
+        MoveCursorTo(g_state.cursor);
+    }
+
+    EndDrag();
+
+    if (moved) {
+        MoveCursorTo(finger);
+    }
+}
+
+// Within the release delay, the drag only waits for the fingers coming back:
+// fewer fingers used meanwhile, e.g. one to move the cursor or two to scroll,
+// drop the window at once, as they would with no delay. The fingers of a
+// lift come up one after the other, and those coming back land one after the
+// other, so a count below the drag's says nothing by itself: fingers left
+// down which move do, and so do fingers which landed and didn't make up the
+// count soon after, see kReleaseLandingMs, or tapped.
+void OnFewerFingersInRelease(int count, DWORD idsKey, double u, double v) {
+    if (!count) {
+        if (g_state.releaseLanding) {
+            Wh_Log(L"Fewer fingers tapped, releasing");
+            EndDragWhereLeft();
+            return;
+        }
+
+        // Fingers landing next may get the ids of those which came up: none
+        // of them count as the same set.
+        g_state.releaseLifted = true;
+        g_state.releaseIdsKey = kNoIdsKey;
+        return;
+    }
+
+    if (idsKey != g_state.releaseIdsKey) {
+        g_state.releaseIdsKey = idsKey;
+        g_state.releaseStartX = u;
+        g_state.releaseStartY = v;
+        if (g_state.releaseLifted && !g_state.releaseLanding) {
+            // The release timer, which drops the window, now goes off when
+            // the landing had its time.
+            g_state.releaseLanding = true;
+            SetTimer(g_hWnd, kReleaseTimerId, kReleaseLandingMs, nullptr);
+        }
+        return;
+    }
+
+    double travel = std::hypot(u - g_state.releaseStartX,
+                               v - g_state.releaseStartY) *
+                    PixelScale();
+    if (travel >= g_settings.startDistance) {
+        Wh_Log(L"Fewer fingers moved, releasing");
+        EndDragWhereLeft();
+    }
+}
+
+void OnOtherFingerCount(int count, int fingers, DWORD idsKey, double u,
+                        double v) {
     g_state.tracking = false;
 
     // The fingers of a drag which never began go their own way: whatever was
@@ -2477,7 +2623,12 @@ void OnOtherFingerCount(int count, int fingers) {
     }
 
     // An extra finger, e.g. a resting thumb, doesn't end the drag.
-    if (!g_state.dragging || count > fingers || g_state.releasePending) {
+    if (!g_state.dragging || count > fingers) {
+        return;
+    }
+
+    if (g_state.releasePending) {
+        OnFewerFingersInRelease(count, idsKey, u, v);
         return;
     }
 
@@ -2488,6 +2639,13 @@ void OnOtherFingerCount(int count, int fingers) {
     }
 
     g_state.releasePending = true;
+    g_state.releaseLifted = !count;
+    g_state.releaseLanding = false;
+    // Fingers landing next may get the ids of those which came up, see
+    // OnFewerFingersInRelease.
+    g_state.releaseIdsKey = count ? idsKey : kNoIdsKey;
+    g_state.releaseStartX = u;
+    g_state.releaseStartY = v;
     SetTimer(g_hWnd, kReleaseTimerId, delay, nullptr);
 }
 
@@ -2496,7 +2654,7 @@ void OnOtherFingerCount(int count, int fingers) {
 void OnFrame(int count, DWORD idsKey, double u, double v) {
     int fingers = ActiveFingers();
     if (count != fingers) {
-        OnOtherFingerCount(count, fingers);
+        OnOtherFingerCount(count, fingers, idsKey, u, v);
         return;
     }
 
@@ -2541,7 +2699,9 @@ void ProcessFrame(const Device& dev) {
     double x = 0;
     double y = 0;
     for (const Contact& contact : g_frame) {
-        if (!contact.tip) {
+        // A palm resting on the touchpad, e.g. while two fingers scroll, is
+        // no finger: it neither makes up the count of a drag nor ends one.
+        if (!contact.tip || !contact.confident) {
             continue;
         }
 
@@ -2656,12 +2816,31 @@ const Device* GetDevice(HANDLE hDevice) {
         }
     }
 
+    // The confidence of a contact is a button. A precision touchpad has to
+    // report it, and clears it for good once it takes a contact for a palm.
+    USHORT buttonCapsCount = caps.NumberInputButtonCaps;
+    std::vector<HIDP_BUTTON_CAPS> buttonCaps(buttonCapsCount);
+    if (buttonCapsCount &&
+        HidP_GetButtonCaps(HidP_Input, buttonCaps.data(), &buttonCapsCount,
+                           preparsed) == HIDP_STATUS_SUCCESS) {
+        for (USHORT i = 0; i < buttonCapsCount; i++) {
+            const HIDP_BUTTON_CAPS& bc = buttonCaps[i];
+            USAGE min = bc.IsRange ? bc.Range.UsageMin : bc.NotRange.Usage;
+            USAGE max = bc.IsRange ? bc.Range.UsageMax : bc.NotRange.Usage;
+            if (bc.UsagePage == kPageDigitizer && min <= kUsageConfidence &&
+                kUsageConfidence <= max) {
+                dev.hasConfidence = true;
+            }
+        }
+    }
+
     dev.valid =
         !dev.fingerCollections.empty() && dev.rangeX > 0 && dev.rangeY > 0;
 
-    Wh_Log(L"Device %p: valid=%d, slots=%u, contact count=%d, range %.0fx%.0f",
+    Wh_Log(L"Device %p: valid=%d, slots=%u, contact count=%d, confidence=%d, "
+           L"range %.0fx%.0f",
            hDevice, dev.valid, (UINT)dev.fingerCollections.size(),
-           dev.hasContactCount, dev.rangeX, dev.rangeY);
+           dev.hasContactCount, dev.hasConfidence, dev.rangeX, dev.rangeY);
 
     return dev.valid ? &dev : nullptr;
 }
@@ -2703,16 +2882,19 @@ void OnReport(const Device& dev, PCHAR report, ULONG length) {
                            kUsageContactId, &id, preparsed, report, length);
 
         bool tip = false;
+        bool confident = !dev.hasConfidence;
         USAGE usages[16];
         ULONG usageCount = ARRAYSIZE(usages);
         if (HidP_GetUsages(HidP_Input, kPageDigitizer, collection, usages,
                            &usageCount, preparsed, report,
                            length) == HIDP_STATUS_SUCCESS) {
-            tip = std::find(usages, usages + usageCount, kUsageTipSwitch) !=
-                  usages + usageCount;
+            USAGE* end = usages + usageCount;
+            tip = std::find(usages, end, kUsageTipSwitch) != end;
+            confident = confident ||
+                        std::find(usages, end, kUsageConfidence) != end;
         }
 
-        g_frame.push_back({id, (LONG)x, (LONG)y, tip});
+        g_frame.push_back({id, (LONG)x, (LONG)y, tip, confident});
     }
 
     if (!dev.hasContactCount || g_frame.size() >= g_frameExpected) {
@@ -2808,7 +2990,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
         case WM_TIMER:
             if (wParam == kReleaseTimerId) {
                 KillTimer(hWnd, kReleaseTimerId);
-                if (g_state.releasePending) {
+                if (g_state.releasePending && g_state.releaseLanding) {
+                    Wh_Log(L"Fewer fingers landed, releasing");
+                    EndDragWhereLeft();
+                } else if (g_state.releasePending) {
                     EndDrag();
                 }
                 return 0;
@@ -2850,7 +3035,7 @@ void RunMessageLoop() {
         }
 
         if (count == 2 && result == WAIT_OBJECT_0 + 1) {
-            ReadWindowsSwipes();
+            ReadTouchpadSettings();
             continue;
         }
 
@@ -3003,6 +3188,16 @@ thread_local UINT g_pendingCommand;
 // program.
 thread_local HWND g_pressOverlayWnd;
 thread_local ULONGLONG g_pressOverlayTime;
+
+// The cursor showing before the overlay put up the drag's, given back when the
+// drag is over. The system asks the window under the cursor for its own only
+// when the mouse moves, and some don't answer even then if they think theirs
+// is already showing, e.g. the XAML content of Windows Terminal, which kept
+// the drag's cursor until the pointer moved over something else.
+thread_local HCURSOR g_cursorBefore;
+// The window it showed over, the only one it's given back over: elsewhere,
+// e.g. after a snap or a prepare taken late, it may not be that window's.
+thread_local HWND g_cursorBeforeWnd;
 
 // The press the main part announced, and when, and whether a press carrying
 // the mark was ever seen on this thread, see IsOwnPress.
@@ -3179,6 +3374,21 @@ void NotifyMain(UINT message, HWND hWnd, LPARAM lParam) {
     PostMessage(g_mainWnd, message, (WPARAM)(DWORD)HandleToLong(hWnd), lParam);
 }
 
+// Only over the window it showed over, which is this thread's: elsewhere, the
+// cursor is another's to set.
+void RestoreCursor() {
+    HCURSOR cursor = g_cursorBefore;
+    HWND hCursorWnd = g_cursorBeforeWnd;
+    g_cursorBefore = nullptr;
+    g_cursorBeforeWnd = nullptr;
+    POINT pt;
+    if (cursor && GetCursorPos(&pt) && WindowFromPoint(pt) == hCursorWnd &&
+        GetWindowThreadProcessId(hCursorWnd, nullptr) ==
+            GetCurrentThreadId()) {
+        SetCursor(cursor);
+    }
+}
+
 void ForgetDrag() {
     g_pendingWnd = nullptr;
     g_pendingCommand = 0;
@@ -3189,6 +3399,7 @@ void ForgetDrag() {
     g_loopWatch = false;
     g_loopFromWatch = false;
     HidePressOverlay();
+    RestoreCursor();
 }
 
 // A move can wait in the queue while the loop is busy with the one before it,
@@ -3256,7 +3467,19 @@ void OnPrepareRequest(MSG* msg) {
         return;
     }
 
+    // A request renewed while the overlay is up finds the drag's cursor.
+    if (!g_pressOverlayWnd) {
+        CURSORINFO info{.cbSize = sizeof(info)};
+        bool showing =
+            GetCursorInfo(&info) && (info.flags & CURSOR_SHOWING);
+        g_cursorBefore = showing ? info.hCursor : nullptr;
+        g_cursorBeforeWnd = showing ? WindowFromPoint(info.ptScreenPos)
+                                    : nullptr;
+    }
+
     if (!ShowPressOverlay(pt, CursorOfCommand(command))) {
+        g_cursorBefore = nullptr;
+        g_cursorBeforeWnd = nullptr;
         return;
     }
 
@@ -3859,7 +4082,8 @@ void LoadSettings() {
                                                       : 0;
     Wh_FreeStringSetting(fingers);
 
-    g_settings.speed = std::clamp(Wh_GetIntSetting(L"speed"), 10, 1000);
+    g_settings.relativeSpeed =
+        std::clamp(Wh_GetIntSetting(L"relativeSpeed"), 10, 1000);
     g_settings.startDistance =
         std::clamp(Wh_GetIntSetting(L"startDistance"), 1, 500);
     g_settings.releaseDelay =
