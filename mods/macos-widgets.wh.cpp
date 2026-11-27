@@ -2045,7 +2045,7 @@ static std::vector<double> JsonArray(const std::string& json, size_t from, const
     return out;
 }
 
-static void FetchWeather() {
+static bool FetchWeather() {
     Settings s = GetSettings();
     std::wstring path = L"/v1/forecast?latitude=" + s.latitude + L"&longitude=" + s.longitude +
                         L"&current=temperature_2m,weather_code,is_day,apparent_temperature,relative_humidity_2m,wind_speed_10m"
@@ -2056,7 +2056,7 @@ static void FetchWeather() {
     std::string json = HttpsGet(L"api.open-meteo.com", path);
     if (json.empty()) {
         Wh_Log(L"Weather request failed");
-        return;
+        return false;
     }
     WeatherData w;
     size_t cur = json.find("\"current\":{");
@@ -2066,7 +2066,7 @@ static void FetchWeather() {
     if (cur == std::string::npos || daily == std::string::npos || !JsonNumber(json, cur, "temperature_2m", &w.temp) ||
         !JsonNumber(json, cur, "weather_code", &code) || !JsonNumber(json, cur, "time", &now)) {
         Wh_Log(L"Weather response could not be parsed");
-        return;
+        return false;
     }
     JsonNumber(json, cur, "is_day", &isDay);
     JsonNumber(json, 0, "utc_offset_seconds", &offset);
@@ -2115,6 +2115,7 @@ static void FetchWeather() {
     w.valid = true;
     std::lock_guard<std::mutex> lock(g_dataMutex);
     g_weather = w;
+    return true;
 }
 
 // ---------- City search (Open-Meteo geocoding) ----------
@@ -3954,26 +3955,50 @@ static void CoverThread() {
 
 // Everything that comes from the internet (and Home Assistant), on its own thread: a slow site or a server that
 // doesn't answer holds up only these, never the music, notifications, notes or the clock
+// One fetch that fails unexpectedly costs only that widget's update, not the whole thread (it would stop every
+// internet widget until the mod restarts)
+template <class F>
+static void Guarded(PCWSTR what, F f) {
+    try {
+        f();
+    } catch (...) {
+        Wh_Log(L"%s: unexpected error", what);
+    }
+}
+
 static void NetThread() {
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     ULONGLONG lastWeather = 0, lastCal = 0, lastQuotes = 0, lastNews = 0, lastHome = 0;
-    while (g_running) {
-        Settings s = GetSettings();
-        bool weatherNow, calNow, newsNow;
+    // The weather, as soon as it's asked for (a city just chosen), even between the other fetches: a slow news site
+    // must not keep the forecast waiting. A failed try (no internet yet) is repeated in 30 s, not 15 minutes
+    auto weather = [&](bool force) {
+        Settings ws = GetSettings();
+        bool asked;
         {
             std::lock_guard<std::mutex> lock(g_dataMutex);
-            weatherNow = g_weatherRefresh;
+            asked = g_weatherRefresh;
+            g_weatherRefresh = false;
+        }
+        ULONGLONG t = GetTickCount64();
+        if (!(ws.showWeather || ws.showSun) || !HasCity(ws)) return;
+        if (!(asked || force || !lastWeather || t - lastWeather > 15 * 60 * 1000)) return;
+        bool ok = false;
+        Guarded(L"Weather", [&] { ok = FetchWeather(); });
+        lastWeather = ok ? t : t - 15 * 60 * 1000 + 30 * 1000;
+        if (ok && g_msgWnd) PostMessageW(g_msgWnd, WM_APP_REDRAW, 0, 0);
+    };
+    while (g_running) {
+        Settings s = GetSettings();
+        bool calNow, newsNow;
+        {
+            std::lock_guard<std::mutex> lock(g_dataMutex);
             calNow = g_eventsRefresh;
             newsNow = g_newsRefresh;
-            g_weatherRefresh = g_eventsRefresh = g_newsRefresh = false;
+            g_eventsRefresh = g_newsRefresh = false;
         }
-        RunHomeCommands();  // taps on the Home widget (a slow Home Assistant holds up only this thread)
+        Guarded(L"Home taps", RunHomeCommands);  // taps on the Home widget (a slow Home Assistant holds up only this thread)
         ULONGLONG now = GetTickCount64();
-        // Only when Weather or Sunrise is shown, and there is a city to ask about
-        if ((s.showWeather || s.showSun) && HasCity(s) && (weatherNow || !lastWeather || now - lastWeather > 15 * 60 * 1000)) {
-            FetchWeather();
-            lastWeather = now;
-        }
+        weather(false);  // only when Weather or Sunrise is shown, and there is a city to ask about
         bool haDown;
         {
             std::lock_guard<std::mutex> lock(g_dataMutex);
@@ -3981,19 +4006,23 @@ static void NetThread() {
         }
         // Every 5 s; when Home Assistant doesn't answer, every minute
         if (g_running && s.showHome && (calNow || !lastHome || now - lastHome > (haDown ? 60 : 5) * 1000)) {
-            FetchHome();
+            Guarded(L"Home", FetchHome);
             lastHome = now;
         }
+        weather(false);
         if (g_running && s.showStocks && (calNow || !lastQuotes || now - lastQuotes > 5 * 60 * 1000)) {
-            FetchQuotes();
+            Guarded(L"Stocks", [] { FetchQuotes(); });
             lastQuotes = now;
         }
+        weather(false);
         if (g_running && s.showCalendar && (calNow || !lastCal || now - lastCal > 15 * 60 * 1000)) {
-            FetchCalendar();
+            Guarded(L"Calendar", [] { FetchCalendar(); });
             lastCal = now;
         }
+        weather(false);
         if (g_running && s.showNews && (calNow || newsNow || !lastNews || now - lastNews > 15 * 60 * 1000)) {
-            bool ok = FetchNews();
+            bool ok = false;
+            Guarded(L"News", [&] { ok = FetchNews(); });
             g_cv.notify_all();  // the covers thread starts on them
             // A failed update (the internet not back yet after the PC wakes up, for one) is tried again in a minute
             lastNews = ok ? now : now - 14 * 60 * 1000;
