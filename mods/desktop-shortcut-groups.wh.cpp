@@ -1179,7 +1179,27 @@ void NotifyFolderChanged(const std::wstring& folder) {
 // changes. Bump the version when the rendering itself changes.
 constexpr int kIconRenderVersion = 2;
 
-std::wstring IconKeyOf(const std::vector<std::wstring>& order,
+// 64-bit FNV-1a hash of a string, in hex.
+std::wstring HashToHex(const std::wstring& text) {
+    uint64_t hash = 14695981039346656037ull;
+    for (wchar_t c : text) {
+        for (int shift = 0; shift < 16; shift += 8) {
+            hash ^= (static_cast<uint32_t>(c) >> shift) & 0xFF;
+            hash *= 1099511628211ull;
+        }
+    }
+    wchar_t buffer[17];
+    swprintf_s(buffer, ARRAYSIZE(buffer), L"%016llX",
+               static_cast<unsigned long long>(hash));
+    return buffer;
+}
+
+// A fixed-length key of what a group icon shows: the render version, theme
+// and grid, and the shown shortcuts with their last-write times (so that a
+// shortcut whose own icon was changed is picked up too). Stored as a hash,
+// since the full text can exceed what the profile APIs read back.
+std::wstring IconKeyOf(const std::wstring& folder,
+                       const std::vector<std::wstring>& order,
                        bool dark,
                        int columns) {
     size_t shown =
@@ -1187,9 +1207,19 @@ std::wstring IconKeyOf(const std::vector<std::wstring>& order,
     std::wstring key = std::to_wstring(kIconRenderVersion) + L";" +
                        (dark ? L"dark" : L"light") + L";" +
                        std::to_wstring(columns) + L";";
-    key += JoinOrder(
-        std::vector<std::wstring>(order.begin(), order.begin() + shown));
-    return key;
+    for (size_t i = 0; i < shown; i++) {
+        ULONGLONG lastWrite = 0;
+        WIN32_FILE_ATTRIBUTE_DATA data;
+        if (GetFileAttributesExW((folder + L"\\" + order[i]).c_str(),
+                                 GetFileExInfoStandard, &data)) {
+            lastWrite =
+                (static_cast<ULONGLONG>(data.ftLastWriteTime.dwHighDateTime)
+                 << 32) |
+                data.ftLastWriteTime.dwLowDateTime;
+        }
+        key += order[i] + L"@" + std::to_wstring(lastWrite) + L"|";
+    }
+    return HashToHex(key);
 }
 
 // The icon file named by a group's desktop.ini, without its index.
@@ -1222,7 +1252,7 @@ bool UpdateGroupIcon(const std::wstring& folder, bool force = false) {
     Settings settings = GetSettings();
     bool dark = IsPreviewDark(settings);
     int columns = settings.preview3x3 && order.size() > 4 ? 3 : 2;
-    std::wstring key = IconKeyOf(order, dark, columns);
+    std::wstring key = IconKeyOf(folder, order, dark, columns);
 
     // The icon currently in use. It's kept until the next update: the shell
     // may still be reading it, and a missing file makes it fall back to the
@@ -1647,6 +1677,12 @@ class GroupingDropTarget final : public IDropTarget {
 
         DWORD allowed = effect ? *effect : DROPEFFECT_NONE;
         HRESULT hr = m_inner->DragEnter(dataObject, keyState, point, effect);
+        if (FAILED(hr)) {
+            // OLE won't call DragLeave or Drop after a failed DragEnter.
+            ResetDragState();
+            EndBusy();
+            return hr;
+        }
         UpdateFeedback(keyState, point, allowed, effect);
         return hr;
     }
@@ -2761,12 +2797,15 @@ void RemovePanelItem(int index) {
 }
 
 void ShowItemContextMenu(int index, POINT screenPoint) {
-    if (index < 0 || index >= static_cast<int>(g_panel.items.size()) ||
-        g_unloading) {
+    if (index < 0 || index >= static_cast<int>(g_panel.items.size())) {
         return;
     }
-    // The menu and the chosen command run modal loops.
+    // The menu and the chosen command run modal loops. Counted before checking
+    // for unloading, so that Wh_ModUninit can't miss the call.
     BusyScope busy;
+    if (g_unloading) {
+        return;
+    }
 
     std::wstring path = g_panel.items[index].path;
     std::wstring folder = g_panel.folder;
@@ -2852,10 +2891,12 @@ void ShowItemContextMenu(int index, POINT screenPoint) {
 // for a shortcut whose target is gone) on its own thread; the call is still
 // tracked in case it blocks.
 void ShellExecuteAsync(PCWSTR verb, const std::wstring& path) {
+    // Counted before checking for unloading, so that Wh_ModUninit can't miss
+    // the call.
+    BusyScope busy;
     if (g_unloading) {
         return;
     }
-    BusyScope busy;
 
     SHELLEXECUTEINFOW info = {};
     info.cbSize = sizeof(info);
