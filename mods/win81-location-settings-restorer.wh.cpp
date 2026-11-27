@@ -1,14 +1,12 @@
 // ==WindhawkMod==
 // @id              win81-location-settings-restorer
 // @name            Windows 7/8.1 Location Settings Applet Restorer
-// @description     This mod restores the Windows 7/8.1 Location Settings Control Panel applet on Windows 10 and Windows 11
+// @description     This mod restores the Windows 7/8.1 Location Settings Control Panel applet on Windows 10 and Windows 11.
 // @version         1.0.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
 // @include         control.exe
-// @include         dllhost.exe
-// @include         svchost.exe
 // @include         rundll32.exe
 // @architecture    x86-64
 // @compilerOptions -lwininet -ladvapi32 -lole32 -lshell32
@@ -20,18 +18,18 @@
 
 This mod restores the classic Windows 8.1 **Location Settings** Control Panel applet (along with optional Windows 7-era left-pane navigation links) that was removed from Windows 10 and Windows 11.
 
-**IMPORTANT:** `svchost.exe` must be included in the mod's target processes for this mod to start and work properly.
-
 ## Screenshot
 
 ![Location Settings](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/locationsettings.png)
 
 ## About
 
-The mod downloads the original Windows 8.1 binaries (`sensorscpl.dll` and `dui70.dll`) plus the Windows 7 `duser.dll` stylesheet from Microsoft's public symbol server on first use, verifies every download with pinned SHA-256 hashes, applies the required compatibility patches (including DirectUI side-by-side isolation, an inlined stylesheet, the Group Policy banner layout fix, and Windows 10/11 Location setting synchronization), and registers the applet virtually so that no permanent system files or registry keys are modified.
+The mod downloads the original Windows 8.1 x64 binaries (`sensorscpl.dll` and `dui70.dll`) plus the Windows 7 x64 `duser.dll` stylesheet over HTTPS from Microsoft's public symbol server (`msdl.microsoft.com`), verifies every download against pinned file sizes and SHA-256 hashes, applies the required compatibility patches (including DirectUI side-by-side isolation, an inlined stylesheet, the Group Policy banner layout fix, and Windows 10/11 Location setting synchronization), and registers the applet virtually inside `explorer.exe` and `control.exe` so no permanent system files or COM/Control Panel registration keys are modified.
+
+Because the restored Microsoft binaries are x64-only, the mod checks for ARM64 at compile time and runtime and skips loading on ARM64 devices.
 
 It supports 6 languages using authentic Windows 8.1 Microsoft translations: English, Italian, French, Spanish, Portuguese, and German. The language can follow the Windows UI language or be set to a specific locale.
-This mod has been tested on Windows 11 24H2.
+
 You can also optionally enable the **Show Windows 7 navigation links** setting to add the classic Windows 7 left-pane links (**View location activity** to open the Windows Location Event Viewer log, and **Default Location** under *See also* to open Windows Location settings).
 
 The applet appears under **Hardware and Sound** in Control Panel Category view, in Large / Small Icons view (with hover InfoTip), and in Control Panel Search. You can also open it directly using either:
@@ -39,7 +37,16 @@ The applet appears under **Hardware and Sound** in Control Panel Category view, 
 - Canonical name: `control /name Microsoft.LocationSettings`
 - CLSID (Run dialog / Explorer address bar): `shell:::{E9950154-C418-419e-A90A-20C5287AE24B}` (or `explorer shell:::{E9950154-C418-419e-A90A-20C5287AE24B}`)
 
-Note: an internet connection is required on first use, and it might take a moment to load the applet while the mod downloads the required dependencies. After the first-time download completes, refresh or reopen Control Panel.
+## Downloads & Caching
+
+An internet connection to `msdl.microsoft.com` is required on first use so the mod can download the verified Microsoft binaries (`sensorscpl.dll`, `dui70.dll`, and `duser.dll`). If the cached files in mod storage are missing or deleted (for example, after disabling the mod with **Keep cached Microsoft binaries when disabled** turned off), they are downloaded again from `msdl.microsoft.com` the next time the mod runs. After the first-time download completes, refresh or reopen Control Panel.
+
+## Persistent Changes When Clicking Apply
+
+While the applet's registration itself is virtual and reverted on unload, clicking **Apply** inside Location Settings intentionally updates the Windows Location system setting—so those preference changes remain after the mod is disabled:
+
+- Runs Windows' built-in `SystemSettingsAdminFlows.exe SetCamSystemGlobal location 0|1` (and falls back to updating `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location` → `Value` = `Allow`/`Deny` only if needed), plus syncs `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location` → `Value`.
+- Updates `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Sensor\Overrides\{BFA794E4-F964-4FDB-90F6-51056BFE4B44}` → `SensorPermissionState` (and, if the optional Windows 8.1 location provider checkbox is toggled, `HKLM\SOFTWARE\Microsoft\Sensors\LocationProvider`).
 */
 // ==/WindhawkModReadme==
 
@@ -1506,7 +1513,6 @@ static const wchar_t* kLayoutFolderClsid    = L"{328B0346-7EAF-4BBE-A479-7CB88A0
 static const wchar_t* kFrameProviderClsid   = L"{E4E54B1D-1AC1-405c-B62A-E11CD87F2261}";
 static const wchar_t* kInitializerClsid     = L"{EACFAA1F-A6CB-4d4a-83D9-810F84C11803}";
 static const wchar_t* kPermLuaClsid         = L"{6CE51F75-0448-438e-B9CA-69C352A248A7}";
-static const wchar_t* kPermIidAndPsClsid    = L"{673F14E0-1875-42a1-90F9-647F4AD9DB92}";
 static const wchar_t* kLocSensorCatGuid     = L"{BFA794E4-F964-4FDB-90F6-51056BFE4B44}";
 
 static constexpr GUID kGuidApplet           = {0xE9950154, 0xC418, 0x419E, {0xA9, 0x0A, 0x20, 0xC5, 0x28, 0x7A, 0xE2, 0x4B}};
@@ -1528,7 +1534,7 @@ struct ISensorsCPLChangeDevicePermission : public IUnknown {
     virtual HRESULT STDMETHODCALLTYPE SetLocationProviderCSFlag(BOOL bEnable) = 0;
 };
 
-enum class ProcessRole { Other, Explorer, Control, DllHost, ComService, ElevatedHelper };
+enum class ProcessRole { Other, Explorer, Control, ElevatedHelper };
 
 static ProcessRole g_role = ProcessRole::Other;
 static std::atomic<int> g_langSetting{0};
@@ -1536,6 +1542,9 @@ static std::atomic<bool> g_showTasks{true};
 static std::atomic<bool> g_showWin7NavLinks{false};
 static std::atomic<bool> g_shuttingDown{false};
 static HANDLE g_stopEvent = nullptr;
+#ifdef __clang__
+[[clang::no_destroy]]
+#endif
 static std::optional<std::thread> g_setupThread;
 static std::atomic<HMODULE> g_hDui{nullptr};
 static std::atomic<HMODULE> g_hSensorsCpl{nullptr};
@@ -1622,13 +1631,10 @@ static void EnsureDir(const std::wstring& path) {
     }
 }
 
-static bool ReadWholeFile(const std::wstring& path, Bytes& out) {
-    HANDLE h = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                           nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+static bool ReadHandleExact(HANDLE h, Bytes& out) {
     if (h == INVALID_HANDLE_VALUE) return false;
     LARGE_INTEGER sz{};
     if (!GetFileSizeEx(h, &sz) || sz.QuadPart <= 0 || sz.QuadPart > 32LL * 1024 * 1024) {
-        CloseHandle(h);
         return false;
     }
     Bytes buf(static_cast<size_t>(sz.QuadPart));
@@ -1637,14 +1643,21 @@ static bool ReadWholeFile(const std::wstring& path, Bytes& out) {
         DWORD rd = 0;
         const DWORD chunk = static_cast<DWORD>(std::min<size_t>(buf.size() - got, 1u << 20));
         if (!ReadFile(h, buf.data() + got, chunk, &rd, nullptr) || rd == 0) {
-            CloseHandle(h);
             return false;
         }
         got += rd;
     }
-    CloseHandle(h);
     out = std::move(buf);
     return true;
+}
+
+static bool ReadWholeFile(const std::wstring& path, Bytes& out) {
+    HANDLE h = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                           nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return false;
+    const bool ok = ReadHandleExact(h, out);
+    CloseHandle(h);
+    return ok;
 }
 
 static bool WriteFileAtomic(const std::wstring& path, const Bytes& data) {
@@ -1767,13 +1780,27 @@ static bool GetVerifiedFile(const std::wstring& dlDir, const FileSpec& spec, Byt
     return true;
 }
 
+// Holds a FILE_SHARE_READ-only handle across verification and LoadLibraryExW so
+// no writer/deleter can swap the file between the byte check and image mapping,
+// and restricts dependency resolution strictly to System32 (already-loaded s8dui.dll
+// binds in-memory without ever searching the mod storage folder).
 static HMODULE LoadVerifiedModule(const std::wstring& path, const Bytes& expected) {
+    HANDLE hLock = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ,
+                               nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (hLock == INVALID_HANDLE_VALUE) {
+        Wh_Log(L"Failed to lock module for verification (%lu): %s", GetLastError(), path.c_str());
+        return nullptr;
+    }
     Bytes disk;
-    if (!ReadWholeFile(path, disk) || disk != expected) {
+    const bool match = ReadHandleExact(hLock, disk) && disk == expected;
+    if (!match) {
+        CloseHandle(hLock);
         Wh_Log(L"Verification mismatch before LoadLibrary: %s", path.c_str());
         return nullptr;
     }
-    return LoadLibraryExW(path.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+    HMODULE mod = LoadLibraryExW(path.c_str(), nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    CloseHandle(hLock);
+    return mod;
 }
 
 static bool IsCurrentProcessElevated() {
@@ -1792,17 +1819,21 @@ static const wchar_t* kConsentLocationSubKey =
 static const wchar_t* kSensorLocOverrideSubKey =
     L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Sensor\\Overrides\\{BFA794E4-F964-4FDB-90F6-51056BFE4B44}";
 
-static bool ReadWin10LocationConsent(bool& outEnabled) {
+static bool ReadWin10LocationConsentFromRoot(HKEY root, bool& outEnabled) {
     wchar_t buf[32] = {};
     DWORD cb = sizeof(buf);
     const LSTATUS st = RegGetValueW(
-        HKEY_LOCAL_MACHINE, kConsentLocationSubKey, L"Value",
+        root, kConsentLocationSubKey, L"Value",
         RRF_RT_REG_SZ | RRF_SUBKEY_WOW6464KEY, nullptr, buf, &cb);
     if (st == ERROR_SUCCESS) {
         if (_wcsicmp(buf, L"Allow") == 0) { outEnabled = true; return true; }
         if (_wcsicmp(buf, L"Deny") == 0)  { outEnabled = false; return true; }
     }
     return false;
+}
+
+static bool ReadWin10LocationConsent(bool& outEnabled) {
+    return ReadWin10LocationConsentFromRoot(HKEY_LOCAL_MACHINE, outEnabled);
 }
 
 static bool WriteConsentStoreValue(HKEY root, bool enable) {
@@ -1819,21 +1850,10 @@ static bool WriteConsentStoreValue(HKEY root, bool enable) {
 }
 
 static bool SyncWin10LocationMachine(bool enable) {
-    bool anyOk = WriteConsentStoreValue(HKEY_LOCAL_MACHINE, enable);
+    bool anyOk = false;
 
-    // Ensure Sensor\Overrides\{BFA794E4-...}\SensorPermissionState matches too.
-    HKEY hOv = nullptr;
-    if (RegCreateKeyExW(HKEY_LOCAL_MACHINE, kSensorLocOverrideSubKey, 0, nullptr, 0,
-                        KEY_SET_VALUE | KEY_WOW64_64KEY, nullptr, &hOv, nullptr) == ERROR_SUCCESS && hOv) {
-        const DWORD state = enable ? 1u : 0u;
-        if (RegSetValueExW(hOv, L"SensorPermissionState", 0, REG_DWORD,
-                           reinterpret_cast<const BYTE*>(&state), sizeof(state)) == ERROR_SUCCESS) {
-            anyOk = true;
-        }
-        RegCloseKey(hOv);
-    }
-
-    // Invoke Microsoft's SystemSettingsAdminFlows.exe (if present) so WinRT / Settings UI updates instantly.
+    // Prefer Microsoft's built-in SystemSettingsAdminFlows.exe first so WinRT,
+    // CapabilityAccessManager, and Settings UI update through Windows' own path.
     wchar_t sysDir[MAX_PATH] = {};
     if (GetSystemDirectoryW(sysDir, MAX_PATH) > 0) {
         const std::wstring flowsExe = std::wstring(sysDir) + L"\\SystemSettingsAdminFlows.exe";
@@ -1846,21 +1866,55 @@ static bool SyncWin10LocationMachine(bool enable) {
             PROCESS_INFORMATION pi{};
             if (CreateProcessW(flowsExe.c_str(), cmd.data(), nullptr, nullptr, FALSE,
                                CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
-                WaitForSingleObject(pi.hProcess, 3500u);
+                const DWORD waited = WaitForSingleObject(pi.hProcess, 3500u);
+                DWORD exitCode = 1u;
+                if (waited == WAIT_OBJECT_0 && GetExitCodeProcess(pi.hProcess, &exitCode) && exitCode == 0u) {
+                    anyOk = true;
+                }
                 CloseHandle(pi.hThread);
                 CloseHandle(pi.hProcess);
+            }
+        }
+    }
+
+    // Fall back to direct HKLM ConsentStore write only if SystemSettingsAdminFlows.exe
+    // was absent, failed, or did not bring ConsentStore\location to the requested state.
+    bool currentConsent = false;
+    if (!ReadWin10LocationConsent(currentConsent) || currentConsent != enable) {
+        if (WriteConsentStoreValue(HKEY_LOCAL_MACHINE, enable)) {
+            anyOk = true;
+        }
+    }
+
+    // Ensure Sensor\Overrides\{BFA794E4-...}\SensorPermissionState matches only if not already set.
+    DWORD existingState = 0xFFFFFFFFu;
+    DWORD existingCb = sizeof(existingState);
+    const DWORD desiredState = enable ? 1u : 0u;
+    if (RegGetValueW(HKEY_LOCAL_MACHINE, kSensorLocOverrideSubKey, L"SensorPermissionState",
+                     RRF_RT_REG_DWORD | RRF_SUBKEY_WOW6464KEY, nullptr, &existingState, &existingCb) != ERROR_SUCCESS ||
+        existingState != desiredState) {
+        HKEY hOv = nullptr;
+        if (RegCreateKeyExW(HKEY_LOCAL_MACHINE, kSensorLocOverrideSubKey, 0, nullptr, 0,
+                            KEY_SET_VALUE | KEY_WOW64_64KEY, nullptr, &hOv, nullptr) == ERROR_SUCCESS && hOv) {
+            if (RegSetValueExW(hOv, L"SensorPermissionState", 0, REG_DWORD,
+                               reinterpret_cast<const BYTE*>(&desiredState), sizeof(desiredState)) == ERROR_SUCCESS) {
                 anyOk = true;
             }
+            RegCloseKey(hOv);
         }
     }
     return anyOk;
 }
 
 static void SyncWin10LocationCurrentUser(bool enable) {
-    WriteConsentStoreValue(HKEY_CURRENT_USER, enable);
+    bool currentUserConsent = false;
+    if (!ReadWin10LocationConsentFromRoot(HKEY_CURRENT_USER, currentUserConsent) ||
+        currentUserConsent != enable) {
+        WriteConsentStoreValue(HKEY_CURRENT_USER, enable);
+    }
 }
 
-// Forward declaration for elevated COM wrapper used by both dllhost & fallback paths
+// Forward declaration for elevated COM wrapper used by elevated Explorer & pipe helper paths
 namespace loc_shim {
 static ISensorsCPLChangeDevicePermission* WrapElevatedPerm(ISensorsCPLChangeDevicePermission* inner);
 }
@@ -1905,13 +1959,10 @@ static bool ContainsKeywordI(LPCWSTR s) {
     if (!s) return false;
     for (; *s; ++s) {
         if (_wcsnicmp(s, L"clsid", 5) == 0 ||
-            _wcsnicmp(s, L"appid", 5) == 0 ||
-            _wcsnicmp(s, L"interface", 9) == 0 ||
             _wcsnicmp(s, L"controlpanel", 12) == 0 ||
             _wcsnicmp(s, L"shell extensions", 16) == 0 ||
             _wcsnicmp(s, L"e9950154-c418-419e-a90a-20c5287ae24b", 36) == 0 ||
-            _wcsnicmp(s, L"6ce51f75-0448-438e-b9ca-69c352a248a7", 36) == 0 ||
-            _wcsnicmp(s, L"673f14e0-1875-42a1-90f9-647f4ad9db92", 36) == 0) {
+            _wcsnicmp(s, L"6ce51f75-0448-438e-b9ca-69c352a248a7", 36) == 0) {
             return true;
         }
     }
@@ -2154,35 +2205,15 @@ static std::shared_ptr<const Table> BuildTable(const std::wstring& binDir, Lang 
              S(L"ThreadingModel", REG_SZ, L"Apartment")}, {});
     }
 
-    // Elevated COM LUA Helper: CSensorsCPLChangeDevicePermission ({6CE51F75-...}) + AppID surrogate
+    // CSensorsCPLChangeDevicePermission ({6CE51F75-...}) for in-process activation
+    // inside elevated Explorer or the one-shot elevated rundll32.exe pipe helper.
     const std::wstring permRoot = L"clsid\\" + LowerStr(kPermLuaClsid);
     add(permRoot,
-        {S(L"", REG_SZ, L"Sensors CPL Change Device Permission LUA Helper"),
-         S(L"AppId", REG_SZ, kPermLuaClsid),
-         S(L"LocalizedString", REG_EXPAND_SZ, L"@" + cplPath + L",-1")},
-        {L"Elevation", L"InProcServer32"});
-    add(permRoot + L"\\elevation",
-        {D(L"Enabled", 1u),
-         S(L"IconReference", REG_EXPAND_SZ, L"@" + cplPath + L",-1")}, {});
+        {S(L"", REG_SZ, L"Sensors CPL Change Device Permission Helper")},
+        {L"InProcServer32"});
     add(permRoot + L"\\inprocserver32",
         {S(L"", REG_EXPAND_SZ, cplPath),
          S(L"ThreadingModel", REG_SZ, L"Apartment")}, {});
-
-    add(L"appid\\" + LowerStr(kPermLuaClsid),
-        {S(L"", REG_SZ, L"Sensors CPL Change Device Permission LUA Helper"),
-         S(L"DllSurrogate", REG_SZ, L"")}, {});
-
-    // Embedded MIDL Proxy/Stub & Interface registration for ISensorsCPLChangeDevicePermission ({673F14E0-...})
-    const std::wstring psRoot = L"clsid\\" + LowerStr(kPermIidAndPsClsid);
-    add(psRoot, {S(L"", REG_SZ, L"ISensorsCPLChangeDevicePermission ProxyStub")}, {L"InProcServer32"});
-    add(psRoot + L"\\inprocserver32",
-        {S(L"", REG_EXPAND_SZ, cplPath),
-         S(L"ThreadingModel", REG_SZ, L"Both")}, {});
-
-    const std::wstring ifaceRoot = L"interface\\" + LowerStr(kPermIidAndPsClsid);
-    add(ifaceRoot, {S(L"", REG_SZ, L"ISensorsCPLChangeDevicePermission")}, {L"NumMethods", L"ProxyStubClsid32"});
-    add(ifaceRoot + L"\\nummethods", {S(L"", REG_SZ, L"5")}, {});
-    add(ifaceRoot + L"\\proxystubclsid32", {S(L"", REG_SZ, kPermIidAndPsClsid)}, {});
 
     return t;
 }
@@ -2647,67 +2678,11 @@ static LSTATUS WINAPI RegQueryInfoKeyW_Hook(HKEY hKey, LPWSTR cls, LPDWORD cchCl
 // ---- Direct COM Activation (CoCreateInstance + CoGetClassObject) ----
 // Intercepting BOTH CoCreateInstance and CoGetClassObject guarantees:
 //   - shdocvw.dll instantiates FrameProvider & Initializer from our pinned s8cpl DLL
-//   - dllhost.exe activates CSensorsCPLChangeDevicePermission wrapped with Win10/11 sync
-//   - combase.dll loads our embedded MIDL IPSFactoryBuffer ({673F14E0-...}) cleanly
-
-class CElevatedPermFactoryWrapper final : public IClassFactory {
-    std::atomic<ULONG> m_ref{1};
-    IClassFactory* m_inner;
-
-public:
-    explicit CElevatedPermFactoryWrapper(IClassFactory* inner) : m_inner(inner) {
-        if (m_inner) m_inner->AddRef();
-    }
-    ~CElevatedPermFactoryWrapper() {
-        if (m_inner) m_inner->Release();
-    }
-
-    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
-        if (!ppv) return E_POINTER;
-        if (IsEqualGUID(riid, kIidUnknown) || IsEqualGUID(riid, kIidClassFactory)) {
-            *ppv = static_cast<IClassFactory*>(this);
-            AddRef();
-            return S_OK;
-        }
-        *ppv = nullptr;
-        return E_NOINTERFACE;
-    }
-    ULONG STDMETHODCALLTYPE AddRef() override { return m_ref.fetch_add(1, std::memory_order_relaxed) + 1; }
-    ULONG STDMETHODCALLTYPE Release() override {
-        const ULONG n = m_ref.fetch_sub(1, std::memory_order_acq_rel) - 1;
-        if (n == 0) delete this;
-        return n;
-    }
-    HRESULT STDMETHODCALLTYPE CreateInstance(IUnknown* pUnkOuter, REFIID riid, void** ppvObject) override {
-        try {
-            if (!ppvObject) return E_POINTER;
-            *ppvObject = nullptr;
-            if (!m_inner) return E_UNEXPECTED;
-            if (pUnkOuter) return CLASS_E_NOAGGREGATION;
-            if (IsEqualGUID(riid, kGuidPermIidAndPs) || IsEqualGUID(riid, kIidUnknown)) {
-                ISensorsCPLChangeDevicePermission* raw = nullptr;
-                const HRESULT hr = m_inner->CreateInstance(nullptr, kGuidPermIidAndPs, reinterpret_cast<void**>(&raw));
-                if (FAILED(hr) || !raw) return hr;
-                ISensorsCPLChangeDevicePermission* wrapped = loc_shim::WrapElevatedPerm(raw);
-                raw->Release();
-                if (!wrapped) return E_OUTOFMEMORY;
-                *ppvObject = wrapped;
-                return S_OK;
-            }
-            return m_inner->CreateInstance(pUnkOuter, riid, ppvObject);
-        } catch (...) {
-            if (ppvObject) *ppvObject = nullptr;
-            return E_FAIL;
-        }
-    }
-    HRESULT STDMETHODCALLTYPE LockServer(BOOL fLock) override {
-        return m_inner ? m_inner->LockServer(fLock) : S_OK;
-    }
-};
+//   - elevated Explorer / rundll32 helper activates CSensorsCPLChangeDevicePermission in-process
 
 struct ComClassEntry {
     GUID clsid;
-    int target;  // 0 = shdocvw.dll, 1 = private s8cpl-<lang>.dll
+    int target;  // 0 = shdocvw.dll, 1 = private s8cpl2-<lang>.dll
 };
 
 static const ComClassEntry kComClasses[] = {
@@ -2715,7 +2690,6 @@ static const ComClassEntry kComClasses[] = {
     {kGuidFrameProvider, 1},
     {kGuidInitializer,   1},
     {kGuidPermLua,       1},
-    {kGuidPermIidAndPs,  1},
 };
 
 static HRESULT GetOurClassObject(REFCLSID clsid, REFIID riid, void** ppv) {
@@ -2737,16 +2711,6 @@ static HRESULT GetOurClassObject(REFCLSID clsid, REFIID riid, void** ppv) {
     using DllGetClassObject_t = HRESULT(STDAPICALLTYPE*)(REFCLSID, REFIID, LPVOID*);
     auto fn = reinterpret_cast<DllGetClassObject_t>(reinterpret_cast<void*>(GetProcAddress(mod, "DllGetClassObject")));
     if (!fn) return REGDB_E_CLASSNOTREG;
-
-    if (g_role == ProcessRole::DllHost && IsEqualGUID(clsid, kGuidPermLua) &&
-        (IsEqualGUID(riid, kIidClassFactory) || IsEqualGUID(riid, kIidUnknown))) {
-        IClassFactory* inner = nullptr;
-        const HRESULT hr = fn(clsid, kIidClassFactory, reinterpret_cast<void**>(&inner));
-        if (FAILED(hr) || !inner) return hr;
-        *ppv = new (std::nothrow) CElevatedPermFactoryWrapper(inner);
-        inner->Release();
-        return *ppv ? S_OK : E_OUTOFMEMORY;
-    }
 
     return fn(clsid, riid, ppv);
 }
@@ -2872,9 +2836,9 @@ static bool InstallHooks(bool withCom) {
 //     via RegEnumKeyExW / RegQueryValueExW in Explorer.
 //   - KERNEL32!RegSetKeySecurity: tolerates ERROR_ACCESS_DENIED on modern
 //     TrustedInstaller-owned Sensor\Overrides keys (lfsvc already has access).
-//   - ole32!CoGetObject (Explorer): wraps the elevated COM helper to mirror
-//     HKCU\...\ConsentStore\location, and provides a single-prompt elevated
-//     rundll32.exe pipe fallback if svchost.exe is not injected or is PPL.
+//   - ole32!CoGetObject (Explorer): intercepts the elevation moniker directly,
+//     applying in-process if Explorer is already elevated or launching a
+//     single-prompt elevated rundll32.exe named-pipe helper (no svchost/dllhost).
 //   - SHLWAPI!#176 (IUnknown_QueryService, Explorer): optionally publishes
 //     the Windows 7-era left-pane navigation links ("View location activity"
 //     and "See also: Default Location") during CSensorsCplPage::LayoutInitialized
@@ -3369,7 +3333,7 @@ public:
     }
 };
 
-// ---- One-Shot UAC Elevated Pipe Fallback (used ONLY if svchost.exe COM Elevation fails) ----
+// ---- One-Shot UAC Elevated Pipe Helper (Sole Elevation Path — No svchost/dllhost) ----
 enum : uint32_t {
     kPipeOpQuit = 0u,
     kPipeOpSetOverride = 1u,
@@ -3497,7 +3461,7 @@ static std::wstring MakeRandomPipeToken() {
     return buf;
 }
 
-static HRESULT LaunchElevatedPipeFallback(HWND ownerHwnd, void** ppv) {
+static HRESULT LaunchElevatedPipeHelper(HWND ownerHwnd, void** ppv) {
     const std::wstring dir = StorageDir();
     if (dir.empty()) return E_FAIL;
     const std::wstring cplPath = dir + L"\\bin\\" + CplDllFileName(CurrentLang());
@@ -3549,8 +3513,12 @@ static HRESULT LaunchElevatedPipeFallback(HWND ownerHwnd, void** ppv) {
         CloseHandle(hPipe);
         return E_FAIL;
     }
+    // Point rundll32 at a benign System32 KnownDLL no-op entry point rather than
+    // any file in user-writable mod storage: if Windhawk is not injected into
+    // rundll32.exe, GetCurrentProcessId() is a side-effect-free read-only no-op
+    // and rundll32 exits immediately without touching any external DLL.
     const std::wstring rundll = std::wstring(sysDir) + L"\\rundll32.exe";
-    const std::wstring params = L"\"" + cplPath + L"\",DllRegisterServer --wh-loc-pipe=" + token;
+    const std::wstring params = L"kernel32.dll,GetCurrentProcessId --wh-loc-pipe=" + token;
 
     SHELLEXECUTEINFOW sei{};
     sei.cbSize = sizeof(sei);
@@ -3627,21 +3595,7 @@ static HRESULT WINAPI CoGetObject_Shim(LPCWSTR pszName, BIND_OPTS* pBindOptions,
             return orig(pszName, pBindOptions, riid, ppv);
         }
 
-        void* realObj = nullptr;
-        const HRESULT hr = orig(pszName, pBindOptions, riid, &realObj);
-        if (SUCCEEDED(hr) && realObj) {
-            auto* rawPerm = static_cast<ISensorsCPLChangeDevicePermission*>(realObj);
-            *ppv = new (std::nothrow) CExplorerLocationPermProxy(rawPerm);
-            rawPerm->Release();
-            return *ppv ? S_OK : E_OUTOFMEMORY;
-        }
-
-        // Never double-prompt if the user explicitly declined UAC.
-        if (hr == HRESULT_FROM_WIN32(ERROR_CANCELLED)) {
-            return hr;
-        }
-
-        Wh_Log(L"[loc] Native COM elevation returned 0x%08X; activating fallback", static_cast<unsigned>(hr));
+        *ppv = nullptr;
 
         // If Explorer is already elevated, apply directly in-process via our verified DLL.
         if (IsCurrentProcessElevated()) {
@@ -3662,11 +3616,12 @@ static HRESULT WINAPI CoGetObject_Shim(LPCWSTR pszName, BIND_OPTS* pBindOptions,
             }
         }
 
+        // Otherwise launch the one-shot elevated rundll32.exe named-pipe helper.
         HWND owner = nullptr;
         if (pBindOptions && pBindOptions->cbStruct >= sizeof(BIND_OPTS3)) {
             owner = reinterpret_cast<const BIND_OPTS3*>(pBindOptions)->hwnd;
         }
-        return LaunchElevatedPipeFallback(owner, ppv);
+        return LaunchElevatedPipeHelper(owner, ppv);
     } catch (...) {
         return E_FAIL;
     }
@@ -4146,8 +4101,7 @@ static bool LoadVerifiedLocationModules(const std::wstring& binDir, const Bytes&
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
                        reinterpret_cast<LPCWSTR>(hCpl), &pinnedCpl);
     g_hSensorsCpl.store(hCpl, std::memory_order_release);
-    if (g_role == ProcessRole::Explorer || g_role == ProcessRole::DllHost ||
-        g_role == ProcessRole::ElevatedHelper) {
+    if (g_role == ProcessRole::Explorer || g_role == ProcessRole::ElevatedHelper) {
         loc_shim::PatchSensorsCplIat(hCpl, g_role == ProcessRole::Explorer);
     }
     return true;
@@ -4259,9 +4213,45 @@ static std::wstring ExtractPipeTokenFromCmdLine(const std::wstring& cmdLine) {
     return cmdLine.substr(start, end - start);
 }
 
-static bool IsProcessAmd64() {
-#if defined(_M_AMD64) || defined(__x86_64__)
-    return true;
+// Detect ARM64 both at compile time (native ARM64 build) and at runtime
+// (e.g., x64-emulated process running on Windows on ARM64) using Microsoft's
+// documented IsWow64Process2 API with GetNativeSystemInfo fallback.
+static bool IsRunningOnArm64Host() {
+    constexpr USHORT kMachineArm64 = 0xAA64;  // IMAGE_FILE_MACHINE_ARM64
+    constexpr USHORT kMachineArmNt = 0x01C4;  // IMAGE_FILE_MACHINE_ARMNT
+    constexpr USHORT kMachineArm   = 0x01C0;  // IMAGE_FILE_MACHINE_ARM
+    constexpr WORD   kArchArm64    = 12;      // PROCESSOR_ARCHITECTURE_ARM64
+    constexpr WORD   kArchArm      = 5;       // PROCESSOR_ARCHITECTURE_ARM
+
+    using IsWow64Process2_t = BOOL(WINAPI*)(HANDLE, USHORT*, USHORT*);
+    HMODULE hKernel32 = GetModuleHandleW(L"kernel32.dll");
+    if (hKernel32) {
+        auto pIsWow64Process2 = reinterpret_cast<IsWow64Process2_t>(
+            reinterpret_cast<void*>(GetProcAddress(hKernel32, "IsWow64Process2")));
+        if (pIsWow64Process2) {
+            USHORT processMachine = 0;
+            USHORT nativeMachine = 0;
+            if (pIsWow64Process2(GetCurrentProcess(), &processMachine, &nativeMachine)) {
+                if (nativeMachine == kMachineArm64 ||
+                    nativeMachine == kMachineArmNt ||
+                    nativeMachine == kMachineArm) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    SYSTEM_INFO si{};
+    GetNativeSystemInfo(&si);
+    return si.wProcessorArchitecture == kArchArm64 ||
+           si.wProcessorArchitecture == kArchArm;
+}
+
+static bool IsSupportedAmd64Runtime() {
+#if defined(_M_ARM64) || defined(__aarch64__) || defined(_M_ARM) || defined(__arm__)
+    return false;
+#elif defined(_M_AMD64) || defined(__x86_64__)
+    return !IsRunningOnArm64Host();
 #else
     return false;
 #endif
@@ -4279,7 +4269,10 @@ static bool IsProcessAmd64() {
 
 BOOL Wh_ModInit() {
     try {
-        if (!IsProcessAmd64()) return FALSE;
+        if (!IsSupportedAmd64Runtime()) {
+            Wh_Log(L"ARM64 / non-x64 environment detected; skipping load (restored Windows 8.1 binaries are x64-only)");
+            return FALSE;
+        }
         LoadSettings();
 
         wchar_t exe[MAX_PATH] = {};
@@ -4287,21 +4280,12 @@ BOOL Wh_ModInit() {
         const wchar_t* exeName = wcsrchr(exe, L'\\');
         exeName = exeName ? exeName + 1 : exe;
         const std::wstring rawCmd = GetCommandLineW() ? GetCommandLineW() : L"";
-        const std::wstring cmdLine = LowerStr(rawCmd);
 
         std::wstring pipeToken;
         if (_wcsicmp(exeName, L"explorer.exe") == 0) {
             g_role = ProcessRole::Explorer;
         } else if (_wcsicmp(exeName, L"control.exe") == 0) {
             g_role = ProcessRole::Control;
-        } else if (_wcsicmp(exeName, L"dllhost.exe") == 0 &&
-                   cmdLine.find(L"6ce51f75-0448-438e-b9ca-69c352a248a7") != std::wstring::npos) {
-            g_role = ProcessRole::DllHost;
-        } else if (_wcsicmp(exeName, L"svchost.exe") == 0 &&
-                   (cmdLine.find(L"rpcss") != std::wstring::npos ||
-                    cmdLine.find(L"dcomlaunch") != std::wstring::npos ||
-                    cmdLine.find(L"appinfo") != std::wstring::npos)) {
-            g_role = ProcessRole::ComService;
         } else if (_wcsicmp(exeName, L"rundll32.exe") == 0) {
             pipeToken = ExtractPipeTokenFromCmdLine(rawCmd);
             if (pipeToken.empty()) return FALSE;
@@ -4323,29 +4307,12 @@ BOOL Wh_ModInit() {
             ExitProcess(0);
         }
 
-        if (g_role == ProcessRole::ComService) {
-            vreg::CleanupStaleHives();
-            if (!vreg::InstallHooks(false)) return FALSE;
-            PublishRegistration(binDir, false);
-            Wh_Log(L"[com-service] read-only Location Settings COM/elevation view published");
-            return TRUE;
-        }
-
         if (g_role == ProcessRole::Control) {
             const std::wstring cplPath = binDir + L"\\" + CplDllFileName(CurrentLang());
             if (GetFileAttributesW(cplPath.c_str()) == INVALID_FILE_ATTRIBUTES) return FALSE;
             vreg::CleanupStaleHives();
             if (!vreg::InstallHooks(false)) return FALSE;
             PublishRegistration(binDir, true);
-            return TRUE;
-        }
-
-        if (g_role == ProcessRole::DllHost) {
-            if (!LoadStagedPayload(binDir, dlDir)) return FALSE;
-            vreg::CleanupStaleHives();
-            if (!vreg::InstallHooks(true)) return FALSE;
-            PublishRegistration(binDir, false);
-            Wh_Log(L"[dllhost] verified elevated Location Settings host ready");
             return TRUE;
         }
 
@@ -4409,10 +4376,6 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
 
 void Wh_ModBeforeUninit() {
     try {
-        if (g_role == ProcessRole::DllHost) {
-            loc_shim::RestorePatchedIats();
-            return;
-        }
         if (g_role != ProcessRole::Explorer) return;
         g_shuttingDown.store(true);
         loc_shim::RestorePatchedIats();
@@ -4429,9 +4392,12 @@ void Wh_ModBeforeUninit() {
 void Wh_ModUninit() {
     try {
         bool keepFiles = true;
-        if (g_role == ProcessRole::DllHost) {
-            loc_shim::RestorePatchedIats();
-        } else if (g_role == ProcessRole::Explorer) {
+        if (g_role == ProcessRole::Explorer) {
+            g_shuttingDown.store(true);
+            if (g_stopEvent) SetEvent(g_stopEvent);
+            CancelInFlightDownload();
+            if (g_setupThread && g_setupThread->joinable()) g_setupThread->join();
+            g_setupThread.reset();
             loc_shim::RestorePatchedIats();
             keepFiles = Wh_GetIntSetting(L"keepDownloadedFiles") != 0;
             if (g_stopEvent) { CloseHandle(g_stopEvent); g_stopEvent = nullptr; }
