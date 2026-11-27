@@ -82,6 +82,38 @@ The bar, the previews and the Alt+Tab view appear instantly, without animations.
 Dragging feedback and the thumbstick are updated once per screen refresh, at the
 refresh rate of the monitor in use (for example 60, 120 or 144 Hz).
 
+## Scrolling split windows together
+When the mouse is over a window that fills a split layout together with other
+windows, hold **Ctrl** and turn the mouse wheel to scroll all of them at once.
+Hold **Ctrl + Shift** to scroll them horizontally (tilting the wheel with Ctrl
+held works too). Each window is scrolled at the same relative position as the
+mouse, and the apps don't zoom.
+
+Ctrl can be pressed before or after the mouse reaches the split. While it is
+used for scrolling, the mod hides the key from the apps, so they scroll instead
+of zooming. With any other key, a click, or once the mouse leaves the split, the
+apps get Ctrl as usual, so shortcuts like Ctrl+C and Ctrl+click keep working. A
+single Ctrl tap is passed on too. Over other windows Ctrl + mouse wheel keeps
+its usual meaning, such as zooming in a browser.
+
+The window under the mouse gets the wheel as usual. For the other windows the
+mod repeats the wheel at the matching position: the mouse pointer jumps there
+and back in one step, which normally isn't visible. This needs "Scroll inactive
+windows when I hover over them" in Settings > Bluetooth & devices > Mouse, which
+is on by default.
+
+With the "Enabled, without moving the pointer" option, or when that Windows
+setting is off, the mod sends the scroll messages straight to the other windows
+instead. The pointer never moves, but some apps, such as Firefox and Microsoft
+Store apps, ignore these messages and only the window under the mouse scrolls.
+
+## Floating windows
+Floating always-on-top windows, such as the Google Meet or video
+picture-in-picture window, can be placed in a zone like any other window, are
+offered by the chooser, and count as part of a split arrangement even when the
+app keeps them smaller than the zone (at least 40% of it). On their own they
+don't appear in Alt+Tab, like in Windows.
+
 ## Compared with Windows and other mods
 - Windows 11 snap layouts offer a top/bottom split only on portrait monitors.
   This mod offers it on every monitor, together with the other layouts, and
@@ -99,6 +131,8 @@ Windows doesn't let programs move or close windows of programs running as
 administrator, so such windows may not be placed by the split layouts or closed
 with a right click. When an administrator window is in the foreground, Windows
 may not pass the keyboard to this mod, and the default Alt+Tab appears instead.
+For the same reason, split windows aren't scrolled together while an
+administrator window is in the foreground.
 */
 // ==/WindhawkModReadme==
 
@@ -120,6 +154,18 @@ may not pass the keyboard to this mod, and the default Alt+Tab appears instead.
   $description: Replace the Alt+Tab switcher with the radial view.
 - groupSplitWindows: true
   $name: Show split windows as one Alt+Tab item
+- syncScroll: enabled
+  $name: Scroll split windows together
+  $description: >-
+    Ctrl + mouse wheel scrolls all windows of a split arrangement at once;
+    Ctrl + Shift + mouse wheel scrolls them horizontally. Elsewhere Ctrl + mouse
+    wheel works as usual (for example, zoom). Without moving the pointer, the
+    scrolling is sent to the windows as messages, which some apps (Firefox,
+    Microsoft Store apps) ignore.
+  $options:
+  - enabled: Enabled
+  - messages: Enabled, without moving the pointer (works in fewer apps)
+  - disabled: Disabled
 - forceClose: false
   $name: Force-close windows that ask before closing
   $description: >-
@@ -151,7 +197,17 @@ may not pass the keyboard to this mod, and the default Alt+Tab appears instead.
 #define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
 #endif
 
+#ifndef SPI_GETMOUSEWHEELROUTING
+#define SPI_GETMOUSEWHEELROUTING 0x201C
+#endif
+
 namespace common {
+
+// Marks the input sent by this mod, so that its own hooks leave it alone. Input
+// injected by other programs (mouse and touchpad drivers, remote desktop, key
+// remappers) is handled like input from the user.
+constexpr ULONG_PTR INPUT_TAG = 0x53504C54;
+constexpr WORD VK_MASK = 0xE8;
 
 struct Zone {
     BYTE x0, y0, x1, y1;
@@ -182,17 +238,130 @@ int MonitorDpi(HMONITOR mon) {
     return SUCCEEDED(GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &dx, &dy)) ? dx : 96;
 }
 
+// Every thread of the mod works in physical pixels, like the window frames
+// reported by DWM and the points reported to low-level mouse hooks.
+void InitThread() {
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+}
+
 bool StartThread(LPTHREAD_START_ROUTINE proc, HANDLE& thread, DWORD& threadId) {
     thread = CreateThread(nullptr, 0, proc, nullptr, 0, &threadId);
     return thread != nullptr;
 }
 
 void StopThread(HANDLE thread, DWORD threadId) {
+    DWORD start = GetTickCount();
     while (!PostThreadMessage(threadId, WM_QUIT, 0, 0) &&
-           WaitForSingleObject(thread, 10) == WAIT_TIMEOUT) {
+           WaitForSingleObject(thread, 10) == WAIT_TIMEOUT && GetTickCount() - start < 1000) {
     }
-    WaitForSingleObject(thread, INFINITE);
+    WaitForSingleObject(thread, 1000);
     CloseHandle(thread);
+}
+
+bool IsFloating(HWND hwnd) {
+    LONG_PTR style = GetWindowLongPtr(hwnd, GWL_STYLE);
+    LONG_PTR ex = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+    RECT r;
+    return (style & WS_THICKFRAME) && (ex & WS_EX_TOPMOST) && GetWindowRect(hwnd, &r) &&
+           r.right - r.left >= 160 && r.bottom - r.top >= 120;
+}
+
+bool IsCandidate(HWND hwnd, bool* floating) {
+    WCHAR cls[32] = L"";
+    DWORD cloaked = 0;
+    if (!IsWindowVisible(hwnd))
+        return false;
+    LONG_PTR ex = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+    GetClassName(hwnd, cls, 32);
+    DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
+    if (cloaked || !GetWindowTextLength(hwnd) || (ex & WS_EX_TRANSPARENT) ||
+        !lstrcmpW(cls, L"Progman"))
+        return false;
+    bool normal = (ex & WS_EX_APPWINDOW) || (!GetWindow(hwnd, GW_OWNER) && !(ex & WS_EX_TOOLWINDOW));
+    bool isFloating = !normal && IsFloating(hwnd);
+    if (floating)
+        *floating = isFloating;
+    return normal || isFloating;
+}
+
+bool FrameMatches(HWND hwnd, RECT r) {
+    RECT f;
+    if (IsIconic(hwnd) ||
+        FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &f, sizeof(f))))
+        return false;
+    if (abs(f.left - r.left) <= 20 && abs(f.top - r.top) <= 20 &&
+        abs(f.right - r.right) <= 20 && abs(f.bottom - r.bottom) <= 20)
+        return true;
+    if (!IsFloating(hwnd) || f.left < r.left - 20 || f.top < r.top - 20 ||
+        f.right > r.right + 20 || f.bottom > r.bottom + 20)
+        return false;
+    LONGLONG area = (LONGLONG)(f.right - f.left) * (f.bottom - f.top);
+    return area * 10 >= (LONGLONG)(r.right - r.left) * (r.bottom - r.top) * 4;
+}
+
+struct WindowList {
+    int n;
+    HWND w[128];
+};
+
+BOOL CALLBACK CollectProc(HWND hwnd, LPARAM lp) {
+    auto* list = (WindowList*)lp;
+    if (!IsWindowVisible(hwnd) || IsIconic(hwnd) || IsZoomed(hwnd) ||
+        !IsCandidate(hwnd, nullptr))
+        return TRUE;
+    list->w[list->n++] = hwnd;
+    return list->n < 128;
+}
+
+HWND RootAt(POINT pt) {
+    HWND hwnd = WindowFromPoint(pt);
+    return hwnd ? GetAncestor(hwnd, GA_ROOT) : nullptr;
+}
+
+// Finds the windows that fill a split layout together with the window at pt.
+// It is called from low-level hooks, so the common case, a window that isn't in
+// any zone, returns after a few calls, without listing the open windows.
+int FindSplitGroup(POINT pt, HWND* members, RECT* zones) {
+    HWND root = RootAt(pt);
+    if (!root || IsIconic(root) || IsZoomed(root) || !IsCandidate(root, nullptr))
+        return 0;
+    HMONITOR mon = MonitorFromWindow(root, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi{sizeof(mi)};
+    if (!GetMonitorInfo(mon, &mi))
+        return 0;
+    WindowList list{};
+    bool listed = false;
+    for (int l = NL - 1; l >= 0; l--) {
+        const Layout& L = g_layouts[l];
+        int rootZone = -1;
+        for (int z = 0; z < L.n; z++) {
+            zones[z] = ZoneIn(mi.rcWork, L.z[z]);
+            if (rootZone < 0 && FrameMatches(root, zones[z]))
+                rootZone = z;
+        }
+        if (rootZone < 0)
+            continue;
+        if (!listed) {
+            EnumWindows(CollectProc, (LPARAM)&list);
+            listed = true;
+        }
+        bool ok = true;
+        for (int z = 0; z < L.n && ok; z++) {
+            members[z] = z == rootZone ? root : nullptr;
+            for (int i = 0; i < list.n && !members[z]; i++) {
+                bool used = list.w[i] == root;
+                for (int y = 0; y < z; y++)
+                    used |= members[y] == list.w[i];
+                if (!used && MonitorFromWindow(list.w[i], MONITOR_DEFAULTTONEAREST) == mon &&
+                    FrameMatches(list.w[i], zones[z]))
+                    members[z] = list.w[i];
+            }
+            ok = members[z] != nullptr;
+        }
+        if (ok)
+            return L.n;
+    }
+    return 0;
 }
 
 int RefreshRate(HMONITOR mon) {
@@ -326,12 +495,13 @@ void Fill(HDC dc, RECT r, COLORREF c) {
 }
 
 bool Place(HWND hwnd, RECT z) {
-    if (IsHungAppWindow(hwnd))
+    if (!IsWindow(hwnd) || IsHungAppWindow(hwnd))
         return false;
     if (IsZoomed(hwnd) || IsIconic(hwnd))
         ShowWindow(hwnd, SW_RESTORE);
     RECT wr, fr;
-    GetWindowRect(hwnd, &wr);
+    if (!GetWindowRect(hwnd, &wr))
+        return false;
     if (FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &fr, sizeof(fr))))
         fr = wr;
     int l = fr.left - wr.left, t = fr.top - wr.top;
@@ -357,13 +527,7 @@ BOOL CALLBACK EnumProc(HWND hwnd, LPARAM) {
     for (int i = 0; i < g_nused; i++)
         if (hwnd == g_used[i])
             return TRUE;
-    WCHAR cls[32] = L"";
-    DWORD cloaked = 0;
-    DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
-    GetClassName(hwnd, cls, 32);
-    if (!IsWindowVisible(hwnd) || cloaked || IsHungAppWindow(hwnd) || GetWindow(hwnd, GW_OWNER) ||
-        (GetWindowLongPtr(hwnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) ||
-        !GetWindowTextLength(hwnd) || !lstrcmpW(cls, L"Progman"))
+    if (IsHungAppWindow(hwnd) || !IsCandidate(hwnd, nullptr))
         return TRUE;
     g_wins[g_count++] = hwnd;
     return g_count < MAXWIN;
@@ -402,8 +566,10 @@ void ShowChooser(RECT b) {
         int x = x0 + i % cols * (tw + p), y = y0 + i / cols * (th + p);
         g_tiles[i] = {x, y, x + tw, y + th};
         g_thumbs[i] = nullptr;
-        if (FAILED(DwmRegisterThumbnail(g_chooser, g_wins[i], &g_thumbs[i])))
+        if (FAILED(DwmRegisterThumbnail(g_chooser, g_wins[i], &g_thumbs[i]))) {
+            g_thumbs[i] = nullptr;
             continue;
+        }
         RECT t{x + Sc(8), y + Sc(36), x + tw - Sc(8), y + th - Sc(8)};
         int aw = t.right - t.left, ah = t.bottom - t.top;
         SIZE s{};
@@ -493,7 +659,7 @@ void PaintBar(HDC dc, RECT rc) {
 
 void PaintChooser(HDC dc, RECT rc) {
     Fill(dc, rc, RGB(32, 32, 32));
-    SelectObject(dc, g_font);
+    HGDIOBJ oldFont = SelectObject(dc, g_font);
     SetBkMode(dc, TRANSPARENT);
     SetTextColor(dc, RGB(255, 255, 255));
     for (int i = 0; i < g_count; i++) {
@@ -508,6 +674,7 @@ void PaintChooser(HDC dc, RECT rc) {
         DrawClose(dc, CloseRect(i), g_hover == MAXWIN + i);
     }
     DrawClose(dc, CloseRect(-1), g_hover == 2 * MAXWIN);
+    SelectObject(dc, oldFont);
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -525,6 +692,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
         }
         case WM_MOUSEMOVE: {
+            TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE, hwnd, 0};
+            TrackMouseEvent(&tme);
             int i = HitTile(lp);
             if (i != g_hover) {
                 g_hover = i;
@@ -532,6 +701,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             }
             return 0;
         }
+        case WM_MOUSELEAVE:
+            if (g_hover != -1) {
+                g_hover = -1;
+                InvalidateRect(hwnd, nullptr, FALSE);
+            }
+            return 0;
         case WM_LBUTTONUP: {
             int i = HitTile(lp);
             if (i >= MAXWIN && i < 2 * MAXWIN) {
@@ -606,7 +781,19 @@ void HideAt(HWND hwnd, bool& shown) {
     shown = false;
 }
 
+void StopTracking() {
+    g_frames.Stop();
+    g_tracking = false;
+    HideAt(g_bar, g_barShown);
+    HideAt(g_preview, g_previewShown);
+}
+
 void TrackFrame() {
+    // A window closed while it is dragged never reports the end of the drag.
+    if (!g_tracking || !IsWindow(g_hwnd)) {
+        StopTracking();
+        return;
+    }
     POINT pt;
     GetCursorPos(&pt);
     HMONITOR mon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
@@ -715,10 +902,7 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
 
     if (!g_tracking || hwnd != g_hwnd)
         return;
-    g_frames.Stop();
-    g_tracking = false;
-    HideAt(g_bar, g_barShown);
-    HideAt(g_preview, g_previewShown);
+    StopTracking();
 
     MONITORINFO mi{sizeof(mi)};
     GetMonitorInfo(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST), &mi);
@@ -736,6 +920,7 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
 }
 
 DWORD WINAPI ThreadProc(LPVOID) {
+    InitThread();
     HINSTANCE inst;
     GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
@@ -879,7 +1064,6 @@ using namespace common;
 
 constexpr int MAXWIN = 16;
 constexpr float PI = 3.14159265f;
-constexpr WORD VK_MASK = 0xE8;
 constexpr UINT WM_APP_START = WM_APP + 1;
 constexpr UINT WM_APP_STEP = WM_APP + 2;
 constexpr UINT WM_APP_END = WM_APP + 3;
@@ -912,6 +1096,7 @@ constexpr int MAXRAW = 48;
 constexpr int TITLE_LEN = MAXMEMBERS * 205;
 HWND g_raw[MAXRAW];
 HICON g_rawIcons[MAXRAW];
+bool g_rawFloating[MAXRAW];
 int g_rawCount;
 Item g_items[MAXWIN];
 HTHUMBNAIL g_thumbs[MAXMEMBERS];
@@ -939,19 +1124,15 @@ void SendKey(WORD vk, bool up) {
     in.type = INPUT_KEYBOARD;
     in.ki.wVk = vk;
     in.ki.dwFlags = up ? KEYEVENTF_KEYUP : 0;
+    in.ki.dwExtraInfo = INPUT_TAG;
     SendInput(1, &in, sizeof(INPUT));
 }
 
 BOOL CALLBACK EnumProc(HWND hwnd, LPARAM) {
-    WCHAR cls[32] = L"";
-    DWORD cloaked = 0;
-    LONG_PTR ex = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
-    GetClassName(hwnd, cls, 32);
-    DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
-    if (hwnd == g_wnd || !IsWindowVisible(hwnd) || cloaked || !GetWindowTextLength(hwnd) ||
-        (!(ex & WS_EX_APPWINDOW) && (GetWindow(hwnd, GW_OWNER) || (ex & WS_EX_TOOLWINDOW))) ||
-        !lstrcmpW(cls, L"Progman"))
+    bool floating = false;
+    if (hwnd == g_wnd || !IsCandidate(hwnd, &floating))
         return TRUE;
+    g_rawFloating[g_rawCount] = floating;
     DWORD_PTR icon = 0;
     SendMessageTimeout(hwnd, WM_GETICON, ICON_BIG, 0, SMTO_ABORTIFHUNG, 20, &icon);
     if (!icon)
@@ -969,6 +1150,7 @@ void Activate(HWND hwnd) {
     if (IsIconic(hwnd))
         ShowWindowAsync(hwnd, SW_RESTORE);
     INPUT in{};
+    in.mi.dwExtraInfo = INPUT_TAG;
     SendInput(1, &in, sizeof(INPUT));
     SetForegroundWindow(hwnd);
 }
@@ -1003,15 +1185,6 @@ void ItemTitle(int i, WCHAR* buf, int len) {
     }
 }
 
-bool FrameMatches(HWND hwnd, RECT r) {
-    RECT f;
-    if (IsIconic(hwnd) ||
-        FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &f, sizeof(f))))
-        return false;
-    return abs(f.left - r.left) <= 20 && abs(f.top - r.top) <= 20 &&
-           abs(f.right - r.right) <= 20 && abs(f.bottom - r.bottom) <= 20;
-}
-
 void BuildItems() {
     HWND fg = GetAncestor(GetForegroundWindow(), GA_ROOTOWNER);
     for (int i = 1; i < g_rawCount; i++) {
@@ -1019,12 +1192,15 @@ void BuildItems() {
             continue;
         HWND w = g_raw[i];
         HICON icon = g_rawIcons[i];
+        bool floating = g_rawFloating[i];
         for (; i > 0; i--) {
             g_raw[i] = g_raw[i - 1];
             g_rawIcons[i] = g_rawIcons[i - 1];
+            g_rawFloating[i] = g_rawFloating[i - 1];
         }
         g_raw[0] = w;
         g_rawIcons[0] = icon;
+        g_rawFloating[0] = floating;
         break;
     }
 
@@ -1041,7 +1217,8 @@ void BuildItems() {
             continue;
         HMONITOR mon = MonitorFromWindow(g_raw[i], MONITOR_DEFAULTTONEAREST);
         MONITORINFO mi{sizeof(mi)};
-        GetMonitorInfo(mon, &mi);
+        if (!GetMonitorInfo(mon, &mi))
+            continue;
         for (int l = NL - 1; l >= 0; l--) {
             const Layout& L = g_layouts[l];
             Group gr{};
@@ -1076,7 +1253,7 @@ void BuildItems() {
     g_count = 0;
     for (int i = 0; i < g_rawCount && g_count < settings.maxWindows; i++) {
         int gi = groupOf[i];
-        if (gi >= 0 && emitted[gi])
+        if ((gi >= 0 && emitted[gi]) || (gi < 0 && g_rawFloating[i]))
             continue;
         Item& it = g_items[g_count++];
         if (gi < 0) {
@@ -1088,6 +1265,7 @@ void BuildItems() {
         }
         emitted[gi] = true;
         it.n = groups[gi].n;
+        it.primary = 0;
         for (int m = 0; m < it.n; m++) {
             it.w[m] = g_raw[groups[gi].idx[m]];
             it.r[m] = groups[gi].r[m];
@@ -1098,12 +1276,25 @@ void BuildItems() {
     }
 }
 
+// Whether the first item is the window in use. When it isn't, for example with
+// the desktop in the foreground, Alt+Tab starts at the first item, not the
+// second one.
+bool FirstItemIsForeground() {
+    HWND fg = GetAncestor(GetForegroundWindow(), GA_ROOTOWNER);
+    for (int m = 0; g_count && m < g_items[0].n; m++)
+        if (g_items[0].w[m] == fg)
+            return true;
+    return false;
+}
+
 void UpdatePreview() {
     for (HTHUMBNAIL& t : g_thumbs) {
         if (t)
             DwmUnregisterThumbnail(t);
         t = nullptr;
     }
+    if (g_sel < 0 || g_sel >= g_count)
+        return;
     int w = g_mon.right - g_mon.left, h = g_mon.bottom - g_mon.top;
     float m = Sc(40), titleH = Sc(48);
     float bx = m, by = m + titleH, bw = w - 2 * m, bh = h / 2.f - by - Sc(24);
@@ -1284,7 +1475,7 @@ void Paint(HDC dc, int w, int h) {
         g.FillRectangle(&bottom, 0, h / 2, w, h - h / 2);
         Pen divider(Color(255, 54, 54, 54), Sc(1));
         g.DrawLine(&divider, 0.f, h / 2.f, (float)w, h / 2.f);
-        if (!g_count)
+        if (!g_count || g_sel < 0 || g_sel >= g_count)
             return;
 
         SolidBrush white(Color(255, 255, 255, 255)), dim(Color(255, 185, 185, 185));
@@ -1395,8 +1586,6 @@ void Paint(HDC dc, int w, int h) {
         g.FillEllipse(&knob, kx - kr, ky - kr, 2 * kr, 2 * kr);
     }
 
-    if (!g_count)
-        return;
     for (int k = 0; k < g_count; k++) {
         const Item& it = g_items[g_slot[k]];
         float a = (-90 + k * span) * PI / 180, s = it.n > 1 ? isz * 0.7f : isz, sp = Sc(4);
@@ -1491,6 +1680,7 @@ LRESULT CALLBACK MouseProc(int code, WPARAM wp, LPARAM lp) {
 }
 
 DWORD WINAPI HookThreadProc(LPVOID) {
+    InitThread();
     HHOOK kb = SetWindowsHookEx(WH_KEYBOARD_LL, KeyboardProc, g_inst, 0), mouse = nullptr;
     MSG msg;
     while (GetMessage(&msg, nullptr, 0, 0) > 0) {
@@ -1508,7 +1698,8 @@ DWORD WINAPI HookThreadProc(LPVOID) {
     }
     if (mouse)
         UnhookWindowsHookEx(mouse);
-    UnhookWindowsHookEx(kb);
+    if (kb)
+        UnhookWindowsHookEx(kb);
     return 0;
 }
 
@@ -1624,7 +1815,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 return 0;
             }
             BuildSlots();
-            g_sel = g_count < 2 ? 0 : wp ? g_count - 1 : 1;
+            g_sel = g_count < 2 ? 0 : wp ? g_count - 1 : FirstItemIsForeground() ? 1 : 0;
             if (settings.delay > 0)
                 SetTimer(hwnd, 1, settings.delay, nullptr);
             else
@@ -1644,11 +1835,13 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
                 return 0;
             }
+            if (wp != 1)
+                return 0;
             KillTimer(hwnd, 1);
             if (g_session && AltReleased()) {
                 g_session = false;
                 PostMessage(hwnd, WM_APP_END, 0, 0);
-            } else if (g_session) {
+            } else if (g_session && g_count) {
                 Open();
             }
             return 0;
@@ -1660,7 +1853,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 Select((g_sel + (int)(INT_PTR)wp + g_count) % g_count);
             return 0;
         case WM_APP_JOY: {
-            if (!g_open)
+            // The view can stay open for a moment with no items left, after the
+            // last window was closed with a right click.
+            if (!g_open || !g_count)
                 return 0;
             if (g_session && AltReleased()) {
                 g_session = false;
@@ -1736,6 +1931,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 }
 
 DWORD WINAPI ThreadProc(LPVOID) {
+    InitThread();
     ULONG_PTR gdiplusToken;
     Gdiplus::GdiplusStartupInput gsi;
     Gdiplus::GdiplusStartup(&gdiplusToken, &gsi, nullptr);
@@ -1749,14 +1945,20 @@ DWORD WINAPI ThreadProc(LPVOID) {
                            nullptr, WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, g_inst, nullptr);
     BOOL noAnim = TRUE;
     DwmSetWindowAttribute(g_wnd, DWMWA_TRANSITIONS_FORCEDISABLED, &noAnim, sizeof(noAnim));
-    StartThread(HookThreadProc, g_hookThread, g_hookThreadId);
+    bool hooked = StartThread(HookThreadProc, g_hookThread, g_hookThreadId);
 
     g_frames.Create();
     RunMessageLoop(g_frames, OnFrame);
 
     Close();
     g_frames.Destroy();
-    StopThread(g_hookThread, g_hookThreadId);
+    if (hooked)
+        StopThread(g_hookThread, g_hookThreadId);
+    KillTimer(g_wnd, 1);
+    KillTimer(g_wnd, 3);
+    KillTimer(g_wnd, 4);
+    g_closingCount = 0;
+    g_count = 0;
     DestroyWindow(g_wnd);
     if (g_mem)
         DeleteDC(g_mem);
@@ -1791,11 +1993,391 @@ void Stop() {
 
 }  // namespace radial
 
-bool g_splitRunning, g_radialRunning;
+namespace scroll {
+
+using namespace common;
+
+enum { MODE_OFF, MODE_INPUT, MODE_MESSAGES };
+constexpr UINT WM_APP_SCROLL = WM_APP + 1;
+constexpr WORD CTRL_KEYS[2] = {VK_LCONTROL, VK_RCONTROL};
+constexpr DWORD ALTGR_CTRL_SCAN = 0x21D;
+
+struct Job {
+    int n, src, delta;
+    bool horizontal, shift;
+    POINT pt;
+    HWND w[MAXMEMBERS];
+};
+
+std::atomic<int> g_mode;
+HANDLE g_thread, g_worker;
+DWORD g_threadId, g_workerId;
+HINSTANCE g_inst;
+
+// Used by the hook thread only. g_held: the key is physically down, but the
+// apps were told (or never knew otherwise) that it is up.
+bool g_held[2], g_used;
+int g_n;
+HWND g_members[MAXMEMBERS];
+RECT g_zones[MAXMEMBERS], g_area;
+
+bool Down(int vk) {
+    return GetAsyncKeyState(vk) < 0;
+}
+
+bool AnyHeld() {
+    return g_held[0] || g_held[1];
+}
+
+void AddKey(INPUT* in, int& k, WORD vk, bool up, bool extended) {
+    in[k] = {};
+    in[k].type = INPUT_KEYBOARD;
+    in[k].ki.wVk = vk;
+    in[k].ki.dwExtraInfo = INPUT_TAG;
+    in[k++].ki.dwFlags = (up ? KEYEVENTF_KEYUP : 0) | (extended ? KEYEVENTF_EXTENDEDKEY : 0);
+}
+
+LONG Normalize(LONG v, int origin, int size) {
+    if (size < 1)
+        size = 1;
+    return (LONG)(((LONGLONG)(v - origin) * 65536 + size - 1) / size);
+}
+
+void AddMouse(INPUT* in, int& k, POINT p, DWORD flags, int data) {
+    in[k] = {};
+    in[k].type = INPUT_MOUSE;
+    in[k].mi.dx = Normalize(p.x, GetSystemMetrics(SM_XVIRTUALSCREEN),
+                            GetSystemMetrics(SM_CXVIRTUALSCREEN));
+    in[k].mi.dy = Normalize(p.y, GetSystemMetrics(SM_YVIRTUALSCREEN),
+                            GetSystemMetrics(SM_CYVIRTUALSCREEN));
+    in[k].mi.mouseData = (DWORD)data;
+    in[k].mi.dwExtraInfo = INPUT_TAG;
+    in[k++].mi.dwFlags =
+        flags | MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK;
+}
+
+// Gives the held keys back to the apps. SendInput is processed before the hook
+// that calls it returns, so the apps get Ctrl before the event that follows.
+void ShowCtrl() {
+    INPUT in[2];
+    int k = 0;
+    for (int i = 0; i < 2; i++)
+        if (g_held[i]) {
+            AddKey(in, k, CTRL_KEYS[i], false, i == 1);
+            g_held[i] = false;
+        }
+    if (k)
+        SendInput(k, in, sizeof(INPUT));
+}
+
+// Takes the Ctrl keys the apps already know about away from them. The mask key
+// keeps it from looking like a single Ctrl tap.
+bool HideCtrl() {
+    INPUT in[4];
+    int k = 0;
+    AddKey(in, k, VK_MASK, false, false);
+    AddKey(in, k, VK_MASK, true, false);
+    for (int i = 0; i < 2; i++)
+        if (Down(CTRL_KEYS[i])) {
+            AddKey(in, k, CTRL_KEYS[i], true, i == 1);
+            g_held[i] = true;
+        }
+    if (!AnyHeld())
+        return false;
+    SendInput(k, in, sizeof(INPUT));
+    return true;
+}
+
+bool FindGroup(POINT pt) {
+    g_n = FindSplitGroup(pt, g_members, g_zones);
+    if (g_n < 2) {
+        g_n = 0;
+        return false;
+    }
+    g_area = g_zones[0];
+    for (int z = 1; z < g_n; z++)
+        UnionRect(&g_area, &g_area, &g_zones[z]);
+    return true;
+}
+
+// The zone of the known group that has the window at pt, or -1. With check, the
+// group also has to be still in place.
+int SourceZone(POINT pt, bool check) {
+    HWND root = RootAt(pt);
+    int src = -1;
+    for (int z = 0; z < g_n; z++) {
+        if (check && !FrameMatches(g_members[z], g_zones[z]))
+            return -1;
+        if (g_members[z] == root)
+            src = z;
+    }
+    return src;
+}
+
+HWND ChildAt(HWND root, POINT screen) {
+    HWND cur = root;
+    for (int depth = 0; depth < 32; depth++) {
+        POINT c = screen;
+        ScreenToClient(cur, &c);
+        HWND next = ChildWindowFromPointEx(
+            cur, c, CWP_SKIPINVISIBLE | CWP_SKIPDISABLED | CWP_SKIPTRANSPARENT);
+        if (!next || next == cur)
+            break;
+        cur = next;
+    }
+    return cur;
+}
+
+bool Frame(HWND hwnd, RECT* r) {
+    return SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, r, sizeof(*r))) &&
+           r->right > r->left && r->bottom > r->top;
+}
+
+// Worker thread: repeats the wheel in the other windows of the group. The
+// window under the mouse got the original wheel event.
+void Scroll(const Job& job) {
+    // The apps got Ctrl back in the meantime; the wheel would zoom them.
+    if (Down(VK_CONTROL))
+        return;
+    RECT s;
+    if (!Frame(job.w[job.src], &s))
+        return;
+    float rx = (float)(job.pt.x - s.left) / (s.right - s.left);
+    float ry = (float)(job.pt.y - s.top) / (s.bottom - s.top);
+    rx = fminf(fmaxf(rx, 0.02f), 0.98f);
+    ry = fminf(fmaxf(ry, 0.02f), 0.98f);
+
+    UINT routing = 2;
+    SystemParametersInfo(SPI_GETMOUSEWHEELROUTING, 0, &routing, 0);
+    bool messages = g_mode == MODE_MESSAGES || routing == 0;
+    DWORD flags = job.horizontal ? MOUSEEVENTF_HWHEEL : MOUSEEVENTF_WHEEL;
+    UINT msg = job.horizontal || job.shift ? WM_MOUSEHWHEEL : WM_MOUSEWHEEL;
+    int msgDelta = job.shift && !job.horizontal ? -job.delta : job.delta;
+
+    INPUT in[MAXMEMBERS + 1];
+    int k = 0;
+    for (int z = 0; z < job.n; z++) {
+        RECT r;
+        if (z == job.src || !Frame(job.w[z], &r))
+            continue;
+        POINT t{r.left + (LONG)(rx * (r.right - r.left)), r.top + (LONG)(ry * (r.bottom - r.top))};
+        // Real input goes to whatever is at the point, so it is used only when
+        // that is the window to scroll.
+        if (!messages && RootAt(t) == job.w[z])
+            AddMouse(in, k, t, flags, job.delta);
+        else
+            PostMessage(ChildAt(job.w[z], t), msg, MAKEWPARAM(0, msgDelta),
+                        MAKELPARAM(t.x, t.y));
+    }
+    if (!k)
+        return;
+    POINT cur, now;
+    if (!GetCursorPos(&cur))
+        return;
+    AddMouse(in, k, cur, 0, 0);
+    SendInput(k, in, sizeof(INPUT));
+    if (GetCursorPos(&now) && (now.x != cur.x || now.y != cur.y) && abs(now.x - cur.x) <= 1 &&
+        abs(now.y - cur.y) <= 1)
+        SetCursorPos(cur.x, cur.y);
+}
+
+bool SameTarget(const Job& a, const Job& b) {
+    if (a.n != b.n || a.src != b.src || a.horizontal != b.horizontal || a.shift != b.shift)
+        return false;
+    for (int z = 0; z < a.n; z++)
+        if (a.w[z] != b.w[z])
+            return false;
+    return true;
+}
+
+int ClampDelta(int delta) {
+    return delta > 32000 ? 32000 : delta < -32000 ? -32000 : delta;
+}
+
+DWORD WINAPI WorkerProc(LPVOID) {
+    InitThread();
+    MSG msg;
+    bool quit = false;
+    while (!quit && GetMessage(&msg, nullptr, 0, 0) > 0) {
+        if (msg.message != WM_APP_SCROLL)
+            continue;
+        Job* job = (Job*)msg.lParam;
+        // When wheel events arrive faster than they are repeated, the waiting
+        // ones are merged, so the scrolling never falls behind.
+        MSG next;
+        while (PeekMessage(&next, nullptr, WM_APP_SCROLL, WM_APP_SCROLL, PM_REMOVE)) {
+            if (next.message != WM_APP_SCROLL) {
+                quit = next.message == WM_QUIT;
+                break;
+            }
+            Job* later = (Job*)next.lParam;
+            if (SameTarget(*job, *later)) {
+                later->delta = ClampDelta(later->delta + job->delta);
+            } else {
+                Scroll(*job);
+            }
+            delete job;
+            job = later;
+        }
+        Scroll(*job);
+        delete job;
+    }
+    while (PeekMessage(&msg, nullptr, WM_APP_SCROLL, WM_APP_SCROLL, PM_REMOVE) &&
+           msg.message == WM_APP_SCROLL)
+        delete (Job*)msg.lParam;
+    return 0;
+}
+
+void PostJob(const MSLLHOOKSTRUCT* m, bool horizontal, int src) {
+    Job* job = new Job{};
+    job->n = g_n;
+    job->src = src;
+    job->delta = (short)HIWORD(m->mouseData);
+    job->horizontal = horizontal;
+    job->shift = Down(VK_SHIFT);
+    job->pt = m->pt;
+    for (int z = 0; z < g_n; z++)
+        job->w[z] = g_members[z];
+    if (!PostThreadMessage(g_workerId, WM_APP_SCROLL, 0, (LPARAM)job))
+        delete job;
+}
+
+// The hooks only decide and hand the scrolling over to the worker thread, so
+// they return quickly: a slow low-level hook delays all input, and Windows
+// removes it without notice.
+LRESULT CALLBACK KeyboardProc(int code, WPARAM wp, LPARAM lp) {
+    auto* kb = (KBDLLHOOKSTRUCT*)lp;
+    if (code != HC_ACTION || kb->dwExtraInfo == INPUT_TAG)
+        return CallNextHookEx(nullptr, code, wp, lp);
+    bool down = wp == WM_KEYDOWN || wp == WM_SYSKEYDOWN;
+    int ctrl = kb->vkCode == VK_LCONTROL ? 0 : kb->vkCode == VK_RCONTROL ? 1 : -1;
+
+    if (ctrl >= 0 && down) {
+        if (g_held[ctrl])
+            return 1;
+        // Not held back: key repeats, the Ctrl that Windows adds to AltGr, Ctrl
+        // pressed together with Alt or Win or during a drag.
+        if (AnyHeld() || radial::g_open || kb->scanCode == ALTGR_CTRL_SCAN ||
+            Down(VK_CONTROL) || Down(VK_MENU) || Down(VK_LWIN) || Down(VK_RWIN) ||
+            Down(VK_LBUTTON) || Down(VK_RBUTTON) || Down(VK_MBUTTON))
+            return CallNextHookEx(nullptr, code, wp, lp);
+        POINT pt;
+        if (!GetCursorPos(&pt) || !FindGroup(pt))
+            return CallNextHookEx(nullptr, code, wp, lp);
+        g_held[ctrl] = true;
+        g_used = false;
+        return 1;
+    }
+
+    if (ctrl >= 0) {
+        if (!g_held[ctrl])
+            return CallNextHookEx(nullptr, code, wp, lp);
+        g_held[ctrl] = false;
+        if (!g_used) {
+            INPUT in[2];
+            int k = 0;
+            AddKey(in, k, CTRL_KEYS[ctrl], false, ctrl == 1);
+            AddKey(in, k, CTRL_KEYS[ctrl], true, ctrl == 1);
+            SendInput(k, in, sizeof(INPUT));
+        }
+        return 1;
+    }
+
+    bool shift = kb->vkCode == VK_LSHIFT || kb->vkCode == VK_RSHIFT || kb->vkCode == VK_SHIFT;
+    if (down && !shift && AnyHeld())
+        ShowCtrl();
+    return CallNextHookEx(nullptr, code, wp, lp);
+}
+
+LRESULT CALLBACK MouseProc(int code, WPARAM wp, LPARAM lp) {
+    auto* m = (MSLLHOOKSTRUCT*)lp;
+    if (code != HC_ACTION || m->dwExtraInfo == INPUT_TAG)
+        return CallNextHookEx(nullptr, code, wp, lp);
+
+    if (wp == WM_MOUSEWHEEL || wp == WM_MOUSEHWHEEL) {
+        bool held = AnyHeld();
+        if (radial::g_open || (!held && (!Down(VK_CONTROL) || Down(VK_MENU) || Down(VK_LWIN) ||
+                                         Down(VK_RWIN))))
+            return CallNextHookEx(nullptr, code, wp, lp);
+        int src = held ? SourceZone(m->pt, true) : -1;
+        if (src < 0 && FindGroup(m->pt))
+            src = SourceZone(m->pt, false);
+        if (src < 0 || (!held && !HideCtrl())) {
+            ShowCtrl();
+            return CallNextHookEx(nullptr, code, wp, lp);
+        }
+        g_used = true;
+        PostJob(m, wp == WM_MOUSEHWHEEL, src);
+        return CallNextHookEx(nullptr, code, wp, lp);
+    }
+
+    if (!AnyHeld())
+        return CallNextHookEx(nullptr, code, wp, lp);
+    bool button = wp == WM_LBUTTONDOWN || wp == WM_RBUTTONDOWN || wp == WM_MBUTTONDOWN ||
+                  wp == WM_XBUTTONDOWN;
+    if (button || (wp == WM_MOUSEMOVE && !PtInRect(&g_area, m->pt)))
+        ShowCtrl();
+    return CallNextHookEx(nullptr, code, wp, lp);
+}
+
+DWORD WINAPI ThreadProc(LPVOID) {
+    InitThread();
+    GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                          GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                      (LPCWSTR)ThreadProc, &g_inst);
+    g_held[0] = g_held[1] = g_used = false;
+    g_n = 0;
+    HHOOK keyboard = SetWindowsHookEx(WH_KEYBOARD_LL, KeyboardProc, g_inst, 0);
+    HHOOK mouse = SetWindowsHookEx(WH_MOUSE_LL, MouseProc, g_inst, 0);
+    Wh_Log(L"Sync scroll hooks %s", keyboard && mouse ? L"installed" : L"failed");
+    MSG msg;
+    while (GetMessage(&msg, nullptr, 0, 0) > 0)
+        DispatchMessage(&msg);
+    if (mouse)
+        UnhookWindowsHookEx(mouse);
+    if (keyboard)
+        UnhookWindowsHookEx(keyboard);
+    ShowCtrl();
+    return 0;
+}
+
+void LoadSettings() {
+    PCWSTR value = Wh_GetStringSetting(L"syncScroll");
+    g_mode = !lstrcmpW(value, L"disabled")   ? MODE_OFF
+             : !lstrcmpW(value, L"messages") ? MODE_MESSAGES
+                                             : MODE_INPUT;
+    Wh_FreeStringSetting(value);
+}
+
+bool Start() {
+    if (!StartThread(WorkerProc, g_worker, g_workerId))
+        return false;
+    if (StartThread(ThreadProc, g_thread, g_threadId))
+        return true;
+    StopThread(g_worker, g_workerId);
+    return false;
+}
+
+void Stop() {
+    StopThread(g_thread, g_threadId);
+    StopThread(g_worker, g_workerId);
+}
+
+}  // namespace scroll
+
+bool g_splitRunning, g_radialRunning, g_scrollRunning;
 
 void LoadSettings() {
     split::LoadSettings();
     radial::LoadSettings();
+    scroll::LoadSettings();
+    bool scrollOn = scroll::g_mode != scroll::MODE_OFF;
+    if (scrollOn && !g_scrollRunning) {
+        g_scrollRunning = scroll::Start();
+    } else if (!scrollOn && g_scrollRunning) {
+        scroll::Stop();
+        g_scrollRunning = false;
+    }
     if (split::settings.enabled && !g_splitRunning) {
         g_splitRunning = split::Start();
     } else if (!split::settings.enabled && g_splitRunning) {
@@ -1813,15 +2395,21 @@ void LoadSettings() {
 BOOL WhTool_ModInit() {
     split::RecoverDocking();
     LoadSettings();
+    Wh_Log(L"Started: split layouts %d, radial Alt+Tab %d, sync scroll %d", g_splitRunning,
+           g_radialRunning, g_scrollRunning);
     return TRUE;
 }
 
 void WhTool_ModUninit() {
-    if (g_splitRunning)
-        split::Stop();
+    split::SetDocking(false);
+    if (g_scrollRunning)
+        scroll::Stop();
     if (g_radialRunning)
         radial::Stop();
-    split::SetDocking(false);
+    if (g_splitRunning)
+        split::Stop();
+    Wh_Log(L"Stopped");
+    TerminateProcess(GetCurrentProcess(), 0);
 }
 
 void WhTool_ModSettingsChanged() {
