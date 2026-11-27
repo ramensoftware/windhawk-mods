@@ -1,17 +1,17 @@
 // ==WindhawkMod==
 // @id              audio-hardware-volume-preset
-// @name            Audio Hardware Volume Preset
+// @name            Safe Device Volume Presets
 // @description     Sets audio playback devices to a configured volume whenever they connect
-// @version         1.3.0
+// @version         1.4.0
 // @author          Dev-StudioCode
 // @github          https://github.com/Dev-StudioCode
 // @include         windhawk.exe
-// @compilerOptions -lole32 -lshell32
+// @compilerOptions -lole32 -lshell32 -luser32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# Audio Hardware Volume Preset
+# Safe Device Volume Presets
 
 Automatically sets your headphones, speakers, Bluetooth headsets, USB DACs, or
 any other audio playback hardware to a specific preset volume whenever they
@@ -23,6 +23,8 @@ by 100% volume again.
 - **Smart Hardware Matching:** Supports flexible keyword and token matching. You
 can enter simple keywords (like `AirPods`, `Sony`, `DAC`, `Speakers`) or full
 device names.
+- **One-Click Device Detection:** Detect connected audio devices and copy their
+names and suggested rule keywords directly to your clipboard from settings.
 - **Max Volume Safety Cap:** Set a ceiling on the preset volume applied at
 connect time (up to 100%).
 - **Global Fallback:** Set any unrecognized audio device to a safe default
@@ -42,33 +44,37 @@ so place more specific rules before general ones.
 
 // ==WindhawkModSettings==
 /*
+- detectConnectedDevices: false
+  $name: 'Detect and Copy Connected Audio Devices'
+  $description: 'Turn this on and click Save. The mod will detect active audio devices, copy their names and suggested keywords to your clipboard, and show a confirmation popup.'
+
 - defaultVolume: 30
-  $name: Default Volume (%)
-  $description: Master volume percentage (0-100) applied when any audio hardware connects, if no specific rule matches.
+  $name: 'Default Volume (%)'
+  $description: 'Master volume percentage (0-100) applied when any audio hardware connects, if no specific rule matches.'
 
 - maxVolumeLimit: 100
-  $name: Max Volume Safety Limit (%)
-  $description: Maximum volume ceiling (0-100) applied to presets at connect time. Does not prevent manual volume changes afterward.
+  $name: 'Max Volume Safety Limit (%)'
+  $description: 'Maximum volume ceiling (0-100) applied to presets at connect time. Does not prevent manual volume changes afterward.'
 
 - applyToAllDevices: true
-  $name: Apply to all devices by default
-  $description: If enabled, any connected playback device without an explicit rule will use the Default Volume.
+  $name: 'Apply to all devices by default'
+  $description: 'If enabled, any connected playback device without an explicit rule will use the Default Volume.'
 
 - autoUnmute: true
-  $name: Unmute on connect
-  $description: Automatically unmutes the audio device when setting its volume.
+  $name: 'Unmute on connect'
+  $description: 'Automatically unmutes the audio device when setting its volume.'
 
 - applyOnStartup: true
-  $name: Apply on mod startup
-  $description: Apply volume preset to the current default audio device when the mod initializes.
+  $name: 'Apply on mod startup'
+  $description: 'Apply volume preset to the current default audio device when the mod initializes.'
 
 - deviceRules:
   - - name: ""
-      $name: Device Name or Keyword
+      $name: 'Device Name or Keyword'
     - volume: 30
-      $name: Volume (%)
-  $name: Custom Device Presets
-  $description: Volume presets for specific hardware. Enter a keyword from your device name (e.g. AirPods, Sony, DAC). The first matching rule wins.
+      $name: 'Volume (%)'
+  $name: 'Custom Device Presets'
+  $description: 'Volume presets for specific hardware. Enter a keyword from your device name (e.g. AirPods, Sony, DAC). The first matching rule wins.'
 */
 // ==/WindhawkModSettings==
 
@@ -187,7 +193,157 @@ static bool CheckCandidateMatch(const std::wstring &candidate,
   return false;
 }
 
+// Returns a concise suggested keyword from a friendly device name for custom rules
+static std::wstring GetSuggestedKeyword(const std::wstring &friendlyName) {
+  std::wstring candidate;
+  for (size_t i = 0; i <= friendlyName.length(); i++) {
+    wchar_t c = (i < friendlyName.length()) ? friendlyName[i] : L'\0';
+    if (iswalnum(c) || c == L'-') {
+      candidate += c;
+    } else {
+      if (!candidate.empty()) {
+        while (!candidate.empty() && candidate.front() == L'-')
+          candidate.erase(candidate.begin());
+        while (!candidate.empty() && candidate.back() == L'-')
+          candidate.pop_back();
+
+        std::wstring lower = ToLower(candidate);
+        if (candidate.length() >= 2 && !IsStopWord(lower)) {
+          bool hasAlpha = false;
+          for (wchar_t ch : candidate) {
+            if (iswalpha(ch)) {
+              hasAlpha = true;
+              break;
+            }
+          }
+          if (hasAlpha) {
+            return candidate;
+          }
+        }
+        candidate.clear();
+      }
+    }
+  }
+  return friendlyName;
+}
+
+// Thread that enumerates all active playback devices and exports them to clipboard
+static DWORD WINAPI ExportDevicesThread(LPVOID /*lpParam*/) {
+  HRESULT hrCom = CoInitializeEx(NULL, COINIT_MULTITHREADED);
+  if (FAILED(hrCom)) {
+    Wh_Log(L"CoInitializeEx failed in ExportDevicesThread: 0x%08X", hrCom);
+    return 1;
+  }
+
+  IMMDeviceEnumerator *pEnum = NULL;
+  HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL,
+                                __uuidof(IMMDeviceEnumerator), (void **)&pEnum);
+  if (SUCCEEDED(hr) && pEnum) {
+    IMMDeviceCollection *pCollection = NULL;
+    hr = pEnum->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &pCollection);
+    if (SUCCEEDED(hr) && pCollection) {
+      UINT count = 0;
+      pCollection->GetCount(&count);
+
+      std::wstring clipText;
+      clipText += L"=== Safe Device Volume Presets: Connected Playback Devices ===\r\n\r\n";
+
+      for (UINT i = 0; i < count; i++) {
+        IMMDevice *pDev = NULL;
+        if (SUCCEEDED(pCollection->Item(i, &pDev)) && pDev) {
+          WCHAR szName[256] = L"Unknown Device";
+          IPropertyStore *pProps = NULL;
+          if (SUCCEEDED(pDev->OpenPropertyStore(STGM_READ, &pProps)) && pProps) {
+            PROPVARIANT var;
+            PropVariantInit(&var);
+            if (SUCCEEDED(pProps->GetValue(PKEY_Device_FriendlyName, &var))) {
+              if (var.vt == VT_LPWSTR && var.pwszVal) {
+                wcsncpy_s(szName, var.pwszVal, _TRUNCATE);
+              }
+              PropVariantClear(&var);
+            }
+            pProps->Release();
+          }
+
+          float fVol = 0.0f;
+          IAudioEndpointVolume *pEndpointVol = NULL;
+          if (SUCCEEDED(pDev->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL,
+                                       NULL, (void **)&pEndpointVol))) {
+            pEndpointVol->GetMasterVolumeLevelScalar(&fVol);
+            pEndpointVol->Release();
+          }
+
+          std::wstring keyword = GetSuggestedKeyword(szName);
+          int volPercent = (int)(fVol * 100.0f + 0.5f);
+
+          clipText += L"Device " + std::to_wstring(i + 1) + L": " + szName + L"\r\n";
+          clipText += L"  Current Volume: " + std::to_wstring(volPercent) + L"%\r\n";
+          clipText += L"  Suggested Rule Keyword: " + keyword + L"\r\n\r\n";
+
+          pDev->Release();
+        }
+      }
+
+      clipText += L"==============================================================\r\n";
+      clipText += L"Instructions:\r\n";
+      clipText += L"Copy any 'Suggested Rule Keyword' or device name above,\r\n";
+      clipText += L"then paste it into 'Custom Device Presets' in Windhawk mod settings.\r\n";
+
+      // Copy text to Windows clipboard
+      bool clipboardOpened = false;
+      for (int retry = 0; retry < 5; retry++) {
+        if (OpenClipboard(NULL)) {
+          clipboardOpened = true;
+          break;
+        }
+        Sleep(50);
+      }
+
+      if (clipboardOpened) {
+        EmptyClipboard();
+        size_t bytes = (clipText.length() + 1) * sizeof(wchar_t);
+        HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, bytes);
+        if (hMem) {
+          void *pMem = GlobalLock(hMem);
+          if (pMem) {
+            memcpy(pMem, clipText.c_str(), bytes);
+            GlobalUnlock(hMem);
+            SetClipboardData(CF_UNICODETEXT, hMem);
+          }
+        }
+        CloseClipboard();
+      }
+
+      Wh_Log(L"ExportDevicesThread: Successfully copied %u device(s) to clipboard.", count);
+
+      std::wstring msg = L"Successfully detected " + std::to_wstring(count) +
+                         L" active audio playback device(s)!\n\n"
+                         L"Device names and suggested rule keywords have been copied to your clipboard.\n\n"
+                         L"You can now paste any keyword directly into 'Custom Device Presets' in Windhawk settings.";
+      MessageBoxW(NULL, msg.c_str(), L"Safe Device Volume Presets",
+                  MB_OK | MB_ICONINFORMATION | MB_TOPMOST);
+
+      pCollection->Release();
+    }
+    pEnum->Release();
+  }
+
+  CoUninitialize();
+  return 0;
+}
+
+static BOOL s_prevDetectSetting = FALSE;
+
 static void LoadSettings() {
+  BOOL detectDevices = Wh_GetIntSetting(L"detectConnectedDevices");
+  if (detectDevices && !s_prevDetectSetting) {
+    HANDLE hThread = CreateThread(NULL, 0, ExportDevicesThread, NULL, 0, NULL);
+    if (hThread) {
+      CloseHandle(hThread);
+    }
+  }
+  s_prevDetectSetting = detectDevices;
+
   AcquireSRWLockExclusive(&g_lock);
 
   g_defaultVolume = Wh_GetIntSetting(L"defaultVolume");
@@ -443,9 +599,9 @@ public:
     return S_OK;
   }
 
-  STDMETHODIMP OnDeviceAdded(LPCWSTR pwstrDeviceId) override { return S_OK; }
+  STDMETHODIMP OnDeviceAdded(LPCWSTR /*pwstrDeviceId*/) override { return S_OK; }
 
-  STDMETHODIMP OnDeviceRemoved(LPCWSTR pwstrDeviceId) override { return S_OK; }
+  STDMETHODIMP OnDeviceRemoved(LPCWSTR /*pwstrDeviceId*/) override { return S_OK; }
 
   // Called when the default output device switches
   STDMETHODIMP OnDefaultDeviceChanged(EDataFlow flow, ERole role,
@@ -458,8 +614,8 @@ public:
     return S_OK;
   }
 
-  STDMETHODIMP OnPropertyValueChanged(LPCWSTR pwstrDeviceId,
-                                      const PROPERTYKEY key) override {
+  STDMETHODIMP OnPropertyValueChanged(LPCWSTR /*pwstrDeviceId*/,
+                                      const PROPERTYKEY /*key*/) override {
     return S_OK;
   }
 };
@@ -536,7 +692,7 @@ static void LogConnectedDevices() {
   pCollection->Release();
 }
 
-static DWORD WINAPI AudioMonitorThread(LPVOID lpParam) {
+static DWORD WINAPI AudioMonitorThread(LPVOID /*lpParam*/) {
   HRESULT hrCom = CoInitializeEx(NULL, COINIT_MULTITHREADED);
   if (FAILED(hrCom)) {
     Wh_Log(L"CoInitializeEx failed in AudioMonitorThread: 0x%08X", hrCom);
@@ -805,10 +961,10 @@ void Wh_ModAfterInit() {
     return;
   }
 
-  STARTUPINFO si{
-      .cb = sizeof(STARTUPINFO),
-      .dwFlags = STARTF_FORCEOFFFEEDBACK,
-  };
+  STARTUPINFO si;
+  ZeroMemory(&si, sizeof(si));
+  si.cb = sizeof(STARTUPINFO);
+  si.dwFlags = STARTF_FORCEOFFFEEDBACK;
   PROCESS_INFORMATION pi;
   if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
                                nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
