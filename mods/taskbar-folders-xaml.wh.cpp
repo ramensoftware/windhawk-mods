@@ -3412,21 +3412,23 @@ struct FolderPanel : FolderPalette {
                 requestedStyle = FolderStyle::Inherit;
     AppearanceSettings appliedSettings{};
     HMENU designMenu{};
-    HWND window{}, list{}, title{}, empty{}, add{}, more{}, hover{}, tips{},
+    // window addresses the current interaction. A parked popup keeps its child
+    // controls and paint resources but takes no input or animation callbacks.
+    HWND window{}, parkedWindow{}, list{}, title{}, empty{}, add{}, more{}, hover{}, tips{},
         filter{}, lens{};
     HFONT normalFont{}, titleFont{}, paperFont{};
     HBRUSH background{};
     HIMAGELIST icons{};
     std::map<wstring, int> imageSlots;
     UINT dpi = 96;
-    RECT anchor{}, bar{};
-    wstring folder;
+    RECT anchor{}, bar{}, layoutWork{};
+    wstring folder, choicesFolder;
     std::vector<App> apps;
     unsigned rendered = ~0u, viewSerial = 0, choicesRevision = ~0u;
     std::vector<App> pins;
     AppSearch search;
     int cellWidth = 0, cellHeight = 0, iconSize = 0, lineHeight = 0;
-    bool browsing = false;
+    bool browsing = false, searchLayout = false;
     com_ptr<IDropTarget> registeredDropTarget;
     bool dropHover = false, waitForDrag = false;
     int pressed = -1, dropTarget = -1, contextItem = -1;
@@ -3501,9 +3503,10 @@ static void endPeer(std::optional<POINT> drop);
 static wstring dropFolderAt(POINT);
 static void beginRename();
 static void endRename(bool save, bool restoreFocus);
-static void closePanel() {
-    if (panel->window)
-        DestroyWindow(panel->window);
+static void destroyPanel() {
+    HWND w = panel->window ? panel->window : panel->parkedWindow;
+    if (w)
+        DestroyWindow(w);
 }
 static int px(int dip) {
     return MulDiv(dip, panel->dpi, 96);
@@ -5245,8 +5248,6 @@ static void revealPanel() {
     layered(true);
     target(panel->reveal, 1, 165);
     panelPosition(motionTime());
-    if (!panel->frame)
-        layered(false);
 }
 static void dismissPanel() {
     if (!panel->window || panel->closing)
@@ -5280,14 +5281,16 @@ static void releasePreviousPage() {
 static void tickPanel() {
     auto now = panel->frameSample = motionTime();
     bool active = panel->reveal.active(now);
-    if (panel->layered) {
+    if (panel->reveal.duration) {
         panelPosition(now);
         if (!active) {
             if (panel->closing) {
                 closePanel();
                 return;
             }
-            layered(false);
+            // Keep the composited surface for the next reveal. Tile-only
+            // animation frames do not reposition or reblend the window.
+            panel->reveal.set(1);
         }
     }
     bool full = panel->arrival.damage(now, active);
@@ -5679,6 +5682,8 @@ panelChild(HWND h, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR sub, DWORD_PTR) {
             RemoveWindowSubclass(h, panelChild, sub);
             return DefSubclassProc(h, msg, wp, lp);
         }
+        if (!panel->window)
+            return DefSubclassProc(h, msg, wp, lp);
         if ((msg == WM_MOUSEWHEEL || msg == WM_MOUSEHWHEEL) &&
             pageWheel(msg, wp))
             return 0;
@@ -7042,7 +7047,7 @@ static void refreshPanel() {
     panel->incoming.lastPage = -1;
     auto f = lookup(groups, panel->folder);
     if (!f) {
-        closePanel();
+        destroyPanel();
         return;
     }
     if (panel->windowFolder != f->id)
@@ -7056,6 +7061,22 @@ static void refreshPanel() {
     releasePreviousPage();
     ++panel->viewSerial;
     const bool searchField = panel->choosing || panel->filtering;
+    // A mode change moves both the native edit and the grid. Keep the previous
+    // frame on screen until both have their final bounds, colors and contents.
+    struct LayoutRedraw {
+        HWND window;
+        ~LayoutRedraw() {
+            if (window) {
+                SendMessageW(window, WM_SETREDRAW, TRUE, 0);
+                RedrawWindow(window, nullptr, nullptr,
+                             RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+            }
+        }
+    } redraw{panel->searchLayout != searchField && IsWindowVisible(panel->window)
+                 ? panel->window : nullptr};
+    if (redraw.window)
+        SendMessageW(redraw.window, WM_SETREDRAW, FALSE, 0);
+    panel->searchLayout = searchField;
     wstring query = searchField ? windowText(panel->filter) : L"";
     auto terms = searchTerms(query);
     bool searching = !terms.empty();
@@ -7079,9 +7100,10 @@ static void refreshPanel() {
             }
         }
     } else {
-        if (panel->choicesRevision != revision) {
+        if (panel->choicesRevision != revision || panel->choicesFolder != f->id) {
             panel->search.generation.reset();
             panel->pins = taskbarChoices(*f);
+            panel->choicesFolder = f->id;
             panel->choicesRevision = revision;
         }
         if (!searching)
@@ -7097,6 +7119,7 @@ static void refreshPanel() {
     MONITORINFO mi{sizeof(mi)};
     GetMonitorInfoW(MonitorFromRect(&panel->anchor, MONITOR_DEFAULTTONEAREST),
                     &mi);
+    panel->layoutWork = mi.rcWork;
     HDC dc = GetDC(panel->list);
     auto before = SelectObject(dc, panel->normalFont);
     TEXTMETRICW tm{};
@@ -7150,31 +7173,31 @@ static void refreshPanel() {
     int w = client.right, h = client.bottom, side = px(28), gap = px(4);
     int last = w - pad - side, addX = last - side - gap;
     MoveWindow(panel->title, pad + px(2), px(8), std::max(1, addX - pad - gap),
-               side, TRUE);
-    MoveWindow(panel->add, addX, px(8), side, side, TRUE);
-    MoveWindow(panel->more, last, px(8), side, side, TRUE);
+               side, FALSE);
+    MoveWindow(panel->add, addX, px(8), side, side, FALSE);
+    MoveWindow(panel->more, last, px(8), side, side, FALSE);
     panel->searchRect = {pad, px(44), w - pad, px(76)};
     if (panel->filter) {
-        MoveWindow(panel->lens, pad + px(4), px(47), px(27), px(26), TRUE);
+        MoveWindow(panel->lens, pad + px(4), px(47), px(27), px(26), FALSE);
         MoveWindow(panel->filter, pad + px(33),
                    px(44) + (px(32) - panel->lineHeight) / 2,
                    std::max(1, w - 2 * pad - px(42)), panel->lineHeight + 1,
-                   TRUE);
+                   FALSE);
         ShowWindow(panel->lens, searchField ? SW_SHOWNA : SW_HIDE);
         ShowWindow(panel->filter, searchField ? SW_SHOWNA : SW_HIDE);
     }
     int gridHeight =
         std::max(1, h - gridTop - (pageCount() > 1 ? px(36) : px(10)));
     MoveWindow(panel->empty, pad, gridTop, std::max(1, w - 2 * pad), gridHeight,
-               TRUE);
+               FALSE);
     int listWidth = std::max(1, std::min(w, cols * cellW));
     MoveWindow(panel->list, (w - listWidth) / 2, gridTop, listWidth, gridHeight,
-               TRUE);
+               FALSE);
     if (pageCount() > 1 && ensurePager()) {
         int footerY = h - px(32), ind = px(76), btn = px(26);
-        MoveWindow(panel->prev, (w - ind) / 2 - btn, footerY, btn, btn, TRUE);
-        MoveWindow(panel->pager, (w - ind) / 2, footerY, ind, btn, TRUE);
-        MoveWindow(panel->next, (w + ind) / 2, footerY, btn, btn, TRUE);
+        MoveWindow(panel->prev, (w - ind) / 2 - btn, footerY, btn, btn, FALSE);
+        MoveWindow(panel->pager, (w - ind) / 2, footerY, ind, btn, FALSE);
+        MoveWindow(panel->next, (w + ind) / 2, footerY, btn, btn, FALSE);
     }
     auto heading =
         panel->choosing ? formatUi(UiString::AddTo, f->name) : f->name;
@@ -7216,8 +7239,8 @@ static void refreshPanel() {
     populatePage();
     ShowWindow(panel->empty, rows ? SW_HIDE : SW_SHOWNA);
     panel->rendered = revision;
-    RedrawWindow(panel->window, nullptr, nullptr,
-                 RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_ERASE);
+    if (!redraw.window)
+        RedrawWindow(panel->window, nullptr, nullptr, RDW_INVALIDATE | RDW_ALLCHILDREN);
 }
 static void syncPanel() {
     if (panel->window && panel->rendered != revision)
@@ -7366,7 +7389,16 @@ static void beginAdding(const wstring& dest) {
     clearPanelSelection();
     panel->choosing = false;
     SetWindowTextW(panel->filter, L"");
-    panel->choicesRevision = ~0u;
+    if (panel->choicesFolder == dest && panel->choicesRevision == revision) {
+        // Taskbar pins can change outside the mod while the popup is parked.
+        if (auto f = lookup(groups, dest)) {
+            auto pins = taskbarChoices(*f);
+            if (pins != panel->pins) {
+                panel->search.generation.reset();
+                panel->pins = std::move(pins);
+            }
+        }
+    }
     SetWindowTextW(panel->lens, uiText(UiString::SearchInstalled));
     SendMessageW(panel->filter, EM_SETCUEBANNER, TRUE,
                  (LPARAM)uiText(UiString::SearchHint));
@@ -7864,8 +7896,77 @@ static void registerPanelDrop(HWND window) {
     else
         OleUninitialize();
 }
+static void stopPanelInteraction(HWND w) {
+    panel->closing = true;
+    panel->motion = false;
+    panel->renaming = false;
+    panel->transfer.reset();
+    panel->incoming = {};
+    panel->dropHover = false;
+    panel->pendingClick.reset();
+    panel->windowRequest = 0;
+    ++panel->viewSerial;
+    stopPanelActivationCheck(w);
+    KillTimer(w, kRunningTimer);
+    panel->windowTimer = false;
+    if (auto hook = std::exchange(panel->windowHook, nullptr))
+        UnhookWinEvent(hook);
+    duringCleanup([] { finishDrag(); });
+    stopPanelFrames();
+    releasePreviousPage();
+}
+static void closePanel() {
+    HWND w = panel->window;
+    if (!w)
+        return;
+    if (panel->filtering || panel->choosing || panel->page || panel->incoming.token)
+        panel->rendered = ~0u;
+    stopPanelInteraction(w);
+    ShowWindow(w, SW_HIDE);
+    if (panel->tips)
+        SendMessageW(panel->tips, TTM_POP, 0, 0);
+    if (panel->registeredDropTarget)
+        panel->registeredDropTarget->DragLeave();
+    if (panel->nameEdit) {
+        ShowWindow(panel->nameEdit, SW_HIDE);
+        ShowWindow(panel->title, SW_SHOWNA);
+    }
+    panel->filtering = panel->choosing = panel->browsing = false;
+    if (panel->filter && GetWindowTextLengthW(panel->filter))
+        SetWindowTextW(panel->filter, L"");
+    panel->page = panel->wheel = panel->searchOrigin = 0;
+    panel->selection.clear();
+    ListView_SetItemState(panel->list, -1, 0, LVIS_SELECTED | LVIS_FOCUSED);
+    panel->hot = -1;
+    panel->hover = nullptr;
+    panel->controls.clear();
+    std::fill(panel->tiles.begin(), panel->tiles.end(), TileMotion{});
+    panel->arrival.set(0);
+    // These messages belong to the interaction that just ended. The HWND can
+    // be shown for a different folder before the next message-loop iteration.
+    MSG old{};
+    while (PeekMessageW(&old, w, kOpenApp, kCheckActivation, PM_REMOVE)) {
+    }
+    panel->parkedWindow = std::exchange(panel->window, nullptr);
+}
 static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
     try {
+        if (panel && panel->parkedWindow == w) {
+            if (msg == WM_DESTROY) {
+                panel->window = std::exchange(panel->parkedWindow, nullptr);
+            } else if (msg != kFilesDone && msg != kCatalogDone) {
+                if (msg == WM_THEMECHANGED || msg == WM_SYSCOLORCHANGE ||
+                    msg == WM_DWMCOLORIZATIONCOLORCHANGED || msg == WM_SETTINGCHANGE ||
+                    msg == WM_DISPLAYCHANGE || msg == WM_DPICHANGED) {
+                    panel->appearanceReady = false;
+                    panel->rendered = ~0u;
+                    panel->timingReadAt = 0;
+                }
+                if (msg == WM_CLOSE)
+                    return 0;
+                return DefWindowProcW(w, msg, wp, lp);
+            }
+        }
         switch (msg) {
             case kFilesDone:
             case kCatalogDone:
@@ -7891,6 +7992,8 @@ static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
                     return 0;
                 }
                 if (wp == kRunningTimer) {
+                    if (!panel->windowTimer)
+                        return 0;
                     KillTimer(w, kRunningTimer);
                     panel->windowTimer = false;
                     requestWindowScan();
@@ -7949,6 +8052,7 @@ static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
                             return 0;
                         }
                         panel->reveal.set(1);
+                        panelPosition(motionTime());
                         panel->arrival.set(0);
                         for (auto& t : panel->tiles)
                             for (Ease* e : std::array<Ease*, 4>{
@@ -8028,7 +8132,7 @@ static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
                     stopPanelActivationCheck(w);
                     break;
                 }
-                if (!panel->browsing) {
+                if (!panel->browsing && !panel->closing) {
                     POINT p{};
                     GetCursorPos(&p);
                     if (!(isIn(panel->anchor, p) && primaryMouseDown()))
@@ -8166,14 +8270,7 @@ static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
                 }
                 break;
             case WM_DESTROY:
-                panel->closing = true;
-                panel->renaming = false;
-                panel->transfer.reset();
-                panel->incoming = {};
-                stopPanelActivationCheck(w);
-                KillTimer(w, kRunningTimer);
-                if (auto hook = std::exchange(panel->windowHook, nullptr))
-                    UnhookWinEvent(hook);
+                stopPanelInteraction(w);
                 if (panel->registeredDropTarget) {
                     RevokeDragDrop(w);
                     if (stopping)
@@ -8181,8 +8278,6 @@ static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
                     panel->registeredDropTarget = nullptr;
                     OleUninitialize();
                 }
-                duringCleanup([] { finishDrag(); });
-                stopPanelFrames();
                 if (panel->frameWait) {
                     CloseThreadpoolWait(panel->frameWait);
                     panel->frameWait = nullptr;
@@ -8191,7 +8286,6 @@ static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
                     CloseHandle(panel->frameTimer);
                     panel->frameTimer = nullptr;
                 }
-                releasePreviousPage();
                 for (const auto& icon : panel->glyphs)
                     if (icon.handle)
                         DestroyIcon(icon.handle);
@@ -8230,56 +8324,29 @@ static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
     }
     return DefWindowProcW(w, msg, wp, lp);
 }
-static void openPanel(const wstring& id,
-                      RECT anchor,
-                      RECT bar,
-                      HWND owner,
-                      bool dark,
-                      bool forDrop = false) {
-    if (stopping)
-        return;
-    if (panel->window) {
-        if (panel->folder == id) {
-            if (panel->closing)
-                revealPanel();
-            else if (!forDrop)
-                dismissPanel();
-            return;
-        }
-        closePanel();
-    }
-    if (!lookup(groups, id))
-        return;
+static bool createPanel(HWND owner, RECT anchor) {
     WNDCLASSW wc{};
     wc.lpfnWndProc = panelProc;
     wc.hInstance = moduleInstance();
     wc.lpszClassName = kPanelClass;
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
-        return;
+        return false;
     INITCOMMONCONTROLSEX init{sizeof(init), ICC_LISTVIEW_CLASSES};
     if (!InitCommonControlsEx(&init))
-        return;
+        return false;
     panel->window =
         CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST, kPanelClass, L"",
                         WS_POPUP | WS_CLIPCHILDREN, anchor.left, anchor.top, 1,
                         1, owner, nullptr, moduleInstance(), nullptr);
     if (!panel->window)
-        return;
-    panel->anchor = anchor;
-    panel->bar = bar;
-    panel->folder = id;
+        return false;
     panel->dpi = GetDpiForWindow(owner ? owner : panel->window);
     if (!panel->dpi)
         panel->dpi = 96;
-    panel->systemDark = dark;
     restorePanelStyle();
-    if (!panel->appearanceReady) {
-        closePanel();
-        return;
-    }
-    panel->motion = allowMotion();
-    panel->reveal.set(1);
+    if (!panel->appearanceReady)
+        return false;
     panel->normalFont =
         CreateFontW(-px(14), 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0,
                     CLEARTYPE_QUALITY, 0, L"Segoe UI");
@@ -8301,10 +8368,8 @@ static void openPanel(const wstring& id,
     panel->add = part(L"BUTTON", uiText(UiString::AddAppsMenu),
                      WS_TABSTOP | BS_OWNERDRAW, kAdd);
     if (!panel->list || !panel->title || !panel->add || !panel->more ||
-        !panel->empty) {
-        closePanel();
-        return;
-    }
+        !panel->empty)
+        return false;
     panel->tips =
         CreateWindowExW(WS_EX_TOPMOST, TOOLTIPS_CLASSW, nullptr,
                         WS_POPUP | TTS_ALWAYSTIP | TTS_NOPREFIX, 0, 0, 0, 0,
@@ -8319,25 +8384,89 @@ static void openPanel(const wstring& id,
             SendMessageW(panel->tips, TTM_ADDTOOLW, 0, (LPARAM)&ti);
         }
     for (auto h : {panel->more, panel->add, panel->list})
-        if (!wirePanelChild(h)) {
-            closePanel();
-            return;
-        }
+        if (!wirePanelChild(h))
+            return false;
     SendMessageW(panel->empty, WM_SETFONT, (WPARAM)panel->normalFont, TRUE);
     SendMessageW(panel->title, WM_SETFONT, (WPARAM)panel->titleFont, TRUE);
     ListView_SetExtendedListViewStyle(panel->list, LVS_EX_DOUBLEBUFFER);
     ListView_SetBkColor(panel->list, panel->surface);
     ListView_SetTextBkColor(panel->list, CLR_NONE);
     ListView_SetTextColor(panel->list, panel->foreground);
+    ensureSearchControls();
+    registerPanelDrop(panel->window);
+    return true;
+}
+static void openPanel(wstring id,
+                      RECT anchor,
+                      RECT bar,
+                      HWND owner,
+                      bool dark,
+                      bool forDrop = false) {
+    if (stopping || !lookup(groups, id))
+        return;
+    if (panel->window) {
+        if (panel->folder == id) {
+            if (panel->closing)
+                revealPanel();
+            else if (!forDrop)
+                dismissPanel();
+            return;
+        }
+        closePanel();
+    }
+    HWND parked = panel->parkedWindow;
+    if (parked && (GetWindow(parked, GW_OWNER) != owner ||
+                   GetDpiForWindow(owner ? owner : parked) != panel->dpi))
+        destroyPanel();
+
+    MONITORINFO mi{sizeof(mi)};
+    const bool sameLayout = panel->parkedWindow && panel->folder == id &&
+        panel->rendered == revision &&
+        GetMonitorInfoW(MonitorFromRect(&anchor, MONITOR_DEFAULTTONEAREST), &mi) &&
+        EqualRect(&mi.rcWork, &panel->layoutWork) &&
+        panel->anchor.top == anchor.top && panel->anchor.bottom == anchor.bottom &&
+        panel->bar.top == bar.top && panel->bar.bottom == bar.bottom;
+    const bool themeChanged = panel->systemDark != dark;
+    if (panel->parkedWindow) {
+        panel->failedIcons.clear();
+        panel->pinnedIcons.reset();
+    }
+    panel->folder = std::move(id);
+    panel->anchor = anchor;
+    panel->bar = bar;
+    panel->systemDark = dark;
+    panel->closing = false;
+    panel->motion = allowMotion();
+    panel->reveal.set(panel->motion ? 0 : 1);
+    if (panel->parkedWindow) {
+        panel->window = std::exchange(panel->parkedWindow, nullptr);
+        restorePanelStyle(themeChanged);
+    } else if (!createPanel(owner, anchor)) {
+        destroyPanel();
+        return;
+    }
+    if (sameLayout) {
+        const RECT old = panel->rest;
+        panel->rest = placePanel(mi.rcWork, bar, anchor, old.right - old.left,
+                                 old.bottom - old.top, px(8));
+    } else {
+        refreshPanel();
+        if (!panel->window)
+            return;
+    }
     panel->windowHook =
         SetWinEventHook(EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE, nullptr,
                         runningWindowEvent, 0, 0, WINEVENT_OUTOFCONTEXT);
-    refreshPanel();
-    registerPanelDrop(panel->window);
-    panel->reveal.set(panel->motion ? 0 : 1);
+    scheduleWindowScan();
+    layered(panel->motion);
+    panelPosition(motionTime());
+    panel->arrival.set(panel->motion ? 1 : 0);
+    panel->slide = 0;
+    ShowWindow(panel->window, forDrop ? SW_SHOWNOACTIVATE : SW_SHOW);
+    RedrawWindow(panel->window, nullptr, nullptr,
+                 RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
     revealPanel();
     gridEntrance(0);
-    ShowWindow(panel->window, forDrop ? SW_SHOWNOACTIVATE : SW_SHOW);
     if (!forDrop) {
         SetForegroundWindow(panel->window);
         SetFocus(panel->apps.empty() ? panel->add : panel->list);
@@ -8967,7 +9096,7 @@ static void restoreRepeaterMargin() {
         ui->repeater.SetValue(property, ui->localMargin);
 }
 static void clearView() {
-    closePanel();
+    destroyPanel();
     duringCleanup([] { closeTaskbarFolderMenu(); });
     duringCleanup(resetFileWindows);
     duringCleanup([] { resetIconHover(); });
@@ -11825,7 +11954,7 @@ static LRESULT CALLBACK controlProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
                     releaseTaskbarState();
                 }
             } finish{h};
-            duringCleanup(closePanel);
+            duringCleanup(destroyPanel);
             while (!exports->empty())
                 duringCleanup([] { finishExport(exports->back().get(), false); });
             duringCleanup([] { syncOpacity({}); });
