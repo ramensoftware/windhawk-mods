@@ -703,6 +703,7 @@ If you enjoy MacOS Widgets, you can support its development with a Pix donation:
 #include <initializer_list>
 #include <memory>
 #include <map>
+#include <optional>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -3690,8 +3691,20 @@ static std::atomic<bool> g_haWantAll{false};  // the picker was opened: the whol
 static std::wstring g_haError;
 static std::deque<std::pair<std::wstring, std::wstring>> g_haCommands;  // (domain/service, entity) for the network thread
 
+// A session and connection kept for a series of requests to the same server (Home Assistant's per-entity rounds), so
+// they don't each open their own (and, on https, each do a TLS handshake). The one who made it closes it
+struct HttpConn {
+    HINTERNET session = nullptr, conn = nullptr;
+    std::wstring host;
+    INTERNET_PORT port = 0;
+    ~HttpConn() {
+        if (conn) WinHttpCloseHandle(conn);
+        if (session) WinHttpCloseHandle(session);
+    }
+};
+
 static std::string HttpRequest(PCWSTR method, const std::wstring& url, const std::wstring& headers, const std::string& body,
-                               DWORD* statusOut) {
+                               DWORD* statusOut, HttpConn* keep = nullptr) {
     std::string out;
     *statusOut = 0;
     URL_COMPONENTSW uc = {sizeof(uc)};
@@ -3701,10 +3714,24 @@ static std::string HttpRequest(PCWSTR method, const std::wstring& url, const std
     uc.lpszUrlPath = path;
     uc.dwUrlPathLength = 2048;
     if (!WinHttpCrackUrl(url.c_str(), 0, 0, &uc)) return out;
-    HINTERNET session = WinHttpOpen(L"MacOSWidgets", WINHTTP_ACCESS_TYPE_NO_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-    if (!session) return out;
-    WinHttpSetTimeouts(session, 3000, 3000, 4000, 6000);
-    HINTERNET conn = WinHttpConnect(session, host, uc.nPort, 0);
+    HINTERNET session = nullptr, conn = nullptr;
+    if (keep && keep->conn && keep->host == host && keep->port == uc.nPort) {
+        session = keep->session;
+        conn = keep->conn;
+    } else {
+        session = WinHttpOpen(L"MacOSWidgets", WINHTTP_ACCESS_TYPE_NO_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+        if (!session) return out;
+        WinHttpSetTimeouts(session, 3000, 3000, 4000, 6000);
+        conn = WinHttpConnect(session, host, uc.nPort, 0);
+        if (keep) {  // kept for the next requests (an older one, to another server, is closed first)
+            if (keep->conn) WinHttpCloseHandle(keep->conn);
+            if (keep->session) WinHttpCloseHandle(keep->session);
+            keep->session = session;
+            keep->conn = conn;
+            keep->host = host;
+            keep->port = uc.nPort;
+        }
+    }
     HINTERNET req = HttpTrack(conn ? WinHttpOpenRequest(conn, method, path, nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
                                                         uc.nScheme == INTERNET_SCHEME_HTTPS ? WINHTTP_FLAG_SECURE : 0)
                                    : nullptr);
@@ -3724,8 +3751,10 @@ static std::string HttpRequest(PCWSTR method, const std::wstring& url, const std
         }
     }
     HttpRelease(req);
-    if (conn) WinHttpCloseHandle(conn);
-    WinHttpCloseHandle(session);
+    if (!keep) {
+        if (conn) WinHttpCloseHandle(conn);
+        WinHttpCloseHandle(session);
+    }
     return out;
 }
 
@@ -3777,9 +3806,11 @@ static void FetchHome() {
                     s.haEntities != lastWanted;
         if (!full) {
             std::vector<HaEntity> fresh;
+            HttpConn round;  // one connection for the whole round
+            std::wstring headers = HaHeaders();
             for (const auto& id : shownIds) {
                 DWORD status = 0;
-                std::string json = HttpRequest(L"GET", base + L"/api/states/" + id, HaHeaders(), "", &status);
+                std::string json = HttpRequest(L"GET", base + L"/api/states/" + id, headers, "", &status, &round);
                 if (status == 401) {
                     error = L"O Home Assistant recusou o token (confira em Ajustes > Casa)";
                     break;
@@ -5300,10 +5331,20 @@ static void DrawThemedShape(const D2D1_RECT_F& r, float radius) {
 // Text formats and stroke styles are made once and kept (they never change after being set up): making them on each
 // draw cost a lot while the backlight or the chrome border animates (every widget redrawn 20 times a second).
 // Used on the UI thread only
+[[clang::no_destroy]] static std::optional<std::map<std::wstring, ComPtr<IDWriteTextFormat>>> g_formats;
+[[clang::no_destroy]] static ComPtr<ID2D1StrokeStyle> g_strokeCaps, g_strokeJoins;
+
 static std::map<std::wstring, ComPtr<IDWriteTextFormat>>& FormatCache() {
-    [[clang::no_destroy]] static std::map<std::wstring, ComPtr<IDWriteTextFormat>> cache;
-    if (cache.size() > 400) cache.clear();  // never expected; a bound all the same
-    return cache;
+    if (!g_formats) g_formats.emplace();
+    if (g_formats->size() > 400) g_formats->clear();  // never expected; a bound all the same
+    return *g_formats;
+}
+
+// Released with the UI thread's teardown, before the DirectWrite and Direct2D factories
+static void FreeDrawingCache() {
+    g_formats.reset();
+    g_strokeCaps = nullptr;
+    g_strokeJoins = nullptr;
 }
 static std::wstring FormatKey(PCWSTR kind, PCWSTR family, float size, int weight, int align, bool wrap) {
     wchar_t k[160];
@@ -5311,8 +5352,7 @@ static std::wstring FormatKey(PCWSTR kind, PCWSTR family, float size, int weight
     return k;
 }
 static ID2D1StrokeStyle* RoundStroke(bool roundJoin = false) {
-    [[clang::no_destroy]] static ComPtr<ID2D1StrokeStyle> caps, joins;
-    ComPtr<ID2D1StrokeStyle>& s = roundJoin ? joins : caps;
+    ComPtr<ID2D1StrokeStyle>& s = roundJoin ? g_strokeJoins : g_strokeCaps;
     if (!s)
         g_d2d->CreateStrokeStyle(roundJoin ? D2D1::StrokeStyleProperties(D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND,
                                                                          D2D1_CAP_STYLE_ROUND, D2D1_LINE_JOIN_ROUND)
@@ -7494,16 +7534,22 @@ static bool ScreenWithoutUs(HDC into, const RECT& area) {
     return ok;
 }
 
-static HDC DesktopPicture() {
+static RECT CaptureRect(Widget* wd);
+
+static RECT GlassArea(Widget* also);
+
+static HDC DesktopPicture(Widget* also = nullptr) {
     // Kept a moment, so the widgets taken one after another share one picture (ReglassAll takes a new one)
     if (g_deskDC && GetTickCount64() - g_deskTick < 3000u) return g_deskDC;
     FreeDesktopPicture();
     g_deskFromScreen = false;
     HWND app = WallpaperAppWindow();
     if (app) {
-        RECT vs = {GetSystemMetrics(SM_XVIRTUALSCREEN), GetSystemMetrics(SM_YVIRTUALSCREEN),
-                   GetSystemMetrics(SM_XVIRTUALSCREEN) + GetSystemMetrics(SM_CXVIRTUALSCREEN),
-                   GetSystemMetrics(SM_YVIRTUALSCREEN) + GetSystemMetrics(SM_CYVIRTUALSCREEN)};
+        RECT screens = {GetSystemMetrics(SM_XVIRTUALSCREEN), GetSystemMetrics(SM_YVIRTUALSCREEN),
+                        GetSystemMetrics(SM_XVIRTUALSCREEN) + GetSystemMetrics(SM_CXVIRTUALSCREEN),
+                        GetSystemMetrics(SM_YVIRTUALSCREEN) + GetSystemMetrics(SM_CYVIRTUALSCREEN)};
+        RECT need = GlassArea(also), vs;
+        if (!IntersectRect(&vs, &need, &screens)) vs = screens;
         HDC screen = GetDC(nullptr);
         g_deskDC = CreateCompatibleDC(screen);
         g_deskBmp = CreateCompatibleBitmap(screen, vs.right - vs.left, vs.bottom - vs.top);
@@ -7643,7 +7689,20 @@ static void Capture(Widget* wd) {
         area = {GetSystemMetrics(SM_XVIRTUALSCREEN), GetSystemMetrics(SM_YVIRTUALSCREEN),
                 GetSystemMetrics(SM_XVIRTUALSCREEN) + GetSystemMetrics(SM_CXVIRTUALSCREEN),
                 GetSystemMetrics(SM_YVIRTUALSCREEN) + GetSystemMetrics(SM_CYVIRTUALSCREEN)};
-    } else if (HDC desk = DesktopPicture()) {
+    } else if (HDC desk = DesktopPicture(wd)) {
+        RECT in;
+        if (g_deskFromScreen && !(IntersectRect(&in, &rc, &g_deskRc) && EqualRect(&in, &rc))) {
+            // Read before this widget existed or moved there: read again, with it
+            FreeDesktopPicture();
+            desk = DesktopPicture(wd);
+        }
+        if (!desk) {
+            SelectObject(dc, old);
+            DeleteObject(bmp);
+            DeleteDC(dc);
+            ReleaseDC(nullptr, screen);
+            return;
+        }
         if (g_deskFromScreen && !ShowsDesktop(wd)) {  // a window is over it on the screen: the glass stays as it was
             SelectObject(dc, old);
             DeleteObject(bmp);
@@ -10151,7 +10210,8 @@ static LRESULT WidgetProcInner(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     } else {
                         OpenFor(wd);
                     }
-                    Render(wd);
+                    // OpenFor can run a modal loop (an error box), in which a rebuild may have replaced this widget
+                    if (std::find(g_widgets.begin(), g_widgets.end(), wd) != g_widgets.end()) Render(wd);
                 } else {
                     OpenFor(wd);
                 }
@@ -11226,6 +11286,24 @@ static void WallpaperTick() {
     if (!g_ui.liveGlass && !g_drag.wd && tick % 2 == 0 && WallpaperAppWindow()) ReglassAll();
 }
 
+// The part of the screens the glass can need: the capture areas of every widget and window of ours (and `also`).
+// Reading only that, and not every screen whole, keeps the read small on big or several monitors
+static RECT GlassArea(Widget* also) {
+    RECT u = {};
+    auto add = [&](Widget* wd) {
+        if (!wd || !wd->hwnd) return;
+        RECT r = CaptureRect(wd);
+        if (IsRectEmpty(&u)) u = r;
+        else UnionRect(&u, &u, &r);
+    };
+    for (Widget* wd : g_widgets) add(wd);
+    add(g_cfg.wd);
+    add(g_menu.wd);
+    add(g_pick.wd);
+    add(also);
+    return u;
+}
+
 static void ReglassAll() {
     FreeDesktopPicture();  // taken again, with the new wallpaper
     for (Widget* wd : g_widgets)
@@ -11446,6 +11524,8 @@ static DWORD WINAPI UiThread(LPVOID) {
     CloseSettings();
     DestroyWidgets();
     UnregisterClassW(kClassName, GetModuleHandleW(nullptr));
+    UnregisterClassW(L"MacOSWidgets_Messages", GetModuleHandleW(nullptr));
+    FreeDrawingCache();
     g_dw.Reset();
     g_d2d.Reset();
     CoUninitialize();
