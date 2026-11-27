@@ -2497,7 +2497,7 @@ void WriteTrayProperty(DependencyObject const& element, DependencyProperty const
             originalValue = element.GetAnimationBaseValue(property);
         }
 
-        changes.push_back({winrt::make_weak(element), property originalValue, GetTrayPropertyBinding(element, property)});
+        changes.push_back({winrt::make_weak(element), property, originalValue, GetTrayPropertyBinding(element, property)});
     }
 
     writer();
@@ -6706,16 +6706,14 @@ bool HookSystemTrayViewSymbols(HMODULE module) {
         return false;
     }
 
-    // Match the C++/WinRT projection and model thunks by their decorated names
+    // SystemTray.dll, Taskbar.View.dll
     WindhawkUtils::SYMBOL_HOOK shellViewHooks[] = {
-        {{L"?OnIconClicked@?$produce@UEmojiAndMoreSystemTrayIconDataModel@implementation@SystemTray@winrt@@UIIconDataModel@34@@impl@winrt@@UEAAHPEAX@Z"}, &SystemPanelClick<InputPanelKind::Emoji>::original, SystemPanelClick<InputPanelKind::Emoji>::Hook, true},
-        {{L"?OnIconClicked@?$produce@UTouchKeyboardSystemTrayIconDataModel@implementation@SystemTray@winrt@@UIIconDataModel@34@@impl@winrt@@UEAAHPEAX@Z"}, &SystemPanelClick<InputPanelKind::Keyboard>::original, SystemPanelClick<InputPanelKind::Keyboard>::Hook, true},
-        {{L"?OnIconClicked@?$produce@ULanguageSystemTrayIconDataModel@implementation@SystemTray@winrt@@UIIconDataModel@34@@impl@winrt@@UEAAHPEAX@Z"}, &SystemPanelClick<InputPanelKind::Language>::original, SystemPanelClick<InputPanelKind::Language>::Hook, true},
-        {{L"?TryShowAsync@?$consume_WindowsUdk_UI_Shell_IShellViewCoordinator@UIShellViewCoordinator@Shell@UI@WindowsUdk@winrt@@@impl@winrt@@QEBA@AEBUShowShellViewOptions@Shell@UI@WindowsUdk@3@@Z"}, &ShellViewTryShowAsync_Original, ShellViewTryShowAsync_Hook, true},
+        {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::EmojiAndMoreSystemTrayIconDataModel,struct winrt::SystemTray::IIconDataModel>::OnIconClicked(void *))"}, &SystemPanelClick<InputPanelKind::Emoji>::original, SystemPanelClick<InputPanelKind::Emoji>::Hook, true},
+        {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::TouchKeyboardSystemTrayIconDataModel,struct winrt::SystemTray::IIconDataModel>::OnIconClicked(void *))"}, &SystemPanelClick<InputPanelKind::Keyboard>::original, SystemPanelClick<InputPanelKind::Keyboard>::Hook, true},
+        {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::LanguageSystemTrayIconDataModel,struct winrt::SystemTray::IIconDataModel>::OnIconClicked(void *))"}, &SystemPanelClick<InputPanelKind::Language>::original, SystemPanelClick<InputPanelKind::Language>::Hook, true},
+        {{LR"(public: __cdecl winrt::impl::consume_WindowsUdk_UI_Shell_IShellViewCoordinator<struct winrt::WindowsUdk::UI::Shell::IShellViewCoordinator>::TryShowAsync(struct winrt::WindowsUdk::UI::Shell::ShowShellViewOptions const &)const )"}, &ShellViewTryShowAsync_Original, ShellViewTryShowAsync_Hook, true},
     };
-    WH_HOOK_SYMBOLS_OPTIONS lookup{sizeof(lookup)};
-    lookup.noUndecoratedSymbols = TRUE;
-    HookSymbols(module, shellViewHooks, ARRAYSIZE(shellViewHooks), &lookup);
+    HookSymbols(module, shellViewHooks, ARRAYSIZE(shellViewHooks));
     Wh_Log(L"system panel hooks launch=%d keyboard=%d language=%d emoji=%d", !!ShellViewTryShowAsync_Original, !!SystemPanelClick<InputPanelKind::Keyboard>::original, !!SystemPanelClick<InputPanelKind::Language>::original, !!SystemPanelClick<InputPanelKind::Emoji>::original);
 
     Wh_Log(
@@ -6776,12 +6774,10 @@ bool HookInputSwitchSymbols(HMODULE module) {
         return false;
     }
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
-        {{L"?HookupModalAndShow@CTsfHandler@@QEAAJPEBUHOTKEY_INFO@@PEBUtagRECT@@W4__MIDL___MIDL_itf_inputswitchserver_0000_0000_0006@@_NKW4__MIDL___MIDL_itf_inputswitchserver_0000_0000_0005@@@Z"}, &ShowLanguagePicker_Original, ShowLanguagePicker_Hook, true},
+    WindhawkUtils::SYMBOL_HOOK inputSwitchDllHooks[] = {
+        {{LR"(public: long __cdecl CTsfHandler::HookupModalAndShow(struct HOTKEY_INFO const *,struct tagRECT const *,enum __MIDL___MIDL_itf_inputswitchserver_0000_0000_0006,bool,unsigned long,enum __MIDL___MIDL_itf_inputswitchserver_0000_0000_0005))"}, &ShowLanguagePicker_Original, ShowLanguagePicker_Hook, true},
     };
-    WH_HOOK_SYMBOLS_OPTIONS lookup{sizeof(lookup)};
-    lookup.noUndecoratedSymbols = TRUE;
-    bool ok = HookSymbols(module, hooks, ARRAYSIZE(hooks), &lookup);
+    bool ok = HookSymbols(module, inputSwitchDllHooks, ARRAYSIZE(inputSwitchDllHooks));
     Wh_Log(L"InputSwitch language picker anchor hook available=%d", !!ShowLanguagePicker_Original);
 
     return ok && ShowLanguagePicker_Original;
@@ -7468,30 +7464,43 @@ bool HookTwinuiPcshellSymbols() {
         return false;
     }
 
-    // KeyboardHosting chooses its own monitor from cached input state after processing the shell-view request
-    WindhawkUtils::SYMBOL_HOOK inputPanelHooks[] = {
-        {{L"?OnInputAppRequestedShow@TabTipAdapter@KeyboardHosting@@AEAAJPEAUICoreKeyboardManager@Core@Text@Internal@UI@Windows@@PEAUICoreKeyboardManagerInputAppRequestedShowEventArgs@45678@@Z"}, &InputAppRequestedShow_Original, InputAppRequestedShow_Hook, true},
-        {{L"?ProcessShowRequest@TabTipAdapter@KeyboardHosting@@AEAAJW4CoreKeyboardViewType@Core@Text@Internal@UI@Windows@@PEA_N@Z"}, &ProcessKeyboardShow_Original, ProcessKeyboardShow_Hook, true},
-        {{L"?ProcessShowRequestWithStoredData@TabTipAdapter@KeyboardHosting@@AEAAJV?$ComPtr@U?$IVectorView@UCoreKeyboardPositionAndSizeOption@Core@Text@Internal@UI@Windows@@@Collections@Foundation@Windows@@@WRL@Microsoft@@W4CoreKeyboardViewType@Core@Text@Internal@UI@Windows@@W4CoreKeyboardModality@789UI@Windows@@@Z"}, &ProcessStoredKeyboardShow_Original, ProcessStoredKeyboardShow_Hook, true},
-        {{L"?SetOverrideMonitorSizeForSIP@TabTipAdapter@KeyboardHosting@@QEAAJXZ"}, &PublishKeyboardScale, nullptr, true},
-        {{L"?OnPrimaryViewShowingResponse@TabTipAdapter@KeyboardHosting@@AEAAJPEAUICoreKeyboardManager@Core@Text@Internal@UI@Windows@@PEAUICoreKeyboardManagerPrimaryViewShowingResponseEventArgs@45678@@Z"}, &PrimaryKeyboardShowingResponse, nullptr, true},
+#ifdef _M_ARM64
+    // These native symbols can share ARM64EC code ranges in hybrid twinui.pcshell.dll. Their decorated names still identify the native entry on either layout
+    // twinui.pcshell.dll
+    WindhawkUtils::SYMBOL_HOOK sharedKeyboardHooks[] = {
+        {{L"??4MonitorInformation@KeyboardHosting@@QEAAAEAU01@AEBU01@@Z"}, &CopyKeyboardMonitor_Original, CopyKeyboardMonitor_Hook, true},
         {{L"?GetCurrentScaleFactor@TabTipAdapterPolicy@KeyboardHosting@@UEAAJPEAI@Z"}, &KeyboardCurrentScale_Original, KeyboardCurrentScale_Hook, true},
         {{L"?SetPrimaryViewId@TabTipAdapterPolicy@KeyboardHosting@@UEAAJI@Z"}, &SetPrimaryKeyboardView_Original, SetPrimaryKeyboardView_Hook, true},
-        {{L"?GetOcclusionKind@TabTipAdapterPolicy@KeyboardHosting@@UEAAJIPEAW4CoreInputViewOcclusionKind@Core@ViewManagement@UI@Windows@@@Z"}, &KeyboardOcclusionKind, nullptr, true},
-        {{L"?HandleEditControlFocusChanged@TabTipAdapterPolicy@KeyboardHosting@@UEAAJEPEAW4ShellRequestType@2Shell@Internal@Windows@@@Z"}, &KeyboardEditFocus_Original, KeyboardEditFocus_Hook, true},
-        {{L"?GetShellState@TabTipAdapterPolicy@KeyboardHosting@@UEAAJW4CoreKeyboardViewType@Core@Text@Internal@UI@Windows@@PEAE1PEAW4CoreKeyboardModality@45678@PEAPEAU?$IVectorView@UCoreKeyboardPositionAndSizeOption@Core@Text@Internal@UI@Windows@@@Collections@Foundation@8@@Z"}, &KeyboardShellState_Original, KeyboardShellState_Hook, true},
-        {{L"?GetPositionAndSizeOptions@TabTipAdapterPolicy@KeyboardHosting@@AEAAJPEAPEAU?$IVectorView@UCoreKeyboardPositionAndSizeOption@Core@Text@Internal@UI@Windows@@@Collections@Foundation@Windows@@@Z"}, &KeyboardSizeOptions, nullptr, true},
-        {{L"??4MonitorInformation@KeyboardHosting@@QEAAAEAU01@AEBU01@@Z"}, &CopyKeyboardMonitor_Original, CopyKeyboardMonitor_Hook, true},
-        {{L"?SetMonitor@MonitorInformation@KeyboardHosting@@QEAAXPEAUHMONITOR__@@@Z"}, &SetKeyboardMonitor, nullptr, true},
-        {{L"?VerifyInputAppRequestedResize@TabTipAdapterPolicy@KeyboardHosting@@UEAAJIUSize@Foundation@Windows@@URect@45@EPEAU645@PEAE@Z"}, &VerifyKeyboardResize_Original, VerifyKeyboardResize_Hook, true},
-        {{L"?VerifyInputAppRequestedHide@TabTipAdapterPolicy@KeyboardHosting@@UEAAJIPEAIPEAE@Z"}, &VerifyKeyboardHide_Original, VerifyKeyboardHide_Hook, true},
-        {{L"?OnViewDestroyed@TabTipAdapterPolicy@KeyboardHosting@@UEAAJI@Z"}, &KeyboardViewDestroyed_Original, KeyboardViewDestroyed_Hook, true},
-        {{L"?HandleDragEnded@TabTipAdapterPolicy@KeyboardHosting@@UEAAJIURect@Foundation@Windows@@PEAW4MoveAnimationType@2Shell@Internal@5@PEAIPEAU345@PEAW4ShellRequestType@2785@@Z"}, &KeyboardDragEnded_Original, KeyboardDragEnded_Hook, true},
-        {{L"?VerifyInputAppRequestedShow@TabTipAdapterPolicy@KeyboardHosting@@UEAAJUCoreKeyboardPositionAndSizeRequest@Core@Text@Internal@UI@Windows@@IEPEAIPEAURect@Foundation@8@PEAE@Z"}, &VerifyInputPanelShow_Original, VerifyInputPanelShow_Hook, true},
     };
     WH_HOOK_SYMBOLS_OPTIONS lookup{sizeof(lookup)};
     lookup.noUndecoratedSymbols = TRUE;
-    HookSymbols(module, inputPanelHooks, ARRAYSIZE(inputPanelHooks), &lookup);
+    HookSymbols(module, sharedKeyboardHooks, ARRAYSIZE(sharedKeyboardHooks), &lookup);
+#endif
+
+    // twinui.pcshell.dll
+    WindhawkUtils::SYMBOL_HOOK inputPanelHooks[] = {
+#ifndef _M_ARM64
+        {{LR"(public: struct KeyboardHosting::MonitorInformation & __cdecl KeyboardHosting::MonitorInformation::operator=(struct KeyboardHosting::MonitorInformation const &))"}, &CopyKeyboardMonitor_Original, CopyKeyboardMonitor_Hook, true},
+        {{LR"(public: virtual long __cdecl KeyboardHosting::TabTipAdapterPolicy::GetCurrentScaleFactor(unsigned int *))"}, &KeyboardCurrentScale_Original, KeyboardCurrentScale_Hook, true},
+        {{LR"(public: virtual long __cdecl KeyboardHosting::TabTipAdapterPolicy::SetPrimaryViewId(unsigned int))"}, &SetPrimaryKeyboardView_Original, SetPrimaryKeyboardView_Hook, true},
+#endif
+        {{LR"(private: long __cdecl KeyboardHosting::TabTipAdapter::OnInputAppRequestedShow(struct Windows::UI::Internal::Text::Core::ICoreKeyboardManager *,struct Windows::UI::Internal::Text::Core::ICoreKeyboardManagerInputAppRequestedShowEventArgs *))"}, &InputAppRequestedShow_Original, InputAppRequestedShow_Hook, true},
+        {{LR"(private: long __cdecl KeyboardHosting::TabTipAdapter::ProcessShowRequest(enum Windows::UI::Internal::Text::Core::CoreKeyboardViewType,bool *))"}, &ProcessKeyboardShow_Original, ProcessKeyboardShow_Hook, true},
+        {{LR"(private: long __cdecl KeyboardHosting::TabTipAdapter::ProcessShowRequestWithStoredData(class Microsoft::WRL::ComPtr<struct Windows::Foundation::Collections::IVectorView<struct Windows::UI::Internal::Text::Core::CoreKeyboardPositionAndSizeOption> >,enum Windows::UI::Internal::Text::Core::CoreKeyboardViewType,enum Windows::UI::Internal::Text::Core::CoreKeyboardModality))"}, &ProcessStoredKeyboardShow_Original, ProcessStoredKeyboardShow_Hook, true},
+        {{LR"(public: long __cdecl KeyboardHosting::TabTipAdapter::SetOverrideMonitorSizeForSIP(void))"}, &PublishKeyboardScale, nullptr, true},
+        {{LR"(private: long __cdecl KeyboardHosting::TabTipAdapter::OnPrimaryViewShowingResponse(struct Windows::UI::Internal::Text::Core::ICoreKeyboardManager *,struct Windows::UI::Internal::Text::Core::ICoreKeyboardManagerPrimaryViewShowingResponseEventArgs *))"}, &PrimaryKeyboardShowingResponse, nullptr, true},
+        {{LR"(public: virtual long __cdecl KeyboardHosting::TabTipAdapterPolicy::GetOcclusionKind(unsigned int,enum Windows::UI::ViewManagement::Core::CoreInputViewOcclusionKind *))"}, &KeyboardOcclusionKind, nullptr, true},
+        {{LR"(public: virtual long __cdecl KeyboardHosting::TabTipAdapterPolicy::HandleEditControlFocusChanged(unsigned char,enum Windows::Internal::Shell::KeyboardHosting::ShellRequestType *))"}, &KeyboardEditFocus_Original, KeyboardEditFocus_Hook, true},
+        {{LR"(public: virtual long __cdecl KeyboardHosting::TabTipAdapterPolicy::GetShellState(enum Windows::UI::Internal::Text::Core::CoreKeyboardViewType,unsigned char *,unsigned char *,enum Windows::UI::Internal::Text::Core::CoreKeyboardModality *,struct Windows::Foundation::Collections::IVectorView<struct Windows::UI::Internal::Text::Core::CoreKeyboardPositionAndSizeOption> * *))"}, &KeyboardShellState_Original, KeyboardShellState_Hook, true},
+        {{LR"(private: long __cdecl KeyboardHosting::TabTipAdapterPolicy::GetPositionAndSizeOptions(struct Windows::Foundation::Collections::IVectorView<struct Windows::UI::Internal::Text::Core::CoreKeyboardPositionAndSizeOption> * *))"}, &KeyboardSizeOptions, nullptr, true},
+        {{LR"(public: void __cdecl KeyboardHosting::MonitorInformation::SetMonitor(struct HMONITOR__ *))"}, &SetKeyboardMonitor, nullptr, true},
+        {{LR"(public: virtual long __cdecl KeyboardHosting::TabTipAdapterPolicy::VerifyInputAppRequestedResize(unsigned int,struct Windows::Foundation::Size,struct Windows::Foundation::Rect,unsigned char,struct Windows::Foundation::Rect *,unsigned char *))"}, &VerifyKeyboardResize_Original, VerifyKeyboardResize_Hook, true},
+        {{LR"(public: virtual long __cdecl KeyboardHosting::TabTipAdapterPolicy::VerifyInputAppRequestedHide(unsigned int,unsigned int *,unsigned char *))"}, &VerifyKeyboardHide_Original, VerifyKeyboardHide_Hook, true},
+        {{LR"(public: virtual long __cdecl KeyboardHosting::TabTipAdapterPolicy::OnViewDestroyed(unsigned int))"}, &KeyboardViewDestroyed_Original, KeyboardViewDestroyed_Hook, true},
+        {{LR"(public: virtual long __cdecl KeyboardHosting::TabTipAdapterPolicy::HandleDragEnded(unsigned int,struct Windows::Foundation::Rect,enum Windows::Internal::Shell::KeyboardHosting::MoveAnimationType *,unsigned int *,struct Windows::Foundation::Rect *,enum Windows::Internal::Shell::KeyboardHosting::ShellRequestType *))"}, &KeyboardDragEnded_Original, KeyboardDragEnded_Hook, true},
+        {{LR"(public: virtual long __cdecl KeyboardHosting::TabTipAdapterPolicy::VerifyInputAppRequestedShow(struct Windows::UI::Internal::Text::Core::CoreKeyboardPositionAndSizeRequest,unsigned int,unsigned char,unsigned int *,struct Windows::Foundation::Rect *,unsigned char *))"}, &VerifyInputPanelShow_Original, VerifyInputPanelShow_Hook, true},
+    };
+    HookSymbols(module, inputPanelHooks, ARRAYSIZE(inputPanelHooks));
     Wh_Log(L"keyboard mode=%d sizing=%d focus=%d input panel placement show=%d resize=%d hide=%d destroy=%d drag=%d", !!KeyboardOcclusionKind, !!(KeyboardShellState_Original && KeyboardSizeOptions && CopyKeyboardMonitor_Original && SetKeyboardMonitor), !!KeyboardEditFocus_Original, !!VerifyInputPanelShow_Original, !!VerifyKeyboardResize_Original, !!VerifyKeyboardHide_Original, !!KeyboardViewDestroyed_Original, !!KeyboardDragEnded_Original);
 
     // twinui.pcshell.dll
