@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         1.0.11
+// @version         1.0.12
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -50,41 +50,6 @@ NetEase Cloud Music compatibility remains limited: the sessions exposed through 
 | **Side · Left** · Glass | ![liquid-glass-sideexpansion-left-dark](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/layoutpreview/hq-0.10.234/liquid-glass-sideexpansion-left-dark.gif) | ![liquid-glass-sideexpansion-left-light](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/layoutpreview/hq-0.10.234/liquid-glass-sideexpansion-left-light.gif) |
 | Borderless | ![transparent-borderless-sideexpansion-left-dark](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/layoutpreview/hq-0.10.234/transparent-borderless-sideexpansion-left-dark.gif) | ![transparent-borderless-sideexpansion-left-light](https://raw.githubusercontent.com/usho-lear/island-media-controls/main/previews/layoutpreview/hq-0.10.234/transparent-borderless-sideexpansion-left-light.gif) |
 
-## 1.0.11 local test build
-
-- Increase the cover wash near the center of the expanded Compact player.
-- Use the Fullsize playback card radius rule for the Compact shell, glass and controls.
-
-- Compact uses two-layer equivalent wash opacity with a pre-blur black mask and fades artwork glow in after expansion settles.
-
-- Compact now composites one cover wash on the expanding shell; the controls share Fullsize wash behavior.
-
-- Attach the thumbnail directly to the taskbar layout so it shares taskbar motion and stacking.
-- Restrict Side Expansion input to the controls and move the dark Compact wash mask into the visible crop.
-- Prepare the hidden player window when a media session is available.
-- Refresh visibility when the foreground window resizes into or out of fullscreen.
-- Begin the popup morph on compositor frames while artwork and glass prepare.
-
-### Earlier material updates
-
-- The same pre-blur fixed black mask now also applies to dark Compact washes.
-- Light Compact is unchanged; existing album-background visibility is respected.
-
-- Replace the rejected post-blur shadow overlay with a fixed cover-space black
-  silhouette composited BEFORE wash blur. Original displayed cover stays intact.
-- Production Liquid Glass retains full WGC displacement and RGB dispersion.
-  A separate preview lab tests segmented native Backdrop refraction.
-
-- Acrylic uses unfiltered Backdrop with adjustable Gaussian blur: 0-100 maps
-  to 0-40 DIP standard deviation, without the HostBackdrop blur floor.
-- Fullsize playback card has its own additional-blur slider; album wash stays off.
-
-### Previous test changes
-
-- Acrylic uses a live system HostBackdrop brush instead of screen capture.
-- Fullsize playback-card album wash is disabled, including track crossfades.
-- Acrylic remains visible in screenshots; Liquid Glass and Transparent retain their existing capture paths.
-
 ## What's new
 
 - **Better Windows 11 taskbar integration**, with an optional disc-style main island.
@@ -124,8 +89,7 @@ NetEase Cloud Music compatibility remains limited: the sessions exposed through 
 > and upward near the bottom. Tray left/right and overlay
 > left/right correspond to top/bottom on vertical taskbars.
 >
-> Acrylic uses the system compositor and stays capturable in this test build.
-> While the expanded player is open, Liquid Glass and transparent materials use
+> While the expanded player is open, Acrylic, Liquid Glass, and transparent materials use
 > Windows Graphics Capture to blur the monitor content directly behind it.
 > By default, the expanded player is hidden from screenshots, recordings, and
 > screen sharing to prevent the blur from capturing itself. Enable **Expanded
@@ -164,26 +128,19 @@ NetEase Cloud Music compatibility remains limited: the sessions exposed through 
     - "taskbar_left_edge": "Taskbar - left overlay"
     - "taskbar_center_edge": "Taskbar - center overlay"
     - "taskbar_right_edge": "Taskbar - right overlay"
-  - FullsizeShadowStrength: 100
-    $name: Fixed wash block
-    $description: "Fullsize and dark Compact: composite a fixed black cover-sized mask BEFORE wash blur. Respects the existing album-background switch; light Compact stays unchanged. 0 disables the block."
+  - AlbumWashBottomShade: 100
+    $name: Darken lower album wash
+    $description: Darken the lower album background in Fullsize and dark Compact when album colors are enabled.
     #! $showIf: {Main.DisplayMode: [fullsize, compact]}
     #! $min: 0
     #! $max: 100
     #! $format: slider
   - AcrylicBlurStrength: 10
     $name: Acrylic blur strength
-    $description: "Gaussian blur strength: 0-100 maps to 0-40 DIP standard deviation. 0 disables outer blur. No built-in HostBackdrop blur floor."
+    $description: Adjust how much Acrylic blurs the desktop behind the player.
     #! $showIf: {Main.Material: acrylic}
     #! $min: 0
     #! $max: 100
-    #! $format: slider
-  - AcrylicControlBlurBoost: 25
-    $name: Fullsize additional blur
-    $description: "Additional Acrylic strength for the Fullsize playback card. Added to the outer strength, independently of album wash. Set both sliders to 0 for no blur."
-    #! $showIf: {Main.Material: acrylic, Main.DisplayMode: fullsize}
-    #! $min: 0
-    #! $max: 50
     #! $format: slider
   - Material: "liquid_glass"
     $name: Material
@@ -286,7 +243,7 @@ NetEase Cloud Music compatibility remains limited: the sessions exposed through 
     #! $max: 80
   - AllowScreenCapture: false
     $name: Expanded player capturable blurred backdrop
-    $description: When off, the expanded player is hidden from screenshots, screen recording, and screen sharing. When on, Liquid Glass, Transparent, and Transparent borderless use a capturable static blurred backdrop without self-capture feedback. Acrylic always uses a live, capturable system backdrop in this test build.
+    $description: Hide the expanded player from screenshots, recordings, and screen sharing when off. When on, blurred materials use a static background sample.
     #! $showIf: {Main.DisplayMode: [fullsize, compact]}
   $name: Animation and behavior
 - Advanced:
@@ -530,64 +487,6 @@ using mediax::TransformGroup;
 using mediax::TranslateTransform;
 using mediax::VisualTreeHelper;
 
-// Minimal Direct2D effect description for Windows Composition.
-// This is a local ABI wrapper; the Gaussian blur itself is implemented by Windows.
-struct IslandAcrylicEffectInterop : ::IUnknown {
-    virtual HRESULT STDMETHODCALLTYPE GetEffectId(GUID*) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(LPCWSTR,UINT*,UINT*) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT*) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetProperty(UINT,void**) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetSource(UINT,::IUnknown**) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetSourceCount(UINT*) = 0;
-};
-template<> inline constexpr winrt::guid winrt::impl::guid_v<IslandAcrylicEffectInterop>{
-    0x2fc57384,0xa068,0x44d7,{0xa3,0x31,0x30,0x98,0x2f,0xcf,0x71,0x77}};
-struct IslandAcrylicGaussianBlurEffect : winrt::implements<IslandAcrylicGaussianBlurEffect,
-    winrt::Windows::Graphics::Effects::IGraphicsEffect,
-    winrt::Windows::Graphics::Effects::IGraphicsEffectSource,IslandAcrylicEffectInterop> {
-    winrt::Windows::Graphics::Effects::IGraphicsEffectSource Source{nullptr};
-    float BlurAmount=18.0f;
-    D2D1_BORDER_MODE BorderMode=D2D1_BORDER_MODE_HARD;
-    winrt::hstring effectName=L"IslandAcrylicBlur";
-    winrt::hstring Name() const {return effectName;}
-    void Name(winrt::hstring const& value){effectName=value;}
-    HRESULT STDMETHODCALLTYPE GetEffectId(GUID* result) noexcept override {
-        if(!result)return E_POINTER;*result=CLSID_D2D1GaussianBlur;return S_OK;
-    }
-    HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(LPCWSTR name,UINT* index,UINT* mapping) noexcept override {
-        if(!name||!index||!mapping)return E_POINTER;
-        const wchar_t* names[]={L"BlurAmount",L"Optimization",L"BorderMode"};
-        for(UINT i=0;i<3;++i)if(std::wstring_view(name)==names[i]){*index=i;*mapping=1;return S_OK;}
-        return E_INVALIDARG;
-    }
-    HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* count) noexcept override {
-        if(!count)return E_POINTER;*count=3;return S_OK;
-    }
-    HRESULT STDMETHODCALLTYPE GetProperty(UINT index,void** result) noexcept override {
-        if(!result)return E_POINTER;*result=nullptr;
-        try {
-            using winrt::Windows::Foundation::PropertyValue;
-            winrt::Windows::Foundation::IInspectable value{nullptr};
-            switch(index){
-                case 0:value=PropertyValue::CreateSingle(BlurAmount);break;
-                case 1:value=PropertyValue::CreateUInt32(1);break; // balanced
-                case 2:value=PropertyValue::CreateUInt32(UINT(BorderMode));break;
-                default:return E_BOUNDS;
-            }
-            auto property=value.as<winrt::Windows::Foundation::IPropertyValue>();
-            *result=winrt::detach_abi(property);return S_OK;
-        }catch(...){return winrt::to_hresult();}
-    }
-    HRESULT STDMETHODCALLTYPE GetSource(UINT index,::IUnknown** result) noexcept override {
-        if(!result)return E_POINTER;*result=nullptr;if(index!=0)return E_BOUNDS;
-        winrt::copy_to_abi(Source,*reinterpret_cast<void**>(result));return S_OK;
-    }
-    HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* count) noexcept override {
-        if(!count)return E_POINTER;*count=1;return S_OK;
-    }
-};
-
-
 namespace {
 
 struct Settings {
@@ -612,7 +511,6 @@ struct Settings {
     int micaUpperBackgroundOpacity = 100;
     int fullsizeShadowStrength = 100;
     int acrylicBlurStrength = 10;
-    int acrylicControlBlurBoost = 25;
     std::wstring artworkAbstractMode = L"browser_original";
     int height = 40;
     int marginLeft = 4;
@@ -956,10 +854,9 @@ bool g_playerUsesRow = false;
 [[clang::no_destroy]] controls::Canvas g_islandPlacementHost = nullptr;
 
 
-// Popup content has its own layout root. Native taskbar panels must never
 // measure the animated island, even when the island captures a pointer.
 bool g_islandEnvironmentSuppressed = false;
-void SyncIslandOverlayVisibility() {
+void SyncIslandPlacementVisibility() {
     if (!g_islandPlacementHost) return;
     auto visibility = g_islandEnvironmentSuppressed ? xaml::Visibility::Collapsed : xaml::Visibility::Visible;
     if (g_islandPlacementHost.Visibility() != visibility)
@@ -1201,8 +1098,6 @@ std::wstring g_popupXamlThemeMaterial;
 std::wstring g_popupXamlThemeButtonStyle;
 int g_popupXamlThemeShadowDepth = -1;
 int g_popupXamlThemeShadowOpacity = -1;
-int g_popupXamlThemeAcrylicStrength = -1;
-int g_popupXamlThemeAcrylicBoost = -1;
 bool g_popupTextForegroundValid = false;
 bool g_popupTextForegroundEdgeFade = false;
 bool g_popupTextForegroundLight = false;
@@ -3156,9 +3051,8 @@ Settings ReadSettings() {
     settings.popupBackdropCoverEffect =
         GetStringSetting(L"Main.PopupBackdropCoverEffect", L"dark_only");
     settings.compactAlbumBackground = Wh_GetIntSetting(L"Main.CompactAlbumBackground") != 0;
-    settings.fullsizeShadowStrength = Clamp(Wh_GetIntSetting(L"Main.FullsizeShadowStrength"),0,100);
+    settings.fullsizeShadowStrength = Clamp(Wh_GetIntSetting(L"Main.AlbumWashBottomShade"),0,100);
     settings.acrylicBlurStrength = Clamp(Wh_GetIntSetting(L"Main.AcrylicBlurStrength"), 0, 100);
-    settings.acrylicControlBlurBoost = Clamp(Wh_GetIntSetting(L"Main.AcrylicControlBlurBoost"), 0, 50);
     settings.micaUpperBackgroundOpacity =
         Clamp(Wh_GetIntSetting(L"Main.MicaUpperBackgroundOpacity"), 0, 130);
     if (settings.popupBackdropCoverEffect != L"off" &&
@@ -7125,6 +7019,7 @@ constexpr float PopupBackdropWgcBlurStdDev() {
     return 18.0f;
 }
 float PopupBackdropWgcEffectiveBlurStdDev() {
+    if (g_settings.material == L"acrylic") return .4f * g_settings.acrylicBlurStrength;
     float stdDev = PopupBackdropWgcBlurStdDev();
     if (IsLiquidGlassMaterial()) {
         return Clamp(stdDev * 0.28f, 3.5f, 5.2f);
@@ -7310,85 +7205,8 @@ BYTE MicaUpperBackgroundAlpha(BYTE baseline) {
         0, 255));
 }
 
-// 1.0.11 experimental Acrylic backend. XAML owns shape/morph/opacity; DWM owns
-// the live pixels. This brush never opens a screen-capture session.
-std::atomic<unsigned> g_acrylicBackdropConnections{0};
-std::atomic<unsigned> g_acrylicBackdropFailures{0};
-class IslandAcrylicBackdropBrush : public mediax::XamlCompositionBrushBaseT<IslandAcrylicBackdropBrush> {
-    composition::Compositor m_compositor{nullptr};
-    bool m_dark;
-    float m_blur;
-public:
-    IslandAcrylicBackdropBrush(composition::Compositor const& compositor, bool dark, float blur)
-        : m_compositor(compositor), m_dark(dark), m_blur(blur) {}
-    void OnConnected() {
-        if (CompositionBrush()) return;
-        try {
-            auto blur = winrt::make_self<IslandAcrylicGaussianBlurEffect>();
-            blur->BlurAmount = m_blur;
-            blur->BorderMode = D2D1_BORDER_MODE_HARD;
-            blur->Source = composition::CompositionEffectSourceParameter(L"backdrop");
-            auto brush = m_compositor.CreateEffectFactory(*blur).CreateBrush();
-            brush.SetSourceParameter(L"backdrop", m_compositor.CreateBackdropBrush());
-            CompositionBrush(brush);
-            ++g_acrylicBackdropConnections;
-            Wh_Log(L"Acrylic Backdrop connected (no screen capture)");
-        } catch (winrt::hresult_error const& error) {
-            ++g_acrylicBackdropFailures;
-            Wh_Log(L"Acrylic Backdrop fallback hr=0x%08X", unsigned(error.code().value));
-            CompositionBrush(m_compositor.CreateColorBrush(m_dark ? Color(255,32,34,40) : Color(255,240,242,246)));
-        }
-    }
-    void OnDisconnected() {
-        if (auto brush = CompositionBrush()) { CompositionBrush(nullptr); brush.Close(); }
-    }
-};
-
-bool UseAcrylicHostBackdrop() { return g_settings.material == L"acrylic"; }
-
-// The transparent XAML host exposes the unfiltered backdrop to this effect.
-// Strength scales Gaussian standard deviation directly; no opacity blending.
-mediax::Brush MakeAcrylicStrengthBrush(bool controlCard=false) {
-    int strength=Clamp(g_settings.acrylicBlurStrength,0,100);
-    if(controlCard)strength+=Clamp(g_settings.acrylicControlBlurBoost,0,50);
-    if(strength==0 || !g_popupXamlRoot)return Brush(Color(0,0,0,0));
-    auto compositor=hosting::ElementCompositionPreview::GetElementVisual(g_popupXamlRoot).Compositor();
-    auto brush=winrt::make<IslandAcrylicBackdropBrush>(compositor,IsDarkModeApprox(),float(strength)*.4f);
-    return brush;
-}
-
-// Documented IXamlSourceTransparency opt-in. Preserve the thread's previous
-// setting because Explorer may own other XAML islands on this same thread.
-struct IslandXamlSourceTransparency : ::IInspectable {
-    virtual HRESULT STDMETHODCALLTYPE get_IsBackgroundTransparent(boolean*) = 0;
-    virtual HRESULT STDMETHODCALLTYPE put_IsBackgroundTransparent(boolean) = 0;
-};
-[[clang::no_destroy]] winrt::com_ptr<IslandXamlSourceTransparency> g_popupXamlTransparency;
-boolean g_popupPreviousXamlTransparency = false;
-void RestorePopupXamlTransparency() {
-    if (g_popupXamlTransparency) {
-        g_popupXamlTransparency->put_IsBackgroundTransparent(g_popupPreviousXamlTransparency);
-        g_popupXamlTransparency = nullptr;
-    }
-}
-void EnablePopupXamlTransparency() {
-    if (g_popupXamlTransparency) return;
-    constexpr GUID iid{0x06636c29,0x5a17,0x458d,{0x8e,0xa2,0x24,0x22,0xd9,0x97,0xa9,0x22}};
-    auto window = xaml::Window::Current();
-    if (!window) return;
-    winrt::com_ptr<IslandXamlSourceTransparency> transparency;
-    winrt::check_hresult(winrt::get_unknown(window)->QueryInterface(iid, transparency.put_void()));
-    winrt::check_hresult(transparency->get_IsBackgroundTransparent(&g_popupPreviousXamlTransparency));
-    winrt::check_hresult(transparency->put_IsBackgroundTransparent(true));
-    g_popupXamlTransparency = std::move(transparency);
-}
-
 bool UseOverlayPopupBackdropMaterial() {
-    //          0.9.50 diagnostic: Acrylic uses a separate native overlay window behind
-    // the XAML popup, clipped to the animated rounded popup shell instead of
-    // the full transparent host rectangle. This keeps the visibility test from
-    // leaking outside the actual visual surface.
-    return IsBlurredGlassMaterial() && !UseAcrylicHostBackdrop();
+    return IsBlurredGlassMaterial();
 }
 
 double PopupBackdropOverlayOpacity() {
@@ -7789,8 +7607,6 @@ void SetPopupTextEdgeFadeOpacity(double opacity) {
 }
 
 mediax::Brush PopupBackdropCardTintBrush() {
-    if (UseAcrylicHostBackdrop()) return Brush(IsDarkModeApprox()
-        ? Color(70,24,28,38) : Color(65,245,248,255));
     if(g_settings.compact && !IsTransparentMaterial())return Brush(IsLiquidGlassMaterial()&&IsDarkModeApprox()?Color(36,0,0,0):Color(0,0,0,0));
     if (IsTransparentMaterial()) {
         return Brush(TransparentMaterialTintColor(
@@ -7849,9 +7665,6 @@ double PopupPanelCoverOpacityFactor() {
 }
 
 mediax::Brush PopupSurfaceBrush() {
-    if (UseAcrylicHostBackdrop() && g_popupXamlRoot) {
-        return MakeAcrylicStrengthBrush();
-    }
     if (UseOverlayPopupBackdropMaterial()) {
         // Let the native overlay window provide the real-time blurred material.
         // The XAML shell itself stays transparent so the clipped overlay can
@@ -8229,10 +8042,6 @@ void ApplyPopupBackdrop(HWND hwnd) {
         // the same rounded compact-material Border used by the taskbar island.
         // Keep the host HWND visually empty. The only visible outline is the
         // same XAML IslandBorderBrush() stroke used by the compact island.
-        BOOL useHostBackdrop = UseAcrylicHostBackdrop();
-        DwmSetWindowAttribute(hwnd, 17, &useHostBackdrop, sizeof(useHostBackdrop));
-        MARGINS hostMargins = useHostBackdrop ? MARGINS{-1,-1,-1,-1} : MARGINS{};
-        DwmExtendFrameIntoClientArea(hwnd, &hostMargins);
         SetPopupDwmAttributes(hwnd, kDwmCornerDoNotRound, kDwmBackdropNone, false);
         return;
     }
@@ -9767,9 +9576,7 @@ void ApplyPopupXamlTheme(bool force = false) {
         g_popupXamlThemeMaterial == g_settings.material &&
         g_popupXamlThemeButtonStyle == g_settings.popupButtonStyle &&
         g_popupXamlThemeShadowDepth == PopupShadowDepth() &&
-        g_popupXamlThemeShadowOpacity == PopupShadowOpacityPercent() &&
-        g_popupXamlThemeAcrylicStrength == g_settings.acrylicBlurStrength &&
-        g_popupXamlThemeAcrylicBoost == g_settings.acrylicControlBlurBoost) {
+        g_popupXamlThemeShadowOpacity == PopupShadowOpacityPercent()) {
         return;
     }
     g_popupXamlThemeValid = true;
@@ -9779,13 +9586,6 @@ void ApplyPopupXamlTheme(bool force = false) {
     g_popupXamlThemeButtonStyle = g_settings.popupButtonStyle;
     g_popupXamlThemeShadowDepth = PopupShadowDepth();
     g_popupXamlThemeShadowOpacity = PopupShadowOpacityPercent();
-    g_popupXamlThemeAcrylicStrength = g_settings.acrylicBlurStrength;
-    g_popupXamlThemeAcrylicBoost = g_settings.acrylicControlBlurBoost;
-    if(auto panelBlur=PopupPanelG2PathAt(4)) {
-        bool active=UseAcrylicHostBackdrop()&&!g_settings.compact&&!g_settings.sideExpand;
-        panelBlur.Visibility(active?Visibility::Visible:Visibility::Collapsed);
-        panelBlur.Fill(active?MakeAcrylicStrengthBrush(true):Brush(Color(0,0,0,0)));
-    }
     if (g_popupXamlShadow) {
         g_popupXamlShadow.Background(PopupShadowBrush());
         g_popupXamlShadow.BorderThickness({0, 0, 0, 0});
@@ -10146,13 +9946,13 @@ void UpdatePopupArtworkBreath() {
         // existing texture, then regenerate once at the settled geometry.
         bool geometrySettled=std::abs(g_popupAnimationTarget-g_popupAnimationProgress)<.003 &&
                              std::abs(g_popupAnimationVelocity)<.05;
-        if (!geometrySettled || g_popupAnimationTarget < .99) {
+        if (!g_popupClosing && (!geometrySettled || g_popupAnimationTarget < .99)) {
             g_popupArtBreathReveal = 0;
             g_popupXamlArtBreath.Opacity(0);
             return;
         }
         bool regenerated = false;
-        if(geometrySettled&&!g_popupArtBreathPending && (!cache.brush || cache.art!=g_popupLiquidWashCurrent ||
+        if(!g_popupClosing&&geometrySettled&&!g_popupArtBreathPending && (!cache.brush || cache.art!=g_popupLiquidWashCurrent ||
             (geometrySettled&&(std::abs(cache.width-width)>.5||std::abs(cache.height-height)>.5)))){
             cache.art=g_popupLiquidWashCurrent;cache.width=width;cache.height=height;
             auto pixels=cache.art?BuildPopupEdgeReflection(cache.art->popupArtBitmap,width,height):PopupSoftPixels(96*96);
@@ -10168,7 +9968,7 @@ void UpdatePopupArtworkBreath() {
             bitmap.Invalidate();cache.brush=mediax::ImageBrush();cache.brush.ImageSource(bitmap);cache.brush.Stretch(mediax::Stretch::Fill);
         }
         if (regenerated) { g_popupArtBreathReveal = 0; dt = 0; }
-        double target=cache.brush && playing&&!changing&&!g_popupArtBreathPending?1.0:0.0;
+        double target=!g_popupClosing && cache.brush && playing&&!changing&&!g_popupArtBreathPending?1.0:0.0;
         g_popupArtBreathReveal+=(target-g_popupArtBreathReveal)*(1-std::exp(-dt/(target>0?0.24:(changing||g_popupArtBreathPending?0.07:0.30))));
         if(std::abs(target-g_popupArtBreathReveal)<0.001)g_popupArtBreathReveal=target;
         g_popupXamlArtBreath.Background(cache.brush);
@@ -10498,7 +10298,6 @@ void InitializePopupCompositionShadow() {
 }
 
 void ResetPopupXamlElementState() {
-    RestorePopupXamlTransparency();
     g_popupProgressMotion = {};
     g_popupCometSpeedMotion = {};
     g_popupProgressMotionTime = {};
@@ -10645,15 +10444,7 @@ void ResetPopupXamlElementState() {
 
 bool InitializePopupXamlHost(HWND hwnd) {
     try {
-        if (UseAcrylicHostBackdrop()) {
-            BOOL enabled = TRUE;
-            HRESULT hr = DwmSetWindowAttribute(hwnd, 17, &enabled, sizeof(enabled));
-            Wh_Log(L"Acrylic DWMWA_USE_HOSTBACKDROPBRUSH hr=0x%08X", unsigned(hr));
-            MARGINS margins{-1,-1,-1,-1};
-            DwmExtendFrameIntoClientArea(hwnd, &margins);
-        }
         g_popupXamlSource = hosting::DesktopWindowXamlSource();
-        if (UseAcrylicHostBackdrop()) EnablePopupXamlTransparency();
         auto native = g_popupXamlSource.as<IDesktopWindowXamlSourceNative>();
         winrt::check_hresult(native->AttachToWindow(hwnd));
         winrt::check_hresult(native->get_WindowHandle(&g_popupXamlChild));
@@ -10830,13 +10621,6 @@ bool InitializePopupXamlHost(HWND hwnd) {
         controls::Canvas::SetZIndex(panelG2Outline,2);
         controls::Canvas::SetZIndex(panelOuterRim,2);
         panelG2Host.Children().Append(panelPointerLight);
-        shapes::Path panelBackdrop;
-        panelBackdrop.IsHitTestVisible(false);
-        panelBackdrop.Stretch(mediax::Stretch::None);
-        panelBackdrop.UseLayoutRounding(false);
-        controls::Canvas::SetZIndex(panelBackdrop,-1);
-        panelBackdrop.Visibility(Visibility::Collapsed);
-        panelG2Host.Children().Append(panelBackdrop); // index 4, behind tint/outline/text
 
         g_popupXamlPanelPointerLight=panelPointerLight;
         panel.Child(panelG2Host);
@@ -11849,7 +11633,7 @@ void UpdatePopupXamlVisuals() {
         try {
             g_playerGrid.Opacity(compactRevealOpacity);
             g_playerGrid.IsHitTestVisible(PopupMainCanInterrupt(compactRevealOpacity));
-            SyncIslandOverlayVisibility();
+            SyncIslandPlacementVisibility();
             if (g_settings.classicMorphScaleAnimation &&
                 g_islandPressScale) {
                 // Hand the final spring lobe from the disappearing popup to
@@ -12149,10 +11933,6 @@ void UpdatePopupXamlVisuals() {
             panelFill.Opacity(g_settings.compact&&!IsLiquidGlassMaterial()&&!IsTransparentMaterial()?0.0:1.0);
             UpdatePopupG2ContinuousPath(
                 panelFill, panelWidth, panelHeight, panelRadius, 0);
-        }
-        if(auto panelBlur=PopupPanelG2PathAt(4)) {
-            // Separate Geometry per path: sharing a DependencyObject is invalid.
-            UpdatePopupG2ContinuousPath(panelBlur,panelWidth,panelHeight,panelRadius,0);
         }
         if(g_popupXamlPanelPointerLight) {
             UpdatePopupG2ContinuousPath(g_popupXamlPanelPointerLight,panelWidth,panelHeight,panelRadius,0);
@@ -12777,7 +12557,7 @@ void RenderExpandedPopupLayer() {
         try {
             g_playerGrid.Opacity(g_popupXamlRoot ? 0.0 : PopupOpeningMainOpacity(PopupProgress()));
             g_playerGrid.IsHitTestVisible(false);
-            SyncIslandOverlayVisibility();
+            SyncIslandPlacementVisibility();
         } catch (...) {}
     }
     if (g_popupXamlRoot) {
@@ -14472,7 +14252,7 @@ void BeginCloseExpandedPopup() {
             g_playerGrid.UpdateLayout();
             g_playerGrid.Opacity(g_popupCloseMainOpacity);
             g_playerGrid.IsHitTestVisible(false);
-            SyncIslandOverlayVisibility();
+            SyncIslandPlacementVisibility();
         }
         // Keep in-flight text crossfades continuous while geometry reverses.
     } catch (...) {
@@ -14533,7 +14313,7 @@ void SetCompactIslandSuppressed(bool suppressed) {
 
     g_playerGrid.Opacity(suppressed ? (g_popupXamlRoot ? (g_popupOpeningFramesPending ? 1.0 : 0.0) : PopupOpeningMainOpacity(PopupProgress())) : 1.0);
     g_playerGrid.IsHitTestVisible(!suppressed);
-    SyncIslandOverlayVisibility();
+    SyncIslandPlacementVisibility();
 }
 
 void StopPopupXamlRenderLoop() {
@@ -14575,7 +14355,7 @@ void FinishCloseExpandedPopup(HWND hwnd) {
         if (g_playerGrid) {
             g_playerGrid.Opacity(1.0);
             g_playerGrid.IsHitTestVisible(true);
-            SyncIslandOverlayVisibility();
+            SyncIslandPlacementVisibility();
         }
     } catch (...) {
         Wh_Log(L"failed to restore compact island after closing popup");
@@ -14583,7 +14363,7 @@ void FinishCloseExpandedPopup(HWND hwnd) {
             if (g_playerGrid) {
                 g_playerGrid.Opacity(1.0);
                 g_playerGrid.IsHitTestVisible(true);
-                SyncIslandOverlayVisibility();
+                SyncIslandPlacementVisibility();
             }
         } catch (...) {
         }
@@ -18104,8 +17884,8 @@ void ShowExpandedPopup() {
     SetCompactIslandSuppressed(true);
     if (!g_popupOpeningFramesPending) SuspendDockEdgeReservation();
 
-    if (UseOverlayPopupBackdropMaterial() && !g_settings.allowScreenCapture) {
-        if (SetExpandedPopupCaptureExclusion(true)) {
+    if (!g_settings.allowScreenCapture) {
+        if (SetExpandedPopupCaptureExclusion(true) && UseOverlayPopupBackdropMaterial()) {
             DwmFlush();
         }
     }
@@ -18119,8 +17899,6 @@ void ShowExpandedPopup() {
 }
 
 void DestroyExpandedPopup() {
-    // Restore the thread-wide opt-in during the same UI-thread teardown.
-    RestorePopupXamlTransparency();
     g_popupButtonLensCaches.reset();
     g_popupArtBreathCache.reset();
     g_popupPointerLightCaches.reset();
@@ -20341,7 +20119,7 @@ void EnsureCompactIslandInteractive() {
         }
         g_playerGrid.Opacity(1.0);
         g_playerGrid.IsHitTestVisible(true);
-        SyncIslandOverlayVisibility();
+        SyncIslandPlacementVisibility();
     } catch (...) {
     }
 }
@@ -20367,7 +20145,7 @@ void RepairExpandedPopupStateIfHidden() {
         if (g_playerGrid) {
             g_playerGrid.Opacity(1.0);
             g_playerGrid.IsHitTestVisible(true);
-            SyncIslandOverlayVisibility();
+            SyncIslandPlacementVisibility();
             ApplyExpandedState();
             UpdatePlayerContents();
         }
@@ -22684,7 +22462,7 @@ void RefreshIslandEnvironmentVisibility() {
     if (suppressed && !wasSuppressed && g_expandedPopup && (g_expanded || g_popupClosing)) {
         FinishCloseExpandedPopup(g_expandedPopup);
     }
-    SyncIslandOverlayVisibility();
+    SyncIslandPlacementVisibility();
 }
 
 void CALLBACK OnTaskbarForegroundChanged(HWINEVENTHOOK, DWORD, HWND,
@@ -23698,7 +23476,6 @@ bool InjectIslandGrid() {
 
         g_islandPlacementHost = AttachIslandPlacement(target.grid, island);
         g_injectionParent = target.grid;
-        // Open only after the island has a valid local size and taskbar anchor.
         g_islandPlacementAnchor = target.anchor;
         g_islandPlacementBefore = target.before;
         g_islandAnchorMarginReserved = false;
