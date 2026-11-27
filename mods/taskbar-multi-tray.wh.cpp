@@ -2,7 +2,7 @@
 // @id              taskbar-multi-tray
 // @name            Taskbar multi-tray
 // @description     Windows 11 taskbar tray/control-center visibility controls for all or selected monitors
-// @version         1.3.0
+// @version         1.4.0
 // @author          EDM115
 // @github          https://github.com/EDM115
 // @twitter         https://twitter.com/_edm115
@@ -19,13 +19,13 @@
 /*
 # Taskbar multi-tray
 Windows 11 Windhawk mod for controlling taskbar tray and control-center visibility across multi-monitor setups.  
-The mod hooks Explorer's taskbar XAML host, selected taskbar.dll taskbar/tray entry points, the SystemTray.dll coordinate conversions behind tray icon clicks and drag/drop, ShellHost flyout monitor helpers, and a small set of monitor/window-placement APIs. It can apply tray/control-center visibility rules to every taskbar or only to selected monitor numbers, and the component filter can target every taskbar or only copied/non-primary taskbars.
+The mod hooks Explorer's taskbar XAML host, selected taskbar.dll taskbar/tray entry points, the SystemTray.dll coordinate conversions behind tray icon clicks and drag/drop, ShellHost flyout monitor helpers and a small set of monitor/window-placement APIs. It can apply tray/control-center visibility rules to every taskbar or only to selected monitor numbers and the component filter can target every taskbar or only copied/non-primary taskbars.
 
 ## What it controls
-**Tray** means the Windows 11 taskbar notification area : promoted tray icons, the hidden-icons entry point, the system icons Windows shows next to them (language/IME, touch keyboard, pen, touchpad, emoji, and the microphone/camera/location privacy indicators), and the XAML containers Windows creates for them.  
+**Tray** means the Windows 11 taskbar notification area : promoted tray icons, the hidden-icons entry point, the system icons Windows shows next to them (language/IME, touch keyboard, pen, touchpad, emoji & the microphone/camera/location privacy indicators) and the XAML containers Windows creates for them.  
 **Control center** means the Windows 11 control-center button (connection status, volume, battery level, ...) *without* the notification/date-time button which Windows can already hide and display on all monitors (we don't handle that one). Together they form what Windows calls the "Action center" surface. We also don't target (yet) the aero peek button.  
 The `components` setting chooses which surfaces the mod keeps visible :
-- `all` : tray icons, hidden icons, system icons, and control center
+- `all` : tray icons, hidden icons, system icons and control center
 - `tray` : tray icons, hidden icons and system icons, the notification/date-time button stays visible because Windows treats it as part of the date/time surface, while the control-center button is hidden
 - `controlCenter` : control center and notification/date-time only, promoted tray icons, copied system icons and the hidden-icons entry point are hidden
 
@@ -34,11 +34,11 @@ The `components` setting chooses which surfaces the mod keeps visible :
 ## Settings
 - `monitorMode` : `all` or `selected`
 - `selectedMonitors` : comma-separated one-based monitor numbers, used only with `monitorMode=selected`
-- `components` : `all`, `tray`, or `controlCenter`
+- `components` : `all`, `tray` or `controlCenter`
 - `componentsScope` : `allTaskbars` or `copiedTaskbars`
 - `enableTreeDump` : adds bounded XAML child-tree dumps when Windhawk logging is enabled
 
-Monitor numbering follows `EnumDisplayMonitors` order for the current session. The numbers can change after hot-plug, docking, display sleep, or reboot.
+Monitor numbering follows `EnumDisplayMonitors` order for the current session. The numbers can change after hot-plug, docking, display sleep or reboot.
 
 ## Demo screenshots
 ![enable-everywhere-tray-apps](https://i.imgur.com/C0VTSGB.jpeg)
@@ -47,16 +47,15 @@ Monitor numbering follows `EnumDisplayMonitors` order for the current session. T
 ![control-select](https://i.imgur.com/s9l2chj.jpeg)
 
 ## Compatibility and safety
-This mod targets **only** Windows 11, and **only** the newer versions.  
-It cannot be applied to the Windows 10 taskbar as-is. Windows 10 exposes the notification area through the older Explorer/Win32 taskbar window hierarchy, with classes such as `Shell_TrayWnd`, `TrayNotifyWnd`, pager/toolbar controls, and the classic notification-area icon model. This mod instead targets the Windows 11 taskbar implementation : XAML/WinUI-hosted taskbar surfaces and Windows 11-specific elements such as `SystemTrayFrame`, `NotifyIconStack`, `NotificationAreaIcons`, `ControlCenterButton`, and ShellHost-hosted flyouts. Those objects, bindings, and flyout paths simply do not exist in the same form on Windows 10.  
+This mod targets **only** Windows 11 and **only** the newer versions.  
+It cannot be applied to the Windows 10 taskbar as-is. Windows 10 exposes the notification area through the older Explorer/Win32 taskbar window hierarchy, with classes such as `Shell_TrayWnd`, `TrayNotifyWnd`, pager/toolbar controls and the classic notification-area icon model. This mod instead targets the Windows 11 taskbar implementation : XAML/WinUI-hosted taskbar surfaces and Windows 11-specific elements such as `SystemTrayFrame`, `NotifyIconStack`, `NotificationAreaIcons`, `ControlCenterButton` and ShellHost-hosted flyouts. Those objects, bindings and flyout paths simply do not exist in the same form on Windows 10.  
 The old "Windows 10 taskbar on Windows 11" approach worked differently : tools such as [ExplorerPatcher](https://github.com/valinet/ExplorerPatcher/wiki/ExplorerPatcher%27s-taskbar-implementation) could rely on Microsoft still shipping enough of the legacy Windows 10 taskbar code inside earlier Windows 11 builds, then switch Explorer back to that legacy path. For reference, Windows 11 version 22H2 is OS build `22621`, which users can check with `winver`. Starting with the newer Windows 11 24H2 line (OS build `26100`), that stock legacy taskbar path is no longer available in the same way, so ExplorerPatcher moved to a custom reimplemented Windows 10-style taskbar based mostly on the code present in Windows 11 22H2. This mod does not reimplement a taskbar, it modifies the native Windows 11 XAML taskbar that is already running.  
-Compatibility with other mods that touch the taskbar isn't guaranteed. Feel free to report an issue in case of incompatibility, crash or any other bug. In that case, enable Windhawk logging for the mod and provide the relevant log entries.
-Windhawk controls whether log entries are emitted. The mod logs settings, taskbar selection, XAML element state, binding reuse, proxy/native flyout contexts, monitor redirection, placement translation, hook availability, startup retries, and cleanup when that toggle is enabled. `enableTreeDump` only adds bounded XAML child-tree dumps for layout investigation.
+Compatibility with other mods that touch the taskbar isn't guaranteed. Feel free to report an issue in case of incompatibility, crash or any other bug. In that case, enable Windhawk logging for the mod and provide the relevant log entries.  
+Windhawk controls whether log entries are emitted. The mod logs settings, taskbar selection, XAML element state, binding reuse, proxy/native flyout contexts, monitor redirection, placement translation, hook availability, startup retries and cleanup when that toggle is enabled. `enableTreeDump` only adds bounded XAML child-tree dumps for layout investigation.
 
 ### Known issues
 *Those are problems that are identified and will be fixed in future updates*
 - [ ] Items that other mods inject into the tray strip aren't duplicated
-- [ ] System-icon duplication is incomplete. Version 1.3.0 shares the `MainStack` and `NonActivatableStack` models, but language/IME, touch keyboard, pen, touchpad, emoji and privacy indicators can still be missing or nonfunctional on copies. Further work from https://github.com/saratna/taskbar-multi-tray-ime remains to be integrated.
 
 ---
 
@@ -64,20 +63,20 @@ Windhawk controls whether log entries are emitted. The mod logs settings, taskba
 This section is the technical map of the mod, following the architecture from injection to pixels.
 
 ### Process and hook layout
-The mod is injected into `explorer.exe` (owner of every taskbar window and its XAML island) and `ShellHost.exe` (host of the `Win+A` control center and several flyouts on Windows 11 24H2+), `GetTargetProcess` picks the role at init. Explorer gets the `taskbar.dll` symbol hooks (`TrayUI::StartTaskbar`, `TrayUI::_SetStuckMonitor`, `CSecondaryTray::InitModelAndHost`, plus the `CTaskBand`/`CSecondaryTaskBand` accessors used to reach the XAML), resolved in a single `HookSymbols` pass so one drifted symbol fails the whole load instead of half-loading. Both processes get the user32 hooks (`MonitorFromPoint/Rect/Window`, `SetWindowPos`, `MoveWindow`, `SetWindowPlacement`, `DeferWindowPos`, `EnumDisplayDevicesW`, `DispatchMessageW`). ShellHost additionally hooks `twinui.pcshell.dll`'s `ImmersiveMonitorHelper` (optional, placement degrades gracefully without it). Explorer also hooks a few `SystemTray.dll` functions (`Taskbar.View.dll` before 2604.x) : the tray icon click/bounds conversions, `GetScreenRectFromXamlElement`, and the geometry helpers of the tray drag/drop manager. They are optional and resolved once the module loads (through a `LoadLibraryExW` hook when the mod loads before the taskbar), so a drifted symbol only loses that one fix.  
-The two processes coordinate through a `.shared` PE section (`SharedProxyState`) guarded by a seqlock : writers flip a generation counter odd before touching the data and even after, readers retry until a stable even generation brackets their copy. The hooks are hot (every monitor query and window placement in two processes), so the no-context case is settled by a cheap shared-monitor read before any seqlock snapshot is taken, and each active-context hook works from one coherent stack copy instead of a mutable process-local mirror. Settings are immutable snapshots swapped atomically (`GetSettings`/`PublishSettings`), so hooks on any thread read coherent values without locks. Monitor numbers are one-based `EnumDisplayMonitors` positions for the current session, cached behind a short-TTL reader/writer snapshot that display changes invalidate eagerly.
+The mod is injected into `explorer.exe` (owner of every taskbar window and its XAML island) and `ShellHost.exe` (host of the `Win+A` control center and several flyouts on Windows 11 24H2+), `GetTargetProcess` picks the role at init. Explorer gets the `taskbar.dll` symbol hooks (`TrayUI::StartTaskbar`, `TrayUI::_SetStuckMonitor`, `CSecondaryTray::InitModelAndHost`, plus the `CTaskBand`/`CSecondaryTaskBand` accessors used to reach the XAML), resolved in a single `HookSymbols` pass so one drifted symbol fails the whole load instead of half-loading. Both processes get the user32 hooks (`MonitorFromPoint/Rect/Window`, `SetWindowPos`, `MoveWindow`, `SetWindowPlacement`, `DeferWindowPos`, `EnumDisplayDevicesW`, `DispatchMessageW`). ShellHost additionally hooks `twinui.pcshell.dll`'s `ImmersiveMonitorHelper` (optional, placement degrades gracefully without it). Explorer also hooks a few `SystemTray.dll` functions (`Taskbar.View.dll` before 2604.x) : the tray icon click/bounds conversions, `GetScreenRectFromXamlElement` and the geometry helpers of the tray drag/drop manager. They are optional and resolved once the module loads (through a `LoadLibraryExW` hook when the mod loads before the taskbar), so a drifted symbol only loses that one fix.  
+The two processes coordinate through a `.shared` PE section (`SharedProxyState`) guarded by a seqlock : writers flip a generation counter odd before touching the data and even after, readers retry until a stable even generation brackets their copy. The hooks are hot (every monitor query and window placement in two processes), so the no-context case is settled by a cheap shared-monitor read before any seqlock snapshot is taken and each active-context hook works from one coherent stack copy instead of a mutable process-local mirror. Settings are immutable snapshots swapped atomically (`GetSettings`/`PublishSettings`), so hooks on any thread read coherent values without locks. Monitor numbers are one-based `EnumDisplayMonitors` positions for the current session, cached behind a short-TTL reader/writer snapshot that display changes invalidate eagerly.
 
 ### Reaching the taskbar XAML
-Each taskbar window (`Shell_TrayWnd`, `Shell_SecondaryTrayWnd`) hosts a XAML island, and no public API maps an HWND to its `XamlRoot`. The mod follows Explorer's own objects instead : the window's `CTaskBand`/`CSecondaryTaskBand` is located by matching the `ITaskListWndSite` vtable pointer across the window-long slots, its `GetTaskbarHost()` returns a `std::shared_ptr<TaskbarHost>` by value, the offset of the hosted XAML element inside `TaskbarHost` is read out of the compiled prologue of `TaskbarHost::FrameHeight` (x64 `add rcx, imm8`/ARM64 `ldr x8, [x0, #imm]` encodings, so no hardcoded struct layout can silently rot), and the temporary `shared_ptr` is released through `std::_Ref_count_base::_Decref`. From the hosted element, `XamlRoot.Content -> SystemTray.SystemTrayFrame -> SystemTrayFrameGrid` is the container under which every tray surface the mod touches lives. Its children are, in template order, `NotifyIconStack` (chevron), `NotificationAreaIcons`, `MainStack` (system icons), `NonActivatableStack` (privacy indicators), `SecondaryClockStack`, `ControlCenterButton`, `NotificationCenterButton` and `ShowDesktopStack`, in a `Grid` with one `Auto` column each on the classic template and a horizontal `StackPanel` on the newer one.
+Each taskbar window (`Shell_TrayWnd`, `Shell_SecondaryTrayWnd`) hosts a XAML island and no public API maps an HWND to its `XamlRoot`. The mod follows Explorer's own objects instead : the window's `CTaskBand`/`CSecondaryTaskBand` is located by matching the `ITaskListWndSite` vtable pointer across the window-long slots, its `GetTaskbarHost()` returns a `std::shared_ptr<TaskbarHost>` by value, the offset of the hosted XAML element inside `TaskbarHost` is read out of the compiled prologue of `TaskbarHost::FrameHeight` (x64 `add rcx, imm8`/ARM64 `ldr x8, [x0, #imm]` encodings, so no hardcoded struct layout can silently rot) and the temporary `shared_ptr` is released through `std::_Ref_count_base::_Decref`. The resolver looks for `SystemTray.SystemTrayFrame` at the root, as a direct child or in a `TaskbarFrameRepeater` content slot, then searches the visual tree to a bounded depth. Its `SystemTrayFrameGrid` contains the tray surfaces. Its children are, in template order, `NotifyIconStack` (chevron), `NotificationAreaIcons`, `MainStack` and `NonActivatableStack` (system icons and input indicators), `SecondaryClockStack`, `ControlCenterButton`, `NotificationCenterButton` and `ShowDesktopStack`, in a `Grid` with one `Auto` column each on the classic template and a horizontal `StackPanel` on the newer one.
 
 ### The apply pass
-`ApplyStyle` runs per taskbar, always on the taskbar thread : at startup from the `TrayUI::StartTaskbar` hook, on demand through `RunFromWindowThread` (a `WH_CALLWNDPROC` hook plus synchronous `SendMessage`, so the caller waits until the callback has finished), for hot-plugged taskbars from `CSecondaryTray::InitModelAndHost`, and through a bounded retry schedule on a mod-unique timer id for Explorer startups or secondary-taskbar creation where the XAML tree appears late. The secondary init hook installs the taskbar subclass immediately, then schedules that full retry pass if the XAML root or `SystemTrayFrameGrid` is not ready yet. The pass collects every tray element in a single child walk (`CollectTrayElements`), forces the configured surfaces (`NotifyIconStack`, `NotificationAreaIcons`, `ControlCenterButton`) visible and hit-testable, shares the system icon stacks, resets non-selected taskbars to the default secondary look, lets every surface keep its natural content width, and then measures the live rectangle of every tray surface for click hit-testing and the menu-ownership pre-arm. `NotificationCenterButton` and the frame width stay native : up to 1.2.2 the mod forced them, which produced an empty 78 px button and an empty strip at the right edge on builds whose secondary taskbars draw their clock through `SecondaryClockStack`, and the pins older versions left behind are released on the next pass. Every property write is read-compare-write and one batched layout update runs per taskbar only when something actually changed, so a steady-state pass dirties nothing, and the measurements happen after that layout so the hit-test always sees this pass's geometry. The whole pass sits inside an exception boundary : XAML structure drift degrades to a logged skip instead of letting an exception escape into Explorer's window procedure. The real-tray owner is processed first so its bindings are cached before any copy consumes them.
+`ApplyStyle` runs per taskbar, always on the taskbar thread : at startup from the `TrayUI::StartTaskbar` hook, on demand through `RunFromWindowThread` (a `WH_CALLWNDPROC` hook plus synchronous `SendMessage`, so the caller waits until the callback has finished), for hot-plugged taskbars from `CSecondaryTray::InitModelAndHost` and through a bounded retry schedule on a mod-unique timer id for Explorer startups or secondary-taskbar creation where the XAML tree appears late. The secondary init hook installs the taskbar subclass immediately, then schedules that full retry pass if the XAML root or `SystemTrayFrameGrid` is not ready yet. The pass collects every tray element in a single child walk (`CollectTrayElements`), forces the configured surfaces (`NotifyIconStack`, `NotificationAreaIcons`, `ControlCenterButton`) visible and hit-testable, shares the system icon stacks, resets non-selected taskbars to the default secondary look, lets every surface keep its natural content width and then measures the live rectangle of every tray surface for click hit-testing and the menu-ownership pre-arm. `NotificationCenterButton` and the frame width stay native : up to 1.2.2 the mod forced them, which produced an empty 78 px button and an empty strip at the right edge on builds whose secondary taskbars draw their clock through `SecondaryClockStack` and the pins older versions left behind are released on the next pass. Every property write is read-compare-write and one batched layout update runs per taskbar only when something actually changed, so a steady-state pass dirties nothing and the measurements happen after that layout so the hit-test always sees this pass's geometry. The whole pass sits inside an exception boundary : XAML structure drift degrades to a logged skip instead of letting an exception escape into Explorer's window procedure. The real-tray owner is processed first so its bindings are cached before any copy consumes them.
 
 ### Content : sharing the singleton bindings
-Windows keeps exactly one real notification-area model, and the mod never duplicates the native icon manager or its `std::shared_ptr` ownership. Instead, the real-tray owner's elements act as a binding source : their `DataContext`/`ItemsSource`/(non-UIElement) `Content` are cached in heap-backed holders and applied to the matching elements of every other taskbar, which then render the singleton content through ordinary XAML data binding. `UIElement` content is never shared, a XAML element cannot live in two trees. The system icon stacks follow the same pattern (stack `DataContext` plus the inner `IconStack` list `ItemsSource`), and each copy's stack `Visibility` is bound one-way to the owner's element, so an indicator appearing on the primary appears everywhere without an apply pass. On builds that show the secondary-taskbar clock through `SecondaryClockStack`, that stack sits right before `ControlCenterButton` in the template, so copies swap the two (Grid columns or panel order, only from the exact template order) to read like the primary. In selected-monitor mode, the first configured monitor additionally becomes the preferred owner of the real tray surface : the `TrayUI::_SetStuckMonitor` hook retargets Explorer's own primary-taskbar placement logic there, re-triggered through Explorer's display-change message (`0x5B8`).
+Windows keeps exactly one real notification-area model and the mod never duplicates the native icon manager or its `std::shared_ptr` ownership. Instead, the real-tray owner's elements act as a binding source : their `DataContext`/`ItemsSource`/(non-UIElement) `Content` are cached in heap-backed holders and applied to the matching elements of every other taskbar, which then render the singleton content through ordinary XAML data binding. `UIElement` content is never shared, a XAML element cannot live in two trees. The system icon stacks share the stack model, matching template child and inner list source and each copy's stack `Visibility` is bound one-way to the owner's element, so an indicator appearing on the primary appears everywhere without an apply pass. On builds that show the secondary-taskbar clock through `SecondaryClockStack`, that stack sits right before `ControlCenterButton` in the template, so copies swap the two (Grid columns or panel order, only from the exact template order) to read like the primary. In selected-monitor mode, the first configured monitor additionally becomes the preferred owner of the real tray surface : the `TrayUI::_SetStuckMonitor` hook retargets Explorer's own primary-taskbar placement logic there, re-triggered through Explorer's display-change message (`0x5B8`).
 
 ### Coordinates : mapping copies to their own island
-`SystemTray.dll` converts island coordinates to screen coordinates through one fixed window, the host of the primary taskbar model (or the overflow popup), scaled by the single per-thread display scale, so every copy maps to the same relative spot on the primary monitor. The `DispatchMessageW` hook publishes which taskbar island is dispatching the current input message (XAML raises clicks, drags and hovers synchronously inside that dispatch), and the SystemTray hooks redo the conversions with the right island :
+`SystemTray.dll` converts island coordinates to screen coordinates through one fixed window, the host of the primary taskbar model (or the overflow popup), scaled by the single per-thread display scale, so every copy maps to the same relative spot on the primary monitor. The `DispatchMessageW` hook publishes which taskbar island is dispatching the current input message (XAML raises clicks, drags and hovers synchronously inside that dispatch) and the SystemTray hooks redo the conversions with the right island :
 - `GetInvocationPointRelativeToScreen`/`GetIconBoundsRelativeToScreen` : the anchor and icon rectangle sent to a tray icon's app (`NOTIFYICON_VERSION_4` callbacks), so app menus and popups open next to the clicked copy
 - `GetScreenRectFromXamlElement` : the answer to `Shell_NotifyIconGetRect`, now the icon (or chevron) on the taskbar under the cursor or last clicked, found by `DataContext` among that island's elements
 - `DragDropManager::ScreenRectForElement`/`ElementPointToScreenPoint` : tray icons are dragged through a pointer-based manager (not OLE or XAML drag/drop) whose drop targets are every loaded icon view, copies included. Measuring each one on its own island, with that island's scale, makes drops over a copied tray land there, hidden-to-visible moves included
@@ -88,32 +87,34 @@ A window subclass on every managed taskbar hit-tests left clicks against the liv
 - `MonitorFrom*` queries resolve to the clicked monitor, gated by target-side filters so only ambiguous geometry, the clicked taskbar itself and known flyout popups (`ControlCenterWindow`, `TopLevelWindowForOverflowXamlIsland`, the control-center windowed popup) are redirected
 - `EnumDisplayDevicesW` reports the clicked display as the primary device
 - `ImmersiveMonitorHelper` is connected to the clicked monitor's center
-- placement calls for the known popups are rewritten : DPI-rescaled between source and target monitors, anchored to the captured chevron point for the overflow flyout, pinned to the armed taskbar's edge with a small gap, and clamped into the target work area
+- placement calls for the known popups are rewritten : DPI-rescaled between source and target monitors, anchored to the captured chevron point for the overflow flyout, pinned to the armed taskbar's edge with a small gap and clamped into the target work area
 
-Contexts expire lazily through their tick deadline (no timers ever run on Explorer's taskbar windows for this), are shortened right after popup placement so they cannot linger, and are dropped by right-click input or left clicks outside the copied surfaces. Every context read validates the armed monitor handle against the live topology first, so a hot-plugged display drops the context instead of redirecting to a dead handle.  
-The overflow popup keeps a **sticky placement** : once an anchored open was translated, every later re-position while the popup stays visible replays the same translation. Windows re-runs its placement from the anchor it stored for the primary taskbar whenever the popup content resizes, for example when an icon leaves and the row count changes, which used to teleport the popup back to the primary monitor once the context had expired. Hiding or reopening the popup drops the sticky placement.  
-When an open arrives with **no armed context** at all (pen/touch input bypasses the subclass left-click path, or the layout changed between measurement and click), the placement hooks arm a last-chance cursor-derived context : a known flyout popup placed while not yet visible, with the cursor on a managed taskbar whose monitor differs from the requested placement, is treated as a click on that taskbar (cursor point as the overflow anchor) and translated through the same path. The rescue never touches re-placements of an already-visible flyout, so a delayed popup cannot chase the cursor across monitors.
+Contexts expire lazily through their tick deadline (no timers ever run on Explorer's taskbar windows for this), are shortened right after popup placement so they cannot linger and are dropped by right-click input or left clicks outside the copied surfaces. Every context read validates the armed monitor handle against the live topology first, so a hot-plugged display drops the context instead of redirecting to a dead handle.  
+The overflow popup keeps a **sticky placement** : once an anchored open was translated, every later re-position while the popup stays visible replays the same translation. Windows re-runs its placement from the anchor it stored for the primary taskbar whenever the popup content resizes, for example when an icon leaves and the row count changes, which used to teleport the popup back to the primary monitor once the context had expired. Hiding or reopening the popup drops the sticky placement. While Quick Settings is open, its own monitor, DPI and work-area calculations use the clicked display. Its full-height XAML host extends exactly to the opening taskbar edge, including after auto-hide. The language picker receives a native anchor in InputSwitch.dll. Windows chooses the keyboard display when a text field has focus. For a copied-tray launch without edit focus, the keyboard host calculates its size options with the clicked monitor's bounds and DPI. An emoji page inside the keyboard keeps that keyboard's placement, including a hide and re-show of the same view during the switch.  
+When an open arrives with **no armed context** at all (pen/touch input bypasses the subclass left-click path or the layout changed between measurement and click), the placement hooks arm a last-chance cursor-derived context : a known flyout popup placed while not yet visible, with the cursor on a managed taskbar whose monitor differs from the requested placement, is treated as a click on that taskbar (cursor point as the overflow anchor) and translated through the same path. The rescue never touches re-placements of an already-visible flyout, so a delayed popup cannot chase the cursor across monitors.
 
 ### Right clicks on shared icons : the three-layer fix
-The per-glyph network/volume/battery menus were the 1.0.7 crash saga, and each of the three layers below is load-bearing. Since 1.3.0 they also cover the copied system icon stacks (`MainStack`, `NonActivatableStack`), whose per-item menus follow the same model :
-1. **Menu ownership follows the pointer**. The per-item context-menu state binds to whichever copy of a shared surface attached its `ItemsSource` most recently, and a right press over any other island kills Explorer inside the island's input processing, before the taskbar window receives a single message. The mod therefore re-attaches the hovered surface's items source while no button is down (mouse-move/pointer-update seen in the `DispatchMessageW` hook, `WM_SETCURSOR` forwarded to the subclassed taskbar), with the right-press dispatch itself as a last resort. Mid-press input never re-attaches, that would eat the active click.
-2. **`ShowAt` is intercepted through regular function hooks**. The menus are flyouts created lazily on first open and cached inside Windows' view-model, reachable through no tree walk and no public API (`Popup.AssociatedFlyout` is WinUI-only, system XAML tops out at `IPopup4`). Throwaway `MenuFlyout`/`Flyout` instances expose the class vtables shared by every instance, and their `IFlyoutBase::ShowAt` (slot 14) and `IFlyoutBase5::ShowAt` (slot 12) entries are read to find the concrete implementation functions. Windhawk regular function hooks are installed on those functions; the ABI vtables are never patched. The hook is a pure pass-through unless the placement target sits inside a `ControlCenterButton`, `MainStack` or `NonActivatableStack` subtree.
-3. **Per-island proxies beat the XamlRoot lock**. A flyout's `XamlRoot` is settable only before its first show, afterwards it is locked to its first island forever, and showing it anchored to another island is the exact crashing call. The mod keeps one proxy `MenuFlyout` per island, created with its `XamlRoot` set before first use. When a locked cached menu is asked to open on a foreign island, its items, which carry the native command handlers, are moved into that island's proxy, the proxy is shown at the original target, and the crashy native `ShowAt` is suppressed (`S_OK` without showing). Borrowed items are handed back to their home menu at the start of the next shared-menu interaction and on unload, with a guard against duplicating a menu Windows rebuilt in the meantime.
+The per-glyph network/volume/battery menus were the 1.0.7 crash saga and each of the three layers below is load-bearing. Since 1.3.0 they also cover the copied system icon stacks (`MainStack`, `NonActivatableStack`), whose per-item menus follow the same model :
+1. **Menu ownership follows the pointer**. The per-item context-menu state binds to whichever copy of a shared surface attached its `ItemsSource` most recently and a right press over any other island kills Explorer inside the island's input processing, before the taskbar window receives a single message. The mod therefore re-attaches the hovered surface's items source while no button is down (mouse-move/pointer-update seen in the `DispatchMessageW` hook, `WM_SETCURSOR` forwarded to the subclassed taskbar), with the right-press dispatch itself as a last resort. Mid-press input never re-attaches, that would eat the active click.
+2. **`ShowAt` is intercepted through regular function hooks**. The menus are flyouts created lazily on first open and cached inside Windows' view-model, reachable through no tree walk and no public API (`Popup.AssociatedFlyout` is WinUI-only, system XAML tops out at `IPopup4`). Throwaway `MenuFlyout`/`Flyout` instances expose the class vtables shared by every instance and their `IFlyoutBase::ShowAt` (slot 14) and `IFlyoutBase5::ShowAt` (slot 12) entries are read to find the concrete implementation functions. Windhawk regular function hooks are installed on those functions, the ABI vtables are never patched. The hook is a pure pass-through unless the placement target sits inside a `ControlCenterButton`, `MainStack` or `NonActivatableStack` subtree.
+3. **Per-island proxies beat the XamlRoot lock**. A flyout's `XamlRoot` is settable only before its first show, afterwards it is locked to its first island forever and showing it anchored to another island is the exact crashing call. The mod keeps one proxy `MenuFlyout` per island, created with its `XamlRoot` set before first use. When a locked cached menu is asked to open on a foreign island, its items, which carry the native command handlers, are moved into that island's proxy, the proxy is shown at the original target and the crashy native `ShowAt` is suppressed (`S_OK` without showing). Borrowed items are handed back to their home menu at the start of the next shared-menu interaction and on unload, with a guard against duplicating a menu Windows rebuilt in the meantime.
 
 ### What stays native
 The notification/date-time button and the secondary-taskbar clock are untouched, apart from placing the control center before that clock : Windows gives every taskbar its own items for them and already opens that flyout on the clicked monitor. Tray icon right clicks travel the notify-icon message pipeline to the owning apps, which is island-safe, with the anchor mapped from the clicked island. ShellHost surfaces outside an armed flyout context, including Windows Search, keep their native placement.
 
 ### Lifecycle and safety
-Unload first stops redirection, then waits synchronously for the taskbar thread to cancel retries, return borrowed proxy items, remove subclasses, restore the properties and bindings changed by the mod, restore child order and native menu ownership, and finally release cached XAML references. Properties whose current value or binding differs from the mod's last write are left alone; originally unset properties are cleared instead of pinned to guessed defaults. Ordinary bindings are restored as bindings; internal template expressions that cannot be reapplied through SetValue are restored as their resolved base values, without animation overrides. Explorer's own monitor choice passes through during the final display refresh. Cleanup has no timeout, so a busy or hung taskbar can delay disable/update. If the taskbar thread is unavailable, taskbar windows in this process are enumerated and their subclasses are removed through Windhawk's synchronous per-window helper, available in 1.6.1 and 1.7.3. Heap-backed XAML references are retained instead of released on the wrong thread. No low timer ids are used on Explorer's windows. Startup retries only reapply XAML state; they do not send display-change notifications that can dismiss an app menu. WinRT references are never released during process detach. The SystemTray hooks replace an answer only when they can compute it from a known taskbar island, and otherwise use the native computation. The free-function rectangle hook returns RECT by value so the compiler selects the correct x64 or ARM64 ABI.
+Unload first stops redirection, then waits synchronously for the taskbar thread to cancel retries, return borrowed proxy items, remove subclasses, restore the properties and bindings changed by the mod, restore child order and native menu ownership and finally release cached XAML references. Properties whose current value or binding differs from the mod's last write are left alone, originally unset properties are cleared instead of pinned to guessed defaults. Ordinary bindings are restored as bindings, internal template expressions that cannot be reapplied through SetValue are restored as their resolved base values, without animation overrides. Explorer's own monitor choice passes through during the final display refresh. Cleanup has no timeout, so a busy or hung taskbar can delay disable/update. If the taskbar thread is unavailable, taskbar windows in this process are enumerated and their subclasses are removed through Windhawk's synchronous per-window helper, available in 1.6.1 and 1.7.3. Heap-backed XAML references are retained instead of released on the wrong thread. No low timer ids are used on Explorer's windows. Startup retries only reapply XAML state, they do not send display-change notifications that can dismiss an app menu. WinRT references are never released during process detach. The SystemTray hooks replace an answer only when they can compute it from a known taskbar island and otherwise use the native computation. The free-function rectangle hook returns RECT by value so the compiler selects the correct x64 or ARM64 ABI.
 
 ---
 
 ## Attribution
-- Author : [@EDM115](https://github.com/EDM115) with great help from AI Agents
-  - [GPT 5.5 High/Extra High](https://openai.com/index/introducing-gpt-5-5/) in [Codex](https://chatgpt.com/codex) for the groundwork
-  - [GPT 5.5 Pro](https://developers.openai.com/api/docs/models/gpt-5.5-pro) in [ChatGPT](https://chatgpt.com/) for code review and bug fixes
-  - [Fable 5 Max](https://www.anthropic.com/news/claude-fable-5-mythos-5) in [Zed](https://zed.dev/) for fixing hard bugs and refactoring
-- Idea : [@rutaaa](https://github.com/rutaaa) (no he didn't bully me into doing this 😭)
+- Author : [`@EDM115`](https://github.com/EDM115) with great help from AI Agents
+  - `GPT 5.5 (Extra High)` in Codex for the groundwork
+  - `GPT 5.5 (Pro)` in ChatGPT for code review and bug fixes
+  - `Fable 5 (Max)` in Zed for fixing hard bugs and refactoring
+  - `GPT 6.2 Astra (Extra High)` in Codex for further hard bug fixes
+- Contributions from [`@LiteWindchester`](https://gist.github.com/LiteWindchester/9b8d40053dd8f32476ee3f0febe75498) (tray frame resolver), [`@wallbangz`](https://github.com/ramensoftware/windhawk-mods/issues/7452) (Quick Settings placement) and [`@saratna`](https://github.com/saratna/taskbar-multi-tray-ime) (IME presenter sharing)
+- Idea : [`@rutaaa`](https://github.com/rutaaa) (no he didn't bully me into doing this 😭)
 - License : MIT
 */
 // ==/WindhawkModReadme==
@@ -148,14 +149,17 @@ Unload first stops redirection, then waits synchronously for the taskbar thread 
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
+#include <inspectable.h>
 
 #include <windows.h>
 #include <windowsx.h>
 #include <commctrl.h>
+#include <shellscalingapi.h>
 
 #undef GetCurrentTime
 
 #include <winrt/Windows.UI.Input.h>
+#include <winrt/Windows.UI.ViewManagement.Core.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Windows.UI.Xaml.Data.h>
@@ -169,6 +173,7 @@ Unload first stops redirection, then waits synchronously for the taskbar thread 
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cstring>
 #include <cwctype>
 #include <functional>
 #include <limits>
@@ -237,7 +242,7 @@ const Settings& GetSettings() {
     return *(snapshot ? snapshot : &g_defaultSettings);
 }
 
-/// Atomically publishes a new immutable settings snapshot. The previous snapshot is intentionally leaked : a hook on another thread may still be reading it, and settings changes are rare enough that the bytes do not matter.
+/// Atomically publishes a new immutable settings snapshot. The previous snapshot is intentionally leaked : a hook on another thread may still be reading it and settings changes are rare enough that the bytes do not matter.
 void PublishSettings(Settings settings) {
     // Keep old snapshots alive. Hooks can be running concurrently on Explorer or taskbar threads, so freeing a replaced std::set/std::vector would reintroduce the race this snapshot pattern is meant to remove.
     Settings* publishedSettings = new Settings(std::move(settings));
@@ -254,6 +259,7 @@ TargetProcess g_targetProcess = TargetProcess::Other;
 
 constexpr WPARAM kNativeControlCenter = 3;
 constexpr WPARAM kNativeHiddenTray = 4;
+constexpr WPARAM kNativeSystemPanel = 5;
 
 constexpr DWORD kNativeFlyoutMonitorContextMs = 5000;
 constexpr DWORD kNativeControlCenterMonitorContextMs = 1800;
@@ -264,7 +270,7 @@ constexpr DWORD kTrayLayoutClickMaxAgeMs = 150;
 constexpr DWORD kTrayLayoutHoverMaxAgeMs = 400;
 // How long a tray icon interaction on one taskbar keeps winning Shell_NotifyIconGetRect answers once the cursor left the taskbars
 constexpr DWORD kTrayInteractionPreferenceMs = 10000;
-// Apps query an icon rectangle dozens of times within a few hundred milliseconds of a click : one answer serves the burst, and an unchanged answer is logged again only after a quiet second
+// Apps query an icon rectangle dozens of times within a few hundred milliseconds of a click : one answer serves the burst and an unchanged answer is logged again only after a quiet second
 constexpr DWORD kTrayElementRectReuseMs = 100;
 constexpr DWORD kTrayElementRectLogRepeatMs = 1000;
 
@@ -290,6 +296,14 @@ struct SharedProxyState {
 };
 
 SharedProxyState g_sharedProxyState SHARED_SECTION = {};
+// Match KeyboardHosting's asynchronous approval to the system-icon request Explorer actually launched
+enum class InputPanelKind : UINT32 { Other, Keyboard, Language, Emoji };
+
+UINT64 InputPanelLaunch(LONG generation, InputPanelKind kind) {
+    return (static_cast<UINT64>(static_cast<UINT32>(generation)) << 32) | static_cast<UINT32>(kind);
+}
+
+std::atomic<UINT64> g_inputPanelLaunch SHARED_SECTION{0};
 
 struct SharedProxyStateSnapshot {
     HMONITOR proxyFlyoutMonitor;
@@ -527,7 +541,7 @@ PCWSTR SharedMenuSurfaceToString(SharedMenuSurface surface) {
     }
 }
 
-/// Drops every ownership record pointing at a taskbar window, or all of them when hWnd is null
+/// Drops every ownership record pointing at a taskbar window or all of them when hWnd is null
 void ClearSharedMenuSurfaceOwners(HWND hWnd) {
     for (HWND& owner : g_sharedMenuSurfaceOwners) {
         if (!hWnd || owner == hWnd) {
@@ -539,7 +553,7 @@ void ClearSharedMenuSurfaceOwners(HWND hWnd) {
 /// Set once the FlyoutBase ShowAt implementation functions have been hooked on the taskbar thread (see EnsureFlyoutShowAtFunctionHooks)
 std::atomic<bool> g_flyoutShowAtHooksInstalled{false};
 
-/// A flyout's XamlRoot locks permanently to the island of its first show (confirmed by logs : re-rooted on first show, locked=3 ever after). The cached per-glyph menus can therefore never be shown on another island. Instead, one proxy MenuFlyout is created per island, rooted there before its first show, and the cached menu's items are moved into the island's proxy for the duration of the interaction. The items keep their original handlers, and they are lazily returned to the cached flyout at the start of the next control-center menu interaction, so no Closed event subscription (and no unload hazard from mod-owned handlers) is needed.
+/// A flyout's XamlRoot locks permanently to the island of its first show (confirmed by logs : re-rooted on first show, locked=3 ever after). The cached per-glyph menus can therefore never be shown on another island. Instead, one proxy MenuFlyout is created per island, rooted there before its first show and the cached menu's items are moved into the island's proxy for the duration of the interaction. The items keep their original handlers and they are lazily returned to the cached flyout at the start of the next control-center menu interaction, so no Closed event subscription (and no unload hazard from mod-owned handlers) is needed.
 struct ControlCenterProxyFlyoutEntry {
     winrt::Windows::UI::Xaml::Controls::MenuFlyout proxy{nullptr};
     winrt::Windows::UI::Xaml::XamlRoot proxyRoot{nullptr};
@@ -552,8 +566,9 @@ struct ControlCenterProxyFlyouts {
 
 ControlCenterProxyFlyouts& g_controlCenterProxyFlyouts = *new ControlCenterProxyFlyouts();
 
-/// Client-space rectangles (physical pixels) of the tray surfaces of one taskbar, measured from the live XAML tree. An empty rectangle means the surface is collapsed or missing. Click hit-testing, the menu-ownership hover pre-arm, and the hidden-tray anchor all read these instead of assuming a fixed right-edge layout, which differs between builds (secondary clock stack, notification bell, show desktop button) and themes.
+/// Client-space rectangles (physical pixels) of the tray surfaces of one taskbar, measured from the live XAML tree. An empty rectangle means the surface is collapsed or missing. Click hit-testing, the menu-ownership hover pre-arm and the hidden-tray anchor all read these instead of assuming a fixed right-edge layout, which differs between builds (secondary clock stack, notification bell, show desktop button) and themes.
 struct TrayLayoutRects {
+    RECT frame = {};
     RECT chevron = {};
     RECT promotedIcons = {};
     RECT mainStack = {};
@@ -610,21 +625,22 @@ struct TrayElementRectAnswer {
 
 thread_local TrayElementRectAnswer g_lastTrayElementRectAnswer;
 
-/// Placement the hidden-icons overflow popup was translated to, re-applied to every later re-position while that popup stays visible. Windows re-runs its placement with the anchor it stored for the primary taskbar whenever the popup content resizes (for example when its row count changes), long after the clicked-monitor context expired.
-struct StickyOverflowPlacement {
+/// Keep the overflow, Quick Settings and its windowed popup independent when more than one window is visible
+enum class StickyPopup { Overflow, ControlCenter, WindowedPopup, Count };
+struct StickyFlyoutPlacement {
     HWND popupWnd = nullptr;
     ProxyFlyoutContext context;
 };
 
-StickyOverflowPlacement g_stickyOverflowPlacement;
-SRWLOCK g_stickyOverflowPlacementLock = SRWLOCK_INIT;
+StickyFlyoutPlacement g_stickyPlacements[static_cast<size_t>(StickyPopup::Count)];
+SRWLOCK g_stickyPlacementLock = SRWLOCK_INIT;
 
 /// True once Wh_ModBeforeUninit has started. Every hook checks it to fall back to fully native behavior during teardown.
 bool IsModUnloading() {
     return g_modUnloading.load(std::memory_order_acquire) != 0;
 }
 
-/// True while monitor-query redirection must stay off : during unload, and while the mod itself applies/restores taskbar XAML (see ActiveFlyoutRedirectionSuppressor)
+/// True while monitor-query redirection must stay off : during unload and while the mod itself applies/restores taskbar XAML (see ActiveFlyoutRedirectionSuppressor)
 bool IsActiveFlyoutRedirectionSuppressed() {
     return IsModUnloading() || g_activeFlyoutRedirectionSuppressionDepth.load(std::memory_order_acquire) > 0;
 }
@@ -640,6 +656,8 @@ struct ActiveFlyoutRedirectionSuppressor {
 };
 
 void RemoveCachedTaskbarTrayLayout(HWND hWnd);
+void ClearKeyboardPlacement(void* policy = nullptr, UINT viewId = 0, LONG generation = 0);
+bool CaptureKeyboardForEmoji(LONG generation);
 bool IsSecondaryTaskbarWindow(HWND hWnd);
 bool IsPrimaryTaskbarWindow(HWND hWnd);
 bool IsRightClickOrContextMenuMessage(UINT uMsg, WPARAM wParam);
@@ -686,7 +704,7 @@ PCWSTR VisibilityToString(Visibility visibility) {
     }
 }
 
-/// Identifies the injected host process (explorer.exe, ShellHost.exe, or other) from the process image name
+/// Identifies the injected host process (explorer.exe, ShellHost.exe or other) from the process image name
 TargetProcess GetTargetProcess() {
     wchar_t modulePath[MAX_PATH] = {};
 
@@ -846,7 +864,7 @@ void LoadSettings() {
 constexpr int kMaxCachedMonitors = 16;
 constexpr DWORD kMonitorCacheTtlMs = 1000;
 
-// Monitor numbering cache. GetMonitorIndex/GetMonitorByIndex used to run a full EnumDisplayMonitors pass per query, and they sit behind settings targeting, context arming, hit-test logging, and the cursor rescue. The cache keeps the EnumDisplayMonitors order behind a slim reader/writer lock and expires by TTL (covers ShellHost, which has no taskbar window to receive display-change messages), with eager invalidation on WM_DISPLAYCHANGE and when an armed context's monitor handle dies.
+// Monitor numbering cache. GetMonitorIndex/GetMonitorByIndex used to run a full EnumDisplayMonitors pass per query and they sit behind settings targeting, context arming, hit-test logging and the cursor rescue. The cache keeps the EnumDisplayMonitors order behind a slim reader/writer lock and expires by TTL (covers ShellHost, which has no taskbar window to receive display-change messages), with eager invalidation on WM_DISPLAYCHANGE and when an armed context's monitor handle dies.
 SRWLOCK g_monitorCacheLock = SRWLOCK_INIT;
 HMONITOR g_monitorCacheEntries[kMaxCachedMonitors];
 int g_monitorCacheCount = 0;
@@ -922,7 +940,7 @@ int SnapshotMonitors(HMONITOR* entries) {
     return count;
 }
 
-/// Resolves a one-based monitor number to its HMONITOR, or nullptr when out of range
+/// Resolves a one-based monitor number to its HMONITOR or nullptr when out of range
 HMONITOR GetMonitorByIndex(int monitorIndex) {
     if (monitorIndex <= 0 || monitorIndex > kMaxCachedMonitors) {
         return nullptr;
@@ -934,7 +952,7 @@ HMONITOR GetMonitorByIndex(int monitorIndex) {
     return monitorIndex <= count ? entries[monitorIndex - 1] : nullptr;
 }
 
-/// Resolves an HMONITOR to its one-based monitor number, or 0 when unknown
+/// Resolves an HMONITOR to its one-based monitor number or 0 when unknown
 int GetMonitorIndex(HMONITOR monitor) {
     if (!monitor) {
         return 0;
@@ -1043,13 +1061,13 @@ HMONITOR GetRealPrimaryTrayTargetMonitor() {
     return GetSingleSelectedMonitorForPrimaryTray();
 }
 
-HMONITOR GetActiveProxyFlyoutMonitor();
+HMONITOR GetActiveProxyFlyoutMonitor(bool includeSystemPanel = false);
 LONG ClearSharedProxyFlyoutMonitorState();
-bool TryGetActiveProxyFlyoutContext(ProxyFlyoutContext* context);
+bool TryGetActiveProxyFlyoutContext(ProxyFlyoutContext* context, bool includeSystemPanel = false);
 
-/// Returns a coherent stack copy of the currently armed flyout context, or false when none. The read path derives all fields from one shared seqlock snapshot and never writes the process-local mirror.
-bool TryGetActiveProxyFlyoutContext(ProxyFlyoutContext* context) {
-    // Fast path for the hot hooks : every MonitorFrom*/placement/dispatch call in two processes funnels through here, and with no shared context one plain read settles it without the full seqlock snapshot. Arming publishes the monitor through the seqlock with barriers, so a racy null read here can only delay redirection by one query.
+/// Returns a coherent stack copy of the currently armed flyout context or false when none. The read path derives all fields from one shared seqlock snapshot and never writes the process-local mirror.
+bool TryGetActiveProxyFlyoutContext(ProxyFlyoutContext* context, bool includeSystemPanel) {
+    // Fast path for the hot hooks : every MonitorFrom*/placement/dispatch call in two processes funnels through here and with no shared context one plain read settles it without the full seqlock snapshot. Arming publishes the monitor through the seqlock with barriers, so a racy null read here can only delay redirection by one query.
     if (!g_sharedProxyState.proxyFlyoutMonitor.load(std::memory_order_acquire)) {
         return false;
     }
@@ -1062,7 +1080,7 @@ bool TryGetActiveProxyFlyoutContext(ProxyFlyoutContext* context) {
     }
 
     if (static_cast<LONG>(context -> untilTick - GetTickCount()) <= 0) {
-        // Clear the shared context only when it is still the generation this read observed. An expiry racing a concurrent click on another monitor (or in the other process) must never wipe the freshly armed context, and a failed snapshot read means a writer is mid-arm right now, so leave the shared state to the next successful read.
+        // Clear the shared context only when it is still the generation this read observed. An expiry racing a concurrent click on another monitor (or in the other process) must never wipe the freshly armed context and a failed snapshot read means a writer is mid-arm right now, so leave the shared state to the next successful read.
         if (hasSharedSnapshot && g_sharedProxyState.proxyFlyoutGeneration.load(std::memory_order_acquire) == snapshot.proxyFlyoutGeneration) {
             ClearSharedProxyFlyoutMonitorState();
         }
@@ -1070,7 +1088,11 @@ bool TryGetActiveProxyFlyoutContext(ProxyFlyoutContext* context) {
         return false;
     }
 
-    // Hot-plug protection (the PowerToys Command Palette pattern) : a context armed before a display change can hold a dead HMONITOR, and forcing monitor queries to a dead handle breaks the shell's placement math. Validate against the live topology and drop the context, the cursor rescue re-resolves a following open.
+    if (context -> kind == kNativeSystemPanel && !includeSystemPanel) {
+        return false;
+    }
+
+    // Hot-plug protection (the PowerToys Command Palette pattern) : a context armed before a display change can hold a dead HMONITOR and forcing monitor queries to a dead handle breaks the shell's placement math. Validate against the live topology and drop the context, the cursor rescue re-resolves a following open.
     MONITORINFO liveMonitorInfo = {};
     liveMonitorInfo.cbSize = sizeof(liveMonitorInfo);
 
@@ -1094,16 +1116,16 @@ bool TryGetActiveProxyFlyoutContext(ProxyFlyoutContext* context) {
     return true;
 }
 
-/// Returns the monitor of the currently armed flyout context, or null when none.
-HMONITOR GetActiveProxyFlyoutMonitor() {
+/// Returns the monitor of the currently armed flyout context or null when none.
+HMONITOR GetActiveProxyFlyoutMonitor(bool includeSystemPanel) {
     ProxyFlyoutContext context;
 
-    return TryGetActiveProxyFlyoutContext(&context) ? context.monitor : nullptr;
+    return TryGetActiveProxyFlyoutContext(&context, includeSystemPanel) ? context.monitor : nullptr;
 }
 
-/// True for the two flyout kinds the mod arms contexts for
+/// True for a flyout opened through a copied taskbar surface
 bool IsKnownFlyoutKind(int kind) {
-    return kind == kNativeControlCenter || kind == kNativeHiddenTray;
+    return kind == kNativeControlCenter || kind == kNativeHiddenTray || kind == kNativeSystemPanel;
 }
 
 /// Rewrites the active context's expiry deadline to at most durationMs from now (never extends it) and republishes through the seqlock, so a placed popup stops influencing monitor queries quickly
@@ -1121,7 +1143,7 @@ void ShortenActiveFlyoutMonitorContext(DWORD durationMs, PCWSTR reason) {
         return;
     }
 
-    // The rewrite below republishes the coherent stack context read above, which is only valid while the shared generation still matches it. A mismatch means another click already armed a newer context, and shortening must never stomp it with stale data or cut its fresh deadline.
+    // The rewrite below republishes the coherent stack context read above, which is only valid while the shared generation still matches it. A mismatch means another click already armed a newer context and shortening must never stomp it with stale data or cut its fresh deadline.
     if (snapshot.proxyFlyoutGeneration != context.generation) {
         return;
     }
@@ -1241,11 +1263,45 @@ bool GetMonitorCenterPoint(HMONITOR monitor, POINT* point) {
     return true;
 }
 
+bool TryGetStickyPlacement(StickyPopup kind, HWND popupWnd, ProxyFlyoutContext* context, HWND* matchedWindow = nullptr);
+
+/// Only the immersive helper used to open Quick Settings may reconnect it after the click expires
+std::atomic<void*> g_controlCenterMonitorHelper{nullptr};
+
+HMONITOR GetImmersiveFlyoutMonitor(void* helper) {
+    if (IsActiveFlyoutRedirectionSuppressed()) {
+        return nullptr;
+    }
+
+    ProxyFlyoutContext context;
+
+    if (TryGetActiveProxyFlyoutContext(&context)) {
+        if (g_targetProcess == TargetProcess::ShellHost && context.kind == kNativeControlCenter) {
+            g_controlCenterMonitorHelper = helper;
+        }
+
+        return context.monitor;
+    }
+
+    HWND popup = nullptr;
+
+    if (g_targetProcess == TargetProcess::ShellHost &&
+        (TryGetStickyPlacement(StickyPopup::ControlCenter, nullptr, &context, &popup) || TryGetStickyPlacement(StickyPopup::WindowedPopup, nullptr, &context, &popup))) {
+        void* previous = g_controlCenterMonitorHelper.load();
+
+        if (helper == previous || (!previous && GetWindowThreadProcessId(popup, nullptr) == GetCurrentThreadId())) {
+            g_controlCenterMonitorHelper = helper;
+
+            return context.monitor;
+        }
+    }
+
+    return nullptr;
+}
+
 /// twinui.pcshell hook : while a flyout context is active, connects the immersive flyout helper to the clicked monitor's center instead of the original point, steering ShellHost-hosted flyout placement
 bool WINAPI ImmersiveMonitorHelper_ConnectToMonitor_Hook(void* pThis, HWND hWnd, POINT point) {
-    HMONITOR monitor = IsActiveFlyoutRedirectionSuppressed()
-        ? nullptr
-        : GetActiveProxyFlyoutMonitor();
+    HMONITOR monitor = GetImmersiveFlyoutMonitor(pThis);
 
     if (!monitor) {
         return ImmersiveMonitorHelper_ConnectToMonitor_Original(pThis, hWnd, point);
@@ -1274,9 +1330,7 @@ ImmersiveMonitorHelper_AdjustMonitorConnectedIfNeeded_Hook(void* pThis) {
         return ImmersiveMonitorHelper_AdjustMonitorConnectedIfNeeded_Original(pThis);
     };
 
-    HMONITOR monitor = IsActiveFlyoutRedirectionSuppressed()
-        ? nullptr
-        : GetActiveProxyFlyoutMonitor();
+    HMONITOR monitor = GetImmersiveFlyoutMonitor(pThis);
 
     if (!monitor) {
         return original();
@@ -1303,8 +1357,41 @@ ImmersiveMonitorHelper_AdjustMonitorConnectedIfNeeded_Hook(void* pThis) {
     return S_OK;
 }
 
+bool TryGetControlCenterLayoutContext(void* caller, ProxyFlyoutContext* context) {
+    if (g_targetProcess != TargetProcess::ShellHost || IsActiveFlyoutRedirectionSuppressed()) {
+        return false;
+    }
+
+    HMODULE controlCenter = GetModuleHandleW(L"ControlCenter.dll");
+    MEMORY_BASIC_INFORMATION mbi{};
+
+    if (!controlCenter || !VirtualQuery(caller, &mbi, sizeof(mbi)) || mbi.AllocationBase != controlCenter) {
+        return false;
+    }
+
+    if (TryGetActiveProxyFlyoutContext(context)) {
+        return context->kind == kNativeControlCenter;
+    }
+
+    return TryGetStickyPlacement(StickyPopup::ControlCenter, nullptr, context) || TryGetStickyPlacement(StickyPopup::WindowedPopup, nullptr, context);
+}
+
 /// user32 hook : while a flyout context is active, point-to-monitor queries that pass the target-side filter resolve to the clicked monitor
 HMONITOR WINAPI MonitorFromPoint_Hook(POINT pt, DWORD flags) {
+    // ControlCenter.dll re-queries the origin to measure its XAML content after taskbar auto-hide
+    ProxyFlyoutContext layout;
+
+    if (pt.x == 0 && pt.y == 0 && TryGetControlCenterLayoutContext(__builtin_return_address(0), &layout)) {
+        Wh_Log(L"ControlCenter.dll measuring layout on monitor %d", layout.monitorIndex);
+
+        return layout.monitor;
+    }
+
+    // Explorer and Taskbar auto-hide per monitor use this exact query to identify the real primary taskbar
+    if (IsExplorerTarget() && flags == MONITOR_DEFAULTTOPRIMARY && pt.x == 0 && pt.y == 0) {
+        return MonitorFromPoint_Original(pt, flags);
+    }
+
     if (!IsActiveFlyoutRedirectionSuppressed()) {
         if (HMONITOR monitor = GetActiveProxyFlyoutMonitor()) {
             if (!ShouldForceActiveFlyoutForPoint(pt, monitor)) {
@@ -1432,7 +1519,7 @@ HMONITOR WINAPI MonitorFromWindow_Hook(HWND hWnd, DWORD flags) {
     return MonitorFromWindow_Original(hWnd, flags);
 }
 
-/// True for the popup window classes whose placement the mod translates (overflow island, control-center window, and the control-center windowed popup while that kind is active). The optional classNameResult receives the window class for further branching/logging without a heap allocation.
+/// True for the popup window classes whose placement the mod translates (overflow island, control-center window and the control-center windowed popup while that kind is active). The optional classNameResult receives the window class for further branching/logging without a heap allocation.
 bool IsNativeFlyoutPopupWindow(HWND hWnd, int activeFlyoutKind, wchar_t* classNameResult, int classNameResultCount) {
     wchar_t className[64] = {};
 
@@ -1524,7 +1611,7 @@ bool IsCursorRescueCandidateWindow(HWND hWnd, WPARAM* flyoutKind) {
     return false;
 }
 
-/// Last-chance monitor fix for flyout opens that arrive with no armed context : the click hit-test depends on the promoted-icon width measured during the last apply pass (tray-icon changes shift the chevron region), and pen/touch input bypasses the subclass left-click path entirely. The destination is resolved from the live cursor, like the start-menu-open-location mod, but scoped to fresh (not yet visible) overflow/control-center popups while the cursor sits on a managed taskbar whose monitor differs from the requested placement, so delayed re-placements can never chase the cursor and keyboard opens away from the taskbars stay native.
+/// Last-chance monitor fix for flyout opens that arrive with no armed context : the click hit-test depends on the promoted-icon width measured during the last apply pass (tray-icon changes shift the chevron region) and pen/touch input bypasses the subclass left-click path entirely. The destination is resolved from the live cursor, like the start-menu-open-location mod, but scoped to fresh (not yet visible) overflow/control-center popups while the cursor sits on a managed taskbar whose monitor differs from the requested placement, so delayed re-placements can never chase the cursor and keyboard opens away from the taskbars stay native.
 /// @return true when a short cursor-derived context was armed and the placement should be translated
 bool TryArmCursorRescueFlyoutContext(HWND hWnd, const RECT& requestedRect) {
     WPARAM flyoutKind = 0;
@@ -1568,59 +1655,147 @@ bool TryArmCursorRescueFlyoutContext(HWND hWnd, const RECT& requestedRect) {
     );
 }
 
-/// True for the hidden-icons overflow popup window
-bool IsOverflowPopupWindowClass(PCWSTR className) {
-    return wcscmp(className, L"TopLevelWindowForOverflowXamlIsland") == 0;
-}
-
-/// Remembers where the overflow popup was translated to, for the re-positions Windows issues while it stays open
-void StoreStickyOverflowPlacement(HWND popupWnd, const ProxyFlyoutContext& context) {
-    AcquireSRWLockExclusive(&g_stickyOverflowPlacementLock);
-    g_stickyOverflowPlacement.popupWnd = popupWnd;
-    g_stickyOverflowPlacement.context = context;
-    ReleaseSRWLockExclusive(&g_stickyOverflowPlacementLock);
-}
-
-/// Forgets the sticky placement of a popup (or any popup when popupWnd is null), when it hides or reopens
-void ClearStickyOverflowPlacement(HWND popupWnd) {
-    AcquireSRWLockExclusive(&g_stickyOverflowPlacementLock);
-
-    if (!popupWnd || g_stickyOverflowPlacement.popupWnd == popupWnd) {
-        g_stickyOverflowPlacement = {};
+StickyPopup GetStickyPopupKind(PCWSTR className) {
+    if (wcscmp(className, L"TopLevelWindowForOverflowXamlIsland") == 0) {
+        return StickyPopup::Overflow;
     }
 
-    ReleaseSRWLockExclusive(&g_stickyOverflowPlacementLock);
-}
-
-/// Cheap pre-filter for the placement hooks : whether this window carries a sticky overflow placement
-bool HasStickyOverflowPlacement(HWND popupWnd) {
-    AcquireSRWLockShared(&g_stickyOverflowPlacementLock);
-    bool result = popupWnd && g_stickyOverflowPlacement.popupWnd == popupWnd;
-    ReleaseSRWLockShared(&g_stickyOverflowPlacementLock);
-
-    return result;
-}
-
-/// Copies the sticky placement of a visible overflow popup, dropping it when its monitor died meanwhile
-bool TryGetStickyOverflowPlacement(HWND popupWnd, ProxyFlyoutContext* context) {
-    AcquireSRWLockShared(&g_stickyOverflowPlacementLock);
-    bool found = popupWnd && g_stickyOverflowPlacement.popupWnd == popupWnd;
-
-    if (found) {
-        *context = g_stickyOverflowPlacement.context;
+    if (wcscmp(className, L"ControlCenterWindow") == 0) {
+        return StickyPopup::ControlCenter;
     }
 
-    ReleaseSRWLockShared(&g_stickyOverflowPlacementLock);
+    // Explorer uses this generic class for unrelated XAML menus too
+    if (g_targetProcess == TargetProcess::ShellHost && wcscmp(className, L"Xaml_WindowedPopupClass") == 0) {
+        return StickyPopup::WindowedPopup;
+    }
 
-    if (!found) {
+    return StickyPopup::Count;
+}
+
+void StoreStickyPlacement(StickyPopup kind, HWND popupWnd, const ProxyFlyoutContext& context) {
+    AcquireSRWLockExclusive(&g_stickyPlacementLock);
+    g_stickyPlacements[static_cast<size_t>(kind)] = {popupWnd, context};
+    ReleaseSRWLockExclusive(&g_stickyPlacementLock);
+}
+
+void ClearStickyPlacement(HWND popupWnd) {
+    AcquireSRWLockExclusive(&g_stickyPlacementLock);
+    bool clearedControlCenter = false;
+
+    for (auto& placement : g_stickyPlacements) {
+        if (!popupWnd || placement.popupWnd == popupWnd) {
+            clearedControlCenter |= placement.context.kind == kNativeControlCenter;
+            placement = {};
+        }
+    }
+
+    if ((!popupWnd || clearedControlCenter) && !g_stickyPlacements[static_cast<size_t>(StickyPopup::ControlCenter)].popupWnd &&
+        !g_stickyPlacements[static_cast<size_t>(StickyPopup::WindowedPopup)].popupWnd) {
+        g_controlCenterMonitorHelper = nullptr;
+    }
+
+    ReleaseSRWLockExclusive(&g_stickyPlacementLock);
+}
+
+bool HasStickyPlacement(HWND popupWnd) {
+    AcquireSRWLockShared(&g_stickyPlacementLock);
+    bool found = false;
+
+    for (const auto& placement : g_stickyPlacements) {
+        if (popupWnd && placement.popupWnd == popupWnd) {
+            found = true;
+
+            break;
+        }
+    }
+
+    ReleaseSRWLockShared(&g_stickyPlacementLock);
+
+    return found;
+}
+
+/// A null window requests the current popup for that slot (the immersive adjustment has no HWND parameter)
+bool TryGetStickyPlacement(StickyPopup kind, HWND popupWnd, ProxyFlyoutContext* context, HWND* matchedWindow) {
+    AcquireSRWLockShared(&g_stickyPlacementLock);
+    auto placement = g_stickyPlacements[static_cast<size_t>(kind)];
+    ReleaseSRWLockShared(&g_stickyPlacementLock);
+
+    if (!placement.popupWnd || (popupWnd && popupWnd != placement.popupWnd) || !IsWindowVisible(placement.popupWnd)) {
         return false;
     }
 
-    MONITORINFO monitorInfo = {};
-    monitorInfo.cbSize = sizeof(monitorInfo);
+    wchar_t className[64] = {};
+    MONITORINFO info{sizeof(info)};
 
-    if (!GetMonitorInfoW(context -> monitor, &monitorInfo)) {
-        ClearStickyOverflowPlacement(popupWnd);
+    if (!GetClassNameW(placement.popupWnd, className, ARRAYSIZE(className)) || GetStickyPopupKind(className) != kind ||
+        !GetMonitorInfoW(placement.context.monitor, &info) || !IsWindow(placement.context.taskbarWnd)) {
+
+            return false;
+    }
+
+    if (matchedWindow) {
+        *matchedWindow = placement.popupWnd;
+    }
+
+    *context = placement.context;
+
+    return true;
+}
+
+/// Keep the native distance from the nearer work-area edge when the destination has a different resolution
+LONG MapPanelAxis(LONG start, LONG size, LONG srcStart, LONG srcEnd, LONG dstStart, LONG dstEnd, LONG dstSize, UINT srcDpi, UINT dstDpi) {
+    LONG nearGap = start - srcStart;
+    LONG farGap = srcEnd - (start + size);
+
+    return nearGap <= farGap ? dstStart + MulDiv(nearGap, dstDpi, srcDpi) : dstEnd - dstSize - MulDiv(farGap, dstDpi, srcDpi);
+}
+
+/// Fit an on-screen panel in physical pixels. A move-only request already carries the window's current pixel size
+RECT FitPanelRect(const RECT& requested, const RECT& source, const RECT& target, UINT srcDpi, UINT dstDpi, bool keepSize, bool fullWidth) {
+    LONG width = requested.right - requested.left;
+    LONG height = requested.bottom - requested.top;
+    LONG dstWidth = keepSize ? width : MulDiv(width, dstDpi, srcDpi);
+
+    if (fullWidth) {
+        dstWidth = target.right - target.left;
+    }
+
+    LONG dstHeight = keepSize ? height : MulDiv(height, dstDpi, srcDpi);
+    dstWidth = ClampLong(dstWidth, 1, target.right - target.left);
+    dstHeight = ClampLong(dstHeight, 1, target.bottom - target.top);
+    LONG left = MapPanelAxis(requested.left, width, source.left, source.right, target.left, target.right, dstWidth, srcDpi, dstDpi);
+    LONG top = MapPanelAxis(requested.top, height, source.top, source.bottom, target.top, target.bottom, dstHeight, srcDpi, dstDpi);
+    left = ClampLong(left, target.left, target.right - dstWidth);
+    top = ClampLong(top, target.top, target.bottom - dstHeight);
+
+    return {left, top, left + dstWidth, top + dstHeight};
+}
+
+/// Intersect the live work area with the space available on the opening side of the taskbar
+bool ReserveOpeningTaskbar(const MONITORINFO& info, const ProxyFlyoutContext& context, LONG gap, RECT* area, bool* horizontal, bool* farEdge) {
+    *area = info.rcWork;
+    RECT bar{};
+
+    if (!context.taskbarRectValid || !IntersectRect(&bar, &info.rcMonitor, &context.taskbarRect)) {
+        return false;
+    }
+
+    *horizontal = bar.right - bar.left >= bar.bottom - bar.top;
+    *farEdge = *horizontal ? bar.top - info.rcMonitor.top >= info.rcMonitor.bottom - bar.bottom
+                           : bar.left - info.rcMonitor.left >= info.rcMonitor.right - bar.right;
+
+    if (*horizontal && *farEdge) {
+        area->bottom = std::min(area->bottom, bar.top - gap);
+    } else if (*horizontal) {
+        area->top = std::max(area->top, bar.bottom + gap);
+    } else if (*farEdge) {
+        area->right = std::min(area->right, bar.left - gap);
+    } else {
+        area->left = std::max(area->left, bar.right + gap);
+    }
+
+    if (IsRectEmpty(area)) {
+        *area = info.rcWork;
 
         return false;
     }
@@ -1628,9 +1803,63 @@ bool TryGetStickyOverflowPlacement(HWND popupWnd, ProxyFlyoutContext* context) {
     return true;
 }
 
-/// Translates a flyout popup rectangle onto the active context's monitor : rescales for source/target DPI, anchors hidden-tray popups to the captured chevron point, pins popups to the armed taskbar's edge with a small gap, preserves relative offsets otherwise, and clamps into the target work area. A visible overflow popup with a sticky placement keeps that placement instead of the active context.
+decltype(&GetMonitorInfoW) GetMonitorInfoW_Original;
+
+BOOL WINAPI GetMonitorInfoW_Hook(HMONITOR monitor, LPMONITORINFO info) {
+    BOOL result = GetMonitorInfoW_Original(monitor, info);
+    ProxyFlyoutContext layout;
+
+    if (result && TryGetControlCenterLayoutContext(__builtin_return_address(0), &layout) && monitor == layout.monitor) {
+        bool horizontal{}, farEdge{};
+        RECT area{};
+
+        if (ReserveOpeningTaskbar(*info, layout, 0, &area, &horizontal, &farEdge) && !EqualRect(&area, &info->rcWork)) {
+            Wh_Log(L"ControlCenter.dll work area monitor=%d (%ld,%ld,%ld,%ld) to (%ld,%ld,%ld,%ld)", layout.monitorIndex, info->rcWork.left, info->rcWork.top, info->rcWork.right, info->rcWork.bottom, area.left, area.top, area.right, area.bottom);
+            info->rcWork = area;
+        }
+    }
+
+    return result;
+}
+
+RECT FitQuickSettingsRect(const RECT& requested, const MONITORINFO& source, const MONITORINFO& target, const ProxyFlyoutContext& context, UINT srcDpi, UINT dstDpi, bool keepSize) {
+    RECT area{};
+    bool horizontal{}, farEdge{};
+    bool reserve = ReserveOpeningTaskbar(target, context, 0, &area, &horizontal, &farEdge);
+    // ControlCenterWindow can be an edge-to-edge vertical XAML host. The card and its margins live inside it
+    LONG srcBarHeight = reserve && horizontal ? MulDiv(context.taskbarRect.bottom - context.taskbarRect.top, srcDpi, dstDpi) : 0;
+    bool fullHeight = (requested.top == source.rcWork.top || (srcBarHeight && !farEdge && requested.top == source.rcMonitor.top + srcBarHeight)) &&
+                      (requested.bottom == source.rcWork.bottom || requested.bottom == source.rcMonitor.bottom ||
+                       (srcBarHeight && farEdge && requested.bottom == source.rcMonitor.bottom - srcBarHeight));
+
+    if (fullHeight) {
+        RECT fitted = FitPanelRect(requested, source.rcWork, area, srcDpi, dstDpi, keepSize, false);
+        fitted.top = area.top;
+        fitted.bottom = area.bottom;
+
+        return fitted;
+    }
+
+    if (reserve) {
+        reserve = ReserveOpeningTaskbar(target, context, MulDiv(8, dstDpi, USER_DEFAULT_SCREEN_DPI), &area, &horizontal, &farEdge);
+    }
+
+    RECT fitted = FitPanelRect(requested, source.rcWork, area, srcDpi, dstDpi, keepSize, false);
+
+    if (reserve) {
+        if (horizontal) {
+            OffsetRect(&fitted, 0, farEdge ? area.bottom - fitted.bottom : area.top - fitted.top);
+        } else {
+            OffsetRect(&fitted, farEdge ? area.right - fitted.right : area.left - fitted.left, 0);
+        }
+    }
+
+    return fitted;
+}
+
+/// Translates a flyout popup rectangle onto the active context's monitor : rescales for source/target DPI, anchors hidden-tray popups to the captured chevron point, pins popups to the armed taskbar's edge with a small gap, preserves relative offsets otherwise and clamps into the target work area. A visible overflow popup with a sticky placement keeps that placement instead of the active context.
 /// @return true when translatedRect differs from the request and should be applied instead
-bool TranslateNativeFlyoutRectToActiveMonitor(HWND hWnd, const RECT& requestedRect, RECT* translatedRect, PCWSTR apiName) {
+bool TranslateNativeFlyoutRectToActiveMonitor(HWND hWnd, const RECT& requestedRect, RECT* translatedRect, PCWSTR apiName, bool keepWindowSize = false) {
     if (IsActiveFlyoutRedirectionSuppressed()) {
         return false;
     }
@@ -1642,20 +1871,28 @@ bool TranslateNativeFlyoutRectToActiveMonitor(HWND hWnd, const RECT& requestedRe
         GetClassNameW(hWnd, popupClassName, ARRAYSIZE(popupClassName));
     }
 
-    bool isOverflowPopup = IsOverflowPopupWindowClass(popupClassName);
+    StickyPopup popupKind = GetStickyPopupKind(popupClassName);
+    bool isOverflowPopup = popupKind == StickyPopup::Overflow;
     bool usedStickyPlacement = false;
 
-    if (isOverflowPopup) {
-        // A visible overflow popup is being re-positioned by Windows itself (content resize, DPI change) : it must stay where the click opened it, whatever context is armed now. A hidden one is a fresh open that resolves its monitor again.
+    if (popupKind != StickyPopup::Count) {
+        // Content resizing and taskbar auto-hide can both trigger placement after the click context expires
         if (IsWindowVisible(hWnd)) {
-            usedStickyPlacement = TryGetStickyOverflowPlacement(hWnd, &context);
-        } else {
-            ClearStickyOverflowPlacement(hWnd);
+            usedStickyPlacement = TryGetStickyPlacement(popupKind, hWnd, &context);
+            // A new click on another copy takes precedence over the previous Quick Settings session
+            ProxyFlyoutContext clicked;
+
+            if (usedStickyPlacement && !isOverflowPopup && TryGetActiveProxyFlyoutContext(&clicked) &&
+                clicked.kind == kNativeControlCenter && clicked.taskbarWnd != context.taskbarWnd) {
+                usedStickyPlacement = false;
+            }
+        } else if (HasStickyPlacement(hWnd)) {
+            ClearStickyPlacement(hWnd);
         }
     }
 
     if (!usedStickyPlacement && !TryGetActiveProxyFlyoutContext(&context)) {
-        // No armed context : a click the hit-test missed, pen/touch input, or a context dropped after a display change. Try the cursor rescue before letting the open land on the wrong monitor.
+        // No armed context : a click the hit-test missed, pen/touch input or a context dropped after a display change. Try the cursor rescue before letting the open land on the wrong monitor.
         if (!TryArmCursorRescueFlyoutContext(hWnd, requestedRect)) {
             return false;
         }
@@ -1672,17 +1909,25 @@ bool TranslateNativeFlyoutRectToActiveMonitor(HWND hWnd, const RECT& requestedRe
         return false;
     }
 
-    RECT targetWork = {};
+    MONITORINFO targetInfo{sizeof(targetInfo)};
 
-    if (!GetMonitorWorkRect(targetMonitor, &targetWork)) {
+    if (!GetMonitorInfoW(targetMonitor, &targetInfo) || IsRectEmpty(&targetInfo.rcWork)) {
         return false;
     }
+
+    const RECT& targetWork = targetInfo.rcWork;
 
     LONG width = requestedRect.right - requestedRect.left;
     LONG height = requestedRect.bottom - requestedRect.top;
 
     if (width <= 0 || height <= 0) {
         return false;
+    }
+
+    // The initial placement may already be on target, but ShellHost still needs its monitor after the taskbar hides
+    if (!usedStickyPlacement && context.kind == kNativeControlCenter &&
+        (popupKind == StickyPopup::ControlCenter || popupKind == StickyPopup::WindowedPopup)) {
+        StoreStickyPlacement(popupKind, hWnd, context);
     }
 
     HMONITOR requestedMonitor = MonitorFromRect_Original
@@ -1702,10 +1947,36 @@ bool TranslateNativeFlyoutRectToActiveMonitor(HWND hWnd, const RECT& requestedRe
         targetDpi = sourceDpi;
     }
 
+    ProxyFlyoutContext contextForMainPanel;
+
+    if (context.kind == kNativeControlCenter && requestedMonitor && (popupKind == StickyPopup::ControlCenter ||
+        (popupKind == StickyPopup::WindowedPopup && !TryGetStickyPlacement(StickyPopup::ControlCenter, nullptr, &contextForMainPanel)))) {
+        MONITORINFO source = targetInfo;
+
+        if (requestedMonitor != targetMonitor && !GetMonitorInfoW(requestedMonitor, &source)) {
+            return false;
+        }
+
+        *translatedRect = FitQuickSettingsRect(requestedRect, source, targetInfo, context, sourceDpi, targetDpi, keepWindowSize);
+
+        if (!usedStickyPlacement) {
+            ShortenActiveFlyoutMonitorContext(kNativeFlyoutMonitorContextAfterPlacementMs, apiName);
+        }
+
+        if (EqualRect(translatedRect, &requestedRect)) {
+            return false;
+        }
+
+        Wh_Log(L"Quick Settings %s monitor=%d dpi=%u->%u keepSize=%d (%ld,%ld,%ld,%ld) to (%ld,%ld,%ld,%ld)", apiName, context.monitorIndex, sourceDpi, targetDpi, keepWindowSize,
+               requestedRect.left, requestedRect.top, requestedRect.right, requestedRect.bottom, translatedRect->left, translatedRect->top, translatedRect->right, translatedRect->bottom);
+
+        return true;
+    }
+
     LONG translatedWidth = width;
     LONG translatedHeight = height;
 
-    if (targetDpi && sourceDpi && targetDpi != sourceDpi) {
+    if (!keepWindowSize && targetDpi && sourceDpi && targetDpi != sourceDpi) {
         translatedWidth = MulDiv(width, targetDpi, sourceDpi);
         translatedHeight = MulDiv(height, targetDpi, sourceDpi);
     }
@@ -1802,7 +2073,7 @@ bool TranslateNativeFlyoutRectToActiveMonitor(HWND hWnd, const RECT& requestedRe
 
     // Only anchored placements are replayed : an anchor-less translation preserves work-area offsets, which is fine for one open but drifts once the popup starts resizing
     if (isOverflowPopup && activeFlyoutKind == kNativeHiddenTray && usedAnchor) {
-        StoreStickyOverflowPlacement(hWnd, context);
+        StoreStickyPlacement(StickyPopup::Overflow, hWnd, context);
     }
 
     ShortenActiveFlyoutMonitorContext(kNativeFlyoutMonitorContextAfterPlacementMs, apiName);
@@ -1823,14 +2094,24 @@ bool ShouldTranslateNativeFlyoutWindowPosition(UINT uFlags) {
     return true;
 }
 
+decltype(&ShowWindow) ShowWindow_Original;
+
+BOOL WINAPI ShowWindow_Hook(HWND hWnd, int command) {
+    if (command == SW_HIDE && HasStickyPlacement(hWnd)) {
+        ClearStickyPlacement(hWnd);
+    }
+
+    return ShowWindow_Original(hWnd, command);
+}
+
 /// user32 hook : rewrites known flyout popup placement onto the active context's monitor
 BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int cx, int cy, UINT uFlags) {
     if (IsModUnloading()) {
         return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
     }
 
-    if (uFlags & SWP_HIDEWINDOW) {
-        ClearStickyOverflowPlacement(hWnd);
+    if ((uFlags & SWP_HIDEWINDOW) && HasStickyPlacement(hWnd)) {
+        ClearStickyPlacement(hWnd);
     }
 
     if (!ShouldTranslateNativeFlyoutWindowPosition(uFlags) ||
@@ -1839,7 +2120,7 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int
         return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
     }
 
-    // With an armed context every known popup placement is translated. With none, only a cursor-rescue candidate (a fresh, not yet visible open) or an overflow popup with a sticky placement is worth the GetWindowRect below : the translation then arms the rescue context, replays the sticky placement, or bails.
+    // With an armed context every known popup placement is translated. With none, only a cursor-rescue candidate (a fresh, not yet visible open) or a popup with a sticky placement is worth the GetWindowRect below : the translation then arms the rescue context, replays the sticky placement or bails.
     ProxyFlyoutContext context;
     bool hasActiveContext = TryGetActiveProxyFlyoutContext(&context);
 
@@ -1847,7 +2128,7 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int
         (hasActiveContext
             ? !IsNativeFlyoutPopupWindow(hWnd, context.kind, nullptr, 0)
             : !IsCursorRescueCandidateWindow(hWnd, nullptr))
-        && !HasStickyOverflowPlacement(hWnd)
+        && !HasStickyPlacement(hWnd)
     ) {
         return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
     }
@@ -1865,9 +2146,13 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int
     };
     RECT translatedRect = {};
 
-    if (TranslateNativeFlyoutRectToActiveMonitor(hWnd, requestedRect, &translatedRect, L"SetWindowPos")) {
+    if (TranslateNativeFlyoutRectToActiveMonitor(hWnd, requestedRect, &translatedRect, L"SetWindowPos", (uFlags & SWP_NOSIZE) != 0)) {
         uFlags &= ~SWP_NOMOVE;
-        uFlags &= ~SWP_NOSIZE;
+
+        if (translatedRect.right - translatedRect.left != width || translatedRect.bottom - translatedRect.top != height) {
+            uFlags &= ~SWP_NOSIZE;
+        }
+
         X = translatedRect.left;
         Y = translatedRect.top;
         cx = translatedRect.right - translatedRect.left;
@@ -1906,10 +2191,42 @@ BOOL WINAPI SetWindowPlacement_Hook(HWND hWnd, const WINDOWPLACEMENT* lpwndpl) {
         return SetWindowPlacement_Original(hWnd, lpwndpl);
     }
 
+    if (lpwndpl -> showCmd == SW_HIDE) {
+        ClearStickyPlacement(hWnd);
+        return SetWindowPlacement_Original(hWnd, lpwndpl);
+    }
+
+    if (!IsNativeFlyoutPopupWindow(hWnd, kNativeControlCenter, nullptr, 0)) {
+        return SetWindowPlacement_Original(hWnd, lpwndpl);
+    }
+
     WINDOWPLACEMENT placement = *lpwndpl;
     RECT translatedRect = {};
 
-    if (TranslateNativeFlyoutRectToActiveMonitor(hWnd, placement.rcNormalPosition, &translatedRect, L"SetWindowPlacement")) {
+    RECT requested = placement.rcNormalPosition;
+    bool workspaceCoordinates = !(GetWindowLongPtrW(hWnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) && !(GetWindowLongPtrW(hWnd, GWL_STYLE) & WS_CHILD);
+
+    if (workspaceCoordinates) {
+        MONITORINFO source{sizeof(source)};
+
+        if (!GetMonitorInfoW(GetActualMonitorFromRect(&requested, MONITOR_DEFAULTTONEAREST), &source)) {
+            return SetWindowPlacement_Original(hWnd, lpwndpl);
+        }
+
+        OffsetRect(&requested, source.rcWork.left - source.rcMonitor.left, source.rcWork.top - source.rcMonitor.top);
+    }
+
+    if (TranslateNativeFlyoutRectToActiveMonitor(hWnd, requested, &translatedRect, L"SetWindowPlacement")) {
+        if (workspaceCoordinates) {
+            MONITORINFO target{sizeof(target)};
+
+            if (!GetMonitorInfoW(GetActualMonitorFromRect(&translatedRect, MONITOR_DEFAULTTONEAREST), &target)) {
+                return SetWindowPlacement_Original(hWnd, lpwndpl);
+            }
+
+            OffsetRect(&translatedRect, target.rcMonitor.left - target.rcWork.left, target.rcMonitor.top - target.rcWork.top);
+        }
+
         placement.rcNormalPosition = translatedRect;
 
         return SetWindowPlacement_Original(hWnd, &placement);
@@ -1924,8 +2241,8 @@ HDWP WINAPI DeferWindowPos_Hook(HDWP hWinPosInfo, HWND hWnd, HWND hWndInsertAfte
         return DeferWindowPos_Original(hWinPosInfo, hWnd, hWndInsertAfter, x, y, cx, cy, uFlags);
     }
 
-    if (uFlags & SWP_HIDEWINDOW) {
-        ClearStickyOverflowPlacement(hWnd);
+    if ((uFlags & SWP_HIDEWINDOW) && HasStickyPlacement(hWnd)) {
+        ClearStickyPlacement(hWnd);
     }
 
     if (!ShouldTranslateNativeFlyoutWindowPosition(uFlags) ||
@@ -1934,7 +2251,7 @@ HDWP WINAPI DeferWindowPos_Hook(HDWP hWinPosInfo, HWND hWnd, HWND hWndInsertAfte
         return DeferWindowPos_Original(hWinPosInfo, hWnd, hWndInsertAfter, x, y, cx, cy, uFlags);
     }
 
-    // Same gate as SetWindowPos : armed contexts translate known popups, unarmed placements only proceed for cursor-rescue candidates and sticky overflow placements
+    // Same gate as SetWindowPos : armed contexts translate known popups, unarmed placements only proceed for cursor-rescue candidates and visible sticky placements
     ProxyFlyoutContext context;
     bool hasActiveContext = TryGetActiveProxyFlyoutContext(&context);
 
@@ -1942,7 +2259,7 @@ HDWP WINAPI DeferWindowPos_Hook(HDWP hWinPosInfo, HWND hWnd, HWND hWndInsertAfte
         (hasActiveContext
             ? !IsNativeFlyoutPopupWindow(hWnd, context.kind, nullptr, 0)
             : !IsCursorRescueCandidateWindow(hWnd, nullptr))
-        && !HasStickyOverflowPlacement(hWnd)
+        && !HasStickyPlacement(hWnd)
     ) {
         return DeferWindowPos_Original(hWinPosInfo, hWnd, hWndInsertAfter, x, y, cx, cy, uFlags);
     }
@@ -1960,9 +2277,13 @@ HDWP WINAPI DeferWindowPos_Hook(HDWP hWinPosInfo, HWND hWnd, HWND hWndInsertAfte
     };
     RECT translatedRect = {};
 
-    if (TranslateNativeFlyoutRectToActiveMonitor(hWnd, requestedRect, &translatedRect, L"DeferWindowPos")) {
+    if (TranslateNativeFlyoutRectToActiveMonitor(hWnd, requestedRect, &translatedRect, L"DeferWindowPos", (uFlags & SWP_NOSIZE) != 0)) {
         uFlags &= ~SWP_NOMOVE;
-        uFlags &= ~SWP_NOSIZE;
+
+        if (translatedRect.right - translatedRect.left != width || translatedRect.bottom - translatedRect.top != height) {
+            uFlags &= ~SWP_NOSIZE;
+        }
+
         x = translatedRect.left;
         y = translatedRect.top;
         cx = translatedRect.right - translatedRect.left;
@@ -2077,7 +2398,7 @@ void UpdateLayoutBestEffort(FrameworkElement element, PCWSTR debugName) {
     }
 }
 
-/// Verbose log line describing a taskbar window : class, monitor number, display device, and rectangle
+/// Verbose log line describing a taskbar window : class, monitor number, display device and rectangle
 void LogTaskbarWindow(HWND hWnd, PCWSTR stage) {
     RECT rect = {};
     GetWindowRect(hWnd, &rect);
@@ -2091,7 +2412,7 @@ void LogTaskbarWindow(HWND hWnd, PCWSTR stage) {
     );
 }
 
-/// Verbose log line describing a XAML element : class, name, visibility, opacity, hit-testability, size, and child count
+/// Verbose log line describing a XAML element : class, name, visibility, opacity, hit-testability, size and child count
 void LogElementState(FrameworkElement element, PCWSTR label) {
     if (!element) {
         Wh_Log(L"element %s missing", label);
@@ -2158,7 +2479,9 @@ Data::Binding GetTrayPropertyBinding(DependencyObject const& element, Dependency
 template <typename Writer>
 void WriteTrayProperty(DependencyObject const& element, DependencyProperty const& property, Writer writer) {
     auto& changes = g_trayPropertyChanges;
-    std::erase_if(changes, [](TrayPropertyChange const& change) { return !change.element.get(); });
+    std::erase_if(changes, [](TrayPropertyChange const& change) {
+        return !change.element.get();
+    });
 
     auto findChange = [&] {
         return std::find_if(changes.begin(), changes.end(), [&](TrayPropertyChange const& change) {
@@ -2169,17 +2492,18 @@ void WriteTrayProperty(DependencyObject const& element, DependencyProperty const
     if (findChange() == changes.end()) {
         auto originalValue = element.ReadLocalValue(property);
 
-        // ReadLocalValue can return an internal TemplateBinding expression that SetValue cannot accept as a property value. Keep the unset marker, otherwise save the resolved value without animation overrides; ordinary bindings are restored separately.
+        // ReadLocalValue can return an internal TemplateBinding expression that SetValue cannot accept as a property value. Keep the unset marker, otherwise save the resolved value without animation overrides, ordinary bindings are restored separately.
         if (originalValue != DependencyProperty::UnsetValue()) {
             originalValue = element.GetAnimationBaseValue(property);
         }
 
-        changes.push_back({winrt::make_weak(element), property, originalValue, GetTrayPropertyBinding(element, property)});
+        changes.push_back({winrt::make_weak(element), property originalValue, GetTrayPropertyBinding(element, property)});
     }
 
     writer();
     auto appliedValue = element.ReadLocalValue(property);
     auto appliedBinding = GetTrayPropertyBinding(element, property);
+
     // XAML callbacks can append or prune records during the write. Re-find this entry instead of retaining an index or iterator across it.
     if (auto it = findChange(); it != changes.end()) {
         it->appliedValue = std::move(appliedValue);
@@ -2189,10 +2513,12 @@ void WriteTrayProperty(DependencyObject const& element, DependencyProperty const
 
 template <typename Value>
 void SetTrayProperty(DependencyObject const& element, DependencyProperty const& property, Value const& value) {
-    WriteTrayProperty(element, property, [&] { element.SetValue(property, winrt::box_value(value)); });
+    WriteTrayProperty(element, property, [&] {
+        element.SetValue(property, winrt::box_value(value));
+    });
 }
 
-/// XAML can box a scalar afresh on each read. Compare values for the scalar properties we write, and identity for bindings and shared objects.
+/// XAML can box a scalar afresh on each read. Compare values for the scalar properties we write and identity for bindings and shared objects.
 bool SameTrayPropertyValue(winrt::Windows::Foundation::IInspectable const& left, winrt::Windows::Foundation::IInspectable const& right) {
     if (left == right) {
         return true;
@@ -2493,7 +2819,7 @@ bool ForceVisibleDescendants(FrameworkElement element, const std::wstring& label
 }
 
 /// Visits the direct FrameworkElement children until the callback returns true
-/// @return the matched child, or nullptr
+/// @return the matched child or nullptr
 FrameworkElement EnumChildElements(FrameworkElement element, const std::function<bool(FrameworkElement)>& enumCallback) {
     int childCount = Media::VisualTreeHelper::GetChildrenCount(element);
 
@@ -2512,7 +2838,7 @@ FrameworkElement EnumChildElements(FrameworkElement element, const std::function
     return nullptr;
 }
 
-/// First FrameworkElement child, or nullptr
+/// First FrameworkElement child or nullptr
 FrameworkElement FirstChildElement(FrameworkElement element) {
     if (!element) {
         return nullptr;
@@ -2576,6 +2902,44 @@ FrameworkElement FindDescendantByClassName(FrameworkElement element, PCWSTR clas
     return nullptr;
 }
 
+/// Resolves the tray in legacy islands, repeater content slots and visually wrapped layouts
+FrameworkElement ResolveSystemTrayFrame(FrameworkElement root) {
+    constexpr auto trayClass = L"SystemTray.SystemTrayFrame";
+
+    if (!root || winrt::get_class_name(root) == trayClass) {
+        return root;
+    }
+
+    if (auto direct = FindChildByClassName(root, trayClass)) {
+        return direct;
+    }
+
+    auto grid = FindChildByName(root, L"RootGrid");
+    auto repeater = grid ? FindChildByName(grid, L"TaskbarFrameRepeater") : nullptr;
+
+    if (repeater) {
+        FrameworkElement tray = nullptr;
+        EnumChildElements(repeater, [&](FrameworkElement item) {
+            auto slot = item.try_as<Controls::ContentControl>();
+            auto content = slot ? slot.Content().try_as<FrameworkElement>() : nullptr;
+
+            if (content && winrt::get_class_name(content) == trayClass) {
+                tray = content;
+
+                return true;
+            }
+
+            return false;
+        });
+
+        if (tray) {
+            return tray;
+        }
+    }
+
+    return FindDescendantByClassName(root, trayClass, 12);
+}
+
 /// The SystemTrayFrameGrid children, in template order : NotifyIconStack, NotificationAreaIcons, MainStack, NonActivatableStack, SecondaryClockStack, ControlCenterButton, NotificationCenterButton, ShowDesktopStack. The container is a Grid with one Auto column per child in the classic template and a horizontal StackPanel in the newer one.
 struct TrayElementsView {
     FrameworkElement systemTrayFrame = nullptr;
@@ -2599,10 +2963,14 @@ bool CollectTrayElements(XamlRoot xamlRoot, HWND taskbarWnd, TrayElementsView* v
         return false;
     }
 
-    view -> systemTrayFrame = FindChildByClassName(content, L"SystemTray.SystemTrayFrame");
+    view -> systemTrayFrame = ResolveSystemTrayFrame(content);
 
     if (!view -> systemTrayFrame) {
-        Wh_Log(L"SystemTrayFrame not found for monitor %d (%s)", GetMonitorIndexForWindow(taskbarWnd), context);
+        Wh_Log(L"SystemTrayFrame not found for monitor %d (%s), root class=%s name=%s", GetMonitorIndexForWindow(taskbarWnd), context, winrt::get_class_name(content).c_str(), content.Name().c_str());
+
+        if (GetSettings().enableTreeDump && wcscmp(context, L"layout refresh") != 0) {
+            DumpElementTree(content, L"XamlRoot", 0, 6);
+        }
 
         return false;
     }
@@ -2611,6 +2979,10 @@ bool CollectTrayElements(XamlRoot xamlRoot, HWND taskbarWnd, TrayElementsView* v
 
     if (!view -> systemTrayFrameGrid) {
         Wh_Log(L"SystemTrayFrameGrid not found (%s)", context);
+
+        if (GetSettings().enableTreeDump && wcscmp(context, L"layout refresh") != 0) {
+            DumpElementChildren(view -> systemTrayFrame, L"SystemTrayFrame");
+        }
 
         return false;
     }
@@ -2654,7 +3026,7 @@ bool ResetExplicitWidth(FrameworkElement element) {
     return false;
 }
 
-/// Makes an element Visible, fully opaque, and hit-testable. Every property is read-compare-write so a steady-state apply pass dirties nothing and the caller can batch a single layout update.
+/// Makes an element Visible, fully opaque and hit-testable. Every property is read-compare-write so a steady-state apply pass dirties nothing and the caller can batch a single layout update.
 /// @return true when any property actually changed (false for missing elements and errors too, callers accumulate this for the batched layout decision)
 bool ForceVisible(FrameworkElement element, PCWSTR debugName, bool resetExplicitWidth = true) {
     if (!element) {
@@ -2782,7 +3154,7 @@ bool ForceVisibleWithMinWidth(FrameworkElement element, PCWSTR debugName, double
 
         if (element.ActualWidth() < 4.0) {
             Wh_Log(
-                L"%s is still width-collapsed; the "
+                L"%s is still width-collapsed, the "
                 L"XAML element exists but Windows didn't populate/layout "
                 L"usable content here",
                 debugName
@@ -2824,7 +3196,7 @@ bool HasLocalDoubleValue(FrameworkElement const& element, DependencyProperty con
 
 constexpr double kLegacyNotificationCenterPinWidth = 78.0;
 
-/// Clears the frame minimum widths versions up to 1.2.2 pinned on SystemTrayFrame/SystemTrayFrameGrid (78 on skipped taskbars, 32 per tray + 96 per control center + 78 on styled ones). The frame auto-sizes to its surfaces, and a minimum wider than the content left an empty strip at the right edge, since the right-aligned panel keeps the extra width after its last child.
+/// Clears the frame minimum widths versions up to 1.2.2 pinned on SystemTrayFrame/SystemTrayFrameGrid (78 on skipped taskbars, 32 per tray + 96 per control center + 78 on styled ones). The frame auto-sizes to its surfaces and a minimum wider than the content left an empty strip at the right edge, since the right-aligned panel keeps the extra width after its last child.
 /// @return true when a pin was released
 bool ReleaseLegacyFrameMinWidth(FrameworkElement element, PCWSTR debugName) {
     if (!element) {
@@ -2847,7 +3219,7 @@ bool ReleaseLegacyFrameMinWidth(FrameworkElement element, PCWSTR debugName) {
     }
 }
 
-/// Releases what versions up to 1.2.2 forced on NotificationCenterButton. The mod no longer touches that button : Windows shows it natively wherever it has content, and some builds render the secondary-taskbar clock through SecondaryClockStack instead, leaving this button empty there, so forcing it visible with a 78 px pin produced an empty hoverable box at the right edge.
+/// Releases what versions up to 1.2.2 forced on NotificationCenterButton. The mod no longer touches that button : Windows shows it natively wherever it has content and some builds render the secondary-taskbar clock through SecondaryClockStack instead, leaving this button empty there, so forcing it visible with a 78 px pin produced an empty hoverable box at the right edge.
 /// @return true when a pin was released
 bool ReleaseLegacyNotificationCenterPins(FrameworkElement element) {
     if (!element) {
@@ -2892,7 +3264,7 @@ bool ReleaseLegacyNotificationCenterPins(FrameworkElement element) {
 /// Taskbars whose SecondaryClockStack and ControlCenterButton order the mod swapped, so restore passes only undo their own swap. Taskbar thread only.
 std::vector<HWND> g_secondaryClockSwappedTaskbars;
 
-/// On builds that draw the secondary-taskbar clock through SecondaryClockStack, that stack sits right before ControlCenterButton in the template, so a copied control center landed on the right of the clock. Swaps the two so copies read like the primary (control center, then clock), and swaps back when the control center stops being managed or the mod unloads. Only the exact template order is touched, so themes that rearrange the tray keep their layout.
+/// On builds that draw the secondary-taskbar clock through SecondaryClockStack, that stack sits right before ControlCenterButton in the template, so a copied control center landed on the right of the clock. Swaps the two so copies read like the primary (control center, then clock) and swaps back when the control center stops being managed or the mod unloads. Only the exact template order is touched, so themes that rearrange the tray keep their layout.
 /// @return true when the order changed
 bool UpdateSecondaryClockOrder(HWND taskbarWnd, TrayElementsView const& view, bool controlCenterFirst) {
     if (!view.systemTrayFrameGrid || !view.secondaryClockStack || !view.controlCenterButton) {
@@ -3050,7 +3422,7 @@ void* ItemsSourceAbi(FrameworkElement const& element) {
     }
 }
 
-/// The element whose ItemsSource carries a shared menu surface's items : the ControlCenterButton itself, or the IconStack list view inside a system icon stack
+/// The element whose ItemsSource carries a shared menu surface's items : the ControlCenterButton itself or the IconStack list view inside a system icon stack
 FrameworkElement GetSharedMenuSurfaceItemsHost(TrayElementsView const& view, SharedMenuSurface surface) {
     switch (surface) {
         case SharedMenuSurface::MainStack:
@@ -3105,7 +3477,9 @@ bool MirrorSourceVisibility(FrameworkElement element, FrameworkElement source, P
         binding.Source(source);
         binding.Path(PropertyPath(L"Visibility"));
         binding.Mode(Data::BindingMode::OneWay);
-        WriteTrayProperty(element, UIElement::VisibilityProperty(), [&] { element.SetBinding(UIElement::VisibilityProperty(), binding); });
+        WriteTrayProperty(element, UIElement::VisibilityProperty(), [&] {
+            element.SetBinding(UIElement::VisibilityProperty(), binding);
+        });
         Wh_Log(L"mirrored %s visibility from the real tray owner", debugName);
 
         return true;
@@ -3129,7 +3503,32 @@ bool HasMirroredVisibility(FrameworkElement const& element) {
     }
 }
 
-/// Shares one system icon stack from the real tray owner into a copied taskbar, the same way the hidden-icons stack is shared : Stack DataContext plus the IconStack list view ItemsSource. MainStack carries the language/IME, touch keyboard, pen, touchpad and emoji icons, NonActivatableStack the microphone/camera/location indicators. The owner only gets its bindings (and element) cached, copies mirror its Visibility.
+/// Copy only the template presenters, leaving individual icon visibility under the native model's control
+bool MirrorStackPresenter(FrameworkElement const& target, FrameworkElement const& source, PCWSTR label) {
+    if (!target || !source || winrt::get_class_name(target) != winrt::get_class_name(source)) {
+        return false;
+    }
+
+    bool changed = MirrorSourceVisibility(target, source, label);
+
+    if (target.Opacity() != source.Opacity()) {
+        SetTrayProperty(target, UIElement::OpacityProperty(), source.Opacity());
+        changed = true;
+    }
+
+    if (target.IsHitTestVisible() != source.IsHitTestVisible()) {
+        SetTrayProperty(target, UIElement::IsHitTestVisibleProperty(), source.IsHitTestVisible());
+        changed = true;
+    }
+
+    if (target.Width() == 0.0 && source.Width() != 0.0) {
+        changed |= ResetExplicitWidth(target);
+    }
+
+    return changed;
+}
+
+/// Shares one system icon stack from the real tray owner into a copied taskbar, the same way the hidden-icons stack is shared : Stack DataContext plus the IconStack list view ItemsSource. The two stacks include the language/IME controls and privacy indicators. The owner supplies the stack, template presenter and icon list for each copy.
 /// @return true when a property actually changed on a copy
 bool ApplySharedSystemIconStack(FrameworkElement stack, HWND taskbarWnd, PCWSTR debugName, CachedXamlBinding& stackBinding, CachedXamlBinding& listViewBinding, FrameworkElement& primaryStack, bool isBindingSource, SharedMenuSurface surface) {
     if (!stack) {
@@ -3148,10 +3547,30 @@ bool ApplySharedSystemIconStack(FrameworkElement stack, HWND taskbarWnd, PCWSTR 
     }
 
     bool changed = false;
-    void* itemsSourceBefore = ItemsSourceAbi(listView);
-
     changed |= SharePrimaryElementBindingIfUseful(stack, taskbarWnd, debugName, stackBinding, false, true, true);
+    changed |= MirrorStackPresenter(stack, primaryStack, debugName);
+
+    // Collapsed copies can still have an unrealized template on the first apply pass
+    if (!listView && stack.Visibility() == Visibility::Visible) {
+        UpdateLayoutBestEffort(stack, debugName);
+        listView = FindDescendantByClassName(stack, L"SystemTray.StackListView");
+    }
+
+    auto child = FirstChildElement(stack);
+    auto sourceChild = FirstChildElement(primaryStack);
+
+    if (child && sourceChild && child != listView && winrt::get_class_name(child) == winrt::get_class_name(sourceChild)) {
+        CachedXamlBinding binding;
+        CaptureBindingIfPresent(sourceChild, binding, true, true);
+        changed |= SharePrimaryElementBindingIfUseful(child, taskbarWnd, L"System icon presenter", binding, false, true, true);
+        changed |= MirrorStackPresenter(child, sourceChild, L"System icon presenter");
+        // Sharing Content can replace the subtree that owned the previous list view
+        listView = FindDescendantByClassName(stack, L"SystemTray.StackListView");
+    }
+
+    void* itemsSourceBefore = ItemsSourceAbi(listView);
     changed |= SharePrimaryElementBindingIfUseful(listView, taskbarWnd, listViewName.c_str(), listViewBinding, false, true, false);
+    changed |= MirrorStackPresenter(listView, FindDescendantByClassName(primaryStack, L"SystemTray.StackListView"), listViewName.c_str());
 
     void* itemsSourceAfter = ItemsSourceAbi(listView);
 
@@ -3160,7 +3579,6 @@ bool ApplySharedSystemIconStack(FrameworkElement stack, HWND taskbarWnd, PCWSTR 
         SharedMenuSurfaceOwner(surface) = taskbarWnd;
     }
 
-    changed |= MirrorSourceVisibility(stack, primaryStack, debugName);
     UpdateSharedSurfaceContextGestures(stack, taskbarWnd, debugName);
 
     return changed;
@@ -3224,7 +3642,7 @@ bool ApplyNonTargetStyle(XamlRoot xamlRoot, HWND taskbarWnd) {
     }
 }
 
-/// Finishes primary-taskbar restoration after the tracked properties are restored : releases legacy pins, restores child order, and hands tray/menu ownership back to the native island
+/// Finishes primary-taskbar restoration after the tracked properties are restored : releases legacy pins, restores child order and hands tray/menu ownership back to the native island
 /// @return true when the tray structure was found and processed
 bool ApplyNativePrimaryStyle(XamlRoot xamlRoot, HWND taskbarWnd) {
     Wh_Log(
@@ -3353,7 +3771,7 @@ void UpdateContextGesturesForElement(FrameworkElement element, HWND taskbarWnd, 
 
 /// Keeps context gestures fully native (enabled) on a shared tray surface during apply and restore. Tray icon right-clicks are forwarded to the owning apps through the notify-icon pipeline, so they are island-safe, unlike the control-center menus.
 void UpdateSharedSurfaceContextGestures(FrameworkElement element, HWND taskbarWnd, PCWSTR debugName) {
-    // Keep local native context gestures enabled on shared tray surfaces (promoted icons, hidden-icons chevron). Their right-clicks are forwarded to the owning apps through the notify-icon pipeline instead of the singleton control-center menu pipeline, and the mod never forwards, synthesizes, re-owns, or suppresses them.
+    // Keep local native context gestures enabled on shared tray surfaces (promoted icons, hidden-icons chevron). Their right-clicks are forwarded to the owning apps through the notify-icon pipeline instead of the singleton control-center menu pipeline and the mod never forwards, synthesizes, re-owns or suppresses them.
     UpdateContextGesturesForElement(element, taskbarWnd, debugName, true);
 }
 
@@ -3567,6 +3985,7 @@ void MeasureTaskbarTrayLayout(HWND taskbarWnd, XamlRoot const& xamlRoot, TrayEle
     }
 
     TrayLayoutRects rects;
+    rects.frame = MeasureTrayElementClientRect(view.systemTrayFrameGrid, scale);
     rects.chevron = MeasureTrayElementClientRect(view.notifyIconStack, scale);
     rects.promotedIcons = MeasureTrayElementClientRect(view.notificationAreaIcons, scale);
     rects.mainStack = MeasureTrayElementClientRect(view.mainStack, scale);
@@ -3647,7 +4066,7 @@ constexpr int kNativeFlyoutHitSlop = 8;
 // Use a mod-unique timer id. Small ids like 2-5 can collide with Explorer's own Shell_TrayWnd/Shell_SecondaryTrayWnd timers : SetTimer would silently replace the native timer and the subclass would swallow and kill it.
 constexpr UINT_PTR kDeferredApplySettingsTimerId = 0x54424D54; // "TBMT"
 
-/// The per-taskbar apply pass. Forces the configured tray/control-center surfaces visible with usable widths, shares the real tray owner's bindings into copies, tracks shared menu ownership, keeps gestures native, and measures the live tray layout used by click hit-testing. Skipped taskbars are reset to the default secondary look instead. All element lookups happen in one child walk (CollectTrayElements), every property write is read-compare-write, and a single layout update runs at the end only when something actually changed, so steady-state passes are no-ops.
+/// The per-taskbar apply pass. Forces the configured tray/control-center surfaces visible with usable widths, shares the real tray owner's bindings into copies, tracks shared menu ownership, keeps gestures native and measures the live tray layout used by click hit-testing. Skipped taskbars are reset to the default secondary look instead. All element lookups happen in one child walk (CollectTrayElements), every property write is read-compare-write and a single layout update runs at the end only when something actually changed, so steady-state passes are no-ops.
 /// @return true when the tray structure was found and processed
 bool ApplyStyle(XamlRoot xamlRoot, HWND taskbarWnd) {
     LogTaskbarWindow(taskbarWnd, L"ApplyStyle");
@@ -3783,8 +4202,8 @@ bool IsPointInTrayRect(RECT const& rect, POINT point, int slop) {
     return PtInRect(&grownRect, point) != FALSE;
 }
 
-/// Maps a click on a copied secondary-taskbar surface to what was hit, from the live tray layout. The control center and the hidden-icons chevron arm a clicked-monitor context, and so do the system icon stacks, because the pen, touchpad and emoji views they open are placed by ShellHost exactly like the control center. The clock/notification surfaces and the app icons stay native. Exact element rectangles win over the neighbouring hit slop.
-WPARAM HitTestProxyFlyout(HWND hWnd, LPARAM lParam) {
+/// Maps a click on a copied secondary-taskbar surface to what was hit, from the live tray layout. The control center and the hidden-icons chevron arm a clicked-monitor context and so do the system icon stacks, with their own click context for input-panel placement. The clock/notification surfaces and the app icons stay native. Exact element rectangles win over the neighbouring hit slop.
+WPARAM HitTestProxyFlyout(HWND hWnd, POINT point) {
     if (!IsSecondaryTaskbarWindow(hWnd) || !ShouldApplyToTaskbar(hWnd)) {
         return 0;
     }
@@ -3795,7 +4214,6 @@ WPARAM HitTestProxyFlyout(HWND hWnd, LPARAM lParam) {
         return 0;
     }
 
-    POINT point = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
     int hitSlop = ScaleTaskbarMetricForDpi(GetWindowDpiOrDefault(hWnd), kNativeFlyoutHitSlop);
     auto const& rects = layout.rects;
     bool wantsControlCenter = WantsControlCenter(hWnd);
@@ -3804,7 +4222,7 @@ WPARAM HitTestProxyFlyout(HWND hWnd, LPARAM lParam) {
     PCWSTR hit = nullptr;
 
     if (IsPointInTrayRect(rects.notificationCenter, point, 0) || IsPointInTrayRect(rects.secondaryClock, point, 0)) {
-        // Leave the notification/date-time surface fully native. Windows already opens this flyout on the clicked monitor, and the removed Win+N proxy used to move the real tray around, refreshing every taskbar (most visibly on mixed-DPI monitors).
+        // Leave the notification/date-time surface fully native. Windows already opens this flyout on the clicked monitor and the removed Win+N proxy used to move the real tray around, refreshing every taskbar (most visibly on mixed-DPI monitors).
         hit = L"notification center native";
     } else if (wantsControlCenter && IsPointInTrayRect(rects.controlCenter, point, 0)) {
         result = kNativeControlCenter;
@@ -3813,7 +4231,7 @@ WPARAM HitTestProxyFlyout(HWND hWnd, LPARAM lParam) {
         result = kNativeHiddenTray;
         hit = L"hidden tray native";
     } else if (wantsTray && (IsPointInTrayRect(rects.mainStack, point, 0) || IsPointInTrayRect(rects.nonActivatableStack, point, 0))) {
-        result = kNativeControlCenter;
+        result = kNativeSystemPanel;
         hit = L"system icons native";
     } else if (IsPointInTrayRect(rects.promotedIcons, point, 0)) {
         hit = L"tray icon native";
@@ -3927,7 +4345,7 @@ bool IsElementInsideSharedMenuSurface(DependencyObject element) {
     return false;
 }
 
-/// FlyoutBase::ShowAt is the exact call that kills Explorer when the cached per-glyph menu is anchored to a foreign island, and the cached instance is reachable nowhere else (not on any visual tree, and Windows.UI.Xaml exposes no Popup.AssociatedFlyout, that API is WinUI-only). The mod reads ABI vtable slots only to discover concrete implementation pointers, then installs regular Windhawk function hooks on those functions without patching the vtables.
+/// FlyoutBase::ShowAt is the exact call that kills Explorer when the cached per-glyph menu is anchored to a foreign island and the cached instance is reachable nowhere else (not on any visual tree and Windows.UI.Xaml exposes no Popup.AssociatedFlyout, that API is WinUI-only). The mod reads ABI vtable slots only to discover concrete implementation pointers, then installs regular Windhawk function hooks on those functions without patching the vtables.
 struct FlyoutShowAtFunctionHook {
     void* target = nullptr;
     void* original = nullptr;
@@ -3957,7 +4375,7 @@ enum class FlyoutReRootResult {
     Error,
 };
 
-/// Attempts to assign a flyout to the target XamlRoot before native ShowAt runs. The full Hide -> clear to null -> set sequence is attempted because clearing the association first is the only possible unlock path; thrown steps are swallowed and the final root decides the result.
+/// Attempts to assign a flyout to the target XamlRoot before native ShowAt runs. The full Hide -> clear to null -> set sequence is attempted because clearing the association first is the only possible unlock path, thrown steps are swallowed and the final root decides the result.
 FlyoutReRootResult TryReRootFlyout(Controls::Primitives::FlyoutBase const& flyout, XamlRoot const& targetRoot) {
     if (!flyout || !targetRoot) {
         return FlyoutReRootResult::Error;
@@ -4015,7 +4433,7 @@ bool IsOwnControlCenterProxyFlyout(Controls::Primitives::FlyoutBase const& flyou
     return false;
 }
 
-/// Returns the island's proxy entry, creating the proxy MenuFlyout on first use. The proxy's XamlRoot is set before its first show, which is the only moment the property is settable, and locks it to exactly the island it must serve.
+/// Returns the island's proxy entry, creating the proxy MenuFlyout on first use. The proxy's XamlRoot is set before its first show, which is the only moment the property is settable and locks it to exactly the island it must serve.
 ControlCenterProxyFlyoutEntry* GetOrCreateControlCenterProxy(XamlRoot const& root) {
     if (!root) {
         return nullptr;
@@ -4182,7 +4600,7 @@ bool PrepareControlCenterFlyoutShowAt(void* flyoutAbi, void* targetAbi, PCWSTR s
         bool shownViaProxy = ShowControlCenterMenuViaProxy(flyout, targetElementFe, targetRoot);
 
         if (!shownViaProxy) {
-            Wh_Log(L"suppressed cross-island flyout class=%s target=%s: no compatible MenuFlyout proxy; native ShowAt would be unsafe", winrt::get_class_name(flyout).c_str(), targetElementFe ? targetElementFe.Name().c_str() : L"<unknown>");
+            Wh_Log(L"suppressed cross-island flyout class=%s target=%s: no compatible MenuFlyout proxy, native ShowAt would be unsafe", winrt::get_class_name(flyout).c_str(), targetElementFe ? targetElementFe.Name().c_str() : L"<unknown>");
         }
 
         Wh_Log(
@@ -4521,7 +4939,7 @@ bool IsSecondButtonPointerMessage(UINT uMsg, WPARAM wParam) {
     return IsPointerCoordinateMessage(uMsg) && IS_POINTER_SECONDBUTTON_WPARAM(wParam);
 }
 
-/// Computes the screen anchor stored in a flyout context : the click point, or for hidden-tray clicks the center of the measured chevron, so the overflow flyout opens at the chevron even when the click landed in the hit slop
+/// Computes the screen anchor stored in a flyout context : the click point or for hidden-tray clicks the center of the measured chevron, so the overflow flyout opens at the chevron even when the click landed in the hit slop
 bool GetNativeFlyoutAnchorPoint(HWND hWnd, LPARAM lParam, WPARAM flyoutKind, POINT* anchorPoint) {
     POINT point = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
     TaskbarTrayLayout layout;
@@ -4570,7 +4988,7 @@ LONG ClearSharedProxyFlyoutMonitorState() {
 
 /// Drops an armed context when the user left-clicks outside the copied surfaces, so a stale monitor cannot drag the next flyout to the wrong screen
 void ClearStaleFlyoutContextBeforeTaskbarClick(HWND taskbarWnd) {
-    HMONITOR activeMonitor = GetActiveProxyFlyoutMonitor();
+    HMONITOR activeMonitor = GetActiveProxyFlyoutMonitor(true);
 
     if (!activeMonitor) {
         return;
@@ -4595,7 +5013,7 @@ void ClearStaleFlyoutContextBeforeTaskbarClick(HWND taskbarWnd) {
 void ClearFlyoutMonitorContextForContextMenu(UINT uMsg, WPARAM wParam, PCWSTR reason) {
     bool contextInput = IsRightClickOrContextMenuMessage(uMsg, wParam) || IsSecondButtonPointerMessage(uMsg, wParam);
 
-    if (!contextInput || !GetActiveProxyFlyoutMonitor()) {
+    if (!contextInput || !GetActiveProxyFlyoutMonitor(true)) {
         return;
     }
 
@@ -4676,7 +5094,7 @@ void PreArmSharedMenuSurfaceOwnershipForMessage(const MSG* msg) {
     PreArmSharedMenuSurfaceOwnershipForTaskbar(rootWnd, screenPoint, L"input dispatch");
 }
 
-/// Input messages whose dispatch can make XAML raise tray clicks, drags, hover or keyboard invocations : keyboard, mouse, pointer/touch, and the timers XAML uses for press-and-hold
+/// Input messages whose dispatch can make XAML raise tray clicks, drags, hover or keyboard invocations : keyboard, mouse, pointer/touch and the timers XAML uses for press-and-hold
 bool IsTrayInputMessage(UINT message) {
     return (message >= WM_KEYFIRST && message <= WM_KEYLAST)
         || (message >= WM_MOUSEFIRST && message <= WM_MOUSELAST)
@@ -4698,10 +5116,18 @@ struct InputDispatchTaskbarScope {
     }
 };
 
-/// user32 hook on the message dispatch loop : clears flyout contexts on right-click input, pre-arms shared-surface ownership before the target window procedure runs, and publishes which taskbar island the input belongs to
+/// user32 hook on the message dispatch loop : clears flyout contexts on right-click input, pre-arms shared-surface ownership before the target window procedure runs and publishes which taskbar island the input belongs to
 LRESULT WINAPI DispatchMessageW_Hook(const MSG* lpMsg) {
     if (IsModUnloading() || !lpMsg) {
         return DispatchMessageW_Original(lpMsg);
+    }
+
+    if (IsExplorerTarget() && (lpMsg -> message == WM_KEYDOWN || lpMsg -> message == WM_SYSKEYDOWN)) {
+        ProxyFlyoutContext previous;
+
+        if (TryGetActiveProxyFlyoutContext(&previous, true) && previous.kind == kNativeSystemPanel) {
+            ClearSharedProxyFlyoutMonitorState();
+        }
     }
 
     InspectRetrievedMessageForFlyoutCancel(lpMsg, L"DispatchMessageW");
@@ -4717,15 +5143,41 @@ LRESULT WINAPI DispatchMessageW_Hook(const MSG* lpMsg) {
         }
     }
 
+    // An island can handle the pointer before the parent taskbar receives WM_PARENTNOTIFY
+    if (dispatchTaskbarWnd) {
+        bool pressed = lpMsg -> message == WM_LBUTTONDOWN ||
+            (lpMsg -> message == WM_POINTERDOWN && IS_POINTER_FLAG_SET_WPARAM(lpMsg -> wParam, POINTER_MESSAGE_FLAG_FIRSTBUTTON));
+        bool released = lpMsg -> message == WM_LBUTTONUP;
+
+        if (lpMsg -> message == WM_POINTERUP) {
+            POINTER_INFO info{};
+            released = GetPointerInfo(GET_POINTERID_WPARAM(lpMsg -> wParam), &info) && info.ButtonChangeType == POINTER_CHANGE_FIRSTBUTTON_UP;
+        }
+
+        if (pressed || released) {
+            POINT client = lpMsg -> pt;
+            ProxyFlyoutContext previous;
+            bool hadSystemPress = TryGetActiveProxyFlyoutContext(&previous, true) && previous.kind == kNativeSystemPanel;
+
+            if (ScreenToClient(dispatchTaskbarWnd, &client) && HitTestProxyFlyout(dispatchTaskbarWnd, client) == kNativeSystemPanel) {
+                if (pressed || !hadSystemPress || previous.taskbarWnd != dispatchTaskbarWnd) {
+                    BeginNativeFlyoutMonitorContext(dispatchTaskbarWnd, L"system icon dispatch", kNativeSystemPanel, &lpMsg -> pt);
+                }
+            } else if (hadSystemPress) {
+                ClearSharedProxyFlyoutMonitorState();
+            }
+        }
+    }
+
     InputDispatchTaskbarScope dispatchScope(dispatchTaskbarWnd);
 
     return DispatchMessageW_Original(lpMsg);
 }
 
-/// Resets per-session interaction state : the armed flyout context, the sticky overflow placement, the last tray icon interaction, and shared-surface ownership tracking
+/// Resets per-session interaction state : the armed flyout context, sticky popup placements, the last tray icon interaction and shared-surface ownership tracking
 void ClearProxyRuntimeState() {
     ClearSharedProxyFlyoutMonitorState();
-    ClearStickyOverflowPlacement(nullptr);
+    ClearStickyPlacement(nullptr);
     g_lastTrayIconInteraction = {};
     ClearSharedMenuSurfaceOwners(nullptr);
 }
@@ -4747,7 +5199,7 @@ void ClearCachedXamlBindings() {
     ClearSharedMenuSurfaceOwners(nullptr);
 }
 
-/// Invalidates all pending deferred-apply retries by bumping the generation, and kills the active retry timer if any
+/// Invalidates all pending deferred-apply retries by bumping the generation and kills the active retry timer if any
 void CancelDeferredApplySettings() {
     g_deferredApplyGeneration.fetch_add(1, std::memory_order_acq_rel);
 
@@ -4919,17 +5371,34 @@ bool SetFlyoutMonitorContext(HWND taskbarWnd, DWORD durationMs, PCWSTR reason, W
 
 /// Arms a flyout context for a native control-center or hidden-tray click, with the kind-specific duration
 void BeginNativeFlyoutMonitorContext(HWND taskbarWnd, PCWSTR reason, WPARAM flyoutKind, const POINT* anchorPoint) {
+    if (flyoutKind == kNativeSystemPanel && anchorPoint) {
+        // A child dispatch and its synchronous WM_PARENTNOTIFY describe the same mouse press
+        static thread_local HWND lastTaskbar = nullptr;
+        static thread_local LONG lastMessageTime = -1;
+        LONG messageTime = GetMessageTime();
+        ProxyFlyoutContext previous;
+
+        if (taskbarWnd == lastTaskbar && lastMessageTime == messageTime && TryGetActiveProxyFlyoutContext(&previous, true) &&
+            previous.kind == kNativeSystemPanel && previous.taskbarWnd == taskbarWnd && previous.anchorValid && previous.anchorPoint.x == anchorPoint->x && previous.anchorPoint.y == anchorPoint->y) {
+
+            return;
+        }
+
+        lastTaskbar = taskbarWnd;
+        lastMessageTime = messageTime;
+    }
+
     DWORD durationMs = (flyoutKind == kNativeControlCenter)
         ? kNativeControlCenterMonitorContextMs
         : kNativeFlyoutMonitorContextMs;
 
-    // No eager-clear timer on the taskbar window. The context expires lazily through proxyFlyoutUntilTick (checked by GetActiveProxyFlyoutMonitor), and SetTimer with a small id on Explorer's own taskbar windows could stomp a native Explorer timer, which the subclass would then swallow and kill : the prime suspect for the delayed right-click crashes on monitors 2/3.
+    // No eager-clear timer on the taskbar window. The context expires lazily through proxyFlyoutUntilTick (checked by GetActiveProxyFlyoutMonitor) and SetTimer with a small id on Explorer's own taskbar windows could stomp a native Explorer timer, which the subclass would then swallow and kill : the prime suspect for the delayed right-click crashes on monitors 2/3.
     SetFlyoutMonitorContext(taskbarWnd, durationMs, reason, flyoutKind, anchorPoint);
 }
 
 LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR);
 
-/// Drops every per-taskbar record when a taskbar window is destroyed (hot-unplug, Explorer taskbar recreation), and removes the subclass
+/// Drops every per-taskbar record when a taskbar window is destroyed (hot-unplug, Explorer taskbar recreation) and removes the subclass
 void ForgetDestroyedTaskbar(HWND hWnd) {
     ClearSharedMenuSurfaceOwners(hWnd);
     RemoveCachedTaskbarTrayLayout(hWnd);
@@ -4947,7 +5416,78 @@ void ForgetDestroyedTaskbar(HWND hWnd) {
     WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, TaskbarSubclassProc);
 }
 
-/// Subclass installed on every managed taskbar window. Handles the deferred-apply timer, layout invalidation, the WM_SETCURSOR hover pre-arm, right-click breadcrumbs plus last-resort ownership transfer, left-click flyout-context arming on the copied surfaces, stale-context clearing, and cleanup on WM_NCDESTROY. During unload everything passes through except timer/cleanup handling.
+// Optional inter-mod query, with screen X/Y in wParam/lParam. Replies: 0 = unavailable, 1 = outside, 2 = tray, 3 = volume glyph
+UINT g_copiedTrayHitTestMessage = 0;
+
+bool IsVolumeIconAtPoint(HWND taskbar, POINT clientPoint) {
+    auto root = GetAnyTaskbarXamlRoot(taskbar);
+    TrayElementsView view;
+
+    if (!root || !CollectTrayElements(root, taskbar, &view, L"layout refresh") || !view.controlCenterButton) {
+        return false;
+    }
+
+    double scale = root.RasterizationScale();
+
+    if (!(scale > 0)) {
+        return false;
+    }
+
+    winrt::Windows::Foundation::Point point{static_cast<float>(clientPoint.x / scale), static_cast<float>(clientPoint.y / scale)};
+
+    for (const auto& hit : Media::VisualTreeHelper::FindElementsInHostCoordinates(point, view.controlCenterButton)) {
+        auto icon = hit.try_as<FrameworkElement>();
+
+        if (!icon || icon.Name() != L"SystemTrayIcon") {
+            continue;
+        }
+
+        auto content = FindDescendantByClassName(icon, L"SystemTray.TextIconContent");
+        auto grid = content ? FindChildByName(content, L"ContainerGrid") : nullptr;
+        auto base = grid ? FindChildByName(grid, L"Base") : nullptr;
+        auto inner = base ? FindChildByName(base, L"InnerTextBlock") : nullptr;
+        auto text = inner ? inner.try_as<Controls::TextBlock>() : nullptr;
+
+        if (text) {
+            auto glyph = text.Text();
+
+            // Segoe Fluent volume and mute glyphs, also used by Taskbar tray system icon tweaks
+            return glyph.size() == 1 && std::wstring_view(L"\uE74F\uE992\uE993\uE994\uE995\uEA85\uEBC5").find(glyph[0]) != std::wstring_view::npos;
+        }
+    }
+
+    return false;
+}
+
+LRESULT HitTestCopiedTray(HWND taskbar, POINT point) {
+    if (!IsSecondaryTaskbarWindow(taskbar) || !ShouldApplyToTaskbar(taskbar) || !ScreenToClient(taskbar, &point)) {
+        return 0;
+    }
+
+    TaskbarTrayLayout layout;
+
+    if (!GetFreshTaskbarTrayLayout(taskbar, kTrayLayoutClickMaxAgeMs, &layout) || IsRectEmpty(&layout.rects.frame)) {
+        return 0;
+    }
+
+    if (!PtInRect(&layout.rects.frame, point)) {
+        return 1;
+    }
+
+    if (WantsControlCenter(taskbar) && PtInRect(&layout.rects.controlCenter, point)) {
+        try {
+            if (IsVolumeIconAtPoint(taskbar, point)) {
+                return 3;
+            }
+        } catch (...) {
+            Wh_Log(L"could not identify the copied volume icon");
+        }
+    }
+
+    return 2;
+}
+
+/// Subclass installed on every managed taskbar window. Handles the deferred-apply timer, layout invalidation, the WM_SETCURSOR hover pre-arm, right-click breadcrumbs plus last-resort ownership transfer, left-click flyout-context arming on the copied surfaces, stale-context clearing and cleanup on WM_NCDESTROY. During unload everything passes through except timer/cleanup handling.
 LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR) {
     if (IsModUnloading()) {
         if (uMsg == WM_TIMER && wParam == kDeferredApplySettingsTimerId) {
@@ -4963,6 +5503,10 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
 
+    if (g_copiedTrayHitTestMessage && uMsg == g_copiedTrayHitTestMessage) {
+        return HitTestCopiedTray(hWnd, {static_cast<LONG>(wParam), static_cast<LONG>(lParam)});
+    }
+
     if (uMsg == WM_TIMER && wParam == kDeferredApplySettingsTimerId) {
         HandleDeferredApplySettingsTimer(hWnd);
 
@@ -4972,6 +5516,7 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
     if (uMsg == WM_DISPLAYCHANGE) {
         // Monitor topology changed : drop the cached monitor list so settings targeting and flyout contexts resolve against the new layout immediately instead of after the TTL
         InvalidateMonitorCache();
+        ClearKeyboardPlacement();
         InvalidateTaskbarTrayLayout(hWnd);
 
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
@@ -5006,10 +5551,16 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
     bool leftButtonUp = uMsg == WM_LBUTTONUP || (uMsg == WM_PARENTNOTIFY && LOWORD(wParam) == WM_LBUTTONUP);
 
     if (leftButtonDown || leftButtonUp) {
-        WPARAM proxyFlyout = HitTestProxyFlyout(hWnd, lParam);
+        WPARAM proxyFlyout = HitTestProxyFlyout(hWnd, {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)});
 
         if (proxyFlyout) {
-            if (proxyFlyout == kNativeControlCenter) {
+            if (proxyFlyout == kNativeSystemPanel && leftButtonDown) {
+                POINT anchor{};
+
+                if (GetNativeFlyoutAnchorPoint(hWnd, lParam, proxyFlyout, &anchor)) {
+                    BeginNativeFlyoutMonitorContext(hWnd, L"copied system icon", proxyFlyout, &anchor);
+                }
+            } else if (proxyFlyout == kNativeControlCenter) {
                 if (leftButtonDown) {
                     BeginNativeFlyoutMonitorContext(hWnd, L"native control center", proxyFlyout, nullptr);
                 }
@@ -5182,7 +5733,7 @@ FrameworkElement FindSystemTrayFrameGridForTaskbar(HWND taskbarWnd) {
         return nullptr;
     }
 
-    child = FindChildByClassName(child, L"SystemTray.SystemTrayFrame");
+    child = ResolveSystemTrayFrame(child);
 
     if (!child) {
         return nullptr;
@@ -5191,8 +5742,7 @@ FrameworkElement FindSystemTrayFrameGridForTaskbar(HWND taskbarWnd) {
     return FindChildByName(child, L"SystemTrayFrameGrid");
 }
 
-// SystemTray.dll (Taskbar.View.dll before the SystemTray types moved out of it) converts island coordinates to screen coordinates through one fixed window : the host of the primary taskbar model (or the overflow popup), scaled by the single per-thread display scale. Copied surfaces live on other islands, so every such conversion lands at the same relative spot on the primary monitor. The hooks below redo the conversions with the island that actually hosts the element or dispatches the input, for the anchor passed to a tray icon's app, the icon rectangle returned by Shell_NotifyIconGetRect, and the tray icon drag/drop hit-tests.
-
+// SystemTray.dll (Taskbar.View.dll before the SystemTray types moved out of it) converts island coordinates to screen coordinates through one fixed window : the host of the primary taskbar model (or the overflow popup), scaled by the single per-thread display scale. Copied surfaces live on other islands, so every such conversion lands at the same relative spot on the primary monitor. The hooks below redo the conversions with the island that actually hosts the element or dispatches the input, for the anchor passed to a tray icon's app, the icon rectangle returned by Shell_NotifyIconGetRect and the tray icon drag/drop hit-tests.
 using NotificationAreaIconsDataModel_GetInvocationPointRelativeToScreen_t = winrt::Windows::Foundation::Point*(WINAPI*)(void* pThis, winrt::Windows::Foundation::Point* result, const winrt::Windows::Foundation::Point* point);
 NotificationAreaIconsDataModel_GetInvocationPointRelativeToScreen_t NotificationAreaIconsDataModel_GetInvocationPointRelativeToScreen_Original;
 
@@ -5423,7 +5973,7 @@ RECT WINAPI GetScreenRectFromXamlElement_Hook(void** element, HWND hWnd) {
         winrt::copy_from_abi(frameworkElement, *element);
     }
 
-    // The original destroys its by-value element argument, so it always runs, and the answer is corrected afterwards
+    // The original destroys its by-value element argument, so it always runs and the answer is corrected afterwards
     RECT rect = GetScreenRectFromXamlElement_Original(element, hWnd);
 
     if (!frameworkElement) {
@@ -5972,7 +6522,7 @@ HRESULT WINAPI TrayUI__SetStuckMonitor_Hook(void* pThis, HMONITOR monitor) {
 
         monitor = targetMonitor;
     } else if (GetSettings().monitorMode == MonitorMode::All) {
-        Wh_Log(L"monitorMode=all can't duplicate the real primary tray model; applying XAML visibility/layout only");
+        Wh_Log(L"monitorMode=all can't duplicate the real primary tray model, applying XAML visibility/layout only");
     }
 
     return TrayUI__SetStuckMonitor_Original(pThis, monitor);
@@ -6011,6 +6561,92 @@ HMODULE GetSystemTrayViewModule() {
     WORD majorVersion = taskbarViewModule ? GetModuleFileMajorVersion(taskbarViewModule) : 0;
 
     return majorVersion && majorVersion < 2604 ? taskbarViewModule : nullptr;
+}
+
+// First properties of WindowsUdk.UI.Shell.IShowShellViewOptions (the default interface of ShowShellViewOptions)
+struct InputPanelShowOptions : ::IInspectable {
+    virtual HRESULT STDMETHODCALLTYPE get_InvokerWindowId(UINT64*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE put_InvokerWindowId(UINT64) = 0;
+    virtual HRESULT STDMETHODCALLTYPE get_InvocationPoint(winrt::Windows::Foundation::Point*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE put_InvocationPoint(winrt::Windows::Foundation::Point) = 0;
+};
+
+constexpr GUID kInputPanelShowOptionsId{0x8f3c6994, 0xb3e4, 0x52a3, {0x97, 0x5c, 0xaf, 0x26, 0x6b, 0x6c, 0x6d, 0x8a}};
+
+bool TryGetSystemPanelContext(ProxyFlyoutContext* context) {
+    return !IsActiveFlyoutRedirectionSuppressed() && TryGetActiveProxyFlyoutContext(context, true) &&
+        context -> kind == kNativeSystemPanel && context -> anchorValid && IsWindow(context -> taskbarWnd);
+}
+
+// The WinRT click callbacks construct the shell-view request. Remember its origin even if the request is dispatched later
+std::atomic<UINT64> g_inputPanelClick{0};
+
+template<InputPanelKind Kind>
+struct SystemPanelClick {
+    static inline HRESULT (WINAPI* original)(void*, void*);
+    static HRESULT WINAPI Hook(void* model, void* args) {
+        if constexpr (Kind == InputPanelKind::Keyboard) {
+            ClearKeyboardPlacement();
+        }
+
+        ProxyFlyoutContext context;
+
+        if (TryGetSystemPanelContext(&context)) {
+            g_inputPanelClick.store(InputPanelLaunch(context.generation, Kind));
+        }
+
+        return original(model, args);
+    }
+};
+
+using ShellViewTryShowAsync_t = void*(WINAPI*)(void* coordinator, void* operation, winrt::Windows::Foundation::IInspectable const& options);
+ShellViewTryShowAsync_t ShellViewTryShowAsync_Original;
+
+void* WINAPI ShellViewTryShowAsync_Hook(void* coordinator, void* operation, winrt::Windows::Foundation::IInspectable const& options) {
+    ProxyFlyoutContext context;
+    winrt::com_ptr<InputPanelShowOptions> placement;
+
+    if (options && TryGetSystemPanelContext(&context) &&
+        SUCCEEDED(winrt::get_unknown(options)->QueryInterface(kInputPanelShowOptionsId, placement.put_void()))) {
+        UINT64 launch = g_inputPanelClick.load();
+
+        if (static_cast<UINT32>(launch >> 32) != static_cast<UINT32>(context.generation)) {
+            launch = InputPanelLaunch(context.generation, InputPanelKind::Other);
+        }
+
+        auto kind = static_cast<InputPanelKind>(launch);
+        bool keyboardPage = kind == InputPanelKind::Emoji && CaptureKeyboardForEmoji(context.generation);
+        g_inputPanelLaunch.store(launch, std::memory_order_release);
+
+        // KeyboardHosting knows the focused edit control and its display. It also owns navigation within an open keyboard
+        if (kind == InputPanelKind::Keyboard || keyboardPage) {
+            Wh_Log(L"system panel launch kind=%s monitor=%d using keyboard host placement", keyboardPage ? L"emoji in keyboard" : L"keyboard", context.monitorIndex);
+
+            return ShellViewTryShowAsync_Original(coordinator, operation, options);
+        }
+
+        using GetWindowId_t = HRESULT(WINAPI*)(HWND, winrt::Windows::UI::WindowId*);
+        static const auto getWindowId = reinterpret_cast<GetWindowId_t>(GetProcAddress(GetModuleHandleW(L"Windows.UI.dll"), "GetWindowIdFromWindow"));
+        winrt::Windows::UI::WindowId id{};
+        HRESULT windowResult = getWindowId ? getWindowId(context.taskbarWnd, &id) : E_NOTIMPL;
+
+        if (SUCCEEDED(windowResult)) {
+            windowResult = placement->put_InvokerWindowId(id.Value);
+        }
+
+        HRESULT pointResult = placement->put_InvocationPoint({static_cast<float>(context.anchorPoint.x), static_cast<float>(context.anchorPoint.y)});
+        PCWSTR name = L"other";
+
+        if (kind == InputPanelKind::Emoji) {
+            name = L"emoji";
+        } else if (kind == InputPanelKind::Language) {
+            name = L"language";
+        }
+
+        Wh_Log(L"system panel launch kind=%s monitor=%d point=(%ld,%ld) windowHr=%08X pointHr=%08X", name, context.monitorIndex, context.anchorPoint.x, context.anchorPoint.y, windowResult, pointResult);
+    }
+
+    return ShellViewTryShowAsync_Original(coordinator, operation, options);
 }
 
 std::atomic<bool> g_systemTrayViewSymbolsHooked{false};
@@ -6070,6 +6706,18 @@ bool HookSystemTrayViewSymbols(HMODULE module) {
         return false;
     }
 
+    // Match the C++/WinRT projection and model thunks by their decorated names
+    WindhawkUtils::SYMBOL_HOOK shellViewHooks[] = {
+        {{L"?OnIconClicked@?$produce@UEmojiAndMoreSystemTrayIconDataModel@implementation@SystemTray@winrt@@UIIconDataModel@34@@impl@winrt@@UEAAHPEAX@Z"}, &SystemPanelClick<InputPanelKind::Emoji>::original, SystemPanelClick<InputPanelKind::Emoji>::Hook, true},
+        {{L"?OnIconClicked@?$produce@UTouchKeyboardSystemTrayIconDataModel@implementation@SystemTray@winrt@@UIIconDataModel@34@@impl@winrt@@UEAAHPEAX@Z"}, &SystemPanelClick<InputPanelKind::Keyboard>::original, SystemPanelClick<InputPanelKind::Keyboard>::Hook, true},
+        {{L"?OnIconClicked@?$produce@ULanguageSystemTrayIconDataModel@implementation@SystemTray@winrt@@UIIconDataModel@34@@impl@winrt@@UEAAHPEAX@Z"}, &SystemPanelClick<InputPanelKind::Language>::original, SystemPanelClick<InputPanelKind::Language>::Hook, true},
+        {{L"?TryShowAsync@?$consume_WindowsUdk_UI_Shell_IShellViewCoordinator@UIShellViewCoordinator@Shell@UI@WindowsUdk@winrt@@@impl@winrt@@QEBA@AEBUShowShellViewOptions@Shell@UI@WindowsUdk@3@@Z"}, &ShellViewTryShowAsync_Original, ShellViewTryShowAsync_Hook, true},
+    };
+    WH_HOOK_SYMBOLS_OPTIONS lookup{sizeof(lookup)};
+    lookup.noUndecoratedSymbols = TRUE;
+    HookSymbols(module, shellViewHooks, ARRAYSIZE(shellViewHooks), &lookup);
+    Wh_Log(L"system panel hooks launch=%d keyboard=%d language=%d emoji=%d", !!ShellViewTryShowAsync_Original, !!SystemPanelClick<InputPanelKind::Keyboard>::original, !!SystemPanelClick<InputPanelKind::Language>::original, !!SystemPanelClick<InputPanelKind::Emoji>::original);
+
     Wh_Log(
         L"hooked SystemTray symbols invocationPoint=%d iconBounds=%d iconRect=%d "
         L"dragRect=%d dragPoint=%d dragChevron=%d",
@@ -6084,10 +6732,65 @@ bool HookSystemTrayViewSymbols(HMODULE module) {
     return true;
 }
 
+using ShowLanguagePicker_t = HRESULT(WINAPI*)(void*, const void*, const RECT*, int, bool, DWORD, int);
+ShowLanguagePicker_t ShowLanguagePicker_Original;
+
+HRESULT WINAPI ShowLanguagePicker_Hook(void* handler, const void* hotkey, const RECT* anchor, int placement, bool shellShow, DWORD flags, int mode) {
+    ProxyFlyoutContext context;
+    RECT icon{};
+
+    if (shellShow && !hotkey && !anchor && TryGetSystemPanelContext(&context)) {
+        UINT64 launch = g_inputPanelLaunch.load();
+        bool language = launch == InputPanelLaunch(context.generation, InputPanelKind::Language);
+        // On builds without a language-model symbol, the null-anchor shell request identifies this native receiver
+        bool nativeShellRequest = mode == 1 && placement == 0 && launch == InputPanelLaunch(context.generation, InputPanelKind::Other);
+
+        if ((language || nativeShellRequest) && g_inputPanelLaunch.compare_exchange_strong(launch, 0)) {
+            POINT click = context.anchorPoint;
+            icon = {click.x, click.y, click.x + 1, click.y + 1};
+
+            if (context.taskbarRectValid && PtInRect(&context.taskbarRect, click)) {
+                const RECT& bar = context.taskbarRect;
+
+                if (bar.right - bar.left >= bar.bottom - bar.top) {
+                    icon.top = bar.top;
+                    icon.bottom = bar.bottom;
+                } else {
+                    icon.left = bar.left;
+                    icon.right = bar.right;
+                }
+            }
+
+            anchor = &icon;
+            Wh_Log(L"InputSwitch native anchor monitor=%d rect=(%ld,%ld,%ld,%ld)", context.monitorIndex, icon.left, icon.top, icon.right, icon.bottom);
+        }
+    }
+
+    return ShowLanguagePicker_Original(handler, hotkey, anchor, placement, shellShow, flags, mode);
+}
+
+std::atomic<bool> g_inputSwitchSymbolsHooked{false};
+
+bool HookInputSwitchSymbols(HMODULE module) {
+    if (!module || g_inputSwitchSymbolsHooked.exchange(true)) {
+        return false;
+    }
+
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        {{L"?HookupModalAndShow@CTsfHandler@@QEAAJPEBUHOTKEY_INFO@@PEBUtagRECT@@W4__MIDL___MIDL_itf_inputswitchserver_0000_0000_0006@@_NKW4__MIDL___MIDL_itf_inputswitchserver_0000_0000_0005@@@Z"}, &ShowLanguagePicker_Original, ShowLanguagePicker_Hook, true},
+    };
+    WH_HOOK_SYMBOLS_OPTIONS lookup{sizeof(lookup)};
+    lookup.noUndecoratedSymbols = TRUE;
+    bool ok = HookSymbols(module, hooks, ARRAYSIZE(hooks), &lookup);
+    Wh_Log(L"InputSwitch language picker anchor hook available=%d", !!ShowLanguagePicker_Original);
+
+    return ok && ShowLanguagePicker_Original;
+}
+
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 LoadLibraryExW_t LoadLibraryExW_Original;
 
-/// kernelbase hook, Explorer only, installed when the SystemTray module was not loaded yet at init (Explorer starting) : hooks its symbols as soon as the taskbar loads it
+/// Resolve optional tray and language-picker symbols when Explorer loads their modules after startup
 HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR libFileName, HANDLE file, DWORD flags) {
     HMODULE module = LoadLibraryExW_Original(libFileName, file, flags);
 
@@ -6097,6 +6800,12 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR libFileName, HANDLE file, DWORD flags
         && module == GetSystemTrayViewModule()
         && HookSystemTrayViewSymbols(module)
     ) {
+        Wh_ApplyHookOperations();
+    }
+
+    if (module && !IsModUnloading() && !g_inputSwitchSymbolsHooked.load() &&
+        !(flags & (LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE | LOAD_LIBRARY_AS_IMAGE_RESOURCE)) &&
+        module == GetModuleHandleW(L"InputSwitch.dll") && HookInputSwitchSymbols(module)) {
         Wh_ApplyHookOperations();
     }
 
@@ -6170,6 +6879,585 @@ bool HookTaskbarDllSymbols() {
     return true;
 }
 
+using PanelRect = winrt::Windows::Foundation::Rect;
+
+struct KeyboardPlacement {
+    void* policy = nullptr;
+    UINT viewId = 0;
+    ProxyFlyoutContext context;
+    bool nativePlacement = false;
+
+    bool Matches(void* owner, UINT view) const {
+        return owner && policy == owner && viewId == view;
+    }
+};
+KeyboardPlacement g_openKeyboard;
+// The native primary keyboard can already be open through focus, accessibility or the primary taskbar
+void* g_primaryKeyboardPolicy = nullptr;
+UINT g_primaryKeyboardViewId = 0;
+// An emoji transition can hide and re-show the same keyboard view in one launch
+KeyboardPlacement g_keyboardBeforeEmoji;
+LONG g_emojiGeneration = 0;
+SRWLOCK g_keyboardLock = SRWLOCK_INIT;
+
+struct KeyboardEditFocus {
+    void* policy = nullptr;
+    bool focused = false;
+    UINT64 revision = 0;
+};
+KeyboardEditFocus g_keyboardEditFocus;
+
+void ClearKeyboardPlacement(void* policy, UINT viewId, LONG generation) {
+    AcquireSRWLockExclusive(&g_keyboardLock);
+
+    if (!policy || (g_openKeyboard.Matches(policy, viewId) && (!generation || g_openKeyboard.context.generation == generation))) {
+        g_openKeyboard = {};
+    }
+
+    if (!policy || (g_keyboardBeforeEmoji.Matches(policy, viewId) && (!generation || g_keyboardBeforeEmoji.context.generation == generation))) {
+        g_keyboardBeforeEmoji = {};
+        g_emojiGeneration = 0;
+    }
+
+    ReleaseSRWLockExclusive(&g_keyboardLock);
+}
+
+bool CaptureKeyboardForEmoji(LONG generation) {
+    AcquireSRWLockExclusive(&g_keyboardLock);
+
+    if (g_openKeyboard.policy || generation != g_emojiGeneration) {
+        g_keyboardBeforeEmoji = g_openKeyboard;
+        g_emojiGeneration = generation;
+    }
+
+    bool open = g_keyboardBeforeEmoji.policy != nullptr;
+    ReleaseSRWLockExclusive(&g_keyboardLock);
+
+    return open;
+}
+
+bool TryGetKeyboardPlacement(void* policy, UINT viewId, ProxyFlyoutContext* context) {
+    AcquireSRWLockShared(&g_keyboardLock);
+    bool matched = g_openKeyboard.Matches(policy, viewId) && !g_openKeyboard.nativePlacement;
+
+    if (matched) {
+        *context = g_openKeyboard.context;
+    }
+
+    ReleaseSRWLockShared(&g_keyboardLock);
+
+    if (!matched || IsActiveFlyoutRedirectionSuppressed()) {
+        return false;
+    }
+
+    MONITORINFO info{sizeof(info)};
+
+    if (!IsWindow(context->taskbarWnd) || !GetMonitorInfoW(context->monitor, &info)) {
+        ClearKeyboardPlacement(policy, viewId, context->generation);
+
+        return false;
+    }
+
+    return true;
+}
+
+void ObserveKeyboardEditFocus(void* policy, bool focused, const UINT64* expectedRevision = nullptr) {
+    AcquireSRWLockExclusive(&g_keyboardLock);
+
+    if (!expectedRevision || g_keyboardEditFocus.revision == *expectedRevision) {
+        g_keyboardEditFocus = {policy, focused, g_keyboardEditFocus.revision + 1};
+
+        if (focused && g_openKeyboard.policy == policy) {
+            g_openKeyboard.nativePlacement = true;
+        }
+
+        if (focused && g_keyboardBeforeEmoji.policy == policy) {
+            g_keyboardBeforeEmoji.nativePlacement = true;
+        }
+    }
+
+    ReleaseSRWLockExclusive(&g_keyboardLock);
+}
+
+using SetPrimaryKeyboardView_t = HRESULT(WINAPI*)(void*, UINT);
+SetPrimaryKeyboardView_t SetPrimaryKeyboardView_Original;
+HRESULT WINAPI SetPrimaryKeyboardView_Hook(void* policy, UINT viewId) {
+    HRESULT hr = SetPrimaryKeyboardView_Original(policy, viewId);
+
+    if (SUCCEEDED(hr)) {
+        AcquireSRWLockExclusive(&g_keyboardLock);
+        g_primaryKeyboardPolicy = policy;
+        g_primaryKeyboardViewId = viewId;
+        ReleaseSRWLockExclusive(&g_keyboardLock);
+    }
+
+    return hr;
+}
+
+using KeyboardEditFocus_t = HRESULT(WINAPI*)(void*, BYTE, int*);
+KeyboardEditFocus_t KeyboardEditFocus_Original;
+HRESULT WINAPI KeyboardEditFocus_Hook(void* policy, BYTE focused, int* request) {
+    HRESULT hr = KeyboardEditFocus_Original(policy, focused, request);
+
+    if (SUCCEEDED(hr)) {
+        ObserveKeyboardEditFocus(policy, focused != 0);
+    }
+
+    return hr;
+}
+
+// GetShellState supplies native edit focus before building the primary keyboard's size options
+using KeyboardShellState_t = HRESULT(WINAPI*)(void*, int, BYTE*, BYTE*, int*, void**);
+KeyboardShellState_t KeyboardShellState_Original;
+using PublishKeyboardScale_t = HRESULT(WINAPI*)(void*);
+PublishKeyboardScale_t PublishKeyboardScale;
+
+// Both show paths publish the previous scale before GetShellState rebuilds the size options
+struct KeyboardShowAdapterScope {
+    static inline thread_local KeyboardShowAdapterScope* current = nullptr;
+    void* adapter;
+    void* storedOptions;
+    KeyboardShowAdapterScope* previous;
+
+    explicit KeyboardShowAdapterScope(void* owner, void* options = nullptr) : adapter(owner), storedOptions(options), previous(std::exchange(current, this)) {}
+    ~KeyboardShowAdapterScope() {
+        current = previous;
+    }
+
+    // The stored-data method sends its by-value WRL ComPtr even after GetShellState builds a fresh vector. Its native destructor releases the reference in this slot
+    void UseFreshOptions(::IUnknown* fresh) const {
+        if (!storedOptions || !fresh) {
+            return;
+        }
+
+        ::IUnknown* old;
+        std::memcpy(&old, storedOptions, sizeof(old));
+
+        if (old != fresh) {
+            fresh->AddRef();
+            std::memcpy(storedOptions, &fresh, sizeof(fresh));
+
+            if (old) {
+                old->Release();
+            }
+        }
+    }
+};
+
+using ProcessKeyboardShow_t = HRESULT(WINAPI*)(void*, int, bool*);
+ProcessKeyboardShow_t ProcessKeyboardShow_Original;
+HRESULT WINAPI ProcessKeyboardShow_Hook(void* adapter, int viewType, bool* result) {
+    KeyboardShowAdapterScope scope(viewType == 0 ? adapter : nullptr);
+
+    return ProcessKeyboardShow_Original(adapter, viewType, result);
+}
+
+// Forward the native ComPtr argument as its ABI word, leaving its ownership with the original method
+using ProcessStoredKeyboardShow_t = HRESULT(WINAPI*)(void*, void*, int, int);
+ProcessStoredKeyboardShow_t ProcessStoredKeyboardShow_Original;
+HRESULT WINAPI ProcessStoredKeyboardShow_Hook(void* adapter, void* options, int viewType, int modality) {
+    KeyboardShowAdapterScope scope(viewType == 0 ? adapter : nullptr, options);
+
+    return ProcessStoredKeyboardShow_Original(adapter, options, viewType, modality);
+}
+using KeyboardSizeOptions_t = HRESULT(WINAPI*)(void*, void**);
+KeyboardSizeOptions_t KeyboardSizeOptions;
+using CopyKeyboardMonitor_t = void*(WINAPI*)(void*, const void*);
+CopyKeyboardMonitor_t CopyKeyboardMonitor_Original;
+using SetKeyboardMonitor_t = void(WINAPI*)(void*, HMONITOR);
+SetKeyboardMonitor_t SetKeyboardMonitor;
+
+struct KeyboardSizeScope;
+thread_local KeyboardSizeScope* g_keyboardSizeScope = nullptr;
+
+struct KeyboardSizeScope {
+    HMONITOR target;
+    BYTE focused = TRUE;
+    bool sized = false;
+    KeyboardSizeScope* previous;
+
+    explicit KeyboardSizeScope(HMONITOR monitor) : target(monitor), previous(g_keyboardSizeScope) {
+        g_keyboardSizeScope = this;
+    }
+    ~KeyboardSizeScope() {
+        g_keyboardSizeScope = previous;
+    }
+};
+
+HMONITOR GetKeyboardSizeMonitor(void* policy) {
+    if (IsActiveFlyoutRedirectionSuppressed()) {
+        return nullptr;
+    }
+
+    ProxyFlyoutContext clicked;
+    bool hasClick = TryGetSystemPanelContext(&clicked);
+    UINT64 launch = g_inputPanelLaunch.load();
+
+    if (hasClick && launch == InputPanelLaunch(clicked.generation, InputPanelKind::Keyboard)) {
+        return clicked.monitor;
+    }
+
+    AcquireSRWLockShared(&g_keyboardLock);
+    KeyboardPlacement keyboard = g_openKeyboard;
+
+    if (!keyboard.policy && hasClick && launch == InputPanelLaunch(clicked.generation, InputPanelKind::Emoji) && g_emojiGeneration == clicked.generation) {
+        keyboard = g_keyboardBeforeEmoji;
+    }
+
+    ReleaseSRWLockShared(&g_keyboardLock);
+    MONITORINFO info{sizeof(info)};
+
+    return policy && keyboard.policy == policy && !keyboard.nativePlacement && IsWindow(keyboard.context.taskbarWnd) &&
+           GetMonitorInfoW(keyboard.context.monitor, &info) ? keyboard.context.monitor : nullptr;
+}
+
+HRESULT WINAPI KeyboardShellState_Hook(void* policy, int viewType, BYTE* focused, BYTE* secondFlag, int* modality, void** options) {
+    // CoreKeyboardViewType 0 is the primary touch keyboard. A nested query for another view masks the outer scope
+    bool primary = viewType == 0 && focused;
+    KeyboardSizeScope scope(primary ? GetKeyboardSizeMonitor(policy) : nullptr);
+    auto* show = KeyboardShowAdapterScope::current;
+    KeyboardShowAdapterScope nestedQuery(nullptr);
+    AcquireSRWLockShared(&g_keyboardLock);
+    UINT64 revision = g_keyboardEditFocus.revision;
+    ReleaseSRWLockShared(&g_keyboardLock);
+    HRESULT hr = KeyboardShellState_Original(policy, viewType, primary ? &scope.focused : focused, secondFlag, modality, options);
+
+    if (primary) {
+        *focused = scope.focused;
+
+        if (SUCCEEDED(hr)) {
+            ObserveKeyboardEditFocus(policy, scope.focused != 0, &revision);
+
+            if (show && show->adapter && scope.sized && options) {
+                show->UseFreshOptions(static_cast<::IUnknown*>(*options));
+            }
+
+            if (show && show->adapter && PublishKeyboardScale) {
+                // The adapter compares against its last published value. This also restores native sizing on a later focused show
+                HRESULT scaleHr = PublishKeyboardScale(show->adapter);
+
+                if (scope.sized || FAILED(scaleHr)) {
+                    Wh_Log(L"keyboard scale refresh monitor=%d hr=%08X", scope.target ? GetMonitorIndex(scope.target) : 0, scaleHr);
+                }
+            } else if (scope.sized) {
+                Wh_Log(L"native keyboard options sized on monitor %d at %u DPI", GetMonitorIndex(scope.target), GetMonitorDpiOrDefault(scope.target));
+            }
+        }
+    }
+
+    return hr;
+}
+
+DWORD64 KeyboardCallerFunction(void* returnAddress) {
+    DWORD64 imageBase = 0;
+    auto entry = RtlLookupFunctionEntry(reinterpret_cast<DWORD64>(returnAddress), &imageBase, nullptr);
+
+    return entry ? imageBase + entry->BeginAddress : 0;
+}
+
+// Only the options provider's copies are retargeted. Windows supplies monitor bounds, scale and work area together through SetMonitor
+void* WINAPI CopyKeyboardMonitor_Hook(void* destination, const void* source) {
+    void* result = CopyKeyboardMonitor_Original(destination, source);
+    auto scope = g_keyboardSizeScope;
+
+    if (scope && scope->target && !scope->focused && destination != source && KeyboardSizeOptions && SetKeyboardMonitor) {
+        if (KeyboardCallerFunction(__builtin_return_address(0)) == reinterpret_cast<DWORD64>(KeyboardSizeOptions)) {
+            SetKeyboardMonitor(destination, scope->target);
+            scope->sized = true;
+        }
+    }
+
+    return result;
+}
+
+
+using VerifyKeyboardResize_t = HRESULT(WINAPI*)(void*, UINT, winrt::Windows::Foundation::Size, PanelRect, BYTE, PanelRect*, BYTE*);
+VerifyKeyboardResize_t VerifyKeyboardResize_Original;
+using VerifyKeyboardHide_t = HRESULT(WINAPI*)(void*, UINT, UINT*, BYTE*);
+VerifyKeyboardHide_t VerifyKeyboardHide_Original;
+using KeyboardViewDestroyed_t = HRESULT(WINAPI*)(void*, UINT);
+KeyboardViewDestroyed_t KeyboardViewDestroyed_Original;
+using KeyboardDragEnded_t = HRESULT(WINAPI*)(void*, UINT, PanelRect, int*, UINT*, PanelRect*, int*);
+KeyboardDragEnded_t KeyboardDragEnded_Original;
+
+// The native 72-byte position request is passed indirectly on both x64 and ARM64
+using VerifyInputPanelShow_t = HRESULT(WINAPI*)(void*, void*, UINT, BYTE, UINT*, PanelRect*, BYTE*);
+VerifyInputPanelShow_t VerifyInputPanelShow_Original;
+
+using OcclusionKind = winrt::Windows::UI::ViewManagement::Core::CoreInputViewOcclusionKind;
+constexpr GUID kDesktopKeyboardHostingPolicyId{0x18e242ef, 0x28c4, 0x5127, {0x97, 0xa6, 0x40, 0xb9, 0x49, 0x15, 0xe4, 0x60}};
+constexpr GUID kShellKeyboardHostingPolicyId{0x538fe260, 0xef5c, 0x5d04, {0x98, 0x90, 0x78, 0x5e, 0xd8, 0x7a, 0xcf, 0xa5}};
+using KeyboardOcclusionKind_t = HRESULT(WINAPI*)(void*, UINT, OcclusionKind*);
+KeyboardOcclusionKind_t KeyboardOcclusionKind;
+
+void* PrimaryKeyboardShowingResponse;
+// Windows converts the visible-view rectangles to physical pixels in the same callback that requested show or resize approval
+struct KeyboardRegionRequest {
+    static inline thread_local KeyboardRegionRequest* current = nullptr;
+    KeyboardRegionRequest* previous = std::exchange(current, this);
+    DWORD64 caller = 0;
+    void* policy = nullptr;
+    UINT viewId = 0;
+    LONG generation = 0;
+
+    ~KeyboardRegionRequest() {
+        current = previous;
+    }
+
+    static void ClearPlacement() {
+        if (current) {
+            current->caller = 0;
+        }
+    }
+
+    static void RecordPlacement(void* owner, UINT view, LONG placementGeneration, void* returnAddress) {
+        if (auto* request = current) {
+            request->caller = KeyboardCallerFunction(returnAddress);
+            request->policy = owner;
+            request->viewId = view;
+            request->generation = placementGeneration;
+        }
+    }
+};
+
+using InputAppRequestedShow_t = HRESULT(WINAPI*)(void*, void*, void*);
+InputAppRequestedShow_t InputAppRequestedShow_Original;
+HRESULT WINAPI InputAppRequestedShow_Hook(void* adapter, void* manager, void* args) {
+    KeyboardRegionRequest request;
+
+    return InputAppRequestedShow_Original(adapter, manager, args);
+}
+
+using KeyboardCurrentScale_t = HRESULT(WINAPI*)(::IUnknown*, UINT*);
+KeyboardCurrentScale_t KeyboardCurrentScale_Original;
+HRESULT WINAPI KeyboardCurrentScale_Hook(::IUnknown* desktopPolicy, UINT* scale) {
+    HRESULT hr = KeyboardCurrentScale_Original(desktopPolicy, scale);
+
+    if (FAILED(hr) || !scale) {
+        return hr;
+    }
+
+    auto caller = KeyboardCallerFunction(__builtin_return_address(0));
+    auto* request = KeyboardRegionRequest::current;
+    bool visibleRegions = request && caller && caller == request->caller;
+
+    if (!caller || (!visibleRegions && caller != reinterpret_cast<DWORD64>(PrimaryKeyboardShowingResponse))) {
+        return hr;
+    }
+
+    // The later primary-view response uses the same scale for its view options
+    AcquireSRWLockShared(&g_keyboardLock);
+    KeyboardPlacement keyboard = g_openKeyboard;
+    ReleaseSRWLockShared(&g_keyboardLock);
+
+    if (visibleRegions && (!keyboard.Matches(request->policy, request->viewId) || keyboard.context.generation != request->generation)) {
+        return hr;
+    }
+
+    winrt::com_ptr<::IUnknown> shellPolicy;
+    ProxyFlyoutContext context;
+
+    if (keyboard.policy && !keyboard.nativePlacement &&
+        SUCCEEDED(desktopPolicy->QueryInterface(kShellKeyboardHostingPolicyId, shellPolicy.put_void())) &&
+        TryGetKeyboardPlacement(shellPolicy.get(), keyboard.viewId, &context) && context.generation == keyboard.context.generation) {
+        static const auto getScale = reinterpret_cast<decltype(&GetScaleFactorForMonitor)>(GetProcAddress(GetModuleHandleW(L"shcore.dll"), "GetScaleFactorForMonitor"));
+        DEVICE_SCALE_FACTOR target{};
+
+        if (getScale && SUCCEEDED(getScale(context.monitor, &target)) && target > 0 && *scale != static_cast<UINT>(target)) {
+            Wh_Log(L"keyboard %s scale monitor=%d from %u to %u percent", visibleRegions ? L"visible region" : L"view", context.monitorIndex, *scale, static_cast<UINT>(target));
+            *scale = static_cast<UINT>(target);
+        }
+    }
+
+    return hr;
+}
+
+void PlaceApprovedInputPanel(PanelRect* panel, const ProxyFlyoutContext& context, bool keyboard = false, void* policy = nullptr, UINT viewId = 0) {
+    if (!panel || !(panel->Width > 0 && panel->Height > 0)) {
+        return;
+    }
+
+    double right = static_cast<double>(panel->X) + panel->Width;
+    double bottom = static_cast<double>(panel->Y) + panel->Height;
+
+    if (!(panel->X >= static_cast<double>(LONG_MIN) && panel->Y >= static_cast<double>(LONG_MIN) && right <= LONG_MAX && bottom <= LONG_MAX)) {
+        return;
+    }
+
+    RECT requested{std::lround(panel->X), std::lround(panel->Y), std::lround(right), std::lround(bottom)};
+    HMONITOR from = GetActualMonitorFromRect(&requested, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO source{sizeof(source)}, target{sizeof(target)};
+
+    if (!from || (!keyboard && from == context.monitor) || !GetMonitorInfoW(from, &source) || !GetMonitorInfoW(context.monitor, &target) ||
+        IsRectEmpty(&requested) || IsRectEmpty(&target.rcWork)) {
+
+            return;
+    }
+
+    // Docked keyboards span the monitor even when the shell has reserved part of its work area
+    bool docked = requested.left <= source.rcMonitor.left + 1 && requested.right >= source.rcMonitor.right - 1;
+
+    if (keyboard && policy && KeyboardOcclusionKind) {
+        // Show and resize receive IShellKeyboardHostingPolicy. GetOcclusionKind belongs to IDesktopKeyboardHostingPolicy on the same object
+        winrt::com_ptr<::IUnknown> desktopPolicy;
+        OcclusionKind nativeKind{};
+
+        if (SUCCEEDED(static_cast<::IUnknown*>(policy)->QueryInterface(kDesktopKeyboardHostingPolicyId, desktopPolicy.put_void())) &&
+            SUCCEEDED(KeyboardOcclusionKind(desktopPolicy.get(), viewId, &nativeKind))) {
+            docked = nativeKind == OcclusionKind::Docked;
+        }
+    }
+
+    RECT fitted = FitPanelRect(requested, docked ? source.rcMonitor : source.rcWork, docked ? target.rcMonitor : target.rcWork,
+                               GetMonitorDpiOrDefault(from), GetMonitorDpiOrDefault(context.monitor), false, docked);
+    if (EqualRect(&requested, &fitted)) {
+        return;
+    }
+
+    *panel = {static_cast<float>(fitted.left), static_cast<float>(fitted.top), static_cast<float>(fitted.right - fitted.left), static_cast<float>(fitted.bottom - fitted.top)};
+    Wh_Log(L"%s placement monitor=%d (%ld,%ld,%ld,%ld) to (%ld,%ld,%ld,%ld)", keyboard ? L"touch keyboard" : L"input panel", context.monitorIndex, requested.left, requested.top, requested.right, requested.bottom, fitted.left, fitted.top, fitted.right, fitted.bottom);
+}
+
+HRESULT WINAPI VerifyInputPanelShow_Hook(void* policy, void* request, UINT viewId, BYTE flag, UINT* result, PanelRect* rect, BYTE* approved) {
+    KeyboardRegionRequest::ClearPlacement();
+    HRESULT hr = VerifyInputPanelShow_Original(policy, request, viewId, flag, result, rect, approved);
+    ProxyFlyoutContext context;
+
+    if (FAILED(hr) || !approved || !*approved || !rect) {
+        return hr;
+    }
+
+    UINT64 launch = g_inputPanelLaunch.load();
+
+    if (TryGetSystemPanelContext(&context) && static_cast<UINT32>(launch >> 32) == static_cast<UINT32>(context.generation) &&
+        static_cast<InputPanelKind>(launch) != InputPanelKind::Language && g_inputPanelLaunch.compare_exchange_strong(launch, 0)) {
+        bool keyboard = static_cast<InputPanelKind>(launch) == InputPanelKind::Keyboard;
+        bool nativeFocus = false;
+        AcquireSRWLockExclusive(&g_keyboardLock);
+
+        if (keyboard) {
+            // A mod attached mid-session can see a show before the first focus report. Let Windows choose in that case
+            nativeFocus = g_keyboardEditFocus.policy != policy || g_keyboardEditFocus.focused;
+
+            if (VerifyKeyboardHide_Original && KeyboardViewDestroyed_Original) {
+                g_openKeyboard = {policy, viewId, context, nativeFocus};
+            }
+        } else if (static_cast<InputPanelKind>(launch) == InputPanelKind::Emoji || static_cast<InputPanelKind>(launch) == InputPanelKind::Other) {
+            if (g_emojiGeneration == context.generation && g_keyboardBeforeEmoji.Matches(policy, viewId)) {
+                g_openKeyboard = g_keyboardBeforeEmoji;
+            }
+
+            if (g_openKeyboard.Matches(policy, viewId)) {
+                keyboard = true;
+                // A hide that finishes after this show must not clear the reopened keyboard session
+                g_openKeyboard.context.generation = context.generation;
+                context = g_openKeyboard.context;
+                nativeFocus = g_openKeyboard.nativePlacement;
+            }
+        }
+
+        g_keyboardBeforeEmoji = {};
+        g_emojiGeneration = 0;
+        ReleaseSRWLockExclusive(&g_keyboardLock);
+
+        if (!nativeFocus) {
+            PlaceApprovedInputPanel(rect, context, keyboard, policy, viewId);
+
+            if (keyboard) {
+                KeyboardRegionRequest::RecordPlacement(policy, viewId, context.generation, __builtin_return_address(0));
+            }
+        }
+
+        if (keyboard) {
+            Wh_Log(L"touch keyboard show view=%u placement=%s clickedMonitor=%d rect=(%.0f,%.0f %.0fx%.0f)", viewId, nativeFocus ? L"native focus" : L"tray", context.monitorIndex, rect->X, rect->Y, rect->Width, rect->Height);
+        }
+    } else if (TryGetKeyboardPlacement(policy, viewId, &context)) {
+        PlaceApprovedInputPanel(rect, context, true, policy, viewId);
+        KeyboardRegionRequest::RecordPlacement(policy, viewId, context.generation, __builtin_return_address(0));
+    } else if (VerifyKeyboardHide_Original && KeyboardViewDestroyed_Original) {
+        AcquireSRWLockExclusive(&g_keyboardLock);
+
+        if (policy && policy == g_primaryKeyboardPolicy && viewId == g_primaryKeyboardViewId && !g_openKeyboard.Matches(policy, viewId)) {
+            g_openKeyboard = {policy, viewId, {}, true};
+        }
+
+        ReleaseSRWLockExclusive(&g_keyboardLock);
+    }
+
+    return hr;
+}
+
+// Windows selects the resize DPI and monitor from the current rectangle before it calculates the new one
+HRESULT WINAPI VerifyKeyboardResize_Hook(void* policy, UINT viewId, winrt::Windows::Foundation::Size size, PanelRect current, BYTE flag, PanelRect* rect, BYTE* approved) {
+    KeyboardRegionRequest::ClearPlacement();
+    ProxyFlyoutContext context;
+
+    if (!TryGetKeyboardPlacement(policy, viewId, &context)) {
+        return VerifyKeyboardResize_Original(policy, viewId, size, current, flag, rect, approved);
+    }
+
+    PlaceApprovedInputPanel(&current, context, true, policy, viewId);
+    HRESULT hr = VerifyKeyboardResize_Original(policy, viewId, size, current, flag, rect, approved);
+    Wh_Log(L"touch keyboard resize view=%u monitor=%d current=(%.0f,%.0f %.0fx%.0f) requested=%.0fx%.0f hr=%08X approved=%d",
+           viewId, context.monitorIndex, current.X, current.Y, current.Width, current.Height, size.Width, size.Height, hr, SUCCEEDED(hr) && approved && *approved);
+    ProxyFlyoutContext latest;
+
+    if (SUCCEEDED(hr) && approved && *approved && TryGetKeyboardPlacement(policy, viewId, &latest) && latest.generation == context.generation) {
+        PlaceApprovedInputPanel(rect, context, true, policy, viewId);
+        KeyboardRegionRequest::RecordPlacement(policy, viewId, context.generation, __builtin_return_address(0));
+    }
+
+    return hr;
+}
+
+HRESULT WINAPI VerifyKeyboardHide_Hook(void* policy, UINT viewId, UINT* result, BYTE* approved) {
+    ProxyFlyoutContext context;
+    AcquireSRWLockShared(&g_keyboardLock);
+    bool tracked = g_openKeyboard.Matches(policy, viewId);
+    context = g_openKeyboard.context;
+    ReleaseSRWLockShared(&g_keyboardLock);
+    HRESULT hr = VerifyKeyboardHide_Original(policy, viewId, result, approved);
+
+    if (tracked && SUCCEEDED(hr) && approved && *approved) {
+        // The show request and its approval can be handled in different processes. Save the transition in the policy's process too
+        ProxyFlyoutContext click;
+        bool switchingToEmoji = TryGetSystemPanelContext(&click) && g_inputPanelLaunch.load() == InputPanelLaunch(click.generation, InputPanelKind::Emoji);
+        AcquireSRWLockExclusive(&g_keyboardLock);
+
+        if (g_openKeyboard.Matches(policy, viewId) && g_openKeyboard.context.generation == context.generation) {
+            if (switchingToEmoji) {
+                g_keyboardBeforeEmoji = g_openKeyboard;
+                g_emojiGeneration = click.generation;
+            }
+
+            g_openKeyboard = {};
+        }
+
+        ReleaseSRWLockExclusive(&g_keyboardLock);
+    }
+
+    return hr;
+}
+
+HRESULT WINAPI KeyboardViewDestroyed_Hook(void* policy, UINT viewId) {
+    ClearKeyboardPlacement(policy, viewId);
+    AcquireSRWLockExclusive(&g_keyboardLock);
+
+    if (policy == g_primaryKeyboardPolicy && viewId == g_primaryKeyboardViewId) {
+        g_primaryKeyboardPolicy = nullptr;
+    }
+
+    ReleaseSRWLockExclusive(&g_keyboardLock);
+
+    return KeyboardViewDestroyed_Original(policy, viewId);
+}
+
+HRESULT WINAPI KeyboardDragEnded_Hook(void* policy, UINT viewId, PanelRect rect, int* animation, UINT* id, PanelRect* result, int* request) {
+    ClearKeyboardPlacement(policy, viewId);
+
+    return KeyboardDragEnded_Original(policy, viewId, rect, animation, id, result, request);
+}
+
 /// Hooks the immersive monitor helper in twinui.pcshell.dll. Optional : flyout placement still mostly works through the user32 hooks when these symbols are unavailable.
 bool HookTwinuiPcshellSymbols() {
     HMODULE module = LoadLibraryEx(L"twinui.pcshell.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -6179,6 +7467,32 @@ bool HookTwinuiPcshellSymbols() {
 
         return false;
     }
+
+    // KeyboardHosting chooses its own monitor from cached input state after processing the shell-view request
+    WindhawkUtils::SYMBOL_HOOK inputPanelHooks[] = {
+        {{L"?OnInputAppRequestedShow@TabTipAdapter@KeyboardHosting@@AEAAJPEAUICoreKeyboardManager@Core@Text@Internal@UI@Windows@@PEAUICoreKeyboardManagerInputAppRequestedShowEventArgs@45678@@Z"}, &InputAppRequestedShow_Original, InputAppRequestedShow_Hook, true},
+        {{L"?ProcessShowRequest@TabTipAdapter@KeyboardHosting@@AEAAJW4CoreKeyboardViewType@Core@Text@Internal@UI@Windows@@PEA_N@Z"}, &ProcessKeyboardShow_Original, ProcessKeyboardShow_Hook, true},
+        {{L"?ProcessShowRequestWithStoredData@TabTipAdapter@KeyboardHosting@@AEAAJV?$ComPtr@U?$IVectorView@UCoreKeyboardPositionAndSizeOption@Core@Text@Internal@UI@Windows@@@Collections@Foundation@Windows@@@WRL@Microsoft@@W4CoreKeyboardViewType@Core@Text@Internal@UI@Windows@@W4CoreKeyboardModality@789UI@Windows@@@Z"}, &ProcessStoredKeyboardShow_Original, ProcessStoredKeyboardShow_Hook, true},
+        {{L"?SetOverrideMonitorSizeForSIP@TabTipAdapter@KeyboardHosting@@QEAAJXZ"}, &PublishKeyboardScale, nullptr, true},
+        {{L"?OnPrimaryViewShowingResponse@TabTipAdapter@KeyboardHosting@@AEAAJPEAUICoreKeyboardManager@Core@Text@Internal@UI@Windows@@PEAUICoreKeyboardManagerPrimaryViewShowingResponseEventArgs@45678@@Z"}, &PrimaryKeyboardShowingResponse, nullptr, true},
+        {{L"?GetCurrentScaleFactor@TabTipAdapterPolicy@KeyboardHosting@@UEAAJPEAI@Z"}, &KeyboardCurrentScale_Original, KeyboardCurrentScale_Hook, true},
+        {{L"?SetPrimaryViewId@TabTipAdapterPolicy@KeyboardHosting@@UEAAJI@Z"}, &SetPrimaryKeyboardView_Original, SetPrimaryKeyboardView_Hook, true},
+        {{L"?GetOcclusionKind@TabTipAdapterPolicy@KeyboardHosting@@UEAAJIPEAW4CoreInputViewOcclusionKind@Core@ViewManagement@UI@Windows@@@Z"}, &KeyboardOcclusionKind, nullptr, true},
+        {{L"?HandleEditControlFocusChanged@TabTipAdapterPolicy@KeyboardHosting@@UEAAJEPEAW4ShellRequestType@2Shell@Internal@Windows@@@Z"}, &KeyboardEditFocus_Original, KeyboardEditFocus_Hook, true},
+        {{L"?GetShellState@TabTipAdapterPolicy@KeyboardHosting@@UEAAJW4CoreKeyboardViewType@Core@Text@Internal@UI@Windows@@PEAE1PEAW4CoreKeyboardModality@45678@PEAPEAU?$IVectorView@UCoreKeyboardPositionAndSizeOption@Core@Text@Internal@UI@Windows@@@Collections@Foundation@8@@Z"}, &KeyboardShellState_Original, KeyboardShellState_Hook, true},
+        {{L"?GetPositionAndSizeOptions@TabTipAdapterPolicy@KeyboardHosting@@AEAAJPEAPEAU?$IVectorView@UCoreKeyboardPositionAndSizeOption@Core@Text@Internal@UI@Windows@@@Collections@Foundation@Windows@@@Z"}, &KeyboardSizeOptions, nullptr, true},
+        {{L"??4MonitorInformation@KeyboardHosting@@QEAAAEAU01@AEBU01@@Z"}, &CopyKeyboardMonitor_Original, CopyKeyboardMonitor_Hook, true},
+        {{L"?SetMonitor@MonitorInformation@KeyboardHosting@@QEAAXPEAUHMONITOR__@@@Z"}, &SetKeyboardMonitor, nullptr, true},
+        {{L"?VerifyInputAppRequestedResize@TabTipAdapterPolicy@KeyboardHosting@@UEAAJIUSize@Foundation@Windows@@URect@45@EPEAU645@PEAE@Z"}, &VerifyKeyboardResize_Original, VerifyKeyboardResize_Hook, true},
+        {{L"?VerifyInputAppRequestedHide@TabTipAdapterPolicy@KeyboardHosting@@UEAAJIPEAIPEAE@Z"}, &VerifyKeyboardHide_Original, VerifyKeyboardHide_Hook, true},
+        {{L"?OnViewDestroyed@TabTipAdapterPolicy@KeyboardHosting@@UEAAJI@Z"}, &KeyboardViewDestroyed_Original, KeyboardViewDestroyed_Hook, true},
+        {{L"?HandleDragEnded@TabTipAdapterPolicy@KeyboardHosting@@UEAAJIURect@Foundation@Windows@@PEAW4MoveAnimationType@2Shell@Internal@5@PEAIPEAU345@PEAW4ShellRequestType@2785@@Z"}, &KeyboardDragEnded_Original, KeyboardDragEnded_Hook, true},
+        {{L"?VerifyInputAppRequestedShow@TabTipAdapterPolicy@KeyboardHosting@@UEAAJUCoreKeyboardPositionAndSizeRequest@Core@Text@Internal@UI@Windows@@IEPEAIPEAURect@Foundation@8@PEAE@Z"}, &VerifyInputPanelShow_Original, VerifyInputPanelShow_Hook, true},
+    };
+    WH_HOOK_SYMBOLS_OPTIONS lookup{sizeof(lookup)};
+    lookup.noUndecoratedSymbols = TRUE;
+    HookSymbols(module, inputPanelHooks, ARRAYSIZE(inputPanelHooks), &lookup);
+    Wh_Log(L"keyboard mode=%d sizing=%d focus=%d input panel placement show=%d resize=%d hide=%d destroy=%d drag=%d", !!KeyboardOcclusionKind, !!(KeyboardShellState_Original && KeyboardSizeOptions && CopyKeyboardMonitor_Original && SetKeyboardMonitor), !!KeyboardEditFocus_Original, !!VerifyInputPanelShow_Original, !!VerifyKeyboardResize_Original, !!VerifyKeyboardHide_Original, !!KeyboardViewDestroyed_Original, !!KeyboardDragEnded_Original);
 
     // twinui.pcshell.dll
     WindhawkUtils::SYMBOL_HOOK twinuiPcshellHooks[] = {
@@ -6213,6 +7527,10 @@ BOOL Wh_ModInit() {
     LoadSettings();
     Wh_Log(L"init target=%s", TargetProcessToString(g_targetProcess));
 
+    if (IsExplorerTarget()) {
+        g_copiedTrayHitTestMessage = RegisterWindowMessageW(L"Windhawk.TaskbarMultiTray.HitTest.v1");
+    }
+
     if (IsExplorerTarget() && !HookTaskbarDllSymbols()) {
         return FALSE;
     }
@@ -6222,10 +7540,13 @@ BOOL Wh_ModInit() {
     }
 
     if (IsExplorerTarget()) {
-        if (HMODULE systemTrayModule = GetSystemTrayViewModule()) {
-            HookSystemTrayViewSymbols(systemTrayModule);
-        } else {
-            // Explorer is still starting : catch the SystemTray module when the taskbar loads it
+        HMODULE systemTrayModule = GetSystemTrayViewModule();
+        HMODULE inputSwitch = GetModuleHandleW(L"InputSwitch.dll");
+        HookSystemTrayViewSymbols(systemTrayModule);
+        HookInputSwitchSymbols(inputSwitch);
+
+        if (!systemTrayModule || !inputSwitch) {
+            // Explorer can load either tray component after mod initialization
             auto loadLibraryExW = reinterpret_cast<LoadLibraryExW_t>(GetProcAddress(GetModuleHandleW(L"kernelbase.dll"), "LoadLibraryExW"));
 
             if (loadLibraryExW) {
@@ -6234,9 +7555,14 @@ BOOL Wh_ModInit() {
         }
     }
 
+    if (g_targetProcess == TargetProcess::ShellHost) {
+        WindhawkUtils::SetFunctionHook(GetMonitorInfoW, GetMonitorInfoW_Hook, &GetMonitorInfoW_Original);
+    }
+
     WindhawkUtils::SetFunctionHook(MonitorFromPoint, MonitorFromPoint_Hook, &MonitorFromPoint_Original);
     WindhawkUtils::SetFunctionHook(MonitorFromRect, MonitorFromRect_Hook, &MonitorFromRect_Original);
     WindhawkUtils::SetFunctionHook(MonitorFromWindow, MonitorFromWindow_Hook, &MonitorFromWindow_Original);
+    WindhawkUtils::SetFunctionHook(ShowWindow, ShowWindow_Hook, &ShowWindow_Original);
     WindhawkUtils::SetFunctionHook(SetWindowPos, SetWindowPos_Hook, &SetWindowPos_Original);
     WindhawkUtils::SetFunctionHook(MoveWindow, MoveWindow_Hook, &MoveWindow_Original);
     WindhawkUtils::SetFunctionHook(SetWindowPlacement, SetWindowPlacement_Hook, &SetWindowPlacement_Original);
@@ -6252,6 +7578,10 @@ void Wh_ModAfterInit() {
     Wh_Log(L"after init");
 
     if (IsExplorerTarget()) {
+        if (HookInputSwitchSymbols(GetModuleHandleW(L"InputSwitch.dll"))) {
+            Wh_ApplyHookOperations();
+        }
+
         // The SystemTray module can load between the init check and the LoadLibraryExW hook going live
         if (!g_systemTrayViewSymbolsHooked.load(std::memory_order_acquire)) {
             if (HMODULE systemTrayModule = GetSystemTrayViewModule(); systemTrayModule && HookSystemTrayViewSymbols(systemTrayModule)) {
@@ -6277,7 +7607,7 @@ void UninitFromTaskbarThread(void* parameter) {
     ClearCachedXamlBindings();
 }
 
-/// Fallback when the taskbar thread couldn't run UninitFromTaskbarThread. Only use the per-window helper available in Windhawk 1.6.1 and 1.7.3, and leave XAML state on its owning thread.
+/// Fallback when the taskbar thread couldn't run UninitFromTaskbarThread. Only use the per-window helper available in Windhawk 1.6.1 and 1.7.3 and leave XAML state on its owning thread.
 void RemoveTaskbarSubclassesFromAnyThread() {
     EnumWindows(
         [](HWND hWnd, LPARAM) -> BOOL {
@@ -6298,6 +7628,7 @@ void RemoveTaskbarSubclassesFromAnyThread() {
 void Wh_ModBeforeUninit() {
     Wh_Log(L"before uninit");
     g_modUnloading.store(1, std::memory_order_release);
+    ClearKeyboardPlacement();
     ClearSharedProxyFlyoutMonitorState();
 
     if (!IsExplorerTarget()) {
@@ -6309,11 +7640,12 @@ void Wh_ModBeforeUninit() {
     if (!taskbarWnd) {
         // No taskbar thread is available to release UI objects. Keep the heap-backed references alive rather than releasing them from this thread.
         RemoveTaskbarSubclassesFromAnyThread();
+
         return;
     }
 
     if (!RunFromWindowThread(taskbarWnd, UninitFromTaskbarThread, taskbarWnd)) {
-        Wh_Log(L"taskbar cleanup could not run; removing subclasses synchronously and retaining XAML references");
+        Wh_Log(L"taskbar cleanup could not run, removing subclasses synchronously and retaining XAML references");
         RemoveTaskbarSubclassesFromAnyThread();
     }
 }
@@ -6322,6 +7654,8 @@ void Wh_ModBeforeUninit() {
 void Wh_ModSettingsChanged() {
     Wh_Log(L"settings changed");
     LoadSettings();
+    ClearStickyPlacement(nullptr);
+    ClearKeyboardPlacement();
     ClearSharedProxyFlyoutMonitorState();
     ClearCachedXamlBindingsSafely();
 
