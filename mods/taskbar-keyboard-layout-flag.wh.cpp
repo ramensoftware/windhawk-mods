@@ -2767,10 +2767,6 @@ void Wh_ModAfterInit() {
         }
     }
 
-    if (!CTaskBand_GetTaskbarHost_Orig) {
-        HookTaskbarDllSymbols();
-    }
-
     if (HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd()) {
         RunFromWindowThread(hTaskbarWnd, ScanExistingIndicatorsOnUIThread, hTaskbarWnd);
     }
