@@ -10001,17 +10001,6 @@ bool IsWindowFullscreenOnMonitor(HWND hwnd, HMONITOR monitor) {
         return IsWindowFullscreenOnMonitor(root, monitor);
     }
 
-    // Maximized windows respect the work area / title bar and are never fullscreen.
-    if (IsZoomed(hwnd)) {
-        return false;
-    }
-
-    // Standard titled resizable desktop windows are not fullscreen apps.
-    LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
-    if (((style & WS_CAPTION) == WS_CAPTION) && (style & WS_THICKFRAME)) {
-        return false;
-    }
-
     if (MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) != monitor) {
         return false;
     }
@@ -10028,10 +10017,33 @@ bool IsWindowFullscreenOnMonitor(HWND hwnd, HMONITOR monitor) {
     }
 
     const LONG tol = 4;
-    return r.left   <= mi.rcMonitor.left   + tol &&
-           r.top    <= mi.rcMonitor.top    + tol &&
-           r.right  >= mi.rcMonitor.right  - tol &&
-           r.bottom >= mi.rcMonitor.bottom - tol;
+    bool coversMonitor =
+        r.left   <= mi.rcMonitor.left   + tol &&
+        r.top    <= mi.rcMonitor.top    + tol &&
+        r.right  >= mi.rcMonitor.right  - tol &&
+        r.bottom >= mi.rcMonitor.bottom - tol;
+    if (!coversMonitor) {
+        return false;
+    }
+
+    // Apps entering fullscreen from a maximized state (e.g. browsers, Electron,
+    // video players) often keep WS_MAXIMIZE set while stripping their frame or
+    // expanding past rcWork to cover rcMonitor. Only reject standard framed
+    // desktop windows when the monitor has no reserved work area (rcWork == rcMonitor).
+    LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+    bool hasStandardFrame = ((style & WS_CAPTION) == WS_CAPTION) && (style & WS_THICKFRAME);
+    if (hasStandardFrame) {
+        bool workAreaSmaller =
+            mi.rcWork.left   > mi.rcMonitor.left   + tol ||
+            mi.rcWork.top    > mi.rcMonitor.top    + tol ||
+            mi.rcWork.right  < mi.rcMonitor.right  - tol ||
+            mi.rcWork.bottom < mi.rcMonitor.bottom - tol;
+        if (!workAreaSmaller) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 void DemoteTopBarForFullscreen() {
@@ -10119,7 +10131,6 @@ bool IsTrueFullscreen() {
     GetWindowThreadProcessId(fg, &fgPid);
     if (fgPid == GetCurrentProcessId()) return false;
     if (IsShellOrOverlayWindow(fg)) return false;
-    if (IsZoomed(fg)) return false;
     if (barMon && MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST) != barMon) return false;
 
     HMONITOR targetMon = barMon ? barMon : MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST);
@@ -43621,9 +43632,12 @@ void ApplyUserTopBarCornerOverrides() {
         if (auto it = g_namedElements.find(L"TopBarRoot"); it != g_namedElements.end() && it->second) {
             SetElementCornerAndClip(it->second, r, false);
         }
-        for (PCWSTR layerName : { L"GlobalBlurLayer", L"BleedLayer", L"BleedBlurLayer" }) {
-            if (auto it = g_namedElements.find(layerName); it != g_namedElements.end() && it->second) {
-                SetElementCornerAndClip(it->second, r, false);
+        if (auto it = g_namedElements.find(L"GlobalBlurLayer"); it != g_namedElements.end() && it->second) {
+            SetElementCornerAndClip(it->second, r, false);
+        }
+        for (PCWSTR bleedName : { L"BleedLayer", L"BleedBlurLayer" }) {
+            if (auto it = g_namedElements.find(bleedName); it != g_namedElements.end() && it->second) {
+                SetElementCornerAndClip(it->second, 0.0, false);
             }
         }
         try { ApplyTopBarMicaShape(); } catch (...) {}
@@ -56737,7 +56751,7 @@ HMONITOR GetBarMonitor();
 
 void BleedTick() {
     if (g_settings.disableTitleBarBleed || g_settings.topBarBehaviour != L"default" ||
-        g_topBarAutoHidden.load() || g_fullScreenAppActive) {
+        g_topBarAutoHidden.load() || g_fullScreenAppActive || IsAnyFullscreenActive()) {
         if (g_bleedActive.exchange(false)) BleedApply(false, nullptr);
         return;
     }
@@ -57016,6 +57030,7 @@ FrameworkElement BuildTopBarContent() {
     bleedLayer.VerticalAlignment(VerticalAlignment::Stretch);
     bleedLayer.IsHitTestVisible(false);
     bleedLayer.Visibility(Visibility::Collapsed);
+    bleedLayer.CornerRadius(MakeCorner(0));
     bleedLayer.Background(MakeBrush(0, 0, 0, 0));
     barRoot.Children().InsertAt(1, bleedLayer);
     RegisterNamed(L"BleedLayer", bleedLayer);
@@ -57029,6 +57044,7 @@ FrameworkElement BuildTopBarContent() {
     bleedBlurLayer.VerticalAlignment(VerticalAlignment::Stretch);
     bleedBlurLayer.IsHitTestVisible(false);
     bleedBlurLayer.Visibility(Visibility::Collapsed);
+    bleedBlurLayer.CornerRadius(MakeCorner(0));
     bleedBlurLayer.Background(MakeBrush(0, 0, 0, 0));
     barRoot.Children().InsertAt(2, bleedBlurLayer);
     RegisterNamed(L"BleedBlurLayer", bleedBlurLayer);
