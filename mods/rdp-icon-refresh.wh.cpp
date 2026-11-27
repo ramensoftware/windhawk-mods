@@ -90,8 +90,9 @@ registered while the mod was running are refreshed.
   $name: Refresh after the screen resolution changes
   $description: >-
     Also refresh the icons after a program changes the screen resolution and restores it
-    (a game, a full-screen application). The refresh waits for the delay above, and for a
-    full-screen application to end.
+    (a game, a full-screen application); also after other display changes, such as a
+    monitor being plugged in or waking up. The refresh waits for the delay above, and for
+    a full-screen application to end.
 - refreshOnLoad: false
   $name: Refresh once when the mod is loaded
   $description: Useful to test the refresh, or to fix icons right after enabling the mod.
@@ -691,6 +692,7 @@ void OnSettleTick(HWND hwnd) {
         if (g_displayPending) {  // a mode change came while the watch was running
             g_displayPending = false;
             g_displayRetries = 0;
+            g_displayDeferredLogged = false;
             SetTimer(hwnd, kDisplayTimer, wait * 1000, nullptr);
         }
     }
