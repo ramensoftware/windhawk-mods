@@ -1687,14 +1687,18 @@ void ScanAndAttachWin10Indicators() {
         }
     }
 
-    HWND primaryTray = FindWindowW(L"Shell_TrayWnd", nullptr);
+    HWND primaryTray = FindCurrentProcessTaskbarWnd();
     if (primaryTray) {
         EnumChildWindows(primaryTray, EnumAndAttachWin10Proc, 0);
     }
 
+    DWORD currentPid = GetCurrentProcessId();
     HWND secondaryTray = nullptr;
     while ((secondaryTray = FindWindowExW(nullptr, secondaryTray, L"Shell_SecondaryTrayWnd", nullptr)) != nullptr) {
-        EnumChildWindows(secondaryTray, EnumAndAttachWin10Proc, 0);
+        DWORD pid = 0;
+        if (GetWindowThreadProcessId(secondaryTray, &pid) && pid == currentPid) {
+            EnumChildWindows(secondaryTray, EnumAndAttachWin10Proc, 0);
+        }
     }
 }
 
@@ -2271,17 +2275,16 @@ void WINAPI IconView_OnPointerEntered_Hook(void* pThis, void* pArgs) {
     }
 }
 
+void* CTaskBand_ITaskListWndSite_vftable = nullptr;
+
 using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis, void** result);
 CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Orig = nullptr;
-
-using std_shared_ptr_TaskbarHost_dtor_t = void(WINAPI*)(void* pThis);
-std_shared_ptr_TaskbarHost_dtor_t std_shared_ptr_TaskbarHost_dtor_Orig = nullptr;
 
 using TaskbarHost_FrameHeight_t = int(WINAPI*)(void* pThis);
 TaskbarHost_FrameHeight_t TaskbarHost_FrameHeight_Orig = nullptr;
 
-using TaskbarHost_GetFrame_t = void*(WINAPI*)(void* pThis, void** result);
-TaskbarHost_GetFrame_t TaskbarHost_GetFrame_Orig = nullptr;
+using std__Ref_count_base__Decref_t = void(WINAPI*)(void* pThis);
+std__Ref_count_base__Decref_t std__Ref_count_base__Decref_Orig = nullptr;
 
 wux::XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
     if (!taskbarHostSharedPtr || !taskbarHostSharedPtr[0]) {
@@ -2291,35 +2294,45 @@ wux::XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
     size_t taskbarElementIUnknownOffset = 0x10;
 
 #if defined(_M_X64)
-    if (TaskbarHost_FrameHeight_Orig) {
-        // 48:83EC 28 | sub rsp, 28
-        // 48:8B49 10 | mov rcx, qword ptr ds:[rcx+10]
-        const BYTE* b = reinterpret_cast<const BYTE*>(TaskbarHost_FrameHeight_Orig);
-        if (b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC &&
-            b[4] == 0x48 && b[5] == 0x8B && b[6] == 0x49) {
+    {
+        // 48:83EC 28 | sub rsp,28
+        // 48:83C1 10 | add rcx,10
+        const BYTE* b = (const BYTE*)TaskbarHost_FrameHeight_Orig;
+        if (b && b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC &&
+            b[4] == 0x48 && b[5] == 0x83 && b[6] == 0xC1) {
             taskbarElementIUnknownOffset = b[7];
+        } else {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight offset");
         }
     }
 #elif defined(_M_ARM64)
-    if (TaskbarHost_GetFrame_Orig) {
-        // F9400800 | ldr x0, [x0, #0x10]
-        const uint32_t* insn = reinterpret_cast<const uint32_t*>(TaskbarHost_GetFrame_Orig);
-        if ((insn[0] & 0xFFC003FF) == 0xF9400000) {
-            taskbarElementIUnknownOffset = ((insn[0] >> 10) & 0xFFF) << 3;
+    {
+        // d503237f | pacibsp
+        // a9bf7bfd | stp x29,x30,[sp,#-0x10]!
+        // 910003fd | mov x29,sp
+        // f8410c08 | ldr x8,[x0,#0x10]!
+        const uint32_t* b = (const uint32_t*)TaskbarHost_FrameHeight_Orig;
+        if (b && b[0] == 0xD503237F && (b[1] & 0xFFC07FFF) == 0xA9807BFD &&
+            b[2] == 0x910003FD && (b[3] & 0xFFE00FFF) == 0xF8400C08) {
+            taskbarElementIUnknownOffset = (b[3] >> 12) & 0xFF;
+        } else {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight offset");
         }
     }
+#else
+#error "Unsupported architecture"
 #endif
 
-    auto* taskbarElementIUnknown = *reinterpret_cast<IUnknown**>(
-        reinterpret_cast<BYTE*>(taskbarHostSharedPtr[0]) + taskbarElementIUnknownOffset);
+    auto* taskbarElementIUnknown = *(IUnknown**)((BYTE*)taskbarHostSharedPtr[0] + taskbarElementIUnknownOffset);
     if (!taskbarElementIUnknown) {
         return nullptr;
     }
 
     wux::FrameworkElement taskbarElement{ nullptr };
-    if (FAILED(taskbarElementIUnknown->QueryInterface(
-            winrt::guid_of<wux::FrameworkElement>(), winrt::put_abi(taskbarElement))) ||
-        !taskbarElement) {
+    taskbarElementIUnknown->QueryInterface(
+        winrt::guid_of<wux::FrameworkElement>(),
+        winrt::put_abi(taskbarElement));
+    if (!taskbarElement) {
         return nullptr;
     }
 
@@ -2327,28 +2340,44 @@ wux::XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
 }
 
 wux::XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
-    if (!hTaskbarWnd || !CTaskBand_GetTaskbarHost_Orig || !std_shared_ptr_TaskbarHost_dtor_Orig) {
+    if (!hTaskbarWnd ||
+        !CTaskBand_ITaskListWndSite_vftable ||
+        !CTaskBand_GetTaskbarHost_Orig ||
+        !TaskbarHost_FrameHeight_Orig ||
+        !std__Ref_count_base__Decref_Orig) {
         return nullptr;
     }
 
-    HWND hTaskSwWnd = FindWindowExW(hTaskbarWnd, nullptr, L"MSTaskSwWClass", nullptr);
+    HWND hTaskSwWnd = (HWND)GetPropW(hTaskbarWnd, L"TaskbandHWND");
     if (!hTaskSwWnd) {
         return nullptr;
     }
 
-    void* taskBand = reinterpret_cast<void*>(GetWindowLongPtrW(hTaskSwWnd, 0));
+    void* taskBand = (void*)GetWindowLongPtrW(hTaskSwWnd, 0);
     if (!taskBand) {
         return nullptr;
     }
 
+    void* taskBandForITaskListWndSite = taskBand;
+    for (int i = 0; *(void**)taskBandForITaskListWndSite != CTaskBand_ITaskListWndSite_vftable; i++) {
+        if (i == 20) {
+            return nullptr;
+        }
+        taskBandForITaskListWndSite = (void**)taskBandForITaskListWndSite + 1;
+    }
+
     void* taskbarHostSharedPtr[2] = { nullptr, nullptr };
-    CTaskBand_GetTaskbarHost_Orig(taskBand, taskbarHostSharedPtr);
+    CTaskBand_GetTaskbarHost_Orig(taskBandForITaskListWndSite, taskbarHostSharedPtr);
     if (!taskbarHostSharedPtr[0]) {
         return nullptr;
     }
 
     wux::XamlRoot xamlRoot = XamlRootFromTaskbarHostSharedPtr(taskbarHostSharedPtr);
-    std_shared_ptr_TaskbarHost_dtor_Orig(taskbarHostSharedPtr);
+
+    if (taskbarHostSharedPtr[1]) {
+        std__Ref_count_base__Decref_Orig(taskbarHostSharedPtr[1]);
+    }
+
     return xamlRoot;
 }
 
@@ -2360,29 +2389,29 @@ bool HookTaskbarDllSymbols() {
 
     WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {
-            { L"public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const " },
+            { LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})" },
+            &CTaskBand_ITaskListWndSite_vftable,
+            nullptr,
+            true
+        },
+        {
+            { LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )" },
             &CTaskBand_GetTaskbarHost_Orig,
             nullptr,
             true
         },
         {
-            { L"public: __cdecl std::shared_ptr<class TaskbarHost>::~shared_ptr<class TaskbarHost>(void)" },
-            &std_shared_ptr_TaskbarHost_dtor_Orig,
-            nullptr,
-            true
-        },
-        {
-            { L"public: int __cdecl TaskbarHost::FrameHeight(void)const " },
+            { LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )" },
             &TaskbarHost_FrameHeight_Orig,
             nullptr,
             true
         },
         {
-            { L"public: class winrt::Windows::UI::Xaml::Controls::Frame __cdecl TaskbarHost::GetFrame(void)const " },
-            &TaskbarHost_GetFrame_Orig,
+            { LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))" },
+            &std__Ref_count_base__Decref_Orig,
             nullptr,
             true
-        }
+        },
     };
 
     return WindhawkUtils::HookSymbols(taskbarMod, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
@@ -2600,7 +2629,7 @@ HWND WINAPI CreateWindowExW_Hook(
         if (GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) > 0) {
             if (wcscmp(cls, L"TrayInputIndicatorWClass") == 0) {
                 AttachWin10IndicatorWindow(hwnd);
-                HWND primaryTray = FindWindowW(L"Shell_TrayWnd", nullptr);
+                HWND primaryTray = FindCurrentProcessTaskbarWnd();
                 if (primaryTray) {
                     AttachShellTrayWatchdog(primaryTray);
                 }
@@ -2698,7 +2727,7 @@ BOOL Wh_ModInit() {
         hasWin10Indicators = !g_subclassedIndicators.empty();
     }
     if (hasWin10Indicators) {
-        HWND shellTray = FindWindowW(L"Shell_TrayWnd", nullptr);
+        HWND shellTray = FindCurrentProcessTaskbarWnd();
         if (shellTray) {
             AttachShellTrayWatchdog(shellTray);
         }
@@ -2736,6 +2765,10 @@ void Wh_ModAfterInit() {
                 }
             }
         }
+    }
+
+    if (!CTaskBand_GetTaskbarHost_Orig) {
+        HookTaskbarDllSymbols();
     }
 
     if (HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd()) {
