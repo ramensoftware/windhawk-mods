@@ -58,7 +58,8 @@ re-imagined as a lightweight Windhawk mod with no Electron runtime.
   system-wide mouse hook; turn it on by setting a step in the settings.
 - **Tray menu:** refresh displays, turn all displays or a single monitor off,
   pause automatic brightness, and copy display names/IDs for use in the
-  settings.
+  settings. A monitor turned off on its own is turned on again when the mod
+  exits or Windows turns the displays on.
 - **Changes from elsewhere:** levels changed with the laptop's brightness keys
   or the Windows slider show up right away. Monitors don't report changes made
   with their own buttons, so their levels are read again before a hotkey step.
@@ -354,6 +355,7 @@ enum class SnapshotKind {
     Enumerated,  // Displays detected again
     Probed,      // Monitors that didn't answer were tried again, in vain
     ProbeFound,  // A monitor that didn't answer answered now (not a full read)
+    Power,       // Monitors were turned off or on
 };
 
 enum class OsdPosition {
@@ -637,7 +639,8 @@ bool ParseHotkey(const std::wstring& text, UINT* modifiers, UINT* vk) {
 
 // A list of levels such as "20, 50, 100". Commas, semicolons and spaces
 // separate the entries, and a trailing "%" is allowed. Invalid entries are
-// skipped, and levels are clamped to 0-100.
+// skipped, levels are clamped to 0-100, and repeats next to each other are
+// merged.
 std::vector<int> ParseLevelList(const std::wstring& text) {
     std::vector<int> levels;
     size_t i = 0;
@@ -660,6 +663,12 @@ std::vector<int> ParseLevelList(const std::wstring& text) {
             continue;
         }
         levels.push_back((int)std::clamp(value, 0L, 100L));
+    }
+    // Repeated neighbors (also after clamping, like "100, 120") would make
+    // the cycle stop at that level.
+    levels.erase(std::unique(levels.begin(), levels.end()), levels.end());
+    if (levels.size() > 1 && levels.back() == levels.front()) {
+        levels.pop_back();
     }
     return levels;
 }
@@ -811,6 +820,9 @@ struct DisplayInfo {
     // requests after a while without traffic, and right after startup Windows
     // may not have a DDC/CI handle for them yet, so the UI detects again later.
     bool ddcFailed = false;
+    // A DDC/CI monitor turned off with the power mode command. Windows still
+    // sees it as on. Its brightness isn't read or written meanwhile.
+    bool off = false;
 };
 
 std::atomic<HWND> g_hwndMain;
@@ -826,6 +838,7 @@ struct HwDisplay {
     DisplayInfo info;
     HANDLE physical = nullptr;
     DWORD vcpMax = 100;
+    bool rawPending = false;  // info.raw is written when it's turned on
     std::wstring wmiNormalized;
     std::wstring wmiPath;
 };
@@ -841,10 +854,16 @@ bool g_busy = false;
 std::condition_variable g_idleCv;
 std::map<std::wstring, int> g_pendingSet;
 std::map<std::wstring, bool> g_pendingPower;  // DDC/CI monitors: on or off
+bool g_forgetPowerOff = false;  // After sleep: the monitors are on again
+// Power requests, counted so that the UI can tell whether a snapshot
+// already includes the latest one.
+unsigned g_powerRequestSeq = 0;
+unsigned g_snapshotPowerSeq = 0;
 std::vector<DisplayInfo> g_snapshot;
 
 // Worker thread only.
 std::vector<HwDisplay> g_displays;
+unsigned g_powerTakenSeq = 0;
 IWbemServices* g_wmi = nullptr;
 
 constexpr BYTE VCP_BRIGHTNESS = 0x10;
@@ -1130,6 +1149,13 @@ void DestroyDisplays() {
 }
 
 void Enumerate() {
+    // Monitors that are off may not answer, so they keep their state.
+    std::map<std::wstring, HwDisplay> offBefore;
+    for (const auto& d : g_displays) {
+        if (d.info.off) {
+            offBefore[d.info.key] = d;
+        }
+    }
     DestroyDisplays();
 
     if (!g_wmi) {
@@ -1252,8 +1278,15 @@ void Enumerate() {
                 d.info.raw = it != wmiBrightness.end() ? it->second : -1;
             };
 
+            auto off = offBefore.find(d.info.key);
             if (wmiIndex >= 0 && d.info.internal) {
                 useWmi();
+            } else if (off != offBefore.end() && d.physical) {
+                d.info.method = Method::Ddc;
+                d.info.off = true;
+                d.info.raw = off->second.info.raw;
+                d.vcpMax = off->second.vcpMax;
+                d.rawPending = off->second.rawPending;
             } else {
                 DWORD current, maximum;
                 if (d.physical && DdcGet(d.physical, &current, &maximum, 5)) {
@@ -1293,7 +1326,7 @@ void Refresh(bool wmiOnly) {
     std::map<std::wstring, int> wmiBrightness;
     bool wmiRead = false;
     for (auto& d : g_displays) {
-        if (d.info.method == Method::Ddc && !wmiOnly) {
+        if (d.info.method == Method::Ddc && !wmiOnly && !d.info.off) {
             DWORD current, maximum;
             if (DdcGet(d.physical, &current, &maximum)) {
                 d.vcpMax = maximum;
@@ -1354,7 +1387,12 @@ std::map<std::wstring, int> ApplyAll(const std::map<std::wstring, int>& sets) {
     for (const auto& [key, raw] : sets) {
         for (auto& d : g_displays) {
             if (d.info.key == key) {
-                if (!Apply(d, raw)) {
+                if (d.info.off) {
+                    // Some monitors wake up on a write: keep the level for
+                    // when it's turned on.
+                    d.info.raw = raw;
+                    d.rawPending = true;
+                } else if (!Apply(d, raw)) {
                     failed[key] = raw;
                 }
                 break;
@@ -1364,10 +1402,13 @@ std::map<std::wstring, int> ApplyAll(const std::map<std::wstring, int>& sets) {
     return failed;
 }
 
+// A monitor that is off may not answer brightness reads, for example after
+// a restart of the mod, so any monitor with a DDC/CI handle can be turned on.
 void ApplyPower(const std::map<std::wstring, bool>& requests) {
     for (const auto& [key, on] : requests) {
         for (auto& d : g_displays) {
-            if (d.info.key != key || d.info.method != Method::Ddc) {
+            if (d.info.key != key || !d.physical ||
+                (!on && d.info.method != Method::Ddc)) {
                 continue;
             }
             bool ok = false;
@@ -1378,9 +1419,18 @@ void ApplyPower(const std::map<std::wstring, bool>& requests) {
                 }
             }
             if (!ok) {
+                // The UI shows the state the monitor is still in.
                 Wh_Log(L"Turning %s %s failed (error 0x%08X)",
                        d.info.name.c_str(), on ? L"on" : L"off",
                        GetLastError());
+                break;
+            }
+            d.info.off = !on;
+            if (on && d.rawPending) {
+                d.rawPending = false;
+                if (d.info.method == Method::Ddc) {
+                    Apply(d, d.info.raw);
+                }
             }
             break;
         }
@@ -1395,6 +1445,7 @@ void Publish(SnapshotKind kind) {
     {
         std::lock_guard<std::mutex> lock(g_mutex);
         g_snapshot = std::move(infos);
+        g_snapshotPowerSeq = g_powerTakenSeq;
     }
     if (HWND hwnd = g_hwndMain) {
         PostMessage(hwnd, WM_APP_SNAPSHOT, (WPARAM)kind, 0);
@@ -1515,13 +1566,14 @@ DWORD WINAPI WorkerThread(LPVOID) {
         bool enumerate, refresh, refreshWmi, probe, stop;
         std::map<std::wstring, int> sets;
         std::map<std::wstring, bool> power;
+        bool forgetPowerOff;
         {
             std::unique_lock<std::mutex> lock(g_mutex);
             auto ready = [] {
                 return g_requestEnumerate || g_requestRefresh ||
                        g_requestRefreshWmi || g_requestProbe ||
                        g_requestStop || !g_pendingSet.empty() ||
-                       !g_pendingPower.empty();
+                       !g_pendingPower.empty() || g_forgetPowerOff;
             };
             while (!ready()) {
                 if (!g_wmiRecheckAt) {
@@ -1543,6 +1595,8 @@ DWORD WINAPI WorkerThread(LPVOID) {
             stop = g_requestStop;
             sets.swap(g_pendingSet);
             power.swap(g_pendingPower);
+            forgetPowerOff = std::exchange(g_forgetPowerOff, false);
+            g_powerTakenSeq = g_powerRequestSeq;
             g_requestEnumerate = false;
             g_requestRefresh = false;
             g_requestRefreshWmi = false;
@@ -1550,8 +1604,18 @@ DWORD WINAPI WorkerThread(LPVOID) {
             g_busy = true;
         }
 
-        std::map<std::wstring, int> failed = ApplyAll(sets);
+        if (forgetPowerOff) {
+            for (auto& d : g_displays) {
+                d.info.off = false;
+                if (d.rawPending) {
+                    d.rawPending = false;
+                    sets.try_emplace(d.info.key, d.info.raw);
+                }
+            }
+        }
+        // Turned on first, so that a level set meanwhile is written.
         ApplyPower(power);
+        std::map<std::wstring, int> failed = ApplyAll(sets);
         // A failed write usually means stale handles (after sleep or a display
         // change), so enumerate again and retry. Rate-limited, so that a
         // monitor that answers reads but rejects writes doesn't cause an
@@ -1584,14 +1648,20 @@ DWORD WINAPI WorkerThread(LPVOID) {
         if (!enumerate && (refresh || refreshWmi)) {
             Refresh(!refresh);
             Publish(refresh ? SnapshotKind::AllLevels : SnapshotKind::WmiLevels);
+        } else if (!enumerate && !probe && (!power.empty() || forgetPowerOff)) {
+            Publish(SnapshotKind::Power);
         }
 
         if (stop) {
             std::map<std::wstring, int> rest;
+            std::map<std::wstring, bool> restPower;
             {
                 std::lock_guard<std::mutex> lock(g_mutex);
                 rest.swap(g_pendingSet);
+                restPower.swap(g_pendingPower);
             }
+            // Monitors turned on when the mod exits (see Shutdown).
+            ApplyPower(restPower);
             ApplyAll(rest);
             break;
         }
@@ -1640,6 +1710,17 @@ void RequestSet(const std::wstring& key, int raw) {
 void RequestPower(const std::wstring& key, bool on) {
     std::lock_guard<std::mutex> lock(g_mutex);
     g_pendingPower[key] = on;
+    g_powerRequestSeq++;
+    g_cv.notify_one();
+}
+
+// Forgets which monitors are off, for example after sleep, which turns them
+// on.
+void ForgetPowerOff() {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    g_pendingPower.clear();
+    g_forgetPowerOff = true;
+    g_powerRequestSeq++;
     g_cv.notify_one();
 }
 
@@ -1649,8 +1730,13 @@ void RequestStop() {
     g_cv.notify_one();
 }
 
-std::vector<DisplayInfo> TakeSnapshot() {
+// powerCurrent: whether the snapshot includes all power requests, so that
+// its power states can replace the UI's.
+std::vector<DisplayInfo> TakeSnapshot(bool* powerCurrent = nullptr) {
     std::lock_guard<std::mutex> lock(g_mutex);
+    if (powerCurrent) {
+        *powerCurrent = g_snapshotPowerSeq == g_powerRequestSeq;
+    }
     return g_snapshot;
 }
 
@@ -1722,10 +1808,20 @@ int g_autoReenumCount;  // Automatic re-detections since the last trigger
 DWORD g_lastHwReadTick;
 std::vector<int> g_deferredHotkeys;
 int g_deferredWheelSteps;  // Brightness steps from the tray icon's wheel
+HMONITOR g_deferredWheelMonitor;
 // DDC/CI monitors turned off on their own with the power mode command.
 // Windows still sees them as on, so they stay off until turned on again.
 std::set<std::wstring> g_displaysOff;
-HHOOK g_mouseHook;
+void SaveDisplaysOff();
+HANDLE g_mouseHookThread;
+DWORD g_mouseHookThreadId;
+HPOWERNOTIFY g_displayStateNotify;
+// GUID_CONSOLE_DISPLAY_STATE
+constexpr GUID kConsoleDisplayState = {
+    0x6fe69556,
+    0x704a,
+    0x47a0,
+    {0x8f, 0x24, 0xc2, 0x8d, 0x93, 0x6f, 0xda, 0x47}};
 bool g_resumeCatchUp;
 int g_registeredHotkeys;
 std::wstring g_storagePrefix;
@@ -2867,7 +2963,35 @@ bool ToggleDisplaysPower(const std::vector<UiDisplay*>& displays) {
         }
         hw::RequestPower(d->info.key, allOff);
     }
+    SaveDisplaysOff();
     return true;
+}
+
+// Turns on the monitors that the mod turned off: when the mod exits, and
+// when Windows turns the displays on again, which doesn't wake them.
+void TurnOnDisplaysOff() {
+    for (const auto& key : g_displaysOff) {
+        hw::RequestPower(key, true);
+    }
+    if (!g_displaysOff.empty()) {
+        g_displaysOff.clear();
+        SaveDisplaysOff();
+    }
+}
+
+// The worker's power states, once it has handled all requests: a failed
+// command leaves the monitor in its state.
+void SyncDisplaysOff(const std::vector<DisplayInfo>& snapshot) {
+    std::set<std::wstring> off;
+    for (const auto& info : snapshot) {
+        if (info.off) {
+            off.insert(info.key);
+        }
+    }
+    if (off != g_displaysOff) {
+        g_displaysOff = std::move(off);
+        SaveDisplaysOff();
+    }
 }
 
 LRESULT CALLBACK PanelWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -3441,10 +3565,14 @@ void ReadLevelsFirst() {
 
 // The mouse wheel over the tray icon: all displays, from their average while
 // linked, or each from its own level while unlinked.
-void StepFromTrayWheel(int steps, bool levelsFresh = false) {
+// The indicator appears on the monitor with the icon.
+void StepFromTrayWheel(int steps,
+                       HMONITOR monitor,
+                       bool levelsFresh = false) {
     if (!levelsFresh && NeedFreshLevels()) {
         bool waiting = WaitingForLevels();
         g_deferredWheelSteps += steps;
+        g_deferredWheelMonitor = monitor;
         if (!waiting) {
             ReadLevelsFirst();
         }
@@ -3452,7 +3580,7 @@ void StepFromTrayWheel(int steps, bool levelsFresh = false) {
     }
     std::vector<UiDisplay*> targets = ControllableDisplays();
     ChangeDisplays(targets, steps * g_settings.trayScrollStep, -1, g_linked);
-    ShowOsd(targets, nullptr);
+    ShowOsd(targets, monitor);
 }
 
 void OnHotkey(int id, bool levelsFresh = false) {
@@ -3544,13 +3672,15 @@ void RunDeferredHotkeys() {
         OnHotkey(id, true);
     }
     if (wheelSteps) {
-        StepFromTrayWheel(wheelSteps, true);
+        StepFromTrayWheel(wheelSteps, g_deferredWheelMonitor, true);
     }
 }
 
 // Tray icons don't get mouse wheel messages, so a low-level mouse hook
 // watches the wheel, and the main window checks whether it turned over the
-// icon. Nothing else is done in the hook, so that the mouse never lags.
+// icon. Windows waits for the hook's thread on every mouse event, so the hook
+// has a thread that does nothing else, and the hook only posts a message:
+// the mouse never lags, and the hook doesn't time out.
 LRESULT CALLBACK MouseHookProc(int code, WPARAM wParam, LPARAM lParam) {
     if (code == HC_ACTION && wParam == WM_MOUSEWHEEL) {
         auto* info = (const MSLLHOOKSTRUCT*)lParam;
@@ -3563,17 +3693,47 @@ LRESULT CALLBACK MouseHookProc(int code, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(nullptr, code, wParam, lParam);
 }
 
+DWORD WINAPI MouseHookThread(LPVOID readyEvent) {
+    MSG msg;
+    // Create the message queue before WM_QUIT can be posted to it.
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    SetEvent((HANDLE)readyEvent);
+    HHOOK hook = SetWindowsHookExW(WH_MOUSE_LL, MouseHookProc, g_module, 0);
+    if (!hook) {
+        Wh_Log(L"SetWindowsHookEx failed (error %u)", GetLastError());
+    }
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+    }
+    if (hook) {
+        UnhookWindowsHookEx(hook);
+    }
+    return 0;
+}
+
+void StopMouseHookThread() {
+    if (g_mouseHookThread) {
+        PostThreadMessageW(g_mouseHookThreadId, WM_QUIT, 0, 0);
+        WaitForSingleObject(g_mouseHookThread, INFINITE);
+        CloseHandle(g_mouseHookThread);
+        g_mouseHookThread = nullptr;
+    }
+}
+
 void UpdateMouseHook() {
     bool want = g_settings.trayScrollStep > 0;
-    if (want && !g_mouseHook) {
-        g_mouseHook =
-            SetWindowsHookExW(WH_MOUSE_LL, MouseHookProc, g_module, 0);
-        if (!g_mouseHook) {
-            Wh_Log(L"SetWindowsHookEx failed (error %u)", GetLastError());
+    if (want && !g_mouseHookThread) {
+        HANDLE ready = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        if (!ready) {
+            return;
         }
-    } else if (!want && g_mouseHook) {
-        UnhookWindowsHookEx(g_mouseHook);
-        g_mouseHook = nullptr;
+        g_mouseHookThread = CreateThread(nullptr, 0, MouseHookThread, ready,
+                                         0, &g_mouseHookThreadId);
+        if (g_mouseHookThread) {
+            WaitForSingleObject(ready, INFINITE);
+        }
+        CloseHandle(ready);
+    } else if (!want) {
+        StopMouseHookThread();
     }
 }
 
@@ -3596,7 +3756,7 @@ void OnMouseWheel(POINT pt, int delta) {
     int steps = accumulator / WHEEL_DELTA;
     accumulator %= WHEEL_DELTA;
     if (steps) {
-        StepFromTrayWheel(steps);
+        StepFromTrayWheel(steps, MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST));
     }
 }
 
@@ -3761,6 +3921,41 @@ void SaveIdleRestore() {
         Wh_DeleteValue(StorageName(L"idleRestoreKey", i).c_str());
         Wh_DeleteValue(StorageName(L"idleRestoreValue", i).c_str());
     }
+}
+
+// The monitors that are off, so that the next start turns them on if the mod
+// couldn't (for example when Windhawk was ended).
+void SaveDisplaysOff() {
+    int oldCount = Wh_GetIntValue(StorageName(L"displaysOffCount").c_str(), 0);
+    int n = 0;
+    for (const auto& key : g_displaysOff) {
+        Wh_SetStringValue(StorageName(L"displaysOffKey", n).c_str(),
+                          key.c_str());
+        n++;
+    }
+    if (n) {
+        Wh_SetIntValue(StorageName(L"displaysOffCount").c_str(), n);
+    } else if (oldCount) {
+        Wh_DeleteValue(StorageName(L"displaysOffCount").c_str());
+    }
+    for (int i = n; i < oldCount; i++) {
+        Wh_DeleteValue(StorageName(L"displaysOffKey", i).c_str());
+    }
+}
+
+// Called after the first enumeration.
+void TurnOnSavedDisplays() {
+    int count = Wh_GetIntValue(StorageName(L"displaysOffCount").c_str(), 0);
+    for (int i = 0; i < count && i < 64; i++) {
+        WCHAR key[512];
+        Wh_GetStringValue(StorageName(L"displaysOffKey", i).c_str(), key,
+                          ARRAYSIZE(key));
+        if (*key) {
+            Wh_Log(L"Turning on %s, which was left off", key);
+            hw::RequestPower(key, true);
+        }
+    }
+    SaveDisplaysOff();  // Clears the saved keys: none are off now.
 }
 
 void ClearSavedIdleRestore() {
@@ -4025,10 +4220,14 @@ void Shutdown() {
     g_fades.clear();
     KillTimer(g_hwndMain, TIMER_FADE);
     UnregisterHotkeys();
-    if (g_mouseHook) {
-        UnhookWindowsHookEx(g_mouseHook);
-        g_mouseHook = nullptr;
+    StopMouseHookThread();
+    if (g_displayStateNotify) {
+        UnregisterPowerSettingNotification(g_displayStateNotify);
+        g_displayStateNotify = nullptr;
     }
+    // Windows doesn't know that these monitors are off. The worker turns
+    // them on before it exits.
+    TurnOnDisplaysOff();
     RemoveTrayIcon();
     if (g_hwndPanel) {
         DestroyWindow(g_hwndPanel);
@@ -4075,8 +4274,12 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             // its own level was read.
             bool enumerated = kind == SnapshotKind::Enumerated ||
                               kind == SnapshotKind::ProbeFound;
-            g_lastSnapshot = hw::TakeSnapshot();
+            bool powerCurrent;
+            g_lastSnapshot = hw::TakeSnapshot(&powerCurrent);
             RebuildDisplays(g_lastSnapshot, true);
+            if (powerCurrent) {
+                SyncDisplaysOff(g_lastSnapshot);
+            }
             if (enumerated) {
                 UpdatePanel();  // The displays may have changed.
             } else if (IsWindowVisible(g_hwndPanel)) {
@@ -4089,7 +4292,7 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             if (kind == SnapshotKind::AllLevels ||
                 kind == SnapshotKind::Enumerated) {
                 g_lastHwReadTick = GetTickCount();
-                if (!g_deferredHotkeys.empty()) {
+                if (WaitingForLevels()) {
                     RunDeferredHotkeys();
                 }
             }
@@ -4102,6 +4305,7 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             if (!g_haveSnapshot) {
                 g_haveSnapshot = true;
                 RestoreSavedIdleLevels();
+                TurnOnSavedDisplays();
                 RunScheduleCheck(true);
             } else if (enumerated) {
                 // Entries skipped while re-enumerating, and the catch-up
@@ -4112,11 +4316,16 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         }
 
         case WM_QUERYENDSESSION:
-            // Don't leave the displays dimmed when the user signs out or
-            // shuts down while idle.
-            if (g_idleDimmed) {
-                RestoreFromIdle(true, true);
-                if (hw::WaitUntilIdle(3000)) {
+            // Don't leave the displays dimmed or off when the user signs out
+            // or shuts down.
+            {
+                bool idle = g_idleDimmed;
+                if (idle) {
+                    RestoreFromIdle(true, true);
+                }
+                bool power = !g_displaysOff.empty();
+                TurnOnDisplaysOff();
+                if ((idle || power) && hw::WaitUntilIdle(3000) && idle) {
                     ClearSavedIdleRestore();
                 }
             }
@@ -4184,7 +4393,23 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
                 g_resumeCatchUp = true;
                 // Waking up turns the monitors on.
                 g_displaysOff.clear();
+                SaveDisplaysOff();
+                hw::ForgetPowerOff();
                 SetTimer(hwnd, TIMER_REENUM, 3000, nullptr);
+            } else if (wParam == PBT_POWERSETTINGCHANGE && lParam) {
+                // Windows turned the displays on again, for example after
+                // "Turn off displays" or the display timeout: turn on the
+                // monitors that are off too, so that the menu stays right.
+                auto* setting = (const POWERBROADCAST_SETTING*)lParam;
+                if (IsEqualGUID(setting->PowerSetting, kConsoleDisplayState) &&
+                    setting->DataLength >= sizeof(DWORD)) {
+                    static DWORD lastState = 1;
+                    DWORD state = *(const DWORD*)setting->Data;
+                    if (state == 1 && lastState == 0) {
+                        TurnOnDisplaysOff();
+                    }
+                    lastState = state;
+                }
             }
             return TRUE;
 
@@ -4287,6 +4512,10 @@ DWORD WINAPI UiThread(LPVOID) {
     // elevated.
     ChangeWindowMessageFilterEx(main, g_taskbarCreatedMsg, MSGFLT_ALLOW,
                                 nullptr);
+    if (main) {
+        g_displayStateNotify = RegisterPowerSettingNotification(
+            main, &kConsoleDisplayState, DEVICE_NOTIFY_WINDOW_HANDLE);
+    }
 
     SetEvent(g_uiReadyEvent);
 
