@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-27T18:03:33.000Z</updated>
+    <updated>2026-11-27T23:04:05.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Zones 1.0.3]]></title>
+        <id>https://windhawk.net/mods/taskbar-zones#00422e32d01f864fef912325685e5a880c5f3455</id>
+        <link href="https://windhawk.net/mods/taskbar-zones"/>
+        <updated>2026-11-27T23:04:05.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed compatibility with newer Windows 11 builds where the mod stopped working (tested on build 26300).</li>
+<li>Fixed drag and drop never settling after a drop.</li>
+<li>Fixed apps changing zones when used with &quot;Disable grouping on the taskbar&quot;.</li>
+<li>Windows of the same app now stay next to each other and move together between positions and zones.</li>
+<li>Improved handling of app IDs that change or are briefly unavailable.</li>
+<li>Added separate icon spacing settings for the left and right zones. The default (0) keeps the standard spacing.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Luiz Bizzio</name>
+            <uri>https://github.com/luizbizzio</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Desktop Clock & Weather 1.0.8]]></title>
         <id>https://windhawk.net/mods/desktop-clock-weather#b7f94ea816d96ae84e77b656a5a741838ab908d4</id>
@@ -1158,27 +1177,6 @@ DirectUI, in the thread &quot;Secure restoration of Control Panel applets in Win
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Twinkle Brightness 1.2.0]]></title>
-        <id>https://windhawk.net/mods/twinkle-brightness#e54cd77948e634febaae4ccb6647c9080b546712</id>
-        <link href="https://windhawk.net/mods/twinkle-brightness"/>
-        <updated>2026-11-26T19:01:02.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Type an exact level: double-click a display's level in the panel, or press F2 or Enter on the focused row.</li>
-<li>The tray icon shows the brightness level: the sun's rays light up like a gauge. It can be turned off in the settings.</li>
-<li>New setting for the position of the on-screen indicator: the top or the bottom of the screen, centered or in a corner.</li>
-<li>Tooltips for the buttons at the bottom of the panel.</li>
-<li>Turkish translation of the panel, the menus and the settings.</li>
-<li>Brightness changes made outside the mod are picked up. Laptop screens report them right away, and monitors are read again before a hotkey step.</li>
-<li>Fixed: some monitors showed &quot;Brightness control is not available&quot; until the displays were refreshed by hand. DDC/CI reads are retried, and monitors that don't answer are detected again, up to three times in the first minute.</li>
-<li>Fixed: scrolling with a touchpad in the panel changed the brightness much too fast.</li>
-</ul>
-]]></content>
-        <author>
-            <name>isousluer</name>
-            <uri>https://github.com/isousluer</uri>
         </author>
     </entry>
 </feed>

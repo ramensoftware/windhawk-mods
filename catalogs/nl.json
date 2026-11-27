@@ -21378,7 +21378,7 @@
         "ratingUsers": 4,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1795024884000,
+        "updated": 1795820645000,
         "users": 52
       },
       "metadata": {
@@ -21396,7 +21396,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Taskbar Zones",
-        "version": "1.0.2"
+        "version": "1.0.3"
       }
     },
     "taskmgr-esc": {

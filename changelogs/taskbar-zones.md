@@ -1,3 +1,12 @@
+## 1.0.3 ([Nov 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/00422e32d01f864fef912325685e5a880c5f3455/mods/taskbar-zones.wh.cpp))
+
+- Fixed compatibility with newer Windows 11 builds where the mod stopped working (tested on build 26300).
+- Fixed drag and drop never settling after a drop.
+- Fixed apps changing zones when used with "Disable grouping on the taskbar".
+- Windows of the same app now stay next to each other and move together between positions and zones.
+- Improved handling of app IDs that change or are briefly unavailable.
+- Added separate icon spacing settings for the left and right zones. The default (0) keeps the standard spacing.
+
 ## 1.0.2 ([Nov 18, 2026](https://github.com/ramensoftware/windhawk-mods/blob/f2e0ed554398b8b91bcb5a9e92e8e8ea2f9ba9d3/mods/taskbar-zones.wh.cpp))
 
 - Made the left and right app zones adapt to the available taskbar space on each monitor.

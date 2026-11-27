@@ -405,6 +405,36 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/b5ff8c1c5e3932db133fce85e2a99b34db5602f3/mods/disable-usb-scan-fix.wh.cpp"
       }
     },
+    "dynamic-island-xshelt": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795820832381,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795820832381,
+        "users": 0
+      },
+      "metadata": {
+        "author": "xShelt",
+        "compilerOptions": "-lole32 -loleaut32 -lshcore -ld2d1 -ldwrite -ldwmapi -lgdi32 -luser32 -lshell32 -lruntimeobject -lwindowscodecs -lsetupapi -lwinhttp -lpdh -lwinmm",
+        "description": "A living pill overlay with media, clipboard, battery, weather and privacy indicators. xShelt edition with a fixed settings block.",
+        "github": "https://github.com/isn8409-source",
+        "homepage": "https://github.com/isn8409-source",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Dynamic Island for Windows (xShelt)",
+        "version": "1.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/8035",
+      "source": {
+        "sha256": "2245b72d4c23f5349e8158dd64cb5e4e4c4f3880341e2080ee692319b5f71bf4",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/8ff5f7b70cf0cacf6e77e1cbb67fc035e4799847/mods/dynamic-island-xshelt.wh.cpp"
+      }
+    },
     "explorer-font-size-changer": {
       "details": {
         "defaultSorting": 0,
@@ -739,6 +769,37 @@
       "source": {
         "sha256": "b7de54c92f8676fca8ff0bbe93c978bdd357c969d3406c7551774e6c8fe150df",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/6dbedd5cbee58eb9afcc1bd2b9bb671fd1aa6fb2/mods/native-audio-router.wh.cpp"
+      }
+    },
+    "start-orb": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795820832381,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795820832381,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "frozt",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
+        "description": "Turns the Windows 11 Start button into an animated orb: pick a built-in orb from a menu, or use your own picture",
+        "github": "https://github.com/Frozt-src",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Start Orb",
+        "version": "1.1.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7858",
+      "source": {
+        "sha256": "7b5b58b97ecf1090341002d5f4a75c9cad44bd64dce58f36cbb880227b0079db",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/ea388cccaa71fc4b932dab2ed3477d521fcd7181/mods/start-orb.wh.cpp"
       }
     },
     "swipe-for-10start": {
@@ -1204,6 +1265,34 @@
       "source": {
         "sha256": "a5a40d6247c7de54a6daaaf7f7e4e084fb53f14ca29fb35dabe5db5b4ff5295f",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/d6c26ce332b2eb14e42ee941a895f082e3207cf2/mods/ultimate-minimize-animation.wh.cpp"
+      }
+    },
+    "visible-wallpaper-without-explorer-exe": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795820832381,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795820832381,
+        "users": 0
+      },
+      "metadata": {
+        "author": "RandomGuy5747",
+        "compilerOptions": "-lgdi32 -lole32 -lshell32 -ladvapi32",
+        "description": "Restores the behavior of Windows 7 and prior where the wallpaper will still be shown even without explorer.exe",
+        "github": "https://github.com/RandomGuy5747",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Visible Wallpaper without explorer.exe",
+        "version": "1.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/8038",
+      "source": {
+        "sha256": "472e6589f4bf607bd54a74ad384c9e8d9f78b7aea0bbd959125078abaf0c0021",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/7c9717f5bc0a05f3646a785b08c916c538101688/mods/visible-wallpaper-without-explorer-exe.wh.cpp"
       }
     },
     "win7-biometric-devices-restorer": {
