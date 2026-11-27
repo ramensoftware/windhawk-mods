@@ -2,7 +2,7 @@
 // @id              alembiq-weather-desktop-overlay
 // @name            Desktop Weather & Particles Overlay
 // @description     Atmospheric effects and live weather forecast visualization for the Windows desktop (Direct2D overlay)
-// @version         3.2.7
+// @version         3.2.8
 // @author          alembiq
 // @github          https://github.com/alembiqspace
 // @include         windhawk.exe
@@ -11,7 +11,7 @@
 
 // ==WindhawkModReadme==
 /*
-A lightweight **Direct2D** weather and atmosphere overlay for the Windows desktop. It brings live weather precipitation (`auto`, `drizzle`, `rain`, `downpour`, `sleet`, `snow`, `blizzard`, `hail`), procedural multi-lobe clouds in `high` mode, a top-edge cloud-cover band that breathes in and out without wind drift, a UV-reactive sun with smooth dynamic gradient cone rays in `high` mode, a real-phase moon with surface shading, parallel sun/moon sky presence with dawn/dusk horizon glow, solar/lunar/astronomical/space sources (SunriseSunset.io, NASA NeoWs, NASA DONKI, Open-Meteo, Yr.no, 7Timer! and more), atmospheric & ecological layers, window collision physics and a draggable temperature button with an interactive visual-card HUD (`Meteo` / `Astro`, `Now` / `Hours` / `Days`).
+A lightweight **Direct2D** weather and atmosphere overlay for the Windows desktop. It brings live weather precipitation (`auto`, `drizzle`, `rain`, `downpour`, `sleet`, `snow`, `blizzard`, `hail`), procedural multi-lobe clouds in `high` mode, a top-edge cloud-cover band that breathes in and out without wind drift, an optional ambient sky phase tint across night, blue hour, sunrise/sunset, and golden hour, a UV-reactive sun with smooth dynamic gradient cone rays in `high` mode, a real-phase moon with surface shading, parallel sun/moon sky presence with dawn/dusk horizon glow, solar/lunar/astronomical/space sources (SunriseSunset.io, NASA NeoWs, NASA DONKI, Open-Meteo, Yr.no, 7Timer! and more), particle & edge-based atmospheric effects, window collision physics and a draggable temperature button with an interactive visual-card HUD (`Meteo` / `Astro`, `Now` / `Hours` / `Days`).
 
 ### Preview
 ![Desktop Weather & Particles Overlay preview](https://raw.githubusercontent.com/alembiqspace/alembiq-weather-desktop-overlay/main/preview.gif)
@@ -20,8 +20,8 @@ A lightweight **Direct2D** weather and atmosphere overlay for the Windows deskto
 - **Operating Modes (`[System]`):** `full_screen_button` (live desktop overlay + button/HUD), `full_screen_only` (overlay without button), or `button_only` (button & HUD with animated hero card).
 - **Performance Quality Scaling (`low`, `medium`, `high`, `custom`):** Scales visual detail and particle density globally or individually in `custom` mode for clouds, sun/moon, precipitation, and general effects.
 - **Screen Insets & Bounds (`[System]`):** Single `screenInsetsPx` (`top/right/bottom/left`) shifts and clamps precipitation, clouds, effects, and collision bounds on each monitor.
-- **Sky & Astronomy (`[Sky]`):** Combined monitor & timeline controls for Sun and Moon, `customSunTimes` / `customMoonTimes`, parallel sky presence, plus SunriseSunset.io, NASA NeoWs, and NASA DONKI.
-- **Visual Card HUD (`[HUD]`):** Top-level `Meteo` / `Astro` switcher, bottom `Now` / `Hours` / `Days` bar on `Meteo`, bottom Rise/Set bar on `Astro`, 3-column metric cards, dedicated `Astro` view with Sun, Moon, UV, EMI/Solar and 5 upcoming astronomical events, click-to-open value tables, `(i)` full-panel source diagnostics, and paginated 2-column Meteo/Astro live comparison tables in settings.
+- **Sky & Astronomy (`[Sky]`):** Combined monitor & timeline controls for Sun and Moon, `customSunTimes` / `customMoonTimes`, ambient sky phase tint (`0..50%`, transparent during daytime), parallel sky presence, plus SunriseSunset.io, NASA NeoWs, and NASA DONKI.
+- **Visual Card HUD (`[HUD]`):** Fixed-height unified layout across `Meteo` (`Now` / `Hours` / `Days`), `Astro`, `Settings`, and detail tables; paginated 2-column Meteo/Astro live comparison tables in settings.
 
 ### Network & Privacy
 - **No requests until configured:** By default `coords` is empty (`""`) and no automatic fallback coordinates are used, so no network requests are made until you enter valid `lat/lon` coordinates (or configure `customApiUrl` / `localWeatherPath`).
@@ -283,6 +283,12 @@ A lightweight **Direct2D** weather and atmosphere overlay for the Windows deskto
 - topCloudCoverEnabled: false
   $name: "[Sky] Top-edge cloud cover band"
   $description: "Fills the top edge of monitors according to cloud cover percentage without wind drift, with dynamic fade-in/fade-out. Default: false."
+- skyAmbientTintEnabled: false
+  $name: "[Sky] Ambient sky phase tint"
+  $description: "Subtle full-screen tint shifting across night, blue hour, sunrise/sunset, and golden hour (transparent during daytime). Default: false."
+- skyAmbientTintOpacity: 15
+  $name: "[Sky] Ambient tint intensity (%)"
+  $description: "Maximum opacity for the ambient sky tint layer (0 to 50). Invalid/out-of-range resets to 15."
 - celestialMonitorMode: primary
   $name: "[Sky] Sun & Moon monitors"
   $description: "Show sun and moon on primary monitor or all monitors. Allowed: primary, all. Default: primary."
@@ -383,21 +389,21 @@ A lightweight **Direct2D** weather and atmosphere overlay for the Windows deskto
   $description: "Strength/opacity for effects (0..100). Outside 0..100 or invalid resets to 25."
 - effectDust: auto
   $name: "[Effects] Dust"
-  $description: "Airborne dust haze (auto triggers on strong dry wind or low visibility). Allowed: auto, on, off."
+  $description: "Airborne dust motes & low ground haze (auto triggers on strong dry wind or low visibility). Allowed: auto, on, off."
   $options:
     - auto: Auto
     - on: On
     - off: Off
 - effectFog: auto
   $name: "[Effects] Fog"
-  $description: "Soft mist/fog layer (auto triggers on fog code or high humidity with low visibility). Allowed: auto, on, off."
+  $description: "Low-lying mist banks along bottom edge (auto triggers on fog code or high humidity with low visibility). Allowed: auto, on, off."
   $options:
     - auto: Auto
     - on: On
     - off: Off
 - effectSmog: auto
   $name: "[Effects] Smog"
-  $description: "Smog layer (auto triggers on calm wind with reduced visibility/haze). Allowed: auto, on, off."
+  $description: "Low smog band & drifting soot motes (auto triggers on calm wind with reduced visibility/haze). Allowed: auto, on, off."
   $options:
     - auto: Auto
     - on: On
@@ -425,7 +431,7 @@ A lightweight **Direct2D** weather and atmosphere overlay for the Windows deskto
     - off: Off
 - effectThermal: auto
   $name: "[Effects] Frost / Heat tint"
-  $description: "Subtle frost rim at <= 0 C or warm heat haze at >= 30 C apparent temperature. Allowed: auto, on, off."
+  $description: "Subtle frost perimeter rim at <= 0 C or bottom heat shimmer at >= 30 C apparent temperature. Allowed: auto, on, off."
   $options:
     - auto: Auto
     - on: On
@@ -439,7 +445,7 @@ A lightweight **Direct2D** weather and atmosphere overlay for the Windows deskto
     - off: Off
 - effectAirQuality: auto
   $name: "[Effects] Air quality (AQI / PM2.5)"
-  $description: "Air quality haze & micro-particles (auto triggers on elevated AQI / PM2.5). Allowed: auto, on, off."
+  $description: "Suspended air quality micro-particles (auto triggers on elevated AQI / PM2.5). Allowed: auto, on, off."
   $options:
     - auto: Auto
     - on: On
@@ -748,6 +754,8 @@ struct Settings {
     TriStateMode cloudsMode = TriStateMode::Auto;
     int cloudsIntensity = 35;
     bool topCloudCoverEnabled = false;
+    bool skyAmbientTintEnabled = false;
+    int skyAmbientTintOpacity = 15;
     CelestialMonitorMode celestialMonitorMode = CelestialMonitorMode::Primary;
     CelestialTimelineMode celestialTimelineMode = CelestialTimelineMode::AutoForecast;
     double customSunriseHour = 6.5;
@@ -2378,6 +2386,8 @@ void LoadSettingsFromWh() {
     next.cloudsMode = ParseTriState(readStr(L"cloudsMode", L"auto"));
     next.cloudsIntensity = ParseIntRangeOrDefault(Wh_GetIntSetting(L"cloudsIntensity"), 0, 100, 35);
     next.topCloudCoverEnabled = Wh_GetIntSetting(L"topCloudCoverEnabled") != 0;
+    next.skyAmbientTintEnabled = Wh_GetIntSetting(L"skyAmbientTintEnabled") != 0;
+    next.skyAmbientTintOpacity = ParseIntRangeOrDefault(Wh_GetIntSetting(L"skyAmbientTintOpacity"), 0, 50, 15);
     next.celestialMonitorMode = ParseCelestialMonitorMode(readStr(L"celestialMonitorMode", L"primary"));
     next.celestialTimelineMode = ParseCelestialTimeline(readStr(L"celestialTimelineMode", L"auto_forecast"));
     ParsePairTimeHhMmOrDefault(readStr(L"customSunTimes", L"06:30/18:30"), 6.5, 18.5, next.customSunriseHour, next.customSunsetHour);
@@ -2668,6 +2678,8 @@ void CycleSettingOption(const std::wstring& actionId) {
             cur.cloudsMode = nextTri(cur.cloudsMode);
         } else if (actionId == L"toggle_top_clouds") {
             cur.topCloudCoverEnabled = !cur.topCloudCoverEnabled;
+        } else if (actionId == L"toggle_sky_ambient_tint") {
+            cur.skyAmbientTintEnabled = !cur.skyAmbientTintEnabled;
         } else if (actionId == L"cycle_sun") {
             cur.sunMode = nextTri(cur.sunMode);
         } else if (actionId == L"cycle_moon") {
@@ -2728,7 +2740,7 @@ void CycleSettingOption(const std::wstring& actionId) {
 }
 
 std::string HttpGetUtf8(const std::wstring& url,
-                        const std::wstring& userAgent = L"WindhawkWeatherOverlay/3.5") {
+                        const std::wstring& userAgent = L"WindhawkWeatherOverlay/3.6") {
     URL_COMPONENTSW parts = {};
     parts.dwStructSize = sizeof(parts);
     wchar_t host[256] = {};
@@ -3818,7 +3830,7 @@ bool FetchSingleWeatherSource(const std::wstring& src, const Settings& cfg, Fore
     if (src == L"met_norway") {
         std::wstring url = L"https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=" +
                            latStr + amp + L"lon=" + lonStr;
-        std::string body = HttpGetUtf8(url, L"WindhawkWeatherOverlay/3.5 github.com/alembiqspace");
+        std::string body = HttpGetUtf8(url, L"WindhawkWeatherOverlay/3.6 github.com/alembiqspace");
         return !body.empty() && ParseMetNorwayJson(body, outSnap);
     }
     if (src == L"seven_timer") {
@@ -5354,6 +5366,204 @@ void DrawMoonLayer(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush, const S
     }
 }
 
+void DrawSkyAmbientTintLayer(ID2D1DCRenderTarget* rt, const Settings& cfg,
+                             const ForecastSnapshot& snap, double hour) {
+    if (!cfg.skyAmbientTintEnabled || cfg.skyAmbientTintOpacity <= 0) return;
+
+    double sr = cfg.customSunriseHour;
+    double ss = cfg.customSunsetHour;
+    bool dummy = false;
+    ResolveCelestialWindow(cfg, snap, true, hour, sr, ss, dummy);
+
+    auto lerpCol = [](D2D1_COLOR_F a, D2D1_COLOR_F b, float t) -> D2D1_COLOR_F {
+        float u = std::clamp(t, 0.0f, 1.0f);
+        return D2D1::ColorF(
+            a.r + (b.r - a.r) * u,
+            a.g + (b.g - a.g) * u,
+            a.b + (b.b - a.b) * u,
+            a.a + (b.a - a.a) * u);
+    };
+
+    const D2D1_COLOR_F kNightTop  = D2D1::ColorF(0.05f, 0.08f, 0.22f, 1.00f);
+    const D2D1_COLOR_F kNightBot  = D2D1::ColorF(0.07f, 0.11f, 0.28f, 0.85f);
+    const D2D1_COLOR_F kBlueTop   = D2D1::ColorF(0.10f, 0.24f, 0.56f, 0.95f);
+    const D2D1_COLOR_F kBlueBot   = D2D1::ColorF(0.18f, 0.36f, 0.68f, 0.85f);
+    const D2D1_COLOR_F kSunTop    = D2D1::ColorF(0.24f, 0.32f, 0.58f, 0.72f);
+    const D2D1_COLOR_F kSunBot    = D2D1::ColorF(0.98f, 0.54f, 0.28f, 0.95f);
+    const D2D1_COLOR_F kGoldTop   = D2D1::ColorF(0.96f, 0.72f, 0.32f, 0.50f);
+    const D2D1_COLOR_F kGoldBot   = D2D1::ColorF(1.00f, 0.78f, 0.38f, 0.82f);
+    const D2D1_COLOR_F kClearDay  = D2D1::ColorF(0.00f, 0.00f, 0.00f, 0.00f);
+
+    D2D1_COLOR_F topCol = kClearDay;
+    D2D1_COLOR_F botCol = kClearDay;
+
+    if (hour >= sr - 1.0 && hour < sr - 0.45) {
+        float t = static_cast<float>((hour - (sr - 1.0)) / 0.55);
+        topCol = lerpCol(kNightTop, kBlueTop, t);
+        botCol = lerpCol(kNightBot, kBlueBot, t);
+    } else if (hour >= sr - 0.45 && hour < sr) {
+        float t = static_cast<float>((hour - (sr - 0.45)) / 0.45);
+        topCol = lerpCol(kBlueTop, kSunTop, t);
+        botCol = lerpCol(kBlueBot, kSunBot, t);
+    } else if (hour >= sr && hour < sr + 0.75) {
+        float t = static_cast<float>((hour - sr) / 0.75);
+        topCol = lerpCol(kSunTop, kGoldTop, t);
+        botCol = lerpCol(kSunBot, kGoldBot, t);
+    } else if (hour >= sr + 0.75 && hour < sr + 1.35) {
+        float t = static_cast<float>((hour - (sr + 0.75)) / 0.60);
+        topCol = lerpCol(kGoldTop, kClearDay, t);
+        botCol = lerpCol(kGoldBot, kClearDay, t);
+    } else if (hour >= ss - 1.35 && hour < ss - 0.75) {
+        float t = static_cast<float>((hour - (ss - 1.35)) / 0.60);
+        topCol = lerpCol(kClearDay, kGoldTop, t);
+        botCol = lerpCol(kClearDay, kGoldBot, t);
+    } else if (hour >= ss - 0.75 && hour < ss) {
+        float t = static_cast<float>((hour - (ss - 0.75)) / 0.75);
+        topCol = lerpCol(kGoldTop, kSunTop, t);
+        botCol = lerpCol(kGoldBot, kSunBot, t);
+    } else if (hour >= ss && hour < ss + 0.45) {
+        float t = static_cast<float>((hour - ss) / 0.45);
+        topCol = lerpCol(kSunTop, kBlueTop, t);
+        botCol = lerpCol(kSunBot, kBlueBot, t);
+    } else if (hour >= ss + 0.45 && hour < ss + 1.0) {
+        float t = static_cast<float>((hour - (ss + 0.45)) / 0.55);
+        topCol = lerpCol(kBlueTop, kNightTop, t);
+        botCol = lerpCol(kBlueBot, kNightBot, t);
+    } else if (hour >= sr + 1.35 && hour < ss - 1.35) {
+        return;
+    } else {
+        topCol = kNightTop;
+        botCol = kNightBot;
+    }
+
+    float maxAlpha = std::clamp(static_cast<float>(cfg.skyAmbientTintOpacity) / 100.0f, 0.0f, 0.50f);
+    for (const auto& mon : g_monitorRects) {
+        DrawVerticalGradientTint(rt, topCol, botCol,
+                                 mon.left + mon.innerLeftRel, mon.left + mon.innerRightRel,
+                                 mon.top + mon.innerTopRel, mon.top + mon.bottomLimitRelY, maxAlpha);
+    }
+}
+
+void DrawDustLayer(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
+                   const Settings& cfg, QualityTier tier, float strength, float windVx, double timeSec) {
+    if (strength <= 0.004f) return;
+    D2D1_COLOR_F base = cfg.hasCustomDustColor ? cfg.colorDust : D2D1::ColorF(0.84f, 0.68f, 0.45f, 0.28f);
+    float driftVx = (std::abs(windVx) > 20.0f) ? (windVx * 0.9f) : 75.0f;
+    int motes = std::clamp(static_cast<int>(36 * GetTierScale(tier)), 16, 80);
+
+    for (const auto& mon : g_monitorRects) {
+        float leftX = mon.left + mon.innerLeftRel;
+        float rightX = mon.left + mon.innerRightRel;
+        float topY = mon.top + mon.innerTopRel;
+        float botY = mon.top + mon.bottomLimitRelY;
+        float innerW = std::max(40.0f, rightX - leftX);
+        float innerH = std::max(40.0f, botY - topY);
+
+        float bandTop = std::max(topY, botY - innerH * 0.14f);
+        D2D1_COLOR_F cTop = base;
+        cTop.a = 0.0f;
+        D2D1_COLOR_F cBot = base;
+        cBot.a = std::clamp(base.a * 0.85f, 0.05f, 0.30f);
+        DrawVerticalGradientTint(rt, cTop, cBot, leftX, rightX, bandTop, botY, strength);
+
+        brush->SetOpacity(1.0f);
+        for (int i = 0; i < motes; ++i) {
+            uint32_t hx = static_cast<uint32_t>(i * 2654435761u + 131u);
+            uint32_t hy = static_cast<uint32_t>(i * 19349663u + 577u);
+            float u01 = static_cast<float>(hx & 0xFFFFu) / 65535.0f;
+            float v01 = static_cast<float>(hy & 0xFFFFu) / 65535.0f;
+            float spdMul = 0.65f + (i % 4) * 0.22f;
+            float rawX = std::fmod(u01 * innerW + static_cast<float>(timeSec) * driftVx * spdMul, innerW);
+            if (rawX < 0.0f) rawX += innerW;
+            float rawY = std::fmod(v01 * innerH + static_cast<float>(timeSec) * 18.0f * spdMul +
+                                   static_cast<float>(std::sin(timeSec * 1.8 + i)) * 8.0f, innerH);
+            if (rawY < 0.0f) rawY += innerH;
+            float px = leftX + rawX;
+            float py = topY + rawY;
+            float fade = ComputeMonitorEdgeFade(mon, px, py, 28.0f);
+            float r = (i % 3 == 0) ? 2.1f : 1.3f;
+            brush->SetColor(D2D1::ColorF(base.r, base.g, base.b, std::clamp(0.55f * strength * fade, 0.03f, 0.72f)));
+            rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(px, py), r * 1.4f, r * 0.85f), brush);
+        }
+    }
+}
+
+void DrawFogLayer(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
+                  const Settings& cfg, QualityTier tier, float strength, double timeSec) {
+    if (strength <= 0.004f) return;
+    D2D1_COLOR_F base = cfg.hasCustomFogColor ? cfg.colorFog : D2D1::ColorF(0.84f, 0.88f, 0.92f, 0.34f);
+    int wisps = (tier == QualityTier::Low) ? 4 : ((tier == QualityTier::High) ? 10 : 7);
+
+    for (const auto& mon : g_monitorRects) {
+        float leftX = mon.left + mon.innerLeftRel;
+        float rightX = mon.left + mon.innerRightRel;
+        float topY = mon.top + mon.innerTopRel;
+        float botY = mon.top + mon.bottomLimitRelY;
+        float innerW = std::max(40.0f, rightX - leftX);
+        float innerH = std::max(40.0f, botY - topY);
+
+        float bandTop = std::max(topY, botY - innerH * 0.22f);
+        D2D1_COLOR_F cTop = base;
+        cTop.a = 0.0f;
+        D2D1_COLOR_F cBot = base;
+        cBot.a = std::clamp(base.a * 0.70f, 0.05f, 0.30f);
+        DrawVerticalGradientTint(rt, cTop, cBot, leftX, rightX, bandTop, botY, strength);
+
+        float spanW = innerW + 260.0f;
+        for (int i = 0; i < wisps; ++i) {
+            float speed = 9.0f + (i % 3) * 4.5f;
+            float rawX = std::fmod(i * (spanW / static_cast<float>(wisps)) + static_cast<float>(timeSec) * speed, spanW);
+            float cx = leftX - 130.0f + rawX;
+            float cy = botY - (innerH * 0.04f) - ((i * 29) % 100) * 0.0014f * innerH;
+            float rx = 110.0f + (i % 3) * 45.0f;
+            float ry = 24.0f + (i % 2) * 14.0f;
+            float edgeFade = ComputeMonitorEdgeFade(mon, cx, cy, rx * 0.85f);
+            float alpha = std::clamp(base.a * 0.55f * strength * edgeFade, 0.003f, 0.32f);
+            if (alpha <= 0.004f) continue;
+            DrawProceduralCloudCluster(rt, brush, tier, base, cx, cy, rx, ry, alpha, i + 41, timeSec, 3);
+        }
+    }
+}
+
+void DrawSmogLayer(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
+                   const Settings& cfg, QualityTier tier, float strength, double timeSec) {
+    if (strength <= 0.004f) return;
+    D2D1_COLOR_F base = cfg.hasCustomSmogColor ? cfg.colorSmog : D2D1::ColorF(0.54f, 0.48f, 0.40f, 0.34f);
+    int ashCount = std::clamp(static_cast<int>(22 * GetTierScale(tier)), 10, 48);
+
+    for (const auto& mon : g_monitorRects) {
+        float leftX = mon.left + mon.innerLeftRel;
+        float rightX = mon.left + mon.innerRightRel;
+        float topY = mon.top + mon.innerTopRel;
+        float botY = mon.top + mon.bottomLimitRelY;
+        float innerW = std::max(40.0f, rightX - leftX);
+        float innerH = std::max(40.0f, botY - topY);
+
+        float bandTop = std::max(topY, botY - innerH * 0.18f);
+        D2D1_COLOR_F cTop = base;
+        cTop.a = 0.0f;
+        D2D1_COLOR_F cBot = base;
+        cBot.a = std::clamp(base.a * 0.90f, 0.06f, 0.36f);
+        DrawVerticalGradientTint(rt, cTop, cBot, leftX, rightX, bandTop, botY, strength);
+
+        brush->SetOpacity(1.0f);
+        for (int i = 0; i < ashCount; ++i) {
+            uint32_t hx = static_cast<uint32_t>(i * 2246822519u + 73u);
+            uint32_t hy = static_cast<uint32_t>(i * 374761393u + 199u);
+            float u01 = static_cast<float>(hx & 0xFFFFu) / 65535.0f;
+            float v01 = static_cast<float>(hy & 0xFFFFu) / 65535.0f;
+            float px = leftX + std::fmod(u01 * innerW + static_cast<float>(timeSec) * 6.5f +
+                                         static_cast<float>(std::sin(timeSec * 0.8 + i)) * 12.0f, innerW);
+            float py = (topY + innerH * 0.50f) + std::fmod(v01 * (innerH * 0.50f) +
+                                                           static_cast<float>(std::cos(timeSec * 0.7 + i * 1.4)) * 10.0f, innerH * 0.50f);
+            float fade = ComputeMonitorEdgeFade(mon, px, py, 24.0f);
+            float r = (i % 4 == 0) ? 2.4f : 1.5f;
+            brush->SetColor(D2D1::ColorF(base.r * 0.75f, base.g * 0.72f, base.b * 0.68f, std::clamp(0.45f * strength * fade, 0.02f, 0.55f)));
+            rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(px, py), r, r), brush);
+        }
+    }
+}
+
 void DrawSmoothAurora(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
                     const Settings& cfg, QualityTier tier, float strength, double timeSec) {
     if (strength <= 0.004f) return;
@@ -5448,20 +5658,84 @@ void DrawBranchedLightning(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
     }
 }
 
-void DrawThermalLayer(ID2D1DCRenderTarget* rt, bool frostOn, bool heatOn, float strength) {
+void DrawThermalLayer(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
+                      QualityTier tier, bool frostOn, bool heatOn, float strength, double timeSec) {
     if (strength <= 0.004f) return;
     for (const auto& mon : g_monitorRects) {
         float leftX = mon.left + mon.innerLeftRel;
         float rightX = mon.left + mon.innerRightRel;
         float topY = mon.top + mon.innerTopRel;
         float botY = mon.top + mon.bottomLimitRelY;
+        float innerW = std::max(40.0f, rightX - leftX);
+        float innerH = std::max(40.0f, botY - topY);
+
         if (frostOn) {
-            DrawVerticalGradientTint(rt, D2D1::ColorF(0.76f, 0.90f, 1.0f, 0.16f), D2D1::ColorF(0.84f, 0.94f, 1.0f, 0.22f),
-                                     leftX, rightX, topY, botY, strength);
+            float rimV = std::min(72.0f, innerH * 0.09f);
+            float rimH = std::min(72.0f, innerW * 0.07f);
+            D2D1_COLOR_F fEdge = D2D1::ColorF(0.76f, 0.90f, 1.0f, 0.28f);
+            D2D1_COLOR_F fZero = D2D1::ColorF(0.76f, 0.90f, 1.0f, 0.00f);
+
+            DrawVerticalGradientTint(rt, fEdge, fZero, leftX, rightX, topY, topY + rimV, strength);
+            DrawVerticalGradientTint(rt, fZero, fEdge, leftX, rightX, botY - rimV, botY, strength);
+
+            auto drawHorizRim = [&](float x0, float x1, D2D1_COLOR_F c0, D2D1_COLOR_F c1) {
+                c0.a = std::clamp(c0.a * strength, 0.0f, 0.65f);
+                c1.a = std::clamp(c1.a * strength, 0.0f, 0.65f);
+                D2D1_GRADIENT_STOP st[2] = {{0.0f, c0}, {1.0f, c1}};
+                ID2D1GradientStopCollection* sc = nullptr;
+                if (SUCCEEDED(rt->CreateGradientStopCollection(st, 2, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP, &sc)) && sc) {
+                    ID2D1LinearGradientBrush* lg = nullptr;
+                    if (SUCCEEDED(rt->CreateLinearGradientBrush(
+                            D2D1::LinearGradientBrushProperties(D2D1::Point2F(x0, topY), D2D1::Point2F(x1, topY)), sc, &lg)) && lg) {
+                        rt->FillRectangle(D2D1::RectF(x0, topY, x1, botY), lg);
+                        lg->Release();
+                    }
+                    sc->Release();
+                }
+            };
+            drawHorizRim(leftX, leftX + rimH, fEdge, fZero);
+            drawHorizRim(rightX - rimH, rightX, fZero, fEdge);
+
+            if (tier != QualityTier::Low) {
+                brush->SetOpacity(1.0f);
+                int glints = (tier == QualityTier::High) ? 18 : 10;
+                for (int i = 0; i < glints; ++i) {
+                    bool sideEdge = (i % 2 == 0);
+                    float gx = sideEdge
+                        ? ((i % 4 == 0) ? (leftX + 8.0f + (i * 11 % 26)) : (rightX - 8.0f - (i * 11 % 26)))
+                        : (leftX + ((i * 97) % 100) * 0.01f * innerW);
+                    float gy = sideEdge
+                        ? (topY + ((i * 73) % 100) * 0.01f * innerH)
+                        : ((i % 4 == 1) ? (topY + 8.0f + (i * 9 % 24)) : (botY - 8.0f - (i * 9 % 24)));
+                    float tw = 0.35f + 0.65f * static_cast<float>(std::sin(timeSec * 2.4 + i * 1.7));
+                    brush->SetColor(D2D1::ColorF(0.92f, 0.97f, 1.0f, std::clamp(0.45f * strength * tw, 0.03f, 0.65f)));
+                    rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(gx, gy), 1.8f, 1.8f), brush);
+                }
+            }
         }
+
         if (heatOn) {
-            DrawVerticalGradientTint(rt, D2D1::ColorF(1.0f, 0.78f, 0.42f, 0.08f), D2D1::ColorF(1.0f, 0.58f, 0.26f, 0.18f),
-                                     leftX, rightX, topY, botY, strength);
+            float bandTop = std::max(topY, botY - innerH * 0.12f);
+            DrawVerticalGradientTint(rt, D2D1::ColorF(1.0f, 0.64f, 0.24f, 0.00f),
+                                     D2D1::ColorF(1.0f, 0.56f, 0.20f, 0.24f),
+                                     leftX, rightX, bandTop, botY, strength);
+            if (tier != QualityTier::Low) {
+                brush->SetOpacity(1.0f);
+                brush->SetColor(D2D1::ColorF(1.0f, 0.72f, 0.34f, std::clamp(0.24f * strength, 0.02f, 0.36f)));
+                int waves = (tier == QualityTier::High) ? 3 : 2;
+                float stepX = 18.0f;
+                for (int w = 0; w < waves; ++w) {
+                    float baseY = botY - 12.0f - w * 18.0f;
+                    float prevX = leftX;
+                    float prevY = baseY + static_cast<float>(std::sin(timeSec * 3.0 + w * 1.9)) * 3.0f;
+                    for (float x = leftX + stepX; x <= rightX; x += stepX) {
+                        float curY = baseY + static_cast<float>(std::sin(x * 0.015f + timeSec * 3.0 + w * 1.9)) * 3.2f;
+                        rt->DrawLine(D2D1::Point2F(prevX, prevY), D2D1::Point2F(x, curY), brush, 1.4f);
+                        prevX = x;
+                        prevY = curY;
+                    }
+                }
+            }
         }
     }
 }
@@ -5488,38 +5762,41 @@ void DrawNightStarsLayer(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
 void DrawAirQualityLayer(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
                            const Settings& cfg, QualityTier tier, const ForecastSnapshot& snap, float strength, double timeSec) {
     if (strength <= 0.004f) return;
-    float aqiNorm = std::clamp(static_cast<float>(std::max(snap.aqiValue, snap.pm25Value * 2.5)) / 150.0f, 0.15f, 1.0f);
-    D2D1_COLOR_F base = cfg.hasCustomAirQualityColor ? cfg.colorAirQuality : D2D1::ColorF(0.82f, 0.66f, 0.34f, 0.22f);
-    D2D1_COLOR_F topCol = base;
-    topCol.a = base.a * 0.45f * aqiNorm;
-    D2D1_COLOR_F botCol = base;
-    botCol.a = base.a * (0.75f + 0.45f * aqiNorm);
+    double aqiVal = std::max(snap.aqiValue, snap.pm25Value * 2.5);
+    float aqiNorm = std::clamp(static_cast<float>(aqiVal / 150.0), 0.15f, 1.0f);
+
+    D2D1_COLOR_F base = cfg.hasCustomAirQualityColor
+        ? cfg.colorAirQuality
+        : ((aqiVal <= 75.0)
+            ? D2D1::ColorF(0.95f, 0.84f, 0.32f, 0.55f)
+            : ((aqiVal <= 125.0)
+                ? D2D1::ColorF(0.96f, 0.56f, 0.24f, 0.62f)
+                : D2D1::ColorF(0.92f, 0.30f, 0.30f, 0.68f)));
+
+    int motes = std::clamp(static_cast<int>((18.0f + aqiNorm * 38.0f) * GetTierScale(tier)), 12, 72);
+    brush->SetOpacity(1.0f);
 
     for (const auto& mon : g_monitorRects) {
         float leftX = mon.left + mon.innerLeftRel;
         float rightX = mon.left + mon.innerRightRel;
         float topY = mon.top + mon.innerTopRel;
         float botY = mon.top + mon.bottomLimitRelY;
-        DrawVerticalGradientTint(rt, topCol, botCol, leftX, rightX, topY, botY, strength);
+        float innerW = std::max(40.0f, rightX - leftX);
+        float innerH = std::max(40.0f, botY - topY);
 
-        if (tier != QualityTier::Low) {
-            int motes = (tier == QualityTier::High) ? 32 : 24;
-            float innerW = std::max(40.0f, rightX - leftX);
-            float innerH = std::max(40.0f, botY - topY);
-            brush->SetOpacity(1.0f);
-            for (int i = 0; i < motes; ++i) {
-                uint32_t hx = static_cast<uint32_t>(i * 2654435761u + 1013904223u);
-                uint32_t hy = static_cast<uint32_t>(i * 1664525u + 22695477u);
-                float u01 = static_cast<float>(hx & 0xFFFFu) / 65535.0f;
-                float v01 = static_cast<float>(hy & 0xFFFFu) / 65535.0f;
-                float mx = leftX + std::fmod(u01 * innerW + static_cast<float>(timeSec) * 10.0f +
-                                             static_cast<float>(std::sin(timeSec * 1.1 + i)) * 14.0f, innerW);
-                float my = topY + std::fmod(v01 * innerH +
-                                            static_cast<float>(std::cos(timeSec * 0.9 + i * 1.7)) * 12.0f, innerH);
-                float fade = ComputeMonitorEdgeFade(mon, mx, my, 24.0f);
-                brush->SetColor(D2D1::ColorF(base.r, base.g, base.b, std::clamp(0.28f * strength * aqiNorm * fade, 0.02f, 0.45f)));
-                rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(mx, my), 2.2f, 2.2f), brush);
-            }
+        for (int i = 0; i < motes; ++i) {
+            uint32_t hx = static_cast<uint32_t>(i * 2654435761u + 1013904223u);
+            uint32_t hy = static_cast<uint32_t>(i * 1664525u + 22695477u);
+            float u01 = static_cast<float>(hx & 0xFFFFu) / 65535.0f;
+            float v01 = static_cast<float>(hy & 0xFFFFu) / 65535.0f;
+            float mx = leftX + std::fmod(u01 * innerW + static_cast<float>(timeSec) * 10.0f +
+                                         static_cast<float>(std::sin(timeSec * 1.1 + i)) * 14.0f, innerW);
+            float my = topY + std::fmod(v01 * innerH +
+                                        static_cast<float>(std::cos(timeSec * 0.9 + i * 1.7)) * 12.0f, innerH);
+            float fade = ComputeMonitorEdgeFade(mon, mx, my, 24.0f);
+            float r = (i % 4 == 0) ? 2.5f : 1.7f;
+            brush->SetColor(D2D1::ColorF(base.r, base.g, base.b, std::clamp(0.42f * strength * aqiNorm * fade, 0.03f, 0.68f)));
+            rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(mx, my), r, r), brush);
         }
     }
 }
@@ -6165,7 +6442,7 @@ void DrawMiniMonitorPreview(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush
     if (fx.fog || fx.smog || fx.dust) {
         D2D1_COLOR_F haze = fx.fog ? cfg.colorFog : (fx.smog ? cfg.colorSmog : cfg.colorDust);
         brush->SetColor(D2D1::ColorF(haze.r, haze.g, haze.b, 0.25f));
-        rt->FillRectangle(box, brush);
+        rt->FillRectangle(D2D1::RectF(box.left, box.bottom - h * 0.22f, box.right, box.bottom), brush);
     }
     if (!g_falling.empty() && g_canvasWidth > 0 && g_canvasHeight > 0) {
         QualityTier pTier = ResolveCategoryTier(cfg, cfg.perfPrecip);
@@ -6422,7 +6699,6 @@ void DrawUnifiedWeatherWindChart(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* 
         rt->DrawTextW(loStr.c_str(), static_cast<UINT32>(loStr.size()), g_hudPillFormat,
                       D2D1::RectF(x0, yLo + 1.0f, x1, yLo + lineH * 0.90f), brush);
 
-        // Prominent time/day label right below main chart on semi-transparent backing
         D2D1_RECT_F lblPill = D2D1::RectF(x0 + 2.0f, chartBot + 2.0f, x1 - 2.0f, chartBot + labelBandH);
         brush->SetColor(s.isCurrent
             ? D2D1::ColorF(0.32f, 0.72f, 1.0f, 0.28f)
@@ -6435,13 +6711,11 @@ void DrawUnifiedWeatherWindChart(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* 
                       brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
         g_hudTitleFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
 
-        // Weather icon
         float iconY = chartBot + labelBandH + 2.0f;
         DrawLargePrecipTypeIcon(rt, brush, cfg, s.weatherCode, cx, iconY + iconZoneH * 0.50f, lineH * 1.40f);
 
         float rowY = iconY + iconZoneH + 2.0f;
 
-        // Row 1: Wind arrow + cardinal direction
         DrawSmallDirectionArrow(rt, brush, cx - 14.0f, rowY + subRowH * 0.5f, 9.0f, s.windDirDeg, D2D1::ColorF(0.48f, 0.82f, 1.0f, 0.95f));
         std::wstring dirStr = WindDegToCompass16(s.windDirDeg);
         brush->SetColor(D2D1::ColorF(cfg.colorHudText.r, cfg.colorHudText.g, cfg.colorHudText.b, 0.92f));
@@ -6449,7 +6723,6 @@ void DrawUnifiedWeatherWindChart(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* 
                       D2D1::RectF(cx - 6.0f, rowY, x1, rowY + subRowH), brush);
         rowY += subRowH;
 
-        // Row 2: Wind speed
         std::wstring spdMain, spdSub;
         FormatWindSplit(s.windSpeedKmh, cfg.windUnit, spdMain, spdSub);
         std::wstring spdStr = spdMain + L" " + spdSub;
@@ -6458,14 +6731,12 @@ void DrawUnifiedWeatherWindChart(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* 
                       D2D1::RectF(x0, rowY, x1, rowY + subRowH), brush);
         rowY += subRowH;
 
-        // Row 3: Pressure
         std::wstring pStr = FormatPressureCompact(s.pressureHpa, cfg.pressureUnit);
         brush->SetColor(D2D1::ColorF(cfg.colorHudText.r, cfg.colorHudText.g, cfg.colorHudText.b, 0.78f));
         rt->DrawTextW(pStr.c_str(), static_cast<UINT32>(pStr.size()), g_hudPillFormat,
                       D2D1::RectF(x0, rowY, x1, rowY + subRowH), brush);
         rowY += subRowH;
 
-        // Row 4: AQI
         D2D1_COLOR_F aqiCol = (s.aqiValue <= 50.0)
             ? D2D1::ColorF(0.24f, 0.85f, 0.48f, 0.95f)
             : ((s.aqiValue <= 100.0) ? D2D1::ColorF(0.95f, 0.82f, 0.24f, 0.95f) : D2D1::ColorF(0.92f, 0.34f, 0.34f, 0.95f));
@@ -6665,7 +6936,6 @@ void DrawDetailTableOverlay(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush
         return;
     }
 
-    // WeatherAll table (Meteo only: Time/Day | Temp | Precip | Wind | Press | AQI)
     std::vector<float> fr = {0.15f, 0.18f, 0.16f, 0.24f, 0.14f, 0.13f};
     drawRowCells(fr, {isDays ? L"Day" : L"Time", L"Temp", L"Precip", L"Wind", L"Press", L"AQI"}, true, false);
 
@@ -6875,9 +7145,11 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
         float totalContentH = fixedCardH;
 
         if (settingsView) {
-            float srcSectionH = 8.0f * (lineH + 4.0f) + 6.0f * (lineH + 2.0f) + 22.0f;
+            float srcSectionH = (expSec == ExpandedSection::None)
+                ? (8.0f * (lineH + 4.0f) + 6.0f * (lineH + 2.0f) + 22.0f)
+                : 0.0f;
             int sRows = 4;
-            if (expSec == ExpandedSection::Sky) sRows += 5;
+            if (expSec == ExpandedSection::Sky) sRows += 6;
             if (expSec == ExpandedSection::Precipitation) sRows += 4;
             if (expSec == ExpandedSection::Effects) sRows += 10;
             if (expSec == ExpandedSection::Performance) sRows += (cfg.performanceMode == PerformanceMode::Custom) ? 5 : 1;
@@ -6984,165 +7256,166 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
         curY += tabBarH + 8.0f;
 
         if (settingsView) {
-            // 2-column Meteo & Astro source tables (no duplicate headers) with 3-page parameter switcher
-            float colGap = 10.0f;
-            float colW = (innerW - colGap) * 0.5f;
-            float colLeftX[2] = {innerLeft, innerLeft + colW + colGap};
+            if (expSec == ExpandedSection::None) {
+                float colGap = 10.0f;
+                float colW = (innerW - colGap) * 0.5f;
+                float colLeftX[2] = {innerLeft, innerLeft + colW + colGap};
 
-            const std::vector<std::wstring> meteoList = {
-                L"open_meteo", L"met_norway", L"seven_timer", L"weatherapi",
-                L"openweathermap", L"visual_crossing", L"tomorrow_io", L"custom_api"
-            };
-            const std::vector<std::wstring> astroList = {
-                L"sunrise_sunset_io", L"open_meteo", L"weatherapi",
-                L"nasa_donki", L"nasa_neows", L"visual_crossing", L"custom_api", L"local_file"
-            };
+                const std::vector<std::wstring> meteoList = {
+                    L"open_meteo", L"met_norway", L"seven_timer", L"weatherapi",
+                    L"openweathermap", L"visual_crossing", L"tomorrow_io", L"custom_api"
+                };
+                const std::vector<std::wstring> astroList = {
+                    L"sunrise_sunset_io", L"open_meteo", L"weatherapi",
+                    L"nasa_donki", L"nasa_neows", L"visual_crossing", L"custom_api", L"local_file"
+                };
 
-            std::wstring pMain, pSub, pNorm;
-            FormatPressureSplit(snap.pressureHpa, cfg.pressureUnit, pMain, pSub, pNorm);
-            std::wstring aMain, aSub;
-            FormatAqiSplit(snap.aqiValue, snap.pm25Value, cfg.aqiUnit, aMain, aSub);
-            bool fogHigh = (snap.valid && snap.mTemp.available && snap.mDewPoint.available && (snap.tempC - snap.dewPointC <= 2.0));
-            std::wstring fogTxt = (snap.valid && snap.mTemp.available && snap.mDewPoint.available)
-                ? (fogHigh ? L"High" : ((snap.tempC - snap.dewPointC <= 5.0) ? L"Med" : L"Low"))
-                : L"--";
+                std::wstring pMain, pSub, pNorm;
+                FormatPressureSplit(snap.pressureHpa, cfg.pressureUnit, pMain, pSub, pNorm);
+                std::wstring aMain, aSub;
+                FormatAqiSplit(snap.aqiValue, snap.pm25Value, cfg.aqiUnit, aMain, aSub);
+                bool fogHigh = (snap.valid && snap.mTemp.available && snap.mDewPoint.available && (snap.tempC - snap.dewPointC <= 2.0));
+                std::wstring fogTxt = (snap.valid && snap.mTemp.available && snap.mDewPoint.available)
+                    ? (fogHigh ? L"High" : ((snap.tempC - snap.dewPointC <= 5.0) ? L"Med" : L"Low"))
+                    : L"--";
 
-            using ParamRow = std::pair<std::wstring, std::pair<std::wstring, bool>>;
-            std::vector<ParamRow> meteoPages[3] = {
-                {
-                    {L"Temp now",   {snap.valid && snap.mTemp.available ? FormatTempValue(snap.tempC, cfg.tempUnit, false) : L"--", snap.valid && snap.mTemp.available}},
-                    {L"Wind speed", {snap.valid && snap.mWind.available ? FormatWindValue(snap.windSpeedKmh, cfg.windUnit) : L"--", snap.valid && snap.mWind.available}},
-                    {L"Wind dir",   {snap.valid && snap.mWind.available ? WindDegToCompass16(snap.windDirDeg) : L"--", snap.valid && snap.mWind.available}},
-                    {L"Pressure",   {snap.valid && snap.mPressure.available ? (pMain + L" " + pSub) : L"--", snap.valid && snap.mPressure.available}},
-                    {L"Humidity",   {snap.valid && snap.mHumidity.available ? FormatHumidityValue(snap.humidityPct, cfg.humidityUnit) : L"--", snap.valid && snap.mHumidity.available}}
-                },
-                {
-                    {L"Max temp",   {snap.valid && snap.hasTodayMinMax ? FormatTempValue(snap.todayMaxC, cfg.tempUnit, false) : L"--", snap.valid && snap.hasTodayMinMax}},
-                    {L"Min temp",   {snap.valid && snap.hasTodayMinMax ? FormatTempValue(snap.todayMinC, cfg.tempUnit, false) : L"--", snap.valid && snap.hasTodayMinMax}},
-                    {L"Clouds",     {snap.valid && snap.mClouds.available ? FormatCloudValue(snap.cloudCoverPct, cfg.cloudUnit) : L"--", snap.valid && snap.mClouds.available}},
-                    {L"Precip",     {snap.valid && snap.mPrecip.available ? FormatPrecipValue(snap.precipMm, cfg.precipUnit) : L"--", snap.valid && snap.mPrecip.available}},
-                    {L"Wind gusts", {snap.valid && snap.mGusts.available ? FormatWindValue(snap.windGustsKmh, cfg.windUnit) : L"--", snap.valid && snap.mGusts.available}}
-                },
-                {
-                    {L"Fog",        {fogTxt, snap.valid && snap.mTemp.available && snap.mDewPoint.available}},
-                    {L"Visibility", {snap.valid && snap.mVisibility.available ? FormatVisibilityValue(snap.visibilityM, cfg.visibilityUnit) : L"--", snap.valid && snap.mVisibility.available}},
-                    {L"Dew point",  {snap.valid && snap.mDewPoint.available ? FormatTempValue(snap.dewPointC, cfg.tempUnit, false) : L"--", snap.valid && snap.mDewPoint.available}},
-                    {L"Air quality",{snap.valid && snap.mAqi.available ? (aMain + L" " + aSub) : L"--", snap.valid && snap.mAqi.available}},
-                    {L"Condition",  {snap.valid && snap.mCondition.available ? WmoCodeToLabel(snap.weatherCode) : L"--", snap.valid && snap.mCondition.available}}
-                }
-            };
-
-            double effSr = cfg.customSunriseHour, effSs = cfg.customSunsetHour;
-            double effMr = cfg.customMoonriseHour, effMs = cfg.customMoonsetHour;
-            bool dummyWin = false;
-            ResolveCelestialWindow(cfg, snap, true, hour, effSr, effSs, dummyWin);
-            ResolveCelestialWindow(cfg, snap, false, hour, effMr, effMs, dummyWin);
-            double dayLenH = effSs - effSr; if (dayLenH < 0.0) dayLenH += 24.0;
-            double altDeg = 0.0, azDeg = 0.0;
-            std::wstring nextNewD, nextFullD;
-            ComputeLunarEphemerisDisplay(moonPhase01, hour, effMr, effMs, cfg.latitude, altDeg, azDeg, nextNewD, nextFullD);
-
-            wchar_t kpBuf[24] = {}, illumBuf[24] = {}, altBuf[24] = {}, azBuf[32] = {};
-            swprintf_s(kpBuf, L"Kp %.1f", snap.flareKpEst);
-            swprintf_s(illumBuf, L"%.0f%%", 50.0 * (1.0 - std::cos(moonPhase01 * 2.0 * kPi)));
-            swprintf_s(altBuf, L"%.0f°", altDeg);
-            swprintf_s(azBuf, L"%.0f° %s", azDeg, WindDegToCompass16(azDeg));
-
-            std::vector<ParamRow> astroPages[3] = {
-                {
-                    {L"Sunrise",    {FormatHourHhMm(effSr), snap.valid && snap.hasSunTimes}},
-                    {L"Sunset",     {FormatHourHhMm(effSs), snap.valid && snap.hasSunTimes}},
-                    {L"UV index",   {snap.valid && snap.mUv.available ? FormatUvValue(snap.uvIndex, cfg.uvUnit) : L"--", snap.valid && snap.mUv.available}},
-                    {L"EMI index",  {kpBuf, snap.hasSpaceWeather}},
-                    {L"Moon phase", {MoonPhaseToName(moonPhase01), true}}
-                },
-                {
-                    {L"Moonrise",   {FormatHourHhMm(effMr), snap.valid && snap.hasMoonTimes}},
-                    {L"Moonset",    {FormatHourHhMm(effMs), snap.valid && snap.hasMoonTimes}},
-                    {L"Moon illum", {illumBuf, true}},
-                    {L"Moon alt",   {altBuf, true}},
-                    {L"Moon az",    {azBuf, true}}
-                },
-                {
-                    {L"Golden start",{FormatHourHhMm(effSs - 0.75), snap.hasGoldenHour || snap.hasSunTimes}},
-                    {L"Golden end",  {FormatHourHhMm(effSs), snap.hasGoldenHour || snap.hasSunTimes}},
-                    {L"Blue start",  {FormatHourHhMm(effSs), snap.hasSunTimes}},
-                    {L"Blue end",    {FormatHourHhMm(effSs + 0.45), snap.hasSunTimes}},
-                    {L"Daylight",    {FormatDurationHhMm(dayLenH), snap.hasSunTimes}}
-                }
-            };
-
-            float colStartY = curY + 2.0f;
-            float maxColEndY = colStartY;
-
-            for (int cIdx = 0; cIdx < 2; ++cIdx) {
-                bool isAstroCol = (cIdx == 1);
-                float cx0 = colLeftX[cIdx];
-                float cx1 = cx0 + colW;
-                float cy = colStartY;
-
-                const auto& srcList = isAstroCol ? astroList : meteoList;
-                const std::wstring& selectedSrc = isAstroCol ? cfg.astroPrimarySource : cfg.primarySource;
-                int pIdx = std::clamp(isAstroCol ? setAstroPage : setMeteoPage, 0, 2);
-
-                for (const auto& sId : srcList) {
-                    bool isSel = (selectedSrc == sId);
-                    D2D1_RECT_F sRect = D2D1::RectF(cx0, cy, cx1, cy + lineH + 2.0f);
-                    brush->SetColor(isSel ? D2D1::ColorF(0.28f, 0.72f, 1.0f, 0.28f) : D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.04f));
-                    rt->FillRoundedRectangle(D2D1::RoundedRect(sRect, 5.0f, 5.0f), brush);
-                    if (isSel) {
-                        brush->SetColor(D2D1::ColorF(0.45f, 0.82f, 1.0f, 0.90f));
-                        rt->DrawRoundedRectangle(D2D1::RoundedRect(sRect, 5.0f, 5.0f), brush, 1.1f);
+                using ParamRow = std::pair<std::wstring, std::pair<std::wstring, bool>>;
+                std::vector<ParamRow> meteoPages[3] = {
+                    {
+                        {L"Temp now",   {snap.valid && snap.mTemp.available ? FormatTempValue(snap.tempC, cfg.tempUnit, false) : L"--", snap.valid && snap.mTemp.available}},
+                        {L"Wind speed", {snap.valid && snap.mWind.available ? FormatWindValue(snap.windSpeedKmh, cfg.windUnit) : L"--", snap.valid && snap.mWind.available}},
+                        {L"Wind dir",   {snap.valid && snap.mWind.available ? WindDegToCompass16(snap.windDirDeg) : L"--", snap.valid && snap.mWind.available}},
+                        {L"Pressure",   {snap.valid && snap.mPressure.available ? (pMain + L" " + pSub) : L"--", snap.valid && snap.mPressure.available}},
+                        {L"Humidity",   {snap.valid && snap.mHumidity.available ? FormatHumidityValue(snap.humidityPct, cfg.humidityUnit) : L"--", snap.valid && snap.mHumidity.available}}
+                    },
+                    {
+                        {L"Max temp",   {snap.valid && snap.hasTodayMinMax ? FormatTempValue(snap.todayMaxC, cfg.tempUnit, false) : L"--", snap.valid && snap.hasTodayMinMax}},
+                        {L"Min temp",   {snap.valid && snap.hasTodayMinMax ? FormatTempValue(snap.todayMinC, cfg.tempUnit, false) : L"--", snap.valid && snap.hasTodayMinMax}},
+                        {L"Clouds",     {snap.valid && snap.mClouds.available ? FormatCloudValue(snap.cloudCoverPct, cfg.cloudUnit) : L"--", snap.valid && snap.mClouds.available}},
+                        {L"Precip",     {snap.valid && snap.mPrecip.available ? FormatPrecipValue(snap.precipMm, cfg.precipUnit) : L"--", snap.valid && snap.mPrecip.available}},
+                        {L"Wind gusts", {snap.valid && snap.mGusts.available ? FormatWindValue(snap.windGustsKmh, cfg.windUnit) : L"--", snap.valid && snap.mGusts.available}}
+                    },
+                    {
+                        {L"Fog",        {fogTxt, snap.valid && snap.mTemp.available && snap.mDewPoint.available}},
+                        {L"Visibility", {snap.valid && snap.mVisibility.available ? FormatVisibilityValue(snap.visibilityM, cfg.visibilityUnit) : L"--", snap.valid && snap.mVisibility.available}},
+                        {L"Dew point",  {snap.valid && snap.mDewPoint.available ? FormatTempValue(snap.dewPointC, cfg.tempUnit, false) : L"--", snap.valid && snap.mDewPoint.available}},
+                        {L"Air quality",{snap.valid && snap.mAqi.available ? (aMain + L" " + aSub) : L"--", snap.valid && snap.mAqi.available}},
+                        {L"Condition",  {snap.valid && snap.mCondition.available ? WmoCodeToLabel(snap.weatherCode) : L"--", snap.valid && snap.mCondition.available}}
                     }
-                    std::wstring lbl = (isSel ? L"★ " : L"  ") + FormatProviderHudBadge(sId);
-                    brush->SetColor(isSel ? cfg.colorHudText : D2D1::ColorF(cfg.colorHudText.r, cfg.colorHudText.g, cfg.colorHudText.b, 0.75f));
-                    rt->DrawTextW(lbl.c_str(), static_cast<UINT32>(lbl.size()), g_hudBodyFormat,
-                                  D2D1::RectF(sRect.left + 6.0f, sRect.top + 1.0f, sRect.right - 4.0f, sRect.bottom), brush);
-                    nextControls.push_back(InteractiveControl{sRect, (isAstroCol ? L"set_astro_src_" : L"set_meteo_src_") + sId, L"", D2D1::ColorF(0, 0, 0, 0), L""});
+                };
+
+                double effSr = cfg.customSunriseHour, effSs = cfg.customSunsetHour;
+                double effMr = cfg.customMoonriseHour, effMs = cfg.customMoonsetHour;
+                bool dummyWin = false;
+                ResolveCelestialWindow(cfg, snap, true, hour, effSr, effSs, dummyWin);
+                ResolveCelestialWindow(cfg, snap, false, hour, effMr, effMs, dummyWin);
+                double dayLenH = effSs - effSr; if (dayLenH < 0.0) dayLenH += 24.0;
+                double altDeg = 0.0, azDeg = 0.0;
+                std::wstring nextNewD, nextFullD;
+                ComputeLunarEphemerisDisplay(moonPhase01, hour, effMr, effMs, cfg.latitude, altDeg, azDeg, nextNewD, nextFullD);
+
+                wchar_t kpBuf[24] = {}, illumBuf[24] = {}, altBuf[24] = {}, azBuf[32] = {};
+                swprintf_s(kpBuf, L"Kp %.1f", snap.flareKpEst);
+                swprintf_s(illumBuf, L"%.0f%%", 50.0 * (1.0 - std::cos(moonPhase01 * 2.0 * kPi)));
+                swprintf_s(altBuf, L"%.0f°", altDeg);
+                swprintf_s(azBuf, L"%.0f° %s", azDeg, WindDegToCompass16(azDeg));
+
+                std::vector<ParamRow> astroPages[3] = {
+                    {
+                        {L"Sunrise",    {FormatHourHhMm(effSr), snap.valid && snap.hasSunTimes}},
+                        {L"Sunset",     {FormatHourHhMm(effSs), snap.valid && snap.hasSunTimes}},
+                        {L"UV index",   {snap.valid && snap.mUv.available ? FormatUvValue(snap.uvIndex, cfg.uvUnit) : L"--", snap.valid && snap.mUv.available}},
+                        {L"EMI index",  {kpBuf, snap.hasSpaceWeather}},
+                        {L"Moon phase", {MoonPhaseToName(moonPhase01), true}}
+                    },
+                    {
+                        {L"Moonrise",   {FormatHourHhMm(effMr), snap.valid && snap.hasMoonTimes}},
+                        {L"Moonset",    {FormatHourHhMm(effMs), snap.valid && snap.hasMoonTimes}},
+                        {L"Moon illum", {illumBuf, true}},
+                        {L"Moon alt",   {altBuf, true}},
+                        {L"Moon az",    {azBuf, true}}
+                    },
+                    {
+                        {L"Golden start",{FormatHourHhMm(effSs - 0.75), snap.hasGoldenHour || snap.hasSunTimes}},
+                        {L"Golden end",  {FormatHourHhMm(effSs), snap.hasGoldenHour || snap.hasSunTimes}},
+                        {L"Blue start",  {FormatHourHhMm(effSs), snap.hasSunTimes}},
+                        {L"Blue end",    {FormatHourHhMm(effSs + 0.45), snap.hasSunTimes}},
+                        {L"Daylight",    {FormatDurationHhMm(dayLenH), snap.hasSunTimes}}
+                    }
+                };
+
+                float colStartY = curY + 2.0f;
+                float maxColEndY = colStartY;
+
+                for (int cIdx = 0; cIdx < 2; ++cIdx) {
+                    bool isAstroCol = (cIdx == 1);
+                    float cx0 = colLeftX[cIdx];
+                    float cx1 = cx0 + colW;
+                    float cy = colStartY;
+
+                    const auto& srcList = isAstroCol ? astroList : meteoList;
+                    const std::wstring& selectedSrc = isAstroCol ? cfg.astroPrimarySource : cfg.primarySource;
+                    int pIdx = std::clamp(isAstroCol ? setAstroPage : setMeteoPage, 0, 2);
+
+                    for (const auto& sId : srcList) {
+                        bool isSel = (selectedSrc == sId);
+                        D2D1_RECT_F sRect = D2D1::RectF(cx0, cy, cx1, cy + lineH + 2.0f);
+                        brush->SetColor(isSel ? D2D1::ColorF(0.28f, 0.72f, 1.0f, 0.28f) : D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.04f));
+                        rt->FillRoundedRectangle(D2D1::RoundedRect(sRect, 5.0f, 5.0f), brush);
+                        if (isSel) {
+                            brush->SetColor(D2D1::ColorF(0.45f, 0.82f, 1.0f, 0.90f));
+                            rt->DrawRoundedRectangle(D2D1::RoundedRect(sRect, 5.0f, 5.0f), brush, 1.1f);
+                        }
+                        std::wstring lbl = (isSel ? L"★ " : L"  ") + FormatProviderHudBadge(sId);
+                        brush->SetColor(isSel ? cfg.colorHudText : D2D1::ColorF(cfg.colorHudText.r, cfg.colorHudText.g, cfg.colorHudText.b, 0.75f));
+                        rt->DrawTextW(lbl.c_str(), static_cast<UINT32>(lbl.size()), g_hudBodyFormat,
+                                      D2D1::RectF(sRect.left + 6.0f, sRect.top + 1.0f, sRect.right - 4.0f, sRect.bottom), brush);
+                        nextControls.push_back(InteractiveControl{sRect, (isAstroCol ? L"set_astro_src_" : L"set_meteo_src_") + sId, L"", D2D1::ColorF(0, 0, 0, 0), L""});
+                        cy += lineH + 4.0f;
+                    }
+
+                    cy += 6.0f;
+                    D2D1_RECT_F prevBtn = D2D1::RectF(cx0, cy, cx0 + 24.0f, cy + lineH);
+                    D2D1_RECT_F nextBtn = D2D1::RectF(cx1 - 24.0f, cy, cx1, cy + lineH);
+                    brush->SetColor(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.14f));
+                    rt->FillRoundedRectangle(D2D1::RoundedRect(prevBtn, 4.0f, 4.0f), brush);
+                    rt->FillRoundedRectangle(D2D1::RoundedRect(nextBtn, 4.0f, 4.0f), brush);
+                    brush->SetColor(cfg.colorHudText);
+                    rt->DrawTextW(L"<", 1, g_hudPillFormat, prevBtn, brush);
+                    rt->DrawTextW(L">", 1, g_hudPillFormat, nextBtn, brush);
+                    nextControls.push_back(InteractiveControl{prevBtn, isAstroCol ? L"settings_astro_prev" : L"settings_meteo_prev", L"<", D2D1::ColorF(0, 0, 0, 0), L""});
+                    nextControls.push_back(InteractiveControl{nextBtn, isAstroCol ? L"settings_astro_next" : L"settings_meteo_next", L">", D2D1::ColorF(0, 0, 0, 0), L""});
+
+                    wchar_t pgLbl[32] = {};
+                    swprintf_s(pgLbl, L"Params %d/3", pIdx + 1);
+                    brush->SetColor(D2D1::ColorF(0.62f, 0.82f, 1.0f, 0.90f));
+                    rt->DrawTextW(pgLbl, static_cast<UINT32>(wcslen(pgLbl)), g_hudPillFormat,
+                                  D2D1::RectF(prevBtn.right + 4.0f, cy, nextBtn.left - 4.0f, cy + lineH), brush);
                     cy += lineH + 4.0f;
+
+                    const auto& tRows = isAstroCol ? astroPages[pIdx] : meteoPages[pIdx];
+                    float midSplit = cx0 + (cx1 - cx0) * 0.48f;
+                    for (const auto& tr : tRows) {
+                        bool avail = tr.second.second;
+                        IDWriteTextFormat* fmt = avail ? g_hudBodyFormat : g_hudItalicFormat;
+                        float op = avail ? 1.0f : 0.50f;
+                        brush->SetColor(D2D1::ColorF(cfg.colorHudText.r, cfg.colorHudText.g, cfg.colorHudText.b, op * 0.82f));
+                        fmt->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+                        rt->DrawTextW(tr.first.c_str(), static_cast<UINT32>(tr.first.size()), fmt,
+                                      D2D1::RectF(cx0 + 4.0f, cy, midSplit - 2.0f, cy + lineH), brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+
+                        brush->SetColor(D2D1::ColorF(cfg.colorHudText.r, cfg.colorHudText.g, cfg.colorHudText.b, op));
+                        fmt->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
+                        rt->DrawTextW(tr.second.first.c_str(), static_cast<UINT32>(tr.second.first.size()), fmt,
+                                      D2D1::RectF(midSplit, cy, cx1 - 4.0f, cy + lineH), brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
+                        fmt->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+                        cy += lineH + 1.5f;
+                    }
+                    if (cy > maxColEndY) maxColEndY = cy;
                 }
 
-                cy += 6.0f;
-                D2D1_RECT_F prevBtn = D2D1::RectF(cx0, cy, cx0 + 24.0f, cy + lineH);
-                D2D1_RECT_F nextBtn = D2D1::RectF(cx1 - 24.0f, cy, cx1, cy + lineH);
-                brush->SetColor(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.14f));
-                rt->FillRoundedRectangle(D2D1::RoundedRect(prevBtn, 4.0f, 4.0f), brush);
-                rt->FillRoundedRectangle(D2D1::RoundedRect(nextBtn, 4.0f, 4.0f), brush);
-                brush->SetColor(cfg.colorHudText);
-                rt->DrawTextW(L"<", 1, g_hudPillFormat, prevBtn, brush);
-                rt->DrawTextW(L">", 1, g_hudPillFormat, nextBtn, brush);
-                nextControls.push_back(InteractiveControl{prevBtn, isAstroCol ? L"settings_astro_prev" : L"settings_meteo_prev", L"<", D2D1::ColorF(0, 0, 0, 0), L""});
-                nextControls.push_back(InteractiveControl{nextBtn, isAstroCol ? L"settings_astro_next" : L"settings_meteo_next", L">", D2D1::ColorF(0, 0, 0, 0), L""});
-
-                wchar_t pgLbl[32] = {};
-                swprintf_s(pgLbl, L"Params %d/3", pIdx + 1);
-                brush->SetColor(D2D1::ColorF(0.62f, 0.82f, 1.0f, 0.90f));
-                rt->DrawTextW(pgLbl, static_cast<UINT32>(wcslen(pgLbl)), g_hudPillFormat,
-                              D2D1::RectF(prevBtn.right + 4.0f, cy, nextBtn.left - 4.0f, cy + lineH), brush);
-                cy += lineH + 4.0f;
-
-                const auto& tRows = isAstroCol ? astroPages[pIdx] : meteoPages[pIdx];
-                float midSplit = cx0 + (cx1 - cx0) * 0.48f;
-                for (const auto& tr : tRows) {
-                    bool avail = tr.second.second;
-                    IDWriteTextFormat* fmt = avail ? g_hudBodyFormat : g_hudItalicFormat;
-                    float op = avail ? 1.0f : 0.50f;
-                    brush->SetColor(D2D1::ColorF(cfg.colorHudText.r, cfg.colorHudText.g, cfg.colorHudText.b, op * 0.82f));
-                    fmt->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
-                    rt->DrawTextW(tr.first.c_str(), static_cast<UINT32>(tr.first.size()), fmt,
-                                  D2D1::RectF(cx0 + 4.0f, cy, midSplit - 2.0f, cy + lineH), brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
-
-                    brush->SetColor(D2D1::ColorF(cfg.colorHudText.r, cfg.colorHudText.g, cfg.colorHudText.b, op));
-                    fmt->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
-                    rt->DrawTextW(tr.second.first.c_str(), static_cast<UINT32>(tr.second.first.size()), fmt,
-                                  D2D1::RectF(midSplit, cy, cx1 - 4.0f, cy + lineH), brush, D2D1_DRAW_TEXT_OPTIONS_CLIP);
-                    fmt->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
-                    cy += lineH + 1.5f;
-                }
-                if (cy > maxColEndY) maxColEndY = cy;
+                curY = maxColEndY + 12.0f;
             }
-
-            curY = maxColEndY + 12.0f;
 
             auto triBadge = [](TriStateMode m) -> std::pair<std::wstring, D2D1_COLOR_F> {
                 if (m == TriStateMode::On) return {L"ON", D2D1::ColorF(0.25f, 0.85f, 0.48f, 0.9f)};
@@ -7172,6 +7445,7 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
                 auto cB = triBadge(cfg.cloudsMode);
                 addSetRow(L"  Clouds", L"cycle_clouds", cB.first, cB.second);
                 addSetRow(L"  Top cloud band", L"toggle_top_clouds", cfg.topCloudCoverEnabled ? L"ON" : L"OFF", D2D1::ColorF(0.35f, 0.68f, 1.0f, 0.9f));
+                addSetRow(L"  Ambient sky tint", L"toggle_sky_ambient_tint", cfg.skyAmbientTintEnabled ? L"ON" : L"OFF", D2D1::ColorF(0.45f, 0.72f, 1.0f, 0.9f));
                 auto sB = triBadge(cfg.sunMode);
                 addSetRow(L"  Sun", L"cycle_sun", sB.first, sB.second);
                 auto mB = triBadge(cfg.moonMode);
@@ -7232,7 +7506,6 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
             nextControls.push_back(InteractiveControl{sBox, L"toggle_sources_view", L"", D2D1::ColorF(0, 0, 0, 0), L""});
             DrawFullSourcesOverlay(rt, brush, cfg, snap, sBox, lineH);
         } else if (activeCat == HudCategory::Astro) {
-            // Top Rise/Set bar on Astro (same height as Meteo Now/Hours/Days bar)
             DrawAstroRiseSetBar(rt, brush, cfg, snap, hour, D2D1::RectF(innerLeft, curY, innerRight, curY + subBarH), lineH);
             curY += subBarH + 10.0f;
 
@@ -7524,7 +7797,6 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
                 DrawInfoIconButton(rt, brush, cfg, cUvEmi, nextControls);
             }
         } else {
-            // Top Now / Hours / Days bar on Meteo (same height as Astro Rise/Set bar)
             float tabW = (innerW - 16.0f) / 3.0f;
             DrawModeTabButton(rt, brush, cfg, D2D1::RectF(innerLeft, curY, innerLeft + tabW, curY + subBarH),
                               L"Now", L"tab_now", (activeTab == HudDataTab::Now), nextControls);
@@ -7874,7 +8146,6 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
     }
 }
 
-
 void RenderFrame(const Settings& cfg, const ForecastSnapshot& snap, const GeneralEffectsState& fx,
                  PrecipKind activePrecipKind, float cloudPct01, float uvIndex, double moonPhase01,
                  bool sunOn, bool moonOn, double hour, int bottomLimitY, float precipVx, double timeSec,
@@ -7897,6 +8168,9 @@ void RenderFrame(const Settings& cfg, const ForecastSnapshot& snap, const Genera
         QualityTier tierEffects = ResolveCategoryTier(cfg, cfg.perfEffects);
 
         float k = static_cast<float>(cfg.effectsIntensity) / 25.0f;
+
+        DrawSkyAmbientTintLayer(g_surface.rt, cfg, snap, hour);
+
         if (fx.nightStars) {
             DrawNightStarsLayer(g_surface.rt, g_surface.sharedBrush, tierEffects, k, timeSec);
         }
@@ -7914,34 +8188,19 @@ void RenderFrame(const Settings& cfg, const ForecastSnapshot& snap, const Genera
         }
 
         if (fx.dust) {
-            D2D1_COLOR_F cTop = cfg.hasCustomDustColor ? cfg.colorDust : D2D1::ColorF(0.84f, 0.68f, 0.45f, 0.10f);
-            D2D1_COLOR_F cBot = cfg.hasCustomDustColor ? cfg.colorDust : D2D1::ColorF(0.84f, 0.68f, 0.45f, 0.26f);
-            for (const auto& mon : g_monitorRects) {
-                DrawVerticalGradientTint(g_surface.rt, cTop, cBot, mon.left + mon.innerLeftRel, mon.left + mon.innerRightRel,
-                                         mon.top + mon.innerTopRel, mon.top + mon.bottomLimitRelY, k);
-            }
+            DrawDustLayer(g_surface.rt, g_surface.sharedBrush, cfg, tierEffects, k, precipVx, timeSec);
         }
         if (fx.fog) {
-            D2D1_COLOR_F cTop = cfg.hasCustomFogColor ? cfg.colorFog : D2D1::ColorF(0.84f, 0.88f, 0.92f, 0.14f);
-            D2D1_COLOR_F cBot = cfg.hasCustomFogColor ? cfg.colorFog : D2D1::ColorF(0.84f, 0.88f, 0.92f, 0.34f);
-            for (const auto& mon : g_monitorRects) {
-                DrawVerticalGradientTint(g_surface.rt, cTop, cBot, mon.left + mon.innerLeftRel, mon.left + mon.innerRightRel,
-                                         mon.top + mon.innerTopRel, mon.top + mon.bottomLimitRelY, k);
-            }
+            DrawFogLayer(g_surface.rt, g_surface.sharedBrush, cfg, tierEffects, k, timeSec);
         }
         if (fx.smog) {
-            D2D1_COLOR_F cTop = cfg.hasCustomSmogColor ? cfg.colorSmog : D2D1::ColorF(0.54f, 0.48f, 0.40f, 0.16f);
-            D2D1_COLOR_F cBot = cfg.hasCustomSmogColor ? cfg.colorSmog : D2D1::ColorF(0.54f, 0.48f, 0.40f, 0.36f);
-            for (const auto& mon : g_monitorRects) {
-                DrawVerticalGradientTint(g_surface.rt, cTop, cBot, mon.left + mon.innerLeftRel, mon.left + mon.innerRightRel,
-                                         mon.top + mon.innerTopRel, mon.top + mon.bottomLimitRelY, k);
-            }
+            DrawSmogLayer(g_surface.rt, g_surface.sharedBrush, cfg, tierEffects, k, timeSec);
         }
         if (fx.airQuality) {
             DrawAirQualityLayer(g_surface.rt, g_surface.sharedBrush, cfg, tierEffects, snap, k, timeSec);
         }
         if (fx.frost || fx.heat) {
-            DrawThermalLayer(g_surface.rt, fx.frost, fx.heat, k);
+            DrawThermalLayer(g_surface.rt, g_surface.sharedBrush, tierEffects, fx.frost, fx.heat, k, timeSec);
         }
         if (fx.aurora) {
             DrawSmoothAurora(g_surface.rt, g_surface.sharedBrush, cfg, tierEffects, k, timeSec);
@@ -8290,7 +8549,8 @@ void RenderWorkerLoop() {
 
         bool hasActiveVisuals = !g_falling.empty() || activeFx.thunderstorm || activeFx.aurora || activeFx.mirage ||
                                 activeFx.nightStars || activeFx.airQuality || activeFx.pollen ||
-                                (cloudPct01 > 0.01f) || sunActive || moonActive ||
+                                activeFx.dust || activeFx.fog || activeFx.smog || activeFx.frost || activeFx.heat ||
+                                cfg.skyAmbientTintEnabled || (cloudPct01 > 0.01f) || sunActive || moonActive ||
                                 g_hudExpanded.load() || prevCursorNearSky;
         DWORD waitMs = hasActiveVisuals
             ? static_cast<DWORD>(1000 / cfg.targetFps)
