@@ -14,7 +14,7 @@
 // @author          DahaSakinOlamazdim
 // @github          https://github.com/DahaSakinOlamazdim
 // @include         windhawk.exe
-// @compilerOptions -lgdi32 -luser32 -lshell32 -lcomctl32 -lcomdlg32 -ladvapi32
+// @compilerOptions -lgdi32 -luser32 -lshell32 -lcomctl32 -lcomdlg32 -ladvapi32 -lole32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -94,9 +94,19 @@ or none) can be chosen in the mod settings.
 ## Notes
 
 - Your settings in the editor are remembered between sessions.
-- Generated pictures are kept in %LOCALAPPDATA%\MinimalPatternWallpapers. Only the
-  latest one is kept. The wallpaper stays in place if you disable the mod.
-- The wallpaper is applied with the "Fill" fit style.
+- Applying a wallpaper is a lasting change to your Windows settings. The wallpaper
+  stays in place when you disable the mod. Use "Restore original" first if you
+  want your old wallpaper back.
+- The picture is set on all monitors. It replaces a Slideshow, a Windows
+  Spotlight background, or different wallpapers on different monitors, and the
+  fit style is switched to "Fill". "Restore original" brings back the single
+  wallpaper and fit style you had, not a Slideshow or Spotlight.
+- Generated pictures are kept in the mod's own storage folder, in a separate
+  subfolder for each Windows user. Only the latest one is kept. The folder is
+  deleted together with the mod when you remove it, so use "Restore original"
+  before removing the mod.
+- Your editor settings and your saved original wallpaper are remembered
+  separately for each Windows user.
 - The editor is available in English, Turkish, Russian, Italian and German. By
   default the language follows your Windows display language ("Automatic");
   you can also choose it in the mod settings.
@@ -212,6 +222,8 @@ or none) can be chosen in the mod settings.
 #include <commctrl.h>
 #include <commdlg.h>
 #include <shellapi.h>
+#include <objbase.h>
+#include <sddl.h>
 #include <stdio.h>
 #include <wchar.h>
 
@@ -223,6 +235,10 @@ or none) can be chosen in the mod settings.
 #include <cstring>
 #include <string>
 #include <vector>
+
+#ifndef WM_DPICHANGED
+#define WM_DPICHANGED 0x02E0
+#endif
 
 // ---------------------------------------------------------------------------
 // BEGIN-RENDERER (no Windows dependencies)
@@ -999,6 +1015,33 @@ static void LoadModSettings() {
 // Persistent parameters
 // ---------------------------------------------------------------------------
 
+// The mod storage is shared by all Windows users of the PC, so every stored
+// value and every file is tied to the SID of the current user.
+static std::wstring GetUserSid() {
+    static std::wstring sid;
+    if (!sid.empty()) return sid;
+    HANDLE tok = nullptr;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &tok)) {
+        DWORD n = 0;
+        GetTokenInformation(tok, TokenUser, nullptr, 0, &n);
+        std::vector<BYTE> buf(n);
+        if (n && GetTokenInformation(tok, TokenUser, buf.data(), n, &n)) {
+            LPWSTR str = nullptr;
+            if (ConvertSidToStringSidW(((TOKEN_USER*)buf.data())->User.Sid, &str)) {
+                sid = str;
+                LocalFree(str);
+            }
+        }
+        CloseHandle(tok);
+    }
+    if (sid.empty()) sid = L"unknown-user";
+    return sid;
+}
+
+static std::wstring UserKey(const wchar_t* name) {
+    return std::wstring(name) + L"_" + GetUserSid();
+}
+
 static Params g_p;
 
 template <class F>
@@ -1022,7 +1065,7 @@ static void ForEachParam(Params& p, F f) {
 
 static void LoadParams(Params& p) {
     ForEachParam(p, [](const wchar_t* name, int* v) {
-        *v = Wh_GetIntValue(name, *v);
+        *v = Wh_GetIntValue(UserKey(name).c_str(), *v);
     });
     p.pattern = std::clamp(p.pattern, 0, (int)PAT_COUNT - 1);
     p.angle = std::clamp(p.angle, 0, 179);
@@ -1039,7 +1082,7 @@ static void LoadParams(Params& p) {
 
 static void SaveParams(Params& p) {
     ForEachParam(p, [](const wchar_t* name, int* v) {
-        Wh_SetIntValue(name, *v);
+        Wh_SetIntValue(UserKey(name).c_str(), *v);
     });
 }
 
@@ -1112,11 +1155,13 @@ static bool WriteBmpFile(const std::wstring& path, const uint32_t* px, int W,
     return ok;
 }
 
+// The pictures live in the mod's own storage folder (removed together with the
+// mod), in a subfolder per Windows user because the storage is shared.
 static bool EnsureDir(std::wstring& dir) {
     WCHAR base[MAX_PATH];
-    DWORD n = GetEnvironmentVariableW(L"LOCALAPPDATA", base, ARRAYSIZE(base));
-    if (!n || n >= ARRAYSIZE(base)) return false;
-    dir = std::wstring(base) + L"\\MinimalPatternWallpapers";
+    if (!Wh_GetModStoragePath(base, ARRAYSIZE(base))) return false;
+    CreateDirectoryW(base, nullptr);  // normally exists already
+    dir = std::wstring(base) + L"\\" + GetUserSid();
     CreateDirectoryW(dir.c_str(), nullptr);
     return GetFileAttributesW(dir.c_str()) != INVALID_FILE_ATTRIBUTES;
 }
@@ -1134,46 +1179,74 @@ static void CleanOldWallpapers(const std::wstring& dir,
     FindClose(h);
 }
 
-static const wchar_t* kDesktopKey = L"Control Panel\\Desktop";
+// Minimal declaration of the Windows IDesktopWallpaper interface. Only the
+// methods up to GetPosition are declared; the order must match the real one.
+struct IWlsDesktopWallpaper : public IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE SetWallpaper(LPCWSTR monitorID, LPCWSTR wallpaper) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetWallpaper(LPCWSTR monitorID, LPWSTR* wallpaper) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetMonitorDevicePathAt(UINT monitorIndex, LPWSTR* monitorID) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetMonitorDevicePathCount(UINT* count) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetMonitorRECT(LPCWSTR monitorID, RECT* displayRect) = 0;
+    virtual HRESULT STDMETHODCALLTYPE SetBackgroundColor(COLORREF color) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetBackgroundColor(COLORREF* color) = 0;
+    virtual HRESULT STDMETHODCALLTYPE SetPosition(int position) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetPosition(int* position) = 0;
+};
 
-static void SetWallpaperStyle(const wchar_t* style, const wchar_t* tile) {
-    HKEY k = nullptr;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, kDesktopKey, 0, KEY_SET_VALUE, &k) !=
-        ERROR_SUCCESS) {
-        return;
-    }
-    RegSetValueExW(k, L"WallpaperStyle", 0, REG_SZ, (const BYTE*)style,
-                   (DWORD)((wcslen(style) + 1) * sizeof(WCHAR)));
-    RegSetValueExW(k, L"TileWallpaper", 0, REG_SZ, (const BYTE*)tile,
-                   (DWORD)((wcslen(tile) + 1) * sizeof(WCHAR)));
-    RegCloseKey(k);
-}
+static const GUID kClsidDesktopWallpaper = {
+    0xC2CF3110, 0x460E, 0x4FC1, {0xB9, 0xD0, 0x8A, 0x1C, 0x0C, 0x9C, 0xC4, 0xBD}};
+static const GUID kIidDesktopWallpaper = {
+    0xB92B56A9, 0x8B55, 0x4E14, {0x9A, 0x89, 0x01, 0x99, 0xBB, 0xB6, 0xF9, 0x3B}};
 
-static std::wstring ReadDesktopString(const wchar_t* name,
-                                      const wchar_t* def) {
-    WCHAR buf[64];
-    DWORD sz = sizeof(buf);
-    if (RegGetValueW(HKEY_CURRENT_USER, kDesktopKey, name, RRF_RT_REG_SZ,
-                     nullptr, buf, &sz) == ERROR_SUCCESS) {
-        return buf;
+static const int kWallpaperFill = 4;  // DWPOS_FILL
+
+static IWlsDesktopWallpaper* CreateDesktopWallpaper() {
+    IWlsDesktopWallpaper* dw = nullptr;
+    HRESULT hr = CoCreateInstance(kClsidDesktopWallpaper, nullptr, CLSCTX_ALL,
+                                  kIidDesktopWallpaper, (void**)&dw);
+    if (FAILED(hr) || !dw) {
+        Wh_Log(L"IDesktopWallpaper is not available: 0x%08X", (unsigned)hr);
+        return nullptr;
     }
-    return def;
+    return dw;
 }
 
 // Remembers the wallpaper from before the first time this mod applies one.
 static void SaveOriginalOnce() {
-    if (Wh_GetIntValue(L"origSaved", 0)) return;
+    const std::wstring kSaved = UserKey(L"origSaved");
+    if (Wh_GetIntValue(kSaved.c_str(), 0)) return;
+
     WCHAR path[MAX_PATH] = L"";
     SystemParametersInfoW(SPI_GETDESKWALLPAPER, MAX_PATH, path, 0);
-    Wh_SetStringValue(L"origPath", path);
-    Wh_SetStringValue(L"origStyle", ReadDesktopString(L"WallpaperStyle", L"10").c_str());
-    Wh_SetStringValue(L"origTile", ReadDesktopString(L"TileWallpaper", L"0").c_str());
-    Wh_SetIntValue(L"origSaved", 1);
+
+    int pos = -1;
+    if (IWlsDesktopWallpaper* dw = CreateDesktopWallpaper()) {
+        int p = 0;
+        if (SUCCEEDED(dw->GetPosition(&p))) pos = p;
+        dw->Release();
+    }
+
+    Wh_SetStringValue(UserKey(L"origPath").c_str(), path);
+    Wh_SetIntValue(UserKey(L"origPos").c_str(), pos);
+    Wh_SetIntValue(kSaved.c_str(), 1);
 }
 
-static bool SetWallpaperFile(const wchar_t* path) {
-    return SystemParametersInfoW(SPI_SETDESKWALLPAPER, 0, (PVOID)path,
-                                 SPIF_UPDATEINIFILE | SPIF_SENDCHANGE) != 0;
+// Sets the wallpaper on all monitors. position < 0 leaves the fit style as is.
+static bool SetWallpaperFile(const wchar_t* path, int position) {
+    IWlsDesktopWallpaper* dw = CreateDesktopWallpaper();
+    if (!dw) return false;
+    HRESULT hr = dw->SetWallpaper(nullptr, path);
+    if (FAILED(hr)) {
+        Wh_Log(L"SetWallpaper failed: 0x%08X", (unsigned)hr);
+        dw->Release();
+        return false;
+    }
+    if (position >= 0) {
+        hr = dw->SetPosition(position);
+        if (FAILED(hr)) Wh_Log(L"SetPosition failed: 0x%08X", (unsigned)hr);
+    }
+    dw->Release();
+    return true;
 }
 
 // Draws the full-size picture and applies it. Returns false on failure.
@@ -1196,23 +1269,17 @@ static bool ApplyWallpaper(int& outW, int& outH) {
     if (!WriteBmpFile(path, buf.p, W, H)) return false;
 
     SaveOriginalOnce();
-    SetWallpaperStyle(L"10", L"0");  // Fill
-    if (!SetWallpaperFile(path.c_str())) {
-        Wh_Log(L"SPI_SETDESKWALLPAPER failed: %lu", GetLastError());
-        return false;
-    }
+    if (!SetWallpaperFile(path.c_str(), kWallpaperFill)) return false;
     CleanOldWallpapers(dir, name);
     return true;
 }
 
 static bool RestoreOriginalWallpaper() {
-    if (!Wh_GetIntValue(L"origSaved", 0)) return false;
-    WCHAR path[MAX_PATH] = L"", style[16] = L"10", tile[16] = L"0";
-    Wh_GetStringValue(L"origPath", path, ARRAYSIZE(path));
-    Wh_GetStringValue(L"origStyle", style, ARRAYSIZE(style));
-    Wh_GetStringValue(L"origTile", tile, ARRAYSIZE(tile));
-    SetWallpaperStyle(style, tile);
-    return SetWallpaperFile(path);
+    if (!Wh_GetIntValue(UserKey(L"origSaved").c_str(), 0)) return false;
+    WCHAR path[MAX_PATH] = L"";
+    Wh_GetStringValue(UserKey(L"origPath").c_str(), path, ARRAYSIZE(path));
+    const int pos = Wh_GetIntValue(UserKey(L"origPos").c_str(), -1);
+    return SetWallpaperFile(path, pos);
 }
 
 // ---------------------------------------------------------------------------
@@ -2298,6 +2365,33 @@ static void BuildEditor(HWND hwnd) {
     UpdatePreview();
 }
 
+// The editor was moved to a monitor with a different scale, or the scale
+// changed: resize the window and build the whole layout again at the new scale.
+static void ChangeEditorDpi(HWND hwnd, int newDpi, const RECT* suggested) {
+    if (newDpi < 96) newDpi = 96;
+    KillTimer(hwnd, 1);
+    g_refreshPending = false;
+    ReleaseCapture();
+    g_dpi = newDpi;
+    if (suggested) {
+        SetWindowPos(hwnd, nullptr, suggested->left, suggested->top,
+                     suggested->right - suggested->left,
+                     suggested->bottom - suggested->top,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+    g_hotBtn = nullptr;
+    g_dragging = false;
+    while (HWND child = GetWindow(hwnd, GW_CHILD)) DestroyWindow(child);
+    FreePreview();
+    if (g_font) {
+        DeleteObject(g_font);
+        g_font = nullptr;
+    }
+    BuildEditor(hwnd);
+    RedrawWindow(hwnd, nullptr, nullptr,
+                 RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+}
+
 static LRESULT CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
         case WM_CREATE:
@@ -2339,6 +2433,10 @@ static LRESULT CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             }
             break;
         }
+
+        case WM_DPICHANGED:
+            ChangeEditorDpi(hwnd, (int)HIWORD(wp), (const RECT*)lp);
+            return 0;
 
         case WM_SETTINGCHANGE:  // accent color changes
             if (lp && wcscmp((LPCWSTR)lp, L"ImmersiveColorSet") == 0) ApplyTheme(hwnd);
@@ -2474,6 +2572,27 @@ static LRESULT CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     return DefWindowProcW(hwnd, msg, wp, lp);
 }
 
+// DPI of the primary monitor, where the editor first opens.
+static int PrimaryMonitorDpi() {
+    int dpi = 96;
+    HMODULE sh = LoadLibraryW(L"shcore.dll");
+    if (sh) {
+        typedef HRESULT(WINAPI * GetDpiForMonitor_t)(HMONITOR, int, UINT*, UINT*);
+        GetDpiForMonitor_t pGet =
+            (GetDpiForMonitor_t)GetProcAddress(sh, "GetDpiForMonitor");
+        if (pGet) {
+            POINT pt = {0, 0};
+            HMONITOR mon = MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
+            UINT dx = 96, dy = 96;
+            if (SUCCEEDED(pGet(mon, 0 /* MDT_EFFECTIVE_DPI */, &dx, &dy))) {
+                dpi = (int)dx;
+            }
+        }
+        FreeLibrary(sh);
+    }
+    return dpi < 96 ? 96 : dpi;
+}
+
 static void OpenEditor() {
     if (g_editor) {
         if (IsIconic(g_editor)) ShowWindow(g_editor, SW_RESTORE);
@@ -2481,10 +2600,7 @@ static void OpenEditor() {
         return;
     }
 
-    HDC scr = GetDC(nullptr);
-    g_dpi = GetDeviceCaps(scr, LOGPIXELSX);
-    ReleaseDC(nullptr, scr);
-    if (g_dpi < 96) g_dpi = 96;
+    g_dpi = PrimaryMonitorDpi();
 
     const DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
     RECT rc = {0, 0, SC(kClientW), SC(kClientH)};
@@ -2727,7 +2843,16 @@ static bool RouteWheel(const MSG& msg) {
     return true;
 }
 
+struct ComInit {
+    HRESULT hr;
+    ComInit() : hr(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)) {}
+    ~ComInit() {
+        if (SUCCEEDED(hr)) CoUninitialize();
+    }
+};
+
 static DWORD WINAPI Worker(LPVOID) {
+    ComInit com;  // IDesktopWallpaper needs COM on this thread
     srand((unsigned)GetTickCount64());
 
     // Work in real pixels (the screen size and the editor layout depend on it).
