@@ -19,7 +19,7 @@ const WAITING_FOR_REVIEWER = 'waiting-for-reviewer';
 const AI_REVIEWER_LOGIN = 'windhawk-reviewer[bot]';
 
 // The commit an AI review covers, as pr_flow.cjs reads it.
-const AI_REVIEW_MARKER_PATTERN = /<!--\s*ai-review\s+sha=([0-9a-f]{40})\s*-->/g;
+const AI_REVIEW_MARKER_PATTERN = /^<!--\s*ai-review\s+sha=([0-9a-f]{40})\s*-->/;
 
 // A pull request with an AI review that has this section is never listed.
 const AI_REVIEW_HARMFUL_SECTION = '<summary>Potentially misleading or harmful';
@@ -172,12 +172,12 @@ async function readAiReviews(prNumber: number) {
         }
 
         const body: string = comment.body ?? '';
-        const markers = [...body.matchAll(AI_REVIEW_MARKER_PATTERN)];
-        if (markers.length === 0) {
+        const marker = body.match(AI_REVIEW_MARKER_PATTERN);
+        if (!marker) {
             continue;
         }
 
-        lastReviewedCommit = markers[markers.length - 1][1];
+        lastReviewedCommit = marker[1];
         flagged ||= body.includes(AI_REVIEW_HARMFUL_SECTION);
     }
 
