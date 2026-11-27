@@ -2,7 +2,7 @@
 // @id              one-letter-language-indicator
 // @name            1 Letter Language Indicator
 // @description     Shortens the taskbar language indicator ("ENG", "ENG (US)") to a single letter ("E")
-// @version         1.0
+// @version         1.1
 // @author          Deen-0x
 // @github          https://github.com/Deen-0x
 // @include         explorer.exe
@@ -32,6 +32,10 @@ text is restored when the mod is disabled.
 
 - **Letter size**: the font size of the letter. Set it to 0 to keep the
   Windows size (12).
+- **Letter weight**: the font weight of the letter, from 1 to 999, e.g. 300
+  (Light), 400 (Normal), 600 (Semi Bold) or 700 (Bold). Set it to 0 to keep the
+  Windows weight (400). The taskbar font, Segoe UI Variable, renders weights
+  from 300 to 700, so values outside that range look like 300 or 700.
 - **Letter color**: separate colors for light mode and dark mode, chosen by the
   taskbar's theme (the Windows mode). Each one can be:
   - A hex color (`#RRGGBB` or `#AARRGGBB`) or a color name (`Red`, `White`).
@@ -53,8 +57,8 @@ text is restored when the mod is disabled.
 - Other mods may set the same properties. "Taskbar tray icon spacing and grid"
   sets the width of the language indicator: while **Indicator width** is set,
   this mod's width wins. Windows 11 Taskbar Styler themes which change the font
-  size or color of the indicator conflict with **Letter size** and **Letter
-  color**, and whichever mod applies last wins. To let the other mod control a
+  size, weight or color of the indicator conflict with **Letter size**,
+  **Letter weight** and **Letter color**, and whichever mod applies last wins. To let the other mod control a
   property, set the matching setting to 0 (or leave the color empty).
 
 ## Target
@@ -74,6 +78,12 @@ Only Windows 11 is supported.
   $name: Letter size
   $description: >-
     Font size of the letter. Set to 0 to keep the Windows default size (12).
+- fontWeight: 0
+  $name: Letter weight
+  $description: >-
+    Font weight of the letter, from 1 to 999: 100 Thin, 200 Extra Light,
+    300 Light, 400 Normal, 500 Medium, 600 Semi Bold, 700 Bold, 800 Extra Bold,
+    900 Black. Set to 0 to keep the Windows default weight (400).
 - textColor:
   - light: ""
     $name: Light mode
@@ -101,6 +111,7 @@ Only Windows 11 is supported.
 
 #include <windhawk_utils.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cwctype>
 #include <functional>
@@ -114,6 +125,7 @@ Only Windows 11 is supported.
 #undef GetCurrentTime
 
 #include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.UI.ViewManagement.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Data.h>
@@ -133,6 +145,7 @@ using winrt::Windows::UI::ViewManagement::UISettings;
 
 struct {
     int fontSize;
+    int fontWeight;
     std::wstring textColorLight;
     std::wstring textColorDark;
     int verticalOffset;
@@ -238,6 +251,22 @@ bool RunFromWindowThread(HWND hWnd,
     UnhookWindowsHookEx(hook);
 
     return true;
+}
+
+FrameworkElement FindParentByClassName(FrameworkElement element,
+                                       PCWSTR className) {
+    auto parent = element;
+    while (true) {
+        parent = Media::VisualTreeHelper::GetParent(parent)
+                     .try_as<FrameworkElement>();
+        if (!parent) {
+            return nullptr;
+        }
+
+        if (winrt::get_class_name(parent) == className) {
+            return parent;
+        }
+    }
 }
 
 FrameworkElement FindChildByClassName(FrameworkElement element,
@@ -697,6 +726,23 @@ ComputeOverride_t MakeDoubleOverride(double desiredValue) {
     };
 }
 
+ComputeOverride_t MakeFontWeightOverride(uint16_t desiredWeight) {
+    return [desiredWeight](const DependencyObject&,
+                           const WinrtInspectable& value) -> WinrtInspectable {
+        // A null or unexpected value unboxes to weight 0, which never equals a
+        // desired weight (1-999).
+        auto currentWeight =
+            winrt::unbox_value_or<winrt::Windows::UI::Text::FontWeight>(value,
+                                                                         {});
+        if (currentWeight.Weight == desiredWeight) {
+            return nullptr;
+        }
+
+        return winrt::box_value(
+            winrt::Windows::UI::Text::FontWeight{desiredWeight});
+    };
+}
+
 // Picks the light or dark mode color by the TextBlock's theme, which follows
 // the taskbar (the Windows mode), not the apps mode.
 WinrtInspectable ComputeForeground(const DependencyObject& element,
@@ -747,8 +793,202 @@ ComputeOverride_t MakeVerticalOffsetOverride(double offsetY) {
     };
 }
 
-void TrackLanguageIndicator(FrameworkElement languageTextIconContent) {
+////////////////////////////////////////////////////////////////////////////////
+// Recreated indicators.
+//
+// Some taskbar changes, such as switching the taskbar size between small and
+// default, recreate the language indicator's content inside existing tray
+// icons. Neither the IconView constructor hook nor the icon's Loaded event sees
+// the new content then. Instead, when a tracked indicator element is unloaded,
+// the system tray is watched for a few seconds, and indicators which appear
+// meanwhile are tracked.
+
+constexpr ULONGLONG kRescanWatchDurationMs = 5000;
+
+// The globals below hold only weak references, event tokens and tick counts, so
+// unlike the XAML-owning globals above they're safe to destroy at process exit.
+// They're still cleared on the taskbar thread on unload, which also removes
+// their event handlers.
+
+struct UnloadWatch {
+    winrt::weak_ref<FrameworkElement> element;
+    // The tray the element belongs to. Each taskbar, primary and secondary,
+    // has its own SystemTray.SystemTrayFrame.
+    winrt::weak_ref<FrameworkElement> systemTrayFrame;
+    winrt::event_token unloadedToken{};
+};
+
+// Only accessed from the taskbar UI thread.
+std::list<UnloadWatch> g_unloadWatches;
+
+struct RescanWatch {
+    winrt::weak_ref<FrameworkElement> root;
+    winrt::event_token layoutUpdatedToken{};
+    ULONGLONG deadline = 0;
+};
+
+// One per system tray being watched for new indicators, so that a watch on one
+// taskbar doesn't cancel a watch on another. Only accessed from the taskbar UI
+// thread.
+std::list<RescanWatch> g_rescanWatches;
+
+int TrackLanguageIndicatorsIn(DependencyObject root);
+
+void StopRescanWatch(std::list<RescanWatch>::iterator it) {
+    if (auto root = it->root.get()) {
+        try {
+            root.LayoutUpdated(it->layoutUpdatedToken);
+        } catch (const winrt::hresult_error& ex) {
+            Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+        }
+    }
+
+    g_rescanWatches.erase(it);
+}
+
+void StopAllRescanWatches() {
+    while (!g_rescanWatches.empty()) {
+        StopRescanWatch(g_rescanWatches.begin());
+    }
+}
+
+// Watches the given system tray for a few seconds, or extends an existing watch
+// of it.
+void StartRescanWatch(const FrameworkElement& systemTrayFrame) {
+    if (g_unloading || !systemTrayFrame) {
+        return;
+    }
+
+    ULONGLONG deadline = GetTickCount64() + kRescanWatchDurationMs;
+
+    for (auto& rescanWatch : g_rescanWatches) {
+        if (rescanWatch.root.get() == systemTrayFrame) {
+            rescanWatch.deadline = deadline;
+            return;
+        }
+    }
+
+    Wh_Log(L"Watching the system tray for new language indicators");
+
+    g_rescanWatches.emplace_back();
+    auto it = std::prev(g_rescanWatches.end());
+    it->root = winrt::make_weak(systemTrayFrame);
+    it->deadline = deadline;
+
+    // Elements are added to the tree in a layout pass, so a scan after each
+    // pass finds them. LayoutUpdated has no meaningful sender. The handler is
+    // removed before its list entry is erased, so the iterator stays valid
+    // while the handler can run.
+    it->layoutUpdatedToken = systemTrayFrame.LayoutUpdated(
+        [it](const WinrtInspectable&, const WinrtInspectable&) {
+            if (g_unloading) {
+                return;
+            }
+
+            auto root = it->root.get();
+            if (!root || GetTickCount64() > it->deadline) {
+                Wh_Log(L"Stopped watching the system tray");
+                StopRescanWatch(it);
+                return;
+            }
+
+            try {
+                int count = TrackLanguageIndicatorsIn(root);
+                if (count > 0) {
+                    Wh_Log(L"New language indicators: %d", count);
+                }
+            } catch (const winrt::hresult_error& ex) {
+                Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+            }
+        });
+}
+
+bool IsUnloadWatched(const FrameworkElement& element) {
+    for (const auto& unloadWatch : g_unloadWatches) {
+        if (unloadWatch.element.get() == element) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void WatchUnload(const FrameworkElement& element,
+                 const FrameworkElement& systemTrayFrame) {
+    if (IsUnloadWatched(element)) {
+        return;
+    }
+
+    // Drop entries of elements which no longer exist.
+    g_unloadWatches.remove_if([](const UnloadWatch& unloadWatch) {
+        return !unloadWatch.element.get();
+    });
+
+    auto& unloadWatch = g_unloadWatches.emplace_back();
+    unloadWatch.element = winrt::make_weak(element);
+    if (systemTrayFrame) {
+        unloadWatch.systemTrayFrame = winrt::make_weak(systemTrayFrame);
+    }
+
+    unloadWatch.unloadedToken = element.Unloaded(
+        [systemTrayFrameWeak = unloadWatch.systemTrayFrame](
+            const WinrtInspectable&, const RoutedEventArgs&) {
+            if (g_unloading) {
+                return;
+            }
+
+            Wh_Log(L"Language indicator element unloaded");
+
+            if (auto systemTrayFrame = systemTrayFrameWeak.get()) {
+                StartRescanWatch(systemTrayFrame);
+            } else {
+                Wh_Log(L"No system tray to watch");
+            }
+        });
+}
+
+void RemoveAllUnloadWatches() {
+    for (const auto& unloadWatch : g_unloadWatches) {
+        if (auto element = unloadWatch.element.get()) {
+            try {
+                element.Unloaded(unloadWatch.unloadedToken);
+            } catch (const winrt::hresult_error& ex) {
+                Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+            }
+        }
+    }
+
+    g_unloadWatches.clear();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Tracking an indicator.
+
+// Returns false if the indicator was already tracked.
+bool TrackLanguageIndicator(FrameworkElement languageTextIconContent) {
+    Controls::TextBlock innerTextBlock = nullptr;
+    if (auto adaptiveTextBlock = FindDescendantByName(
+            languageTextIconContent, L"LanguageInnerTextBlock")) {
+        innerTextBlock =
+            FindDescendantByName(adaptiveTextBlock, L"InnerTextBlock")
+                .try_as<Controls::TextBlock>();
+    }
+
+    // Both elements are watched once tracked. A watched content element with a
+    // new TextBlock means its template was applied again, and the new
+    // TextBlock still needs tracking.
+    if (IsUnloadWatched(languageTextIconContent) &&
+        (!innerTextBlock || IsUnloadWatched(innerTextBlock))) {
+        return false;
+    }
+
     Wh_Log(L"Found LanguageTextIconContent");
+
+    // The tray to rescan when the indicator is recreated.
+    auto systemTrayFrame = FindParentByClassName(languageTextIconContent,
+                                                 L"SystemTray.SystemTrayFrame");
+
+    WatchUnload(languageTextIconContent, systemTrayFrame);
 
     if (g_settings.iconWidth > 0) {
         TrackProperty(languageTextIconContent,
@@ -759,18 +999,12 @@ void TrackLanguageIndicator(FrameworkElement languageTextIconContent) {
                       MakeDoubleOverride(0));
     }
 
-    Controls::TextBlock innerTextBlock = nullptr;
-    if (auto adaptiveTextBlock = FindDescendantByName(
-            languageTextIconContent, L"LanguageInnerTextBlock")) {
-        innerTextBlock =
-            FindDescendantByName(adaptiveTextBlock, L"InnerTextBlock")
-                .try_as<Controls::TextBlock>();
-    }
-
     if (!innerTextBlock) {
         Wh_Log(L"InnerTextBlock not found");
-        return;
+        return true;
     }
+
+    WatchUnload(innerTextBlock, systemTrayFrame);
 
     if (innerTextBlock.GetBindingExpression(
             Controls::TextBlock::TextProperty())) {
@@ -787,6 +1021,12 @@ void TrackLanguageIndicator(FrameworkElement languageTextIconContent) {
                       MakeDoubleOverride(g_settings.fontSize));
     }
 
+    if (g_settings.fontWeight > 0) {
+        TrackProperty(innerTextBlock, Controls::TextBlock::FontWeightProperty(),
+                      MakeFontWeightOverride(
+                          static_cast<uint16_t>(g_settings.fontWeight)));
+    }
+
     if (!g_settings.textColorLight.empty() ||
         !g_settings.textColorDark.empty()) {
         TrackProperty(innerTextBlock, Controls::TextBlock::ForegroundProperty(),
@@ -797,12 +1037,28 @@ void TrackLanguageIndicator(FrameworkElement languageTextIconContent) {
         TrackProperty(innerTextBlock, UIElement::RenderTransformProperty(),
                       MakeVerticalOffsetOverride(g_settings.verticalOffset));
     }
+
+    return true;
 }
 
+// Returns the number of newly tracked indicators.
 int TrackLanguageIndicatorsIn(DependencyObject root) {
-    return EnumDescendantsByClassName(root,
-                                      L"SystemTray.LanguageTextIconContent",
-                                      TrackLanguageIndicator);
+    int newCount = 0;
+    EnumDescendantsByClassName(root, L"SystemTray.LanguageTextIconContent",
+                               [&newCount](FrameworkElement element) {
+                                   if (TrackLanguageIndicator(element)) {
+                                       newCount++;
+                                   }
+                               });
+    return newCount;
+}
+
+// Stops tracking everything and restores the taskbar's values. Must be called
+// on the taskbar UI thread.
+void UntrackAllLanguageIndicators() {
+    StopAllRescanWatches();
+    RemoveAllUnloadWatches();
+    RestoreAllPropertyOverrides();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -848,6 +1104,12 @@ void* WINAPI IconView_IconView_Hook(void* pThis) {
             try {
                 if (TrackLanguageIndicatorsIn(iconView) > 0) {
                     Wh_Log(L"Language indicator loaded");
+                } else if (iconView.Name() == L"SystemTrayIcon") {
+                    // The icon's content might not be created yet. This is
+                    // also the language indicator's icon type. Watch the tray
+                    // this icon belongs to.
+                    StartRescanWatch(FindParentByClassName(
+                        iconView, L"SystemTray.SystemTrayFrame"));
                 }
             } catch (const winrt::hresult_error& ex) {
                 Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
@@ -968,6 +1230,9 @@ void LoadSettings() {
         g_settings.fontSize = 0;
     }
 
+    // XAML accepts weights from 1 to 999.
+    g_settings.fontWeight = std::clamp(Wh_GetIntSetting(L"fontWeight"), 0, 999);
+
     g_settings.textColorLight = GetTrimmedStringSetting(L"textColor.light");
     g_settings.textColorDark = GetTrimmedStringSetting(L"textColor.dark");
 
@@ -1011,7 +1276,7 @@ void ApplySettings(bool reloadSettings) {
             const auto& param = *(const ApplySettingsParam*)pParam;
             HWND hTaskbarWnd = param.hTaskbarWnd;
 
-            RestoreAllPropertyOverrides();
+            UntrackAllLanguageIndicators();
 
             if (g_unloading) {
                 UnregisterAccentColorChanges();

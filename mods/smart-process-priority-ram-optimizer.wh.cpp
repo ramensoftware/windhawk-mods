@@ -2,11 +2,11 @@
 // @id              smart-process-priority-ram-optimizer
 // @name            Smart Process Priority & RAM Optimizer
 // @description     Boosts foreground responsiveness, shields audio, network, and AI workloads, throttles runaway background CPU, and safely reclaims idle memory.
-// @version         1.1.0
+// @version         1.1.1
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         windhawk.exe
-// @compilerOptions -lpsapi -lole32 -lshell32 -ldwmapi -ladvapi32 -lpowrprof -liphlpapi
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lpsapi -lole32 -lshell32 -ldwmapi -ladvapi32 -lpowrprof -liphlpapi
 // @donateUrl       https://buymeacoffee.com/gilnett
 // @license         GPL-3.0
 // ==/WindhawkMod==
@@ -224,9 +224,6 @@ If you find this mod useful, you can support its development and maintenance:
 #define _WIN32_WINNT 0x0A00
 #endif
 
-#include <windows.h>
-
-// Must follow windows.h for ULONG and WINAPI_FAMILY_PARTITION
 #include <powrprof.h>
 
 #include <objbase.h>
@@ -288,6 +285,9 @@ typedef struct _PROCESS_POWER_THROTTLING_STATE {
 #endif
 #ifndef PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION
 #define PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION 0x4u
+#endif
+#ifndef AF_INET
+#define AF_INET 2
 #endif
 #ifndef AF_INET6
 #define AF_INET6 23
@@ -657,17 +657,25 @@ static void ClearPowerSchemeState() {
 }
 
 static void RestoreOriginalPowerScheme() {
-    std::lock_guard<std::mutex> lock(g_powerSchemeMutex);
-    if (!g_isPerformancePlanEngaged.load() || !g_hasOriginalPowerScheme) {
-        return;
+    GUID origScheme{};
+    GUID engagedGuid{};
+    {
+        std::lock_guard<std::mutex> lock(g_powerSchemeMutex);
+        if (!g_isPerformancePlanEngaged.load() || !g_hasOriginalPowerScheme) {
+            return;
+        }
+        origScheme = g_originalPowerScheme;
+        engagedGuid = g_engagedPowerPlanGuid;
     }
+
     GUID* pCurrent = nullptr;
     if (PowerGetActiveScheme(nullptr, &pCurrent) == ERROR_SUCCESS && pCurrent) {
         bool currentMatchesEngaged =
-            IsEqualGUID(*pCurrent, g_engagedPowerPlanGuid);
+            IsEqualGUID(*pCurrent, engagedGuid);
         LocalFree(pCurrent);
         if (!currentMatchesEngaged) {
             // User manually switched power schemes during workload; do not overwrite user's choice
+            std::lock_guard<std::mutex> lock(g_powerSchemeMutex);
             g_isPerformancePlanEngaged.store(false);
             g_hasOriginalPowerScheme = false;
             g_engagedPowerPlanGuid = GUID{};
@@ -676,11 +684,14 @@ static void RestoreOriginalPowerScheme() {
             return;
         }
     }
-    DWORD res = PowerSetActiveScheme(nullptr, &g_originalPowerScheme);
-    g_isPerformancePlanEngaged.store(false);
-    g_hasOriginalPowerScheme = false;
-    g_engagedPowerPlanGuid = GUID{};
-    ClearPowerSchemeState();
+    DWORD res = PowerSetActiveScheme(nullptr, &origScheme);
+    {
+        std::lock_guard<std::mutex> lock(g_powerSchemeMutex);
+        g_isPerformancePlanEngaged.store(false);
+        g_hasOriginalPowerScheme = false;
+        g_engagedPowerPlanGuid = GUID{};
+        ClearPowerSchemeState();
+    }
     if (res == ERROR_SUCCESS) {
         Wh_Log(L"[Power] Restored original system power plan.");
     } else {
@@ -689,17 +700,25 @@ static void RestoreOriginalPowerScheme() {
 }
 
 static void EngageTargetPowerScheme(const GUID& targetGuid) {
-    std::lock_guard<std::mutex> lock(g_powerSchemeMutex);
-    if (g_hasFailedPowerPlanGuid &&
-        IsEqualGUID(g_lastFailedPowerPlanGuid, targetGuid)) {
-        return;
-    }
-    if (g_isPerformancePlanEngaged.load()) {
-        if (IsEqualGUID(g_engagedPowerPlanGuid, targetGuid)) {
+    bool alreadyEngaged = false;
+    {
+        std::lock_guard<std::mutex> lock(g_powerSchemeMutex);
+        if (g_hasFailedPowerPlanGuid &&
+            IsEqualGUID(g_lastFailedPowerPlanGuid, targetGuid)) {
             return;
         }
+        if (g_isPerformancePlanEngaged.load()) {
+            if (IsEqualGUID(g_engagedPowerPlanGuid, targetGuid)) {
+                return;
+            }
+            alreadyEngaged = true;
+        }
+    }
+
+    if (alreadyEngaged) {
         // Swapping target scheme while already engaged (e.g. settings changed during workload)
         DWORD res = PowerSetActiveScheme(nullptr, &targetGuid);
+        std::lock_guard<std::mutex> lock(g_powerSchemeMutex);
         if (res == ERROR_SUCCESS) {
             g_engagedPowerPlanGuid = targetGuid;
             SavePowerSchemeState(g_originalPowerScheme, targetGuid, /*engaged=*/true);
@@ -729,6 +748,7 @@ static void EngageTargetPowerScheme(const GUID& targetGuid) {
         LocalFree(pCurrent);
 
         DWORD res = PowerSetActiveScheme(nullptr, &targetGuid);
+        std::lock_guard<std::mutex> lock(g_powerSchemeMutex);
         if (res == ERROR_SUCCESS) {
             g_originalPowerScheme = originalGuid;
             g_hasOriginalPowerScheme = true;
@@ -1397,7 +1417,7 @@ static bool IsKnownHeavyElectronApp(const std::wstring& name) {
     static const std::unordered_set<std::wstring> kElectronApps = {
         L"discord.exe", L"slack.exe", L"teams.exe", L"telegram.exe",
         L"whatsapp.exe", L"signal.exe", L"skype.exe", L"spotify.exe",
-        L"code.exe", L"steamwebhelper.exe", L"obs64.exe"};
+        L"code.exe", L"steamwebhelper.exe"};
     return kElectronApps.count(ToLower(name)) != 0;
 }
 
@@ -1967,8 +1987,8 @@ GetActiveAudioProcessIdsCached(const ModSettings& settings) {
     // 1. Instant Elastic Rebound: for any audio stream newly started or resumed,
     // if it was throttled by the mod, restore it immediately to normal operation.
     for (DWORD pid : rawPids) {
-        if (g_audioPidFirstActive.find(pid) == g_audioPidFirstActive.end()) {
-            g_audioPidFirstActive[pid] = now;
+        auto [it, inserted] = g_audioPidFirstActive.try_emplace(pid, now);
+        if (inserted) {
             RestoreAndEraseThrottledProcess(pid);
             RestoreAndEraseSoftTrimmedProcess(pid);
         }
@@ -1976,7 +1996,7 @@ GetActiveAudioProcessIdsCached(const ModSettings& settings) {
 
         // Tier 2: Sustained audio stream (>= 1.5s) engages full audio protection logging
         auto durMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-                         now - g_audioPidFirstActive[pid])
+                         now - it->second)
                          .count();
         if (durMs >= 1500) {
             if (g_loggedSanctuaryPids.insert(pid).second) {
@@ -2062,7 +2082,7 @@ GetActiveNetworkProcessIdsCached(const ModSettings& settings) {
                     row.dwOwningPid != 0 && row.dwOwningPid != 4) {
                     BYTE firstByte =
                         static_cast<BYTE>(row.dwRemoteAddr & 0xFF);
-                    if (firstByte != 127 && row.dwRemoteAddr != 0) {
+                    if (firstByte != 127) {
                         activePids.insert(row.dwOwningPid);
                     }
                 }
@@ -2087,22 +2107,17 @@ GetActiveNetworkProcessIdsCached(const ModSettings& settings) {
                 if (row.dwState == MIB_TCP_STATE_ESTAB &&
                     row.dwOwningPid != 0 && row.dwOwningPid != 4) {
                     bool isLoopback = true;
-                    bool isUnspecified = true;
                     for (int b = 0; b < 15; ++b) {
                         if (row.ucRemoteAddr[b] != 0) {
                             isLoopback = false;
-                            isUnspecified = false;
                             break;
                         }
                     }
                     if (row.ucRemoteAddr[15] != 1) {
                         isLoopback = false;
                     }
-                    if (row.ucRemoteAddr[15] != 0) {
-                        isUnspecified = false;
-                    }
 
-                    if (!isLoopback && !isUnspecified) {
+                    if (!isLoopback) {
                         activePids.insert(row.dwOwningPid);
                     }
                 }
@@ -2126,9 +2141,42 @@ GetActiveNetworkProcessIdsCached(const ModSettings& settings) {
             for (DWORD i = 0; i < pTable->dwNumEntries; ++i) {
                 const auto& row = pTable->table[i];
                 if (row.dwOwningPid != 0 && row.dwOwningPid != 4) {
-                    BYTE firstByte =
-                        static_cast<BYTE>(row.dwLocalAddr & 0xFF);
-                    if (firstByte != 127) {
+                    if ((row.dwLocalAddr & 0xFF) != 127) {
+                        activePids.insert(row.dwOwningPid);
+                    }
+                }
+            }
+        }
+    }
+
+    // Query IPv6 UDP Table
+    size = 0;
+    if (GetExtendedUdpTable(nullptr, &size, FALSE, AF_INET6,
+                            UDP_TABLE_OWNER_PID, 0) ==
+        ERROR_INSUFFICIENT_BUFFER) {
+        std::vector<BYTE> buffer(size);
+        if (GetExtendedUdpTable(buffer.data(), &size, FALSE,
+                                AF_INET6,
+                                UDP_TABLE_OWNER_PID,
+                                0) == NO_ERROR) {
+            auto* pTable6 =
+                reinterpret_cast<const MIB_UDP6TABLE_OWNER_PID*>(
+                    buffer.data());
+            for (DWORD i = 0; i < pTable6->dwNumEntries; ++i) {
+                const auto& row = pTable6->table[i];
+                if (row.dwOwningPid != 0 && row.dwOwningPid != 4) {
+                    bool isLoopback = true;
+                    for (int b = 0; b < 15; ++b) {
+                        if (row.ucLocalAddr[b] != 0) {
+                            isLoopback = false;
+                            break;
+                        }
+                    }
+                    if (row.ucLocalAddr[15] != 1) {
+                        isLoopback = false;
+                    }
+
+                    if (!isLoopback) {
                         activePids.insert(row.dwOwningPid);
                     }
                 }
@@ -3250,9 +3298,7 @@ static void UpdateAiProcessActivity(const ModSettings& settings) {
                 continue;
 
             // Freshly detected AI process: initialize timestamp so it starts protected
-            if (g_aiLastInferenceTime.find(pid) == g_aiLastInferenceTime.end()) {
-                g_aiLastInferenceTime[pid] = now;
-            }
+            g_aiLastInferenceTime.try_emplace(pid, now);
 
             HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
             if (!hProc)
@@ -3493,13 +3539,13 @@ struct DecisionResult {
 
 struct SystemActionArbiter {
     const ModSettings& settings;
-    DWORD currentPid = 0;
-    DWORD foregroundPid = 0;
+    DWORD currentPid{0};
+    DWORD foregroundPid{0};
     const std::unordered_set<DWORD>& activeAudioPids;
     const std::unordered_set<DWORD>& immuneFamilyPids;
-    std::chrono::steady_clock::time_point now;
-    const std::unordered_map<DWORD, std::wstring>* procNames = nullptr;
-    const std::unordered_set<DWORD>* activeNetworkPids = nullptr;
+    std::chrono::steady_clock::time_point now{};
+    const std::unordered_map<DWORD, std::wstring>* procNames{nullptr};
+    const std::unordered_set<DWORD>* activeNetworkPids{nullptr};
 
     [[nodiscard]] DecisionResult EvaluatePreOpen(
         DWORD pid,
@@ -4084,7 +4130,8 @@ static void ApplyBackgroundThrottling(const ModSettings& settings,
 // ---------------------------------------------------------------------------
 
 static std::mutex g_gameConfigStoreMutex;
-static std::unordered_set<std::wstring> g_gameConfigStoreCache;
+static std::unordered_set<std::wstring> g_gameConfigStoreFullPaths;
+static std::unordered_set<std::wstring> g_gameConfigStoreExeNames;
 static std::chrono::steady_clock::time_point g_lastGameConfigStoreScan{};
 
 static void RefreshGameConfigStoreCache() {
@@ -4094,7 +4141,8 @@ static void RefreshGameConfigStoreCache() {
         std::chrono::duration_cast<std::chrono::minutes>(now - g_lastGameConfigStoreScan).count() < 10) {
         return; // Cache valid for 10 minutes
     }
-    g_gameConfigStoreCache.clear();
+    g_gameConfigStoreFullPaths.clear();
+    g_gameConfigStoreExeNames.clear();
     try {
         HKEY hParent = nullptr;
         if (RegOpenKeyExW(HKEY_CURRENT_USER, L"System\\GameConfigStore\\Children", 0, KEY_READ, &hParent) == ERROR_SUCCESS) {
@@ -4111,16 +4159,28 @@ static void RefreshGameConfigStoreCache() {
                         HKEY hSub = nullptr;
                         if (RegOpenKeyExW(hParent, subkeyName.data(), 0, KEY_READ, &hSub) == ERROR_SUCCESS) {
                             wchar_t pathBuf[MAX_PATH]{};
-                            DWORD bufSize = sizeof(pathBuf);
-                            DWORD type = 0;
-                            if (RegQueryValueExW(hSub, L"MatchedExeFullPath", nullptr, &type, reinterpret_cast<LPBYTE>(pathBuf), &bufSize) == ERROR_SUCCESS && type == REG_SZ) {
-                                const wchar_t* lastSlash = wcsrchr(pathBuf, L'\\');
-                                if (!lastSlash) {
-                                    lastSlash = wcsrchr(pathBuf, L'/');
+                            DWORD flags = 0;
+                            DWORD flagsSize = sizeof(flags);
+                            DWORD flagsType = 0;
+                            bool isGame = true;
+                            if (RegQueryValueExW(hSub, L"Flags", nullptr, &flagsType, reinterpret_cast<LPBYTE>(&flags), &flagsSize) == ERROR_SUCCESS && flagsType == REG_DWORD) {
+                                // Flags bitmask: 0x1 = Game title registered in Windows, 0x10 = Xbox GameDVR monitored game
+                                if ((flags & 0x11) == 0) {
+                                    isGame = false;
                                 }
-                                const wchar_t* exePtr = lastSlash ? (lastSlash + 1) : pathBuf;
-                                if (exePtr[0] != L'\0') {
-                                    g_gameConfigStoreCache.insert(ToLower(exePtr));
+                            }
+                            if (isGame) {
+                                DWORD bufSize = sizeof(pathBuf);
+                                if (RegGetValueW(hSub, nullptr, L"MatchedExeFullPath", RRF_RT_REG_SZ, nullptr, pathBuf, &bufSize) == ERROR_SUCCESS && pathBuf[0] != L'\0') {
+                                    g_gameConfigStoreFullPaths.insert(ToLower(pathBuf));
+                                    const wchar_t* lastSlash = wcsrchr(pathBuf, L'\\');
+                                    if (!lastSlash) {
+                                        lastSlash = wcsrchr(pathBuf, L'/');
+                                    }
+                                    const wchar_t* exePtr = lastSlash ? (lastSlash + 1) : pathBuf;
+                                    if (exePtr[0] != L'\0') {
+                                        g_gameConfigStoreExeNames.insert(ToLower(exePtr));
+                                    }
                                 }
                             }
                             RegCloseKey(hSub);
@@ -4138,40 +4198,21 @@ static void RefreshGameConfigStoreCache() {
     g_lastGameConfigStoreScan = now;
 }
 
-static bool IsRegisteredWindowsGame(const std::wstring& procName) {
-    if (procName.empty()) {
+static bool IsRegisteredWindowsGame(const std::wstring& procName, HANDLE hProc = nullptr) {
+    if (procName.empty() && !hProc) {
         return false;
     }
     RefreshGameConfigStoreCache();
     std::lock_guard<std::mutex> lock(g_gameConfigStoreMutex);
-    return g_gameConfigStoreCache.count(ToLower(procName)) != 0;
-}
-
-static bool HasGameRuntimeSignature(HANDLE hProc) {
-    if (!hProc) {
-        return false;
-    }
-    wchar_t imagePath[MAX_PATH]{};
-    DWORD pathLen = _countof(imagePath);
-    if (QueryFullProcessImageNameW(hProc, 0, imagePath, &pathLen) && pathLen > 0) {
-        std::wstring fullPathLower = ToLower(imagePath);
-        // Exclude launchers, tools, and background wallpapers located in game directories
-        if (fullPathLower.find(L"\\epic games\\launcher\\") != std::wstring::npos ||
-            fullPathLower.find(L"wallpaper32.exe") != std::wstring::npos ||
-            fullPathLower.find(L"wallpaper64.exe") != std::wstring::npos ||
-            fullPathLower.find(L"steam.exe") != std::wstring::npos ||
-            fullPathLower.find(L"galaxyclient.exe") != std::wstring::npos) {
-            return false;
-        }
-        // Common verified game directories without store client collision
-        if (fullPathLower.find(L"\\steamapps\\common\\") != std::wstring::npos ||
-            fullPathLower.find(L"\\epic games\\") != std::wstring::npos ||
-            fullPathLower.find(L"\\gog games\\") != std::wstring::npos ||
-            fullPathLower.find(L"\\xboxgames\\") != std::wstring::npos) {
-            return true;
+    if (hProc) {
+        wchar_t imagePath[MAX_PATH]{};
+        DWORD pathLen = _countof(imagePath);
+        if (QueryFullProcessImageNameW(hProc, 0, imagePath, &pathLen) && pathLen > 0) {
+            return (g_gameConfigStoreFullPaths.count(ToLower(imagePath)) != 0);
         }
     }
-    return false;
+    // Only fall back to exe name matching if process handle is null or QueryFullProcessImageNameW failed (e.g. access denied)
+    return (!procName.empty() && g_gameConfigStoreExeNames.count(ToLower(procName)) != 0);
 }
 
 static bool IsLikelyGameOrFullscreenWindow(HWND hwnd, DWORD pid) {
@@ -4207,7 +4248,7 @@ static bool IsLikelyGameOrFullscreenWindow(HWND hwnd, DWORD pid) {
                 if (rc.left <= mi.rcMonitor.left && rc.top <= mi.rcMonitor.top &&
                     rc.right >= mi.rcMonitor.right && rc.bottom >= mi.rcMonitor.bottom) {
                     LONG style = GetWindowLongW(hwnd, GWL_STYLE);
-                    if ((style & WS_POPUP) || !(style & WS_CAPTION)) {
+                    if (!(style & WS_THICKFRAME) && !(style & WS_CAPTION)) {
                         return true;
                     }
                 }
@@ -4219,7 +4260,7 @@ static bool IsLikelyGameOrFullscreenWindow(HWND hwnd, DWORD pid) {
     if (g_pfnSHQueryUserNotificationState) {
         QUERY_USER_NOTIFICATION_STATE quns = QUNS_NOT_PRESENT;
         if (SUCCEEDED(g_pfnSHQueryUserNotificationState(&quns))) {
-            if (quns == QUNS_RUNNING_D3D_FULL_SCREEN && hwnd == GetForegroundWindow()) {
+            if (quns == QUNS_RUNNING_D3D_FULL_SCREEN) {
                 return true;
             }
         }
@@ -4235,23 +4276,15 @@ static bool IsLikelyGameOrFullscreenWindow(HWND hwnd, DWORD pid) {
         }
     }
 
-    if (!procName.empty() && IsRegisteredWindowsGame(procName)) {
-        return true;
-    }
-
-    // Packaged apps (UWP/MSIX like Store, Settings, Calculator) are standard Windows apps,
-    // not dedicated 3D games, unless running exclusive D3D above or registered as a game.
-    HANDLE hCheck = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (hCheck) {
-        bool isPkg = IsPackagedAppCached(pid, hCheck);
-        bool hasGameDir = HasGameRuntimeSignature(hCheck);
-        CloseHandle(hCheck);
-        if (hasGameDir) {
+    HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (hProc) {
+        bool regGame = IsRegisteredWindowsGame(procName, hProc);
+        CloseHandle(hProc);
+        if (regGame) {
             return true;
         }
-        if (isPkg) {
-            return false;
-        }
+    } else if (!procName.empty() && IsRegisteredWindowsGame(procName)) {
+        return true;
     }
 
     return false;
@@ -4924,7 +4957,8 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings& settings,
             static_cast<int64_t>(settings.browserTabInactivityMinutes) * 60;
         for (const auto& entry : processList) {
             DWORD pid = entry.pid;
-            if (pid == 0 || pid == 4 || pid == foregroundPid || handledPids.count(pid)) {
+            if (pid == 0 || pid == 4 || pid == foregroundPid ||
+                handledPids.count(pid)) {
                 continue;
             }
             // Exclude main browser UI windows
@@ -4933,8 +4967,8 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings& settings,
                 continue;
             }
 
-            // Never trim processes actively playing audio
-            if (activeAudioPids.count(pid)) {
+            // Never trim processes actively playing audio or transmitting network data
+            if (activeAudioPids.count(pid) || activeNetworkPids.count(pid)) {
                 continue;
             }
 
@@ -4959,6 +4993,7 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings& settings,
                 if (cpuPercent > 0.5) {
                     // Active tab (e.g. video streaming, web games, dynamic scripts)
                     g_rendererLastActiveTime[pid] = now;
+                    RestoreAndEraseSoftTrimmedProcess(pid);
                 } else if (itAct != g_rendererLastActiveTime.end()) {
                     auto inactiveSec =
                         std::chrono::duration_cast<std::chrono::seconds>(
@@ -6059,6 +6094,7 @@ void WhTool_ModUninit() {
     Wh_Log(L"Mod unloaded cleanly.");
 }
 
+// clang-format off
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
@@ -6168,10 +6204,10 @@ void Wh_ModAfterInit() {
     WCHAR currentProcessPath[MAX_PATH];
     switch (GetModuleFileName(nullptr, currentProcessPath,
                               ARRAYSIZE(currentProcessPath))) {
-    case 0:
-    case ARRAYSIZE(currentProcessPath):
-        Wh_Log(L"GetModuleFileName failed");
-        return;
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
     }
 
     WCHAR
@@ -6237,3 +6273,4 @@ void Wh_ModUninit() {
     WhTool_ModUninit();
     ExitProcess(0);
 }
+// clang-format on

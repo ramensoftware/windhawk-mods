@@ -2,7 +2,7 @@
 // @id              move-window-to-monitor
 // @name            Move Window to Monitor
 // @description     Moves the active window to a specific monitor using configurable hotkeys (default: Ctrl+Alt+Arrows)
-// @version         1.1.0
+// @version         1.1.1
 // @author          TomberWolf
 // @github          https://github.com/TomberWolf
 // @include         windhawk.exe
@@ -33,9 +33,15 @@ based on their physical position in your Windows display layout.
 
 Set: UP=1, LEFT=0, DOWN=2, RIGHT=3
 
-Use **-1** to keep automatic geometric detection for a direction.
+Use **-1** to keep automatic geometric detection for a direction. If a
+configured index does not exist (for example because a monitor was unplugged),
+the automatic detection is used as well.
 
 When the active window is already on the target monitor, the hotkey does nothing.
+
+Maximized and minimized windows keep their state when they are moved, and
+borderless full-screen windows (games, video players) cover the whole target
+monitor.
 
 The **Center window** option centers the window on the target monitor instead
 of preserving its relative position. Works independently of **Keep window size**.
@@ -127,6 +133,7 @@ static void LoadSettings() {
 
 struct MonitorInfo {
     HMONITOR hMon;
+    RECT     rcMonitor;
     RECT     rcWork;
     UINT     dpiX;
     UINT     dpiY;
@@ -138,8 +145,9 @@ static BOOL CALLBACK MonitorEnumProc(HMONITOR hMon, HDC, LPRECT, LPARAM lParam) 
     if (!GetMonitorInfo(hMon, &mi)) return TRUE;
 
     MonitorInfo info;
-    info.hMon   = hMon;
-    info.rcWork = mi.rcWork;
+    info.hMon      = hMon;
+    info.rcMonitor = mi.rcMonitor;
+    info.rcWork    = mi.rcWork;
     info.dpiX   = 96;
     info.dpiY   = 96;
 
@@ -175,7 +183,7 @@ static int FindMonitorIndex(const std::vector<MonitorInfo>& monitors, HMONITOR h
 }
 
 static void LogAllMonitors(const std::vector<MonitorInfo>& monitors) {
-    Wh_Log(L"=== Move Window to Monitor v6: %d monitor(s) detected ===",
+    Wh_Log(L"=== Move Window to Monitor v1.1.1: %d monitor(s) detected ===",
            (int)monitors.size());
     Wh_Log(L"Sorted left-to-right, then top-to-bottom:");
     for (int i = 0; i < (int)monitors.size(); i++) {
@@ -195,12 +203,41 @@ static void LogAllMonitors(const std::vector<MonitorInfo>& monitors) {
 
 enum class Direction { Up, Down, Left, Right };
 
-static void MoveWindowToMonitor(HWND hwnd, const MonitorInfo& src, const MonitorInfo& dst) {
-    bool wasMaximized = IsZoomed(hwnd);
-    if (wasMaximized) ShowWindowAsync(hwnd, SW_RESTORE);
+// WINDOWPLACEMENT::rcNormalPosition is in workspace coordinates (offset by the
+// work area of the window's monitor) unless the window is a tool window, which
+// uses screen coordinates.
+static POINT WorkspaceOffset(HWND hwnd, const MonitorInfo& mon) {
+    if (GetWindowLongPtr(hwnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) return { 0, 0 };
+    return { mon.rcWork.left - mon.rcMonitor.left,
+             mon.rcWork.top  - mon.rcMonitor.top };
+}
 
+// Handling of maximized/minimized windows, borderless full-screen windows and
+// missing target monitors is based on a suggestion by DavidHiFi
+// (ramensoftware/windhawk-mods#7843).
+static void MoveWindowToMonitor(HWND hwnd, const MonitorInfo& src, const MonitorInfo& dst) {
+    // Maximized and minimized windows are moved via their restored rectangle,
+    // so that they keep their state.
+    bool usePlacement = IsZoomed(hwnd) || IsIconic(hwnd);
+
+    WINDOWPLACEMENT wp = { sizeof(wp) };
     RECT rcWin = {};
-    GetWindowRect(hwnd, &rcWin);
+    if (usePlacement) {
+        if (!GetWindowPlacement(hwnd, &wp)) return;
+        rcWin = wp.rcNormalPosition;
+        POINT ofs = WorkspaceOffset(hwnd, src);
+        OffsetRect(&rcWin, ofs.x, ofs.y);
+    } else {
+        GetWindowRect(hwnd, &rcWin);
+
+        // Borderless full screen: cover the destination monitor instead.
+        if (EqualRect(&rcWin, &src.rcMonitor)) {
+            const RECT& m = dst.rcMonitor;
+            SetWindowPos(hwnd, nullptr, m.left, m.top, m.right - m.left,
+                         m.bottom - m.top, SWP_NOZORDER | SWP_NOACTIVATE);
+            return;
+        }
+    }
 
     int ww   = rcWin.right  - rcWin.left;
     int wh   = rcWin.bottom - rcWin.top;
@@ -239,10 +276,27 @@ static void MoveWindowToMonitor(HWND hwnd, const MonitorInfo& src, const Monitor
     if (newX < dst.rcWork.left)          newX = dst.rcWork.left;
     if (newY < dst.rcWork.top)           newY = dst.rcWork.top;
 
-    SetWindowPos(hwnd, nullptr, newX, newY, newW, newH,
-                 SWP_NOZORDER | SWP_NOACTIVATE);
+    if (!usePlacement) {
+        SetWindowPos(hwnd, nullptr, newX, newY, newW, newH,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+        return;
+    }
 
-    if (wasMaximized) ShowWindowAsync(hwnd, SW_MAXIMIZE);
+    POINT ofs = WorkspaceOffset(hwnd, dst);
+    wp.rcNormalPosition = { newX - ofs.x, newY - ofs.y,
+                            newX - ofs.x + newW, newY - ofs.y + newH };
+    wp.flags &= ~WPF_SETMINPOSITION;
+    SetWindowPlacement(hwnd, &wp);
+
+    // If the window stayed maximized on the old monitor, restore it (onto the
+    // new normal rectangle) and maximize it again. Both calls are queued in
+    // order and nothing is read from the window afterwards, so the async
+    // variant is safe here and cannot hang on an unresponsive window.
+    if (IsZoomed(hwnd) &&
+        MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) != dst.hMon) {
+        ShowWindowAsync(hwnd, SW_RESTORE);
+        ShowWindowAsync(hwnd, SW_MAXIMIZE);
+    }
 }
 
 static void MoveActiveWindowInDirection(Direction dir) {
@@ -264,6 +318,9 @@ static void MoveActiveWindowInDirection(Direction dir) {
         case Direction::Left:  fixedIndex = g_settings.targetLeft;  break;
         case Direction::Right: fixedIndex = g_settings.targetRight; break;
     }
+
+    // Missing saved display (e.g. unplugged): use the spatial movement instead.
+    if (fixedIndex >= (int)monitors.size()) fixedIndex = -1;
 
     int dstIdx = -1;
 
@@ -383,7 +440,7 @@ static DWORD WINAPI HotkeyThreadEntry(LPVOID) {
 // ── Tool mod callbacks (renamed as required by the tool mod pattern) ──────────
 
 BOOL WhTool_ModInit() {
-    Wh_Log(L"MoveWindowToMonitor v6: Init");
+    Wh_Log(L"MoveWindowToMonitor v1.1.1: Init");
     LoadSettings();
     auto monitors = GetAllMonitors();
     LogAllMonitors(monitors);

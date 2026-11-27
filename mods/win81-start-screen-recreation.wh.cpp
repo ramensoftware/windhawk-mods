@@ -10,13 +10,13 @@
 // @description:es  Este mod recrea la pantalla de inicio de Windows 8.1 en Windows 10 y Windows 11
 // @description:fr  Ce mod recrée l'écran d'accueil de Windows 8.1 sur Windows 10 et Windows 11
 // @description:pt  Este mod recria a Tela Inicial do Windows 8.1 no Windows 10 e no Windows 11
-// @version         1.2.0
-// @license         GPL-3.0-or-later
+// @version         1.3.0
+// @license         GPL-3.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lgdi32 -luser32 -lmsimg32 -lshell32 -ladvapi32 -lole32 -ld2d1 -ldwrite -ldwmapi -lgdiplus -luuid -lshlwapi -lwtsapi32 -lpowrprof -lshcore -lcomctl32
+// @compilerOptions -lgdi32 -luser32 -lmsimg32 -lshell32 -ladvapi32 -lole32 -ld2d1 -ldwrite -ldwmapi -lgdiplus -luuid -lshlwapi -lwtsapi32 -lpowrprof -lshcore -lcomctl32 -lwinhttp
 // ==/WindhawkMod==
 //
 // ==WindhawkModReadme==
@@ -25,7 +25,7 @@
 
 This mod recreates the Windows 8.1 Start Screen on Windows 10 and Windows 11.
 
-![Screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/startscreen.png)
+![Screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/startscreen2.png)
 
 ## About the mod
 The mod replaces the Start experience with a full-screen Start screen modeled after
@@ -38,6 +38,15 @@ Note: This is a best-effort modification. Layout, colors, icons and animations a
 inspired by Windows 8.1. Tiles display the real Windows 10/11 applications, so
 certain original elements (such as Live Tiles and Metro apps) cannot be restored.
 The mod does **not** replace system files.
+
+## Experimental touch and touchpad input
+The optional experimental input setting is disabled by default. This is a
+best-effort implementation that has not been tested on touchscreen hardware.
+It attempts one-finger horizontal panning, vertical Start/All Apps switching,
+a downward tile gesture for the command bar, and horizontal touchpad wheel
+scrolling. Behavior depends on Windows and the device driver. Long-press tile
+dragging, multi-selection, multi-tile dragging and vertical touchpad switching
+are not implemented by this option. Changing it reloads the mod.
 
 ## Features
 - **Tiles**: all four sizes (small, medium, wide, large). Tiles can be dragged,
@@ -92,9 +101,9 @@ The mod does **not** replace system files.
   the space back when the pointer touches the bottom edge of the screen. The horizontal scroll
   bar and the buttons in the two bottom corners move up by the same amount, so they never
   overlap the taskbar and stay usable, and a click on the taskbar closes the Start screen.
-  Nothing of the shell is touched: the bottom strip of the Start window is clipped away with
-  `SetWindowRgn` and restored as soon as the pointer leaves it. It can be turned off in the
-  settings.
+  Nothing of the shell is touched: Start clips its own bottom strip, or resizes its own window
+  when Windows 7/8/8.1 Taskbar Recreation is detected, and restores it when the pointer leaves.
+  It can be turned off in the settings.
 - **Layout kept across updates**: tiles, sizes, group names and groups are saved in
   Windhawk's per-mod storage (`Wh_GetModStoragePath`, one file per user account), which
   survives mod updates and a mod reinstall and is only removed with the mod itself. The
@@ -124,6 +133,21 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
 - If the old taskbar still comes back, restart Explorer from StartAllBack or ExplorerPatcher, or
   set **Compatibility with StartAllBack and ExplorerPatcher** to *Always on* and the delay to 8000 ms.
 
+## Local tile content
+The reconstructed Metro icons are used for recognized Microsoft apps. The app search also includes
+separate Weather, Calendar and Clock tiles that can be pinned again after removal. They open the
+corresponding Microsoft web pages. Calendar can alternate between its icon and the local date;
+Clock shows the local time. Online Weather is off by default. If enabled, Open-Meteo receives
+coordinates and the public IP every 30 minutes while a Weather tile is pinned, even while Start is closed. Users can enter both
+coordinates or separately enable approximate IP location via ipwho.is, which receives the public
+IP. IP lookup retries every five minutes until successful; forecast failures retry every 30 minutes.
+Privacy mode hides only the label, not the data sent to the services. If coordinates and IP
+location are unavailable, no forecast request is made. In-flight requests are cancelled when the
+worker stops; shutdown may still wait for WinHTTP to finish closing the request. Data: Open-Meteo.com, CC BY 4.0; the free API is for non-commercial use.
+Photos can optionally show JPG and PNG files directly from the local Pictures folder while Start
+is open and Photos is pinned. Images are not uploaded; decoding runs on a worker thread and stopping
+can wait for it. These are simulated features, not notifications read from other apps.
+
 ## Additional information
 - The mod is compatible with the **Windows 8/8.1 Charms Bar Recreation** and the
   **Windows 8/8.1 Search Charm Recreation** mods for a complete Windows 8.1
@@ -138,6 +162,9 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
 
 ## Credits
 
+- **Track41** - Custom tile and app-specific tile colour suggestions.
+- **Microsoft** - [TileSize documentation](https://learn.microsoft.com/en-us/uwp/api/windows.ui.startscreen.tilesize).
+
 - **AdmnistratoX** - for the original Windows 8 (8045) Start Screen mod on which this
   mod is based.
 - **WinBoeing 777** - Testing on Windows 10 22H2
@@ -151,17 +178,11 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
 /*
-- taskbarOnBottomHover: true
-  $name: "Taskbar back when the pointer touches the bottom of Start"
-  $name:it: "Barra delle applicazioni quando il puntatore tocca il fondo di Start"
-  $name:es: "Barra de tareas cuando el puntero toca la parte inferior de Inicio"
-  $name:fr: "Barre des tâches quand le pointeur touche le bas de l'accueil"
-  $name:pt: "Barra de tarefas quando o ponteiro toca a parte inferior da Tela Inicial"
-  $description: "This is what Windows 8.1 Update 1 does: the Start screen covers the taskbar, and the taskbar comes back when the pointer touches the bottom edge of the screen. The bottom chrome of the Start screen (the horizontal scroll bar and the buttons in the two corners) moves up by the same amount, so the two never overlap and both stay usable, and a click on the taskbar closes the Start screen. Nothing of the shell is touched: the bottom strip of the Start window is clipped away and restored as soon as the pointer leaves it. This setting can also be turned off, and the taskbar then stays covered for as long as the Start screen is open."
-  $description:it: "È quello che fa Windows 8.1 Update 1: la schermata Start copre la barra delle applicazioni, e la barra torna visibile quando il puntatore tocca il bordo inferiore dello schermo. Gli elementi in basso della schermata Start (la barra di scorrimento orizzontale e i pulsanti nei due angoli) si spostano in alto della stessa misura, così le due cose non si sovrappongono mai e restano entrambe utilizzabili, e un clic sulla barra chiude la schermata Start. Nulla della shell viene modificato: la striscia inferiore della finestra di Start viene ritagliata e ripristinata appena il puntatore si allontana. Questa impostazione può anche essere disattivata, e allora la barra resta coperta finché la schermata Start è aperta."
-  $description:es: "Es lo que hace Windows 8.1 Update 1: la pantalla de inicio cubre la barra de tareas y la barra vuelve cuando el puntero toca el borde inferior de la pantalla. Los elementos inferiores de la pantalla de inicio (la barra de desplazamiento horizontal y los botones de las dos esquinas) suben la misma cantidad, así que nunca se superponen y ambos siguen siendo utilizables, y un clic en la barra cierra la pantalla de inicio. No se toca nada del shell: la franja inferior de la ventana de inicio se recorta y se restaura en cuanto el puntero se aleja. Esta configuración también se puede desactivar, y entonces la barra queda cubierta mientras la pantalla de inicio esté abierta."
-  $description:fr: "C'est ce que fait Windows 8.1 Update 1 : l'écran d'accueil couvre la barre des tâches, et la barre revient quand le pointeur touche le bord inférieur de l'écran. Les éléments du bas de l'écran d'accueil (la barre de défilement horizontale et les boutons des deux coins) remontent de la même hauteur, ainsi les deux ne se chevauchent jamais et restent utilisables, et un clic sur la barre ferme l'écran d'accueil. Rien du shell n'est modifié : la bande inférieure de la fenêtre d'accueil est rognée puis restaurée dès que le pointeur s'en éloigne. Ce paramètre peut aussi être désactivé, et la barre reste alors couverte tant que l'écran d'accueil est ouvert."
-  $description:pt: "É o que o Windows 8.1 Update 1 faz: a Tela Inicial cobre a barra de tarefas e a barra volta quando o ponteiro toca a borda inferior da tela. Os elementos de baixo da Tela Inicial (a barra de rolagem horizontal e os botões dos dois cantos) sobem a mesma medida, assim os dois nunca se sobrepõem e ambos continuam utilizáveis, e um clique na barra fecha a Tela Inicial. Nada do shell é alterado: a faixa inferior da janela da Tela Inicial é recortada e restaurada assim que o ponteiro se afasta. Esta configuração também pode ser desativada, e então a barra fica coberta enquanto a Tela Inicial estiver aberta."
+- experimentalTouch: false
+  $name: "Experimental touch and touchpad input (best effort)"
+  $name:it: "Input touch e touchpad sperimentale (best effort)"
+  $description: "This setting enables experimental touch panning, vertical Start/All Apps switching, a downward tile gesture for the command bar, and horizontal touchpad scrolling. Best effort; not tested on touchscreen hardware. Long-press dragging, multiple selection or dragging, and vertical touchpad switching are not implemented. Changes reload the mod."
+  $description:it: "Questa impostazione attiva lo scorrimento touch sperimentale, il cambio verticale Start/Tutte le app, il gesto verso il basso su un riquadro per la barra dei comandi e lo scorrimento orizzontale del touchpad. Best effort, non testato su hardware touch. Il trascinamento con pressione prolungata, la selezione e il trascinamento multipli e il cambio verticale tramite touchpad non sono implementati. Le modifiche ricaricano la mod."
 - winKey: true
   $name: "Open with the Windows key and the Start button"
   $name:it: "Apri con il tasto Windows e il pulsante Start"
@@ -173,6 +194,28 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
   $description:es: "Esta configuración hace que, al pulsar la tecla Windows sola o hacer clic en el botón Inicio de la barra, se abra esta pantalla de inicio en lugar del menú Inicio de Windows (Win+E, Win+D y el resto de accesos siguen funcionando)."
   $description:fr: "Ce paramètre fait ouvrir cet écran d'accueil, au lieu du menu Démarrer de Windows, quand vous appuyez sur la touche Windows seule ou cliquez sur le bouton Démarrer de la barre (Win+E, Win+D et les autres raccourcis continuent de fonctionner)."
   $description:pt: "Esta configuração faz com que, ao pressionar a tecla Windows sozinha ou clicar no botão Iniciar da barra, esta Tela Inicial seja aberta em vez do menu Iniciar do Windows (Win+E, Win+D e os outros atalhos continuam funcionando)."
+- openAtLogon: true
+  $name: "Open Start once at sign-in"
+  $name:it: "Apri Start una volta all'accesso"
+  $name:es: "Abrir Inicio una vez al iniciar sesión"
+  $name:fr: "Ouvrir l'écran d'accueil une fois à l'ouverture de session"
+  $name:pt: "Abrir a Tela Inicial uma vez ao entrar"
+  $description: "This setting shows Start after the Explorer desktop is ready on a new sign-in, using the slower 8102-style tile reveal. Does not reopen Start when this mod is edited or Explorer is restarted later in the same sign-in. Turn off to keep the desktop at sign-in."
+  $description:it: "Questa impostazione mostra Start dopo che il desktop di Explorer è pronto a un nuovo accesso, usando la rivelazione delle tile più lenta in stile 8102. Non riapre Start se questa mod viene modificata o se Explorer viene riavviato più tardi nella stessa sessione. Disattivala per mantenere il desktop all'accesso."
+  $description:es: "Esta configuración muestra Inicio cuando el escritorio de Explorer está listo tras un nuevo inicio de sesión, con la revelación de iconos más lenta al estilo 8102. No reabre Inicio si se edita esta mod o se reinicia Explorer más tarde en la misma sesión. Desactívala para mantener el escritorio al iniciar sesión."
+  $description:fr: "Ce paramètre affiche l'écran d'accueil dès que le bureau d'Explorer est prêt après une nouvelle ouverture de session, avec la révélation des vignettes plus lente de style 8102. Il ne rouvre pas l'écran d'accueil si le mod est modifié ou si Explorer redémarre plus tard dans la même session. Désactivez-le pour garder le bureau à l'ouverture de session."
+  $description:pt: "Esta configuração mostra a Tela Inicial quando a área de trabalho do Explorer está pronta após um novo logon, usando a revelação de blocos mais lenta no estilo 8102. Não reabre a Tela Inicial se este mod for editado ou se o Explorer reiniciar depois no mesmo logon. Desative para manter a área de trabalho ao entrar."
+- allAppsAtSignIn: false
+  $name: "Open the list of all apps once at sign-in"
+  $name:it: "Apri l'elenco di tutte le app una volta all'accesso"
+  $name:es: "Abrir la lista de todas las aplicaciones una vez al iniciar sesión"
+  $name:fr: "Ouvrir la liste de toutes les applications une fois à l'ouverture de session"
+  $name:pt: "Abrir a lista de todos os apps uma vez ao entrar"
+  $description: "This setting concerns the following. With 'Open Start once at sign-in' on, the screen opens on the list of all apps instead of the tiles. It only affects that automatic opening: pressing the Windows key later still shows the tiles first."
+  $description:it: "Questa impostazione riguarda quanto segue. Con 'Apri Start una volta all'accesso' attivo, la schermata si apre sull'elenco di tutte le app invece che sulle tile. Vale solo per quell'apertura automatica: premendo il tasto Windows più tardi si vedono comunque le tile."
+  $description:es: "Esta configuración se refiere a lo siguiente. Con 'Abrir Inicio una vez al iniciar sesión' activo, la pantalla se abre en la lista de todas las aplicaciones en lugar de los iconos."
+  $description:fr: "Ce paramètre concerne les éléments suivants. Avec 'Ouvrir l'écran d'accueil une fois à l'ouverture de session', l'écran s'ouvre sur la liste de toutes les applications au lieu des vignettes."
+  $description:pt: "Esta configuração refere-se ao seguinte. Com 'Abrir a Tela Inicial uma vez ao entrar' ativado, a tela abre na lista de todos os apps em vez dos blocos."
 - searchOnType: true
   $name: "Typing on Start opens Search"
   $name:it: "Digitare su Start apre la ricerca"
@@ -184,65 +227,28 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
   $description:es: "Esta configuración hace que, al escribir con la pantalla de inicio abierta, se busquen tus aplicaciones (programas, aplicaciones de la Tienda y comandos del sistema como winver). Una barra lateral se desliza; haz clic fuera para ocultarla y pulsa la tecla Windows para volver a Inicio."
   $description:fr: "Ce paramètre fait en sorte que, lorsque vous tapez alors que l'écran d'accueil est ouvert, vos applications soient recherchées (programmes, applications Store et commandes système comme winver). Un panneau latéral glisse ; cliquez à l'extérieur pour le masquer et appuyez sur la touche Windows pour revenir à l'accueil."
   $description:pt: "Esta configuração faz com que, ao digitar com a Tela Inicial aberta, seus aplicativos sejam pesquisados (programas, aplicativos da Loja e comandos do sistema como winver). Uma barra lateral desliza; clique fora para ocultá-la e pressione a tecla Windows para voltar à Tela Inicial."
-- interceptMode: auto
-  $name: "How the Windows key / Start button are caught"
-  $name:it: "Come vengono intercettati il tasto Windows e il pulsante Start"
-  $name:es: "Cómo se capturan la tecla Windows y el botón Inicio"
-  $name:fr: "Comment la touche Windows et le bouton Démarrer sont capturés"
-  $name:pt: "Como a tecla Windows e o botão Iniciar são capturados"
-  $description: "This setting chooses how the Windows key and the Start button are intercepted. Changing this needs the mod to be disabled and enabled again."
-  $description:it: "Questa impostazione sceglie come vengono intercettati il tasto Windows e il pulsante Start. Per modificarla è necessario disabilitare e riabilitare la mod."
-  $description:es: "Esta configuración elige cómo se interceptan la tecla Windows y el botón Inicio. Cambiarla requiere desactivar y volver a activar la mod."
-  $description:fr: "Ce paramètre choisit comment la touche Windows et le bouton Démarrer sont interceptés. Le modifier nécessite de désactiver puis réactiver le mod."
-  $description:pt: "Esta configuração escolhe como a tecla Windows e o botão Iniciar são interceptados. Alterá-la exige desativar e ativar o mod novamente."
-  $options:
-  - auto: "Hook the Start menu inside Explorer (recommended), plus the keyboard hook as a backup"
-  - keyboard: "Keyboard hook only (the taskbar Start button is not caught)"
-  $options:it:
-  - auto: "Aggancia il menu Start dentro Explorer (consigliato), più l'hook da tastiera come riserva"
-  - keyboard: "Solo hook da tastiera (il pulsante Start della barra non viene intercettato)"
-  $options:es:
-  - auto: "Enganchar el menú Inicio dentro de Explorer (recomendado), más el hook de teclado como reserva"
-  - keyboard: "Solo hook de teclado (el botón Inicio de la barra no se captura)"
-  $options:fr:
-  - auto: "Ancrer le menu Démarrer dans Explorer (recommandé), plus le hook clavier en secours"
-  - keyboard: "Hook clavier uniquement (le bouton Démarrer de la barre n'est pas capturé)"
-  $options:pt:
-  - auto: "Ancorar o menu Iniciar dentro do Explorer (recomendado), mais o hook de teclado como reserva"
-  - keyboard: "Somente hook de teclado (o botão Iniciar da barra não é capturado)"
-- closeSlideMs: 320
-  $name: "Closing animation duration (milliseconds)"
-  $name:it: "Durata dell'animazione di chiusura (millisecondi)"
-  $name:es: "Duración de la animación de cierre (milisegundos)"
-  $name:fr: "Durée de l'animation de fermeture (millisecondes)"
-  $name:pt: "Duração da animação de fechamento (milissegundos)"
-  $description: "This setting controls the duration of the closing animation: the tiles shrink and fade, then the desktop fades back in. Smaller is faster. Allowed range 80 to 3000; default 320."
-  $description:it: "Questa impostazione controlla la durata dell'animazione di chiusura: i tile si riducono e svaniscono, poi il desktop ricompare con una dissolvenza. Un valore più piccolo è più veloce. Intervallo consentito da 80 a 3000; predefinito 320."
-  $description:es: "Esta configuración controla la duración de la animación de cierre: los iconos se reducen y se desvanecen, y después el escritorio reaparece con un fundido. Un valor menor es más rápido. Rango permitido de 80 a 3000; predeterminado 320."
-  $description:fr: "Ce paramètre contrôle la durée de l'animation de fermeture : les vignettes rétrécissent et s'estompent, puis le bureau réapparaît en fondu. Plus petit = plus rapide. Plage autorisée de 80 à 3000 ; défaut 320."
-  $description:pt: "Esta configuração controla a duração da animação de fechamento: os blocos diminuem e desaparecem, e depois a área de trabalho reaparece com um esmaecimento. Menor é mais rápido. Faixa permitida de 80 a 3000; padrão 320."
-- groupColumns: 2
-  $name: "Tiles per group (horizontal)"
-  $name:it: "Tile per gruppo (orizzontali)"
-  $name:es: "Iconos por grupo (horizontales)"
-  $name:fr: "Vignettes par groupe (horizontales)"
-  $name:pt: "Blocos por grupo (horizontais)"
-  $description: "This setting chooses the number of Medium-tile columns in each Start group. Allowed range 2 to 8; default 2. A Small tile takes a quarter of a Medium slot, a Wide tile two slots, a Large tile four. Changes apply immediately."
-  $description:it: "Questa impostazione sceglie il numero di colonne di tile medie in ogni gruppo di Start. Intervallo consentito da 2 a 8; predefinito 2. Una tile piccola occupa un quarto di posto medio, una larga due posti, una grande quattro. Le modifiche si applicano subito."
-  $description:es: "Esta configuración elige el número de columnas de iconos medianos de cada grupo de Inicio. Rango permitido de 2 a 8; predeterminado 2. Un icono pequeño ocupa un cuarto de hueco mediano, uno ancho dos huecos y uno grande cuatro. Los cambios se aplican al momento."
-  $description:fr: "Ce paramètre choisit le nombre de colonnes de vignettes moyennes dans chaque groupe de l'écran d'accueil. Plage autorisée de 2 à 8 ; défaut 2. Une petite vignette occupe un quart d'emplacement moyen, une large deux emplacements, une grande quatre. Les changements s'appliquent immédiatement."
-  $description:pt: "Esta configuração escolhe o número de colunas de blocos médios em cada grupo da Tela Inicial. Faixa permitida de 2 a 8; padrão 2. Um bloco pequeno ocupa um quarto de espaço médio, um largo dois espaços, um grande quatro. As mudanças valem na hora."
-- groupRows: 3
-  $name: "Tiles per group (vertical)"
-  $name:it: "Tile per gruppo (verticali)"
-  $name:es: "Iconos por grupo (verticales)"
-  $name:fr: "Vignettes par groupe (verticales)"
-  $name:pt: "Blocos por grupo (verticais)"
-  $description: "This setting chooses the number of tile rows in each Start group. Allowed range 1 to 8; default 3. On shorter displays the visible row count is limited to fit above the bottom command bar. Changes apply immediately."
-  $description:it: "Questa impostazione sceglie il numero di righe di tile in ogni gruppo di Start. Intervallo consentito da 1 a 8; predefinito 3. Sugli schermi più bassi il numero di righe visibili è limitato per restare sopra la barra dei comandi. Le modifiche si applicano subito."
-  $description:es: "Esta configuración elige el número de filas de iconos de cada grupo de Inicio. Rango permitido de 1 a 8; predeterminado 3. En pantallas bajas el número de filas visibles se limita para caber sobre la barra de comandos inferior. Los cambios se aplican al momento."
-  $description:fr: "Ce paramètre choisit le nombre de rangées de vignettes dans chaque groupe de l'écran d'accueil. Plage autorisée de 1 à 8 ; défaut 3. Sur les écrans peu hauts, le nombre de rangées visibles est limité pour rester au-dessus de la barre de commandes. Les changements s'appliquent immédiatement."
-  $description:pt: "Esta configuração escolhe o número de fileiras de blocos em cada grupo da Tela Inicial. Faixa permitida de 1 a 8; padrão 3. Em telas mais baixas, o número de fileiras visíveis é limitado para caber acima da barra de comandos inferior. As mudanças valem na hora."
+- taskbarOnBottomHover: true
+  $name: "Taskbar back when the pointer touches the bottom of Start"
+  $name:it: "Barra delle applicazioni quando il puntatore tocca il fondo di Start"
+  $name:es: "Barra de tareas cuando el puntero toca la parte inferior de Inicio"
+  $name:fr: "Barre des tâches quand le pointeur touche le bas de l'accueil"
+  $name:pt: "Barra de tarefas quando o ponteiro toca a parte inferior da Tela Inicial"
+  $description: "This setting reveals the taskbar when the pointer touches the bottom of Start, giving priority to Windows 7/8/8.1 Taskbar Recreation when detected on that monitor. The Start screen gives up space by clipping or resizing its own window; other windows are not moved or hidden. Turn it off to keep the taskbar covered."
+  $description:it: "Questa impostazione mostra la barra quando il puntatore tocca il bordo inferiore di Start, dando priorità a Windows 7/8/8.1 Taskbar Recreation quando viene rilevata sul monitor. Start libera spazio ritagliando o ridimensionando la propria finestra, senza spostare o nascondere le altre finestre. Disattivala per mantenere coperta la barra."
+  $description:es: "Esta configuración muestra la barra al tocar el borde inferior de Inicio con el puntero y da prioridad a Windows 7/8/8.1 Taskbar Recreation si se detecta en el monitor. Inicio libera espacio recortando o redimensionando su propia ventana, sin mover ni ocultar otras ventanas. Desactívala para mantener cubierta la barra."
+  $description:fr: "Ce paramètre affiche la barre lorsque le pointeur touche le bas de l'écran d'accueil et donne la priorité à Windows 7/8/8.1 Taskbar Recreation si elle est détectée sur le moniteur. L'accueil libère de l'espace en rognant ou redimensionnant sa propre fenêtre, sans déplacer ni masquer les autres fenêtres. Désactivez-le pour garder la barre couverte."
+  $description:pt: "Esta configuração mostra a barra quando o ponteiro toca a borda inferior da Tela Inicial e dá prioridade ao Windows 7/8/8.1 Taskbar Recreation quando detectado no monitor. A Tela Inicial libera espaço recortando ou redimensionando sua própria janela, sem mover ou ocultar outras janelas. Desative para manter a barra coberta."
+- startOnPointerMonitor: true
+  $name: "Open the Start screen on the monitor that holds the pointer"
+  $name:it: "Apri la schermata Start sul monitor dove sta il puntatore"
+  $name:es: "Abrir la pantalla de inicio en el monitor donde está el puntero"
+  $name:fr: "Ouvrir l'écran d'accueil sur le moniteur du pointeur"
+  $name:pt: "Abrir a Tela Inicial no monitor onde está o ponteiro"
+  $description: "This setting concerns the following. On: the screen opens on whichever monitor the mouse pointer is on, which is what this mod has always done. Off: it always opens on the primary monitor. The position is decided when the screen opens, so no reload is needed."
+  $description:it: "Questa impostazione riguarda quanto segue. Attiva: la schermata si apre sul monitor dove sta il puntatore del mouse, cioè quello che il mod ha sempre fatto. Disattiva: si apre sempre sul monitor principale. La posizione viene decisa all'apertura della schermata, quindi non serve ricaricare il mod."
+  $description:es: "Esta configuración se refiere a lo siguiente. Activada: la pantalla se abre en el monitor donde está el puntero del ratón, que es lo que la mod ha hecho siempre. Desactivada: se abre siempre en el monitor principal."
+  $description:fr: "Ce paramètre concerne les éléments suivants. Activé : l'écran s'ouvre sur le moniteur où se trouve le pointeur de la souris, ce que le mod a toujours fait. Désactivé : il s'ouvre toujours sur le moniteur principal."
+  $description:pt: "Esta configuração refere-se ao seguinte. Ativado: a tela abre no monitor onde está o ponteiro do mouse, que é o que o mod sempre fez. Desativado: abre sempre no monitor principal."
 - backgroundMode: petals
   $name: "Start screen background"
   $name:it: "Sfondo della schermata Start"
@@ -284,17 +290,6 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
   - accent: "Cor sólida ligada à cor de destaque do sistema"
   - wallpaper: "Papel de parede da área de trabalho com véu translúcido, como o Windows 8.1"
   - image: "Imagem personalizada do caminho de imagem de fundo"
-- backgroundImagePath: ""
-  $name: "Custom background image path"
-  $name:it: "Percorso dell'immagine di sfondo personalizzata"
-  $name:es: "Ruta de la imagen de fondo personalizada"
-  $name:fr: "Chemin de l'image d'arrière-plan personnalisée"
-  $name:pt: "Caminho da imagem de fundo personalizada"
-  $description: "This setting is the full path of the image file used when the Start screen background is set to the custom image mode, for example C:\\Users\\YourName\\Pictures\\start.png. Environment variables such as %USERPROFILE% are expanded. The image is cover-cropped to fill the screen, like a wallpaper set to Fill. If the path is empty or the image cannot be loaded, the petal artwork is used instead."
-  $description:it: "Questa impostazione è il percorso completo del file immagine usato quando lo sfondo della schermata Start è in modalità immagine personalizzata, per esempio C:\\Users\\TuoNome\\Immagini\\start.png. Le variabili d'ambiente come %USERPROFILE% vengono espanse. L'immagine viene ritagliata per riempire lo schermo, come uno sfondo impostato su Riempimento. Se il percorso è vuoto o l'immagine non può essere caricata, viene usata l'arte a petali."
-  $description:es: "Esta configuración es la ruta completa del archivo de imagen usado cuando el fondo de la pantalla de inicio está en modo de imagen personalizada, por ejemplo C:\\Users\\TuNombre\\Imágenes\\start.png. Las variables de entorno como %USERPROFILE% se expanden. La imagen se recorta para llenar la pantalla, como un fondo en modo Rellenar. Si la ruta está vacía o la imagen no puede cargarse, se usa el arte de pétalos."
-  $description:fr: "Ce paramètre est le chemin complet du fichier image utilisé quand l'arrière-plan de l'écran d'accueil est en mode image personnalisée, par exemple C:\\Users\\VotreNom\\Images\\start.png. Les variables d'environnement comme %USERPROFILE% sont développées. L'image est recadrée pour remplir l'écran, comme un fond d'écran en mode Remplir. Si le chemin est vide ou l'image illisible, l'art à pétales est utilisé."
-  $description:pt: "Esta configuração é o caminho completo do arquivo de imagem usado quando o plano de fundo da Tela Inicial está no modo de imagem personalizada, por exemplo C:\\Users\\SeuNome\\Imagens\\start.png. Variáveis de ambiente como %USERPROFILE% são expandidas. A imagem é cortada para preencher a tela, como um papel de parede no modo Preencher. Se o caminho estiver vazio ou a imagem não puder ser carregada, a arte de pétalas é usada."
 - backgroundColor: "#4617b4"
   $name: "Start background and overlay colour (hex)"
   $name:it: "Colore di sfondo Start e di velatura (esadecimale)"
@@ -306,6 +301,230 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
   $description:es: "Esta configuración es el color de fondo sólido al estilo de Windows 8.1 que usan los modos color sólido y fondo de escritorio (en modo fondo de escritorio es el tinte translúcido, ya que en Windows 8.1 el color de fondo de Inicio era independiente del color de acento). Acepta #RRGGBB; los valores no válidos usan el púrpura predeterminado de Windows 8.1 #4617b4."
   $description:fr: "Ce paramètre est la couleur d'arrière-plan unie de style Windows 8.1 utilisée par les modes couleur unie et fond d'écran du bureau (en mode fond d'écran, c'est la teinte translucide du voile, car sous Windows 8.1 la couleur d'arrière-plan de l'écran d'accueil était indépendante de la couleur d'accent). Accepte #RRGGBB ; les valeurs invalides reviennent au violet par défaut de Windows 8.1 #4617b4."
   $description:pt: "Esta configuração é a cor de fundo sólida no estilo do Windows 8.1 usada pelos modos cor sólida e papel de parede da área de trabalho (no modo papel de parede, é o tom translúcido do véu, pois no Windows 8.1 a cor de fundo da Tela Inicial era independente da cor de destaque). Aceita #RRGGBB; valores inválidos usam o roxo padrão do Windows 8.1 #4617b4."
+- backgroundImagePath: ""
+  $name: "Custom background image path"
+  $name:it: "Percorso dell'immagine di sfondo personalizzata"
+  $name:es: "Ruta de la imagen de fondo personalizada"
+  $name:fr: "Chemin de l'image d'arrière-plan personnalisée"
+  $name:pt: "Caminho da imagem de fundo personalizada"
+  $description: "This setting is the full path of the image file used when the Start screen background is set to the custom image mode, for example C:\\Users\\YourName\\Pictures\\start.png. Environment variables such as %USERPROFILE% are expanded. The image is cover-cropped to fill the screen, like a wallpaper set to Fill. If the path is empty or the image cannot be loaded, the petal artwork is used instead."
+  $description:it: "Questa impostazione è il percorso completo del file immagine usato quando lo sfondo della schermata Start è in modalità immagine personalizzata, per esempio C:\\Users\\TuoNome\\Immagini\\start.png. Le variabili d'ambiente come %USERPROFILE% vengono espanse. L'immagine viene ritagliata per riempire lo schermo, come uno sfondo impostato su Riempimento. Se il percorso è vuoto o l'immagine non può essere caricata, viene usata l'arte a petali."
+  $description:es: "Esta configuración es la ruta completa del archivo de imagen usado cuando el fondo de la pantalla de inicio está en modo de imagen personalizada, por ejemplo C:\\Users\\TuNombre\\Imágenes\\start.png. Las variables de entorno como %USERPROFILE% se expanden. La imagen se recorta para llenar la pantalla, como un fondo en modo Rellenar. Si la ruta está vacía o la imagen no puede cargarse, se usa el arte de pétalos."
+  $description:fr: "Ce paramètre est le chemin complet du fichier image utilisé quand l'arrière-plan de l'écran d'accueil est en mode image personnalisée, par exemple C:\\Users\\VotreNom\\Images\\start.png. Les variables d'environnement comme %USERPROFILE% sont développées. L'image est recadrée pour remplir l'écran, comme un fond d'écran en mode Remplir. Si le chemin est vide ou l'image illisible, l'art à pétales est utilisé."
+  $description:pt: "Esta configuração é o caminho completo do arquivo de imagem usado quando o plano de fundo da Tela Inicial está no modo de imagem personalizada, por exemplo C:\\Users\\SeuNome\\Imagens\\start.png. Variáveis de ambiente como %USERPROFILE% são expandidas. A imagem é cortada para preencher a tela, como um papel de parede no modo Preencher. Se o caminho estiver vazio ou a imagem não puder ser carregada, a arte de pétalas é usada."
+- seedStartLayout: false
+  $name: "Populate Start with a Windows 8.1 style layout from installed apps"
+  $name:it: "Popola Start con un layout stile Windows 8.1 dalle app installate"
+  $name:es: "Rellenar Inicio con un diseño estilo Windows 8.1 desde las apps instaladas"
+  $name:fr: "Peupler l'écran d'accueil façon Windows 8.1 depuis les applications installées"
+  $name:pt: "Preencher a Tela Inicial com um layout estilo Windows 8.1 dos apps instalados"
+  $description: "This setting is optional and off by default. There are no real Metro apps left to download on Windows 10/11, so to spare you pinning dozens of apps by hand, turning this on pins the modern counterparts of the Windows 8.1 inbox apps that are actually installed (Mail/Outlook, Calendar, Weather, Photos, Edge, News, Camera, Xbox, Music, Movies, OneDrive, Maps, Settings, Calculator, Clock, Notepad, Paint) in Windows 8.1 sizes and groups - Wide Mail, Large Weather and so on. It only adds groups after your current tiles, never removes or moves anything, skips apps that are already pinned or not installed, and the added tiles are ordinary tiles you can resize, move or unpin. Turning it off again changes nothing that was added."
+  $description:it: "Questa impostazione è opzionale e disattivata in partenza. Su Windows 10/11 non restano vere app Metro da scaricare, quindi per risparmiarti di pinnare decine di app a mano, attivandola vengono pinnate le controparti moderne delle app di sistema di Windows 8.1 che sono davvero installate (Posta/Outlook, Calendario, Meteo, Foto, Edge, Notizie, Fotocamera, Xbox, Musica, Film, OneDrive, Mappe, Impostazioni, Calcolatrice, Orologio, Blocco note, Paint) con dimensioni e gruppi in stile 8.1: Posta Larga, Meteo Grande e così via. Aggiunge solo gruppi dopo le tue tile attuali, non rimuove né sposta nulla, salta le app già pinnate o non installate, e le tile aggiunte sono tile normali da ridimensionare, spostare o rimuovere. Disattivandola non cambia nulla di ciò che è stato aggiunto."
+  $description:es: "Esta configuración es opcional y viene desactivada. En Windows 10/11 ya no quedan apps Metro reales para descargar, así que, para ahorrarte fijar docenas de apps a mano, al activarla se fijan las equivalentes modernas de las apps del sistema de Windows 8.1 que estén instaladas (Correo/Outlook, Calendario, Tiempo, Fotos, Edge, Noticias, Cámara, Xbox, Música, Películas, OneDrive, Mapas, Configuración, Calculadora, Reloj, Bloc de notas, Paint) con tamaños y grupos estilo 8.1: Correo Ancho, Tiempo Grande, etc. Solo añade grupos tras tus iconos actuales, nunca quita ni mueve nada, salta las apps ya fijadas o no instaladas, y los iconos añadidos son normales: puedes redimensionarlos, moverlos o quitarlos. Desactivarla no cambia lo ya añadido."
+  $description:fr: "Ce paramètre est optionnel et désactivé par défaut. Sur Windows 10/11, il ne reste plus de vraies applications Metro à télécharger ; pour vous épargner d'épingler des dizaines d'applications à la main, l'activer épingle les équivalents modernes des applications système de Windows 8.1 réellement installées (Courrier/Outlook, Calendrier, Météo, Photos, Edge, Actualités, Caméra, Xbox, Musique, Films, OneDrive, Cartes, Paramètres, Calculatrice, Horloge, Bloc-notes, Paint) aux tailles et groupes de Windows 8.1 : Courrier Large, Météo Grand, etc. Il ajoute seulement des groupes après vos vignettes actuelles, ne retire ni ne déplace rien, ignore les applications déjà épinglées ou absentes, et les vignettes ajoutées sont ordinaires : redimensionnables, déplaçables, retirables. Le désactiver ne change rien à ce qui a été ajouté."
+  $description:pt: "Esta configuração é opcional e vem desativada. No Windows 10/11 não restam apps Metro de verdade para baixar, então, para poupar você de fixar dezenas de apps manualmente, ao ativá-la são fixados os equivalentes modernos dos apps de sistema do Windows 8.1 que estiverem instalados (Email/Outlook, Calendário, Clima, Fotos, Edge, Notícias, Câmera, Xbox, Música, Filmes, OneDrive, Mapas, Configurações, Calculadora, Relógio, Bloco de Notas, Paint) com tamanhos e grupos no estilo 8.1: Email Largo, Clima Grande e assim por diante. Ela apenas adiciona grupos depois dos seus blocos atuais, nunca remove nem move nada, pula apps já fixados ou não instalados, e os blocos adicionados são comuns: redimensionáveis, móveis e removíveis. Desativá-la não muda o que foi adicionado."
+- groupColumns: 2
+  $name: "Tiles per group (horizontal)"
+  $name:it: "Tile per gruppo (orizzontali)"
+  $name:es: "Iconos por grupo (horizontales)"
+  $name:fr: "Vignettes par groupe (horizontales)"
+  $name:pt: "Blocos por grupo (horizontais)"
+  $description: "This setting chooses the number of Medium-tile columns in each Start group. Allowed range 2 to 8; default 2. A Small tile takes a quarter of a Medium slot, a Wide tile two slots, a Large tile four. Changes apply immediately."
+  $description:it: "Questa impostazione sceglie il numero di colonne di tile medie in ogni gruppo di Start. Intervallo consentito da 2 a 8; predefinito 2. Una tile piccola occupa un quarto di posto medio, una larga due posti, una grande quattro. Le modifiche si applicano subito."
+  $description:es: "Esta configuración elige el número de columnas de iconos medianos de cada grupo de Inicio. Rango permitido de 2 a 8; predeterminado 2. Un icono pequeño ocupa un cuarto de hueco mediano, uno ancho dos huecos y uno grande cuatro. Los cambios se aplican al momento."
+  $description:fr: "Ce paramètre choisit le nombre de colonnes de vignettes moyennes dans chaque groupe de l'écran d'accueil. Plage autorisée de 2 à 8 ; défaut 2. Une petite vignette occupe un quart d'emplacement moyen, une large deux emplacements, une grande quatre. Les changements s'appliquent immédiatement."
+  $description:pt: "Esta configuração escolhe o número de colunas de blocos médios em cada grupo da Tela Inicial. Faixa permitida de 2 a 8; padrão 2. Um bloco pequeno ocupa um quarto de espaço médio, um largo dois espaços, um grande quatro. As mudanças valem na hora."
+- groupRows: 3
+  $name: "Tiles per group (vertical)"
+  $name:it: "Tile per gruppo (verticali)"
+  $name:es: "Iconos por grupo (verticales)"
+  $name:fr: "Vignettes par groupe (verticales)"
+  $name:pt: "Blocos por grupo (verticais)"
+  $description: "This setting chooses the number of tile rows in each Start group. Allowed range 1 to 8; default 3. On shorter displays the visible row count is limited to fit above the bottom command bar. Changes apply immediately."
+  $description:it: "Questa impostazione sceglie il numero di righe di tile in ogni gruppo di Start. Intervallo consentito da 1 a 8; predefinito 3. Sugli schermi più bassi il numero di righe visibili è limitato per restare sopra la barra dei comandi. Le modifiche si applicano subito."
+  $description:es: "Esta configuración elige el número de filas de iconos de cada grupo de Inicio. Rango permitido de 1 a 8; predeterminado 3. En pantallas bajas el número de filas visibles se limita para caber sobre la barra de comandos inferior. Los cambios se aplican al momento."
+  $description:fr: "Ce paramètre choisit le nombre de rangées de vignettes dans chaque groupe de l'écran d'accueil. Plage autorisée de 1 à 8 ; défaut 3. Sur les écrans peu hauts, le nombre de rangées visibles est limité pour rester au-dessus de la barre de commandes. Les changements s'appliquent immédiatement."
+  $description:pt: "Esta configuração escolhe o número de fileiras de blocos em cada grupo da Tela Inicial. Faixa permitida de 1 a 8; padrão 3. Em telas mais baixas, o número de fileiras visíveis é limitado para caber acima da barra de comandos inferior. As mudanças valem na hora."
+- customTiles:
+  - - name: ""
+      $name: "Name"
+      $name:it: "Nome"
+      $name:es: "Nombre"
+      $name:fr: "Nom"
+      $name:pt: "Nome"
+      $description: "This setting specifies the tile's display name."
+      $description:it: "Questa impostazione specifica il nome visualizzato nel riquadro."
+      $description:es: "Esta configuración especifica el nombre visible del mosaico."
+      $description:fr: "Ce paramètre définit le nom affiché sur la vignette."
+      $description:pt: "Esta configuração especifica o nome exibido no bloco."
+    - target: ""
+      $name: "Target"
+      $name:it: "Destinazione"
+      $name:es: "Destino"
+      $name:fr: "Cible"
+      $name:pt: "Destino"
+      $description: "This setting specifies the file, shortcut, URL or shell target to open. Leave it empty to end the list."
+      $description:it: "Questa impostazione specifica il file, collegamento, URL o destinazione shell da aprire. Lasciala vuota per terminare l'elenco."
+      $description:es: "Esta configuración especifica el archivo, acceso directo, URL o destino del shell que se abrirá. Déjala vacía para terminar la lista."
+      $description:fr: "Ce paramètre indique le fichier, raccourci, URL ou cible du shell à ouvrir. Laissez-le vide pour terminer la liste."
+      $description:pt: "Esta configuração especifica o arquivo, atalho, URL ou destino do shell a abrir. Deixe vazio para terminar a lista."
+    - color: "#4617B4"
+      $name: "Tile color (#RRGGBB)"
+      $name:it: "Colore del riquadro (#RRGGBB)"
+      $name:es: "Color del mosaico (#RRGGBB)"
+      $name:fr: "Couleur de la vignette (#RRGGBB)"
+      $name:pt: "Cor do bloco (#RRGGBB)"
+      $description: "This setting chooses the background color when no size-specific image is available."
+      $description:it: "Questa impostazione sceglie il colore di sfondo quando non è disponibile un'immagine per la dimensione scelta."
+      $description:es: "Esta configuración elige el color de fondo cuando no hay una imagen para el tamaño seleccionado."
+      $description:fr: "Ce paramètre choisit la couleur de fond si aucune image n'est disponible pour la taille choisie."
+      $description:pt: "Esta configuração escolhe a cor de fundo quando não há imagem para o tamanho escolhido."
+    - icon: ""
+      $name: "Icon file"
+      $name:it: "File dell'icona"
+      $name:es: "Archivo del icono"
+      $name:fr: "Fichier de l'icône"
+      $name:pt: "Arquivo do ícone"
+      $description: "This setting specifies an optional local icon or image file."
+      $description:it: "Questa impostazione specifica un file locale facoltativo per l'icona o l'immagine."
+      $description:es: "Esta configuración especifica un archivo local opcional de icono o imagen."
+      $description:fr: "Ce paramètre indique un fichier local facultatif d'icône ou d'image."
+      $description:pt: "Esta configuração especifica um arquivo local opcional de ícone ou imagem."
+    - smallImage: ""
+      $name: "Small image"
+      $name:it: "Immagine piccolo"
+      $name:es: "Imagen pequeño"
+      $name:fr: "Image petite"
+      $name:pt: "Imagem pequeno"
+      $description: "This setting specifies an optional local image for this tile size."
+      $description:it: "Questa impostazione specifica un'immagine locale facoltativa per questa dimensione del riquadro."
+      $description:es: "Esta configuración especifica una imagen local opcional para este tamaño de mosaico."
+      $description:fr: "Ce paramètre indique une image locale facultative pour cette taille de vignette."
+      $description:pt: "Esta configuração especifica uma imagem local opcional para este tamanho do bloco."
+    - mediumImage: ""
+      $name: "Medium image"
+      $name:it: "Immagine medio"
+      $name:es: "Imagen mediano"
+      $name:fr: "Image moyenne"
+      $name:pt: "Imagem médio"
+      $description: "This setting specifies an optional local image for this tile size."
+      $description:it: "Questa impostazione specifica un'immagine locale facoltativa per questa dimensione del riquadro."
+      $description:es: "Esta configuración especifica una imagen local opcional para este tamaño de mosaico."
+      $description:fr: "Ce paramètre indique une image locale facultative pour cette taille de vignette."
+      $description:pt: "Esta configuração especifica uma imagem local opcional para este tamanho do bloco."
+    - wideImage: ""
+      $name: "Wide image"
+      $name:it: "Immagine largo"
+      $name:es: "Imagen ancho"
+      $name:fr: "Image large"
+      $name:pt: "Imagem largo"
+      $description: "This setting specifies an optional local image for this tile size."
+      $description:it: "Questa impostazione specifica un'immagine locale facoltativa per questa dimensione del riquadro."
+      $description:es: "Esta configuración especifica una imagen local opcional para este tamaño de mosaico."
+      $description:fr: "Ce paramètre indique une image locale facultative pour cette taille de vignette."
+      $description:pt: "Esta configuração especifica uma imagem local opcional para este tamanho do bloco."
+    - largeImage: ""
+      $name: "Large image"
+      $name:it: "Immagine grande"
+      $name:es: "Imagen grande"
+      $name:fr: "Image grande"
+      $name:pt: "Imagem grande"
+      $description: "This setting specifies an optional local image for this tile size."
+      $description:it: "Questa impostazione specifica un'immagine locale facoltativa per questa dimensione del riquadro."
+      $description:es: "Esta configuración especifica una imagen local opcional para este tamaño de mosaico."
+      $description:fr: "Ce paramètre indique une image locale facultative pour cette taille de vignette."
+      $description:pt: "Esta configuração especifica uma imagem local opcional para este tamanho do bloco."
+  $name: "Custom tiles"
+  $name:it: "Riquadri personalizzati"
+  $name:es: "Mosaicos personalizados"
+  $name:fr: "Vignettes personnalisées"
+  $name:pt: "Blocos personalizados"
+  $description: "This setting defines custom tiles. Changes reload the mod. Each tile must have a name, a target and a #RRGGBB color. Image files must be local and at most 8 MiB."
+  $description:it: "Questa impostazione definisce riquadri personalizzati. Le modifiche ricaricano la mod. Ogni riquadro deve avere nome, destinazione e colore #RRGGBB. I file immagine devono essere locali e non superare 8 MiB."
+  $description:es: "Esta configuración define mosaicos personalizados. Los cambios recargan la mod. Cada mosaico debe tener nombre, destino y color #RRGGBB. Las imágenes deben ser locales y no superar 8 MiB."
+  $description:fr: "Ce paramètre définit des vignettes personnalisées. Les modifications rechargent le mod. Chaque vignette doit avoir un nom, une cible et une couleur #RRGGBB. Les images doivent être locales et ne pas dépasser 8 Mio."
+  $description:pt: "Esta configuração define blocos personalizados. As alterações recarregam a mod. Cada bloco deve ter nome, destino e cor #RRGGBB. As imagens devem ser locais e não ultrapassar 8 MiB."
+- photoSlideshow: false
+  $name: "Photos tile: local slideshow"
+  $name:it: "Riquadro Foto: presentazione locale"
+  $name:es: "Mosaico Fotos: presentación local"
+  $name:fr: "Vignette Photos : diaporama local"
+  $name:pt: "Bloco Fotos: apresentação local"
+  $description: "This setting shows JPG and PNG files from the local Windows Pictures folder while Start is open and Photos is pinned. Images are not uploaded. Stopping may wait for decoding to finish."
+  $description:it: "Questa impostazione mostra JPG e PNG dalla cartella locale Immagini di Windows mentre Start è aperto e Foto è fissata. Le immagini non vengono caricate online. L'arresto può attendere la fine della decodifica."
+  $description:es: "Esta configuración muestra archivos JPG y PNG de la carpeta local Imágenes de Windows mientras Inicio está abierto y Fotos está fijado. Las imágenes no se suben. Al detenerse puede esperar a que termine la decodificación."
+  $description:fr: "Ce paramètre affiche les fichiers JPG et PNG du dossier local Images de Windows lorsque l'écran d'accueil est ouvert et Photos est épinglé. Les images ne sont pas envoyées en ligne. L'arrêt peut attendre la fin du décodage."
+  $description:pt: "Esta configuração mostra arquivos JPG e PNG da pasta local Imagens do Windows enquanto a Tela Inicial está aberta e Fotos está fixado. As imagens não são enviadas. A parada pode aguardar o fim da decodificação."
+- calendarSlide: false
+  $name: "Calendar live tile slide"
+  $name:it: "Animazione del riquadro Calendario"
+  $name:es: "Deslizamiento del mosaico Calendario"
+  $name:fr: "Défilement de la vignette Calendrier"
+  $name:pt: "Deslizamento do bloco Calendário"
+  $description: "This setting alternates the pinned Microsoft Calendar tile between its icon and the current local date using a downward slide. It does not read app notifications."
+  $description:it: "Questa impostazione alterna l'icona del riquadro Calendario Microsoft fissato alla data locale con uno scorrimento verso il basso. Non legge le notifiche dell'app."
+  $description:es: "Esta configuración alterna el icono del mosaico fijado de Calendario de Microsoft con la fecha local mediante un deslizamiento hacia abajo. No lee las notificaciones de la aplicación."
+  $description:fr: "Ce paramètre alterne l'icône de la vignette Calendrier Microsoft épinglée et la date locale par un glissement vers le bas. Il ne lit pas les notifications de l'application."
+  $description:pt: "Esta configuração alterna o ícone do bloco fixado do Calendário Microsoft com a data local por meio de um deslizamento para baixo. Ela não lê as notificações do aplicativo."
+- weatherOnline: false
+  $name: "Online Weather (Open-Meteo)"
+  $name:it: "Meteo online (Open-Meteo)"
+  $name:es: "Tiempo en línea (Open-Meteo)"
+  $name:fr: "Météo en ligne (Open-Meteo)"
+  $name:pt: "Clima online (Open-Meteo)"
+  $description: "This setting enables online weather. Provide both coordinates or separately enable IP location. While a Weather tile is pinned, Open-Meteo receives your IP and coordinates every 30 minutes, even when Start is closed. Its free API is for non-commercial use."
+  $description:it: "Questa impostazione attiva il meteo online. Inserisci entrambe le coordinate oppure attiva separatamente la posizione via IP. Quando una tile Meteo è fissata, Open-Meteo riceve IP e coordinate ogni 30 minuti anche a Start chiuso. L'API gratuita è per uso non commerciale."
+  $description:es: "Esta configuración activa el tiempo en línea. Introduce ambas coordenadas o activa por separado la ubicación por IP. Mientras haya un mosaico de Tiempo fijado, Open-Meteo recibe tu IP y coordenadas cada 30 minutos, incluso con Inicio cerrado. Su API gratuita es para uso no comercial."
+  $description:fr: "Ce paramètre active la météo en ligne. Saisissez les deux coordonnées ou activez séparément la localisation par IP. Tant qu'une vignette Météo est épinglée, Open-Meteo reçoit votre IP et vos coordonnées toutes les 30 minutes, même lorsque l'écran d'accueil est fermé. Son API gratuite est réservée à un usage non commercial."
+  $description:pt: "Esta configuração ativa o clima online. Informe as duas coordenadas ou ative separadamente a localização por IP. Enquanto um bloco de Clima estiver fixado, o Open-Meteo recebe seu IP e suas coordenadas a cada 30 minutos, mesmo com a Tela Inicial fechada. A API gratuita é para uso não comercial."
+- weatherLatitude: ""
+  #! $showIf: {weatherOnline: true}
+  $name: "Latitude (decimal degrees)"
+  $name:it: "Latitudine (gradi decimali)"
+  $name:es: "Latitud (grados decimales)"
+  $name:fr: "Latitude (degrés décimaux)"
+  $name:pt: "Latitude (graus decimais)"
+  $description: "This setting specifies a decimal latitude using a dot, for example 41.90. Both coordinates override IP location."
+  $description:it: "Questa impostazione specifica la latitudine decimale con il punto, per esempio 41.90. Se entrambe le coordinate sono inserite, prevalgono sulla posizione via IP."
+  $description:es: "Esta configuración especifica la latitud decimal con un punto, por ejemplo 41.90. Si se indican ambas coordenadas, tienen prioridad sobre la ubicación por IP."
+  $description:fr: "Ce paramètre indique la latitude décimale avec un point, par exemple 41.90. Si les deux coordonnées sont renseignées, elles remplacent la localisation par IP."
+  $description:pt: "Esta configuração especifica a latitude decimal usando ponto, por exemplo 41.90. Se as duas coordenadas forem informadas, elas têm prioridade sobre a localização por IP."
+- weatherLongitude: ""
+  #! $showIf: {weatherOnline: true}
+  $name: "Longitude (decimal degrees)"
+  $name:it: "Longitudine (gradi decimali)"
+  $name:es: "Longitud (grados decimales)"
+  $name:fr: "Longitude (degrés décimaux)"
+  $name:pt: "Longitude (graus decimais)"
+  $description: "This setting specifies a decimal longitude using a dot, for example 12.50."
+  $description:it: "Questa impostazione specifica la longitudine decimale con il punto, per esempio 12.50."
+  $description:es: "Esta configuración especifica la longitud decimal con un punto, por ejemplo 12.50."
+  $description:fr: "Ce paramètre indique la longitude décimale avec un point, par exemple 12.50."
+  $description:pt: "Esta configuração especifica a longitude decimal usando ponto, por exemplo 12.50."
+- weatherIpLocation: false
+  #! $showIf: {weatherOnline: true}
+  $name: "Approximate location from IP (ipwho.is)"
+  $name:it: "Posizione approssimativa tramite IP (ipwho.is)"
+  $name:es: "Ubicación aproximada por IP (ipwho.is)"
+  $name:fr: "Position approximative par IP (ipwho.is)"
+  $name:pt: "Localização aproximada por IP (ipwho.is)"
+  $description: "This setting allows ipwho.is to receive your IP and estimate a location when coordinates are not supplied. VPNs can reduce accuracy."
+  $description:it: "Questa impostazione consente a ipwho.is di ricevere l'IP e stimare la posizione quando non sono inserite le coordinate. Una VPN può ridurre la precisione."
+  $description:es: "Esta configuración permite que ipwho.is reciba tu IP y estime una ubicación cuando no se proporcionan coordenadas. Una VPN puede reducir la precisión."
+  $description:fr: "Ce paramètre autorise ipwho.is à recevoir votre IP et à estimer une position lorsque les coordonnées ne sont pas indiquées. Un VPN peut réduire la précision."
+  $description:pt: "Esta configuração permite que ipwho.is receba seu IP e estime uma localização quando as coordenadas não são informadas. Uma VPN pode reduzir a precisão."
+- weatherLocationName: ""
+  #! $showIf: {weatherOnline: true}
+  $name: "Weather location label"
+  $name:it: "Nome località Meteo"
+  $name:es: "Nombre de la ubicación del tiempo"
+  $name:fr: "Nom du lieu météo"
+  $name:pt: "Nome da localização do clima"
+  $description: "This setting provides an optional display label, not sent to the weather service. Privacy mode hides it, not the location sent to the service."
+  $description:it: "Questa impostazione specifica un nome facoltativo da mostrare, non inviato al servizio meteo. La modalità privacy nasconde il nome, non la posizione inviata al servizio."
+  $description:es: "Esta configuración define un nombre opcional que no se envía al servicio meteorológico. El modo de privacidad oculta el nombre, no la ubicación enviada al servicio."
+  $description:fr: "Ce paramètre définit un nom facultatif qui n'est pas envoyé au service météo. Le mode confidentialité masque le nom, pas la position envoyée au service."
+  $description:pt: "Esta configuração define um nome opcional que não é enviado ao serviço de clima. O modo de privacidade oculta o nome, não a localização enviada ao serviço."
 - privacyMode: false
   $name: "Privacy mode (generic account name)"
   $name:it: "Modalità privacy (nome account generico)"
@@ -317,28 +536,61 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
   $description:es: "Esta configuración sustituye el nombre de tu cuenta de Windows por una etiqueta genérica localizada (por ejemplo Usuario) en el encabezado de la pantalla de inicio, para capturas, grabaciones y directos. La imagen de cuenta y su menú siguen funcionando con normalidad. Portada de la mod Windows 10 1507 Start Menu Recreation."
   $description:fr: "Ce paramètre remplace le nom de votre compte Windows par un libellé générique localisé (par exemple Utilisateur) dans l'en-tête de l'écran d'accueil, pour captures, enregistrements et streams. L'image du compte et son menu continuent de fonctionner normalement. Porté du mod Windows 10 1507 Start Menu Recreation."
   $description:pt: "Esta configuração substitui o nome da sua conta do Windows por um rótulo genérico localizado (por exemplo Usuário) no cabeçalho da Tela Inicial, para capturas, gravações e transmissões. A imagem da conta e seu menu continuam funcionando normalmente. Portado da mod Windows 10 1507 Start Menu Recreation."
+- appTileColors: false
+  $name: "Use app-specific tile colors (sampled from the app icon)"
+  $name:it: "Usa colori specifici delle app (campionati dall'icona)"
+  $name:es: "Usar colores específicos de cada aplicación (muestreados del icono)"
+  $name:fr: "Utiliser les couleurs propres aux applications (prélevées sur leur icône)"
+  $name:pt: "Usar cores específicas dos aplicativos (extraídas do ícone)"
+  $description: "This setting optionally uses a color sampled from the application icon for desktop tiles. Simulated and packaged tiles keep their own artwork and color."
+  $description:it: "Questa impostazione usa facoltativamente il colore campionato dall'icona dell'app per i riquadri desktop. I riquadri simulati e delle app in pacchetto conservano immagini e colori propri."
+  $description:es: "Esta configuración usa opcionalmente un color tomado del icono de la aplicación para los mosaicos de escritorio. Los mosaicos simulados y de aplicaciones empaquetadas conservan sus imágenes y colores."
+  $description:fr: "Ce paramètre utilise éventuellement une couleur prélevée sur l'icône de l'application pour les vignettes de bureau. Les vignettes simulées et celles des applications packagées conservent leurs images et leurs couleurs."
+  $description:pt: "Esta configuração usa opcionalmente uma cor extraída do ícone do aplicativo nos blocos de desktop. Os blocos simulados e de aplicativos empacotados mantêm suas imagens e cores."
+- closeSlideMs: 320
+  $name: "Closing animation duration (milliseconds)"
+  $name:it: "Durata dell'animazione di chiusura (millisecondi)"
+  $name:es: "Duración de la animación de cierre (milisegundos)"
+  $name:fr: "Durée de l'animation de fermeture (millisecondes)"
+  $name:pt: "Duração da animação de fechamento (milissegundos)"
+  $description: "This setting controls the duration of the closing animation: the tiles shrink and fade, then the desktop fades back in. Smaller is faster. Allowed range 80 to 3000; default 320."
+  $description:it: "Questa impostazione controlla la durata dell'animazione di chiusura: i tile si riducono e svaniscono, poi il desktop ricompare con una dissolvenza. Un valore più piccolo è più veloce. Intervallo consentito da 80 a 3000; predefinito 320."
+  $description:es: "Esta configuración controla la duración de la animación de cierre: los iconos se reducen y se desvanecen, y después el escritorio reaparece con un fundido. Un valor menor es más rápido. Rango permitido de 80 a 3000; predeterminado 320."
+  $description:fr: "Ce paramètre contrôle la durée de l'animation de fermeture : les vignettes rétrécissent et s'estompent, puis le bureau réapparaît en fondu. Plus petit = plus rapide. Plage autorisée de 80 à 3000 ; défaut 320."
+  $description:pt: "Esta configuração controla a duração da animação de fechamento: os blocos diminuem e desaparecem, e depois a área de trabalho reaparece com um esmaecimento. Menor é mais rápido. Faixa permitida de 80 a 3000; padrão 320."
+- desktopAppsFirstInCategories: false
+  $name: "Desktop programs before Store apps in the list of all apps"
+  $name:it: "Programmi desktop prima delle app dello Store nell'elenco di tutte le app"
+  $name:es: "Programas de escritorio antes que las apps de la Store en la lista de todas las aplicaciones"
+  $name:fr: "Programmes de bureau avant les applications du Store dans la liste de toutes les applications"
+  $name:pt: "Programas de desktop antes dos apps da Store na lista de todos os apps"
+  $description: "This setting concerns the following. This only matters with the 'by category' sort of the list of all apps. On: desktop programs are listed before the Store apps. Off: the Store apps come first, as in the Windows 8.1 Start screen and in this mod."
+  $description:it: "Questa impostazione riguarda quanto segue. Conta solo con l'ordinamento 'per categoria' dell'elenco di tutte le app. Attiva: i programmi desktop sono elencati prima delle app dello Store. Disattiva: prima le app dello Store, come nella schermata Start di Windows 8.1 e come fa questo mod."
+  $description:es: "Esta configuración se refiere a lo siguiente. Solo cuenta con el orden 'por categoría' de la lista de todas las aplicaciones. Activada: los programas de escritorio van antes que las apps de la Store. Desactivada: las apps van primero, como en Windows 8.1."
+  $description:fr: "Ce paramètre concerne les éléments suivants. Ne compte qu'avec le tri 'par catégorie' de la liste de toutes les applications. Activé : les programmes de bureau passent avant les applications du Store. Désactivé : les applications passent en premier, comme sous Windows 8.1."
+  $description:pt: "Esta configuração refere-se ao seguinte. Só conta com a ordenação 'por categoria' da lista de todos os apps. Ativado: os programas de desktop vêm antes dos apps da Store. Desativado: os apps vêm primeiro, como no Windows 8.1."
 - tileGradients: true
   $name: "Windows 8/8.1 tile gradients"
   $name:it: "Sfumatura delle tile in stile Windows 8/8.1"
   $name:es: "Degradado de los iconos estilo Windows 8/8.1"
   $name:fr: "Dégradés des vignettes façon Windows 8/8.1"
   $name:pt: "Gradientes dos blocos no estilo Windows 8/8.1"
-  $description: "Windows 8 and 8.1 never drew flat tiles: the tile colour is lighter towards the top and darker towards the bottom. Windows 10 and 11 replaced that with a flat fill, which is why the UWP apps, the 8.x Metro style apps and the tiles whose colour is sampled from the app icon look like Windows 10. Turning this on derives the Windows 8.1 gradient from the colour of every tile, including the BackgroundColor that packaged apps declare in their manifest. Turning it off restores the flat 1.0.0 look."
-  $description:it: "Windows 8 e 8.1 non disegnavano mai tile piatte: il colore della tile è più chiaro in alto e più scuro in basso. Windows 10 e 11 l'hanno sostituito con un riempimento pieno, ed è per questo che le app UWP, le app in stile Metro di Windows 8.x e le tile il cui colore è campionato dall'icona sembrano di Windows 10. Attivando questa opzione la sfumatura di Windows 8.1 viene ricavata dal colore di ogni tile, incluso il BackgroundColor che le app in pacchetto dichiarano nel loro manifesto. Disattivandola si torna all'aspetto piatto della 1.0.0."
-  $description:es: "Windows 8 y 8.1 nunca dibujaban iconos planos: el color del icono es más claro arriba y más oscuro abajo. Windows 10 y 11 lo sustituyeron por un relleno plano, y por eso las aplicaciones UWP, las aplicaciones estilo Metro de 8.x y los iconos cuyo color se muestrea del icono de la aplicación parecen de Windows 10. Al activarlo, el degradado de Windows 8.1 se obtiene del color de cada icono, incluido el BackgroundColor que las aplicaciones empaquetadas declaran en su manifiesto. Al desactivarlo se recupera el aspecto plano de la 1.0.0."
-  $description:fr: "Windows 8 et 8.1 ne dessinaient jamais de vignettes unies : la couleur de la vignette est plus claire en haut et plus sombre en bas. Windows 10 et 11 l'ont remplacée par un fond uni, et c'est pourquoi les applications UWP, les applications de style Metro 8.x et les vignettes dont la couleur est échantillonnée depuis l'icône ressemblent à Windows 10. En activant ce paramètre, le dégradé de Windows 8.1 est calculé à partir de la couleur de chaque vignette, y compris le BackgroundColor que les applications packagées déclarent dans leur manifeste. Le désactiver restaure l'aspect uni de la 1.0.0."
-  $description:pt: "O Windows 8 e 8.1 nunca desenhavam blocos lisos: a cor do bloco é mais clara em cima e mais escura em baixo. O Windows 10 e 11 substituíram isso por um preenchimento liso, e é por isso que os apps UWP, os apps no estilo Metro do 8.x e os blocos cuja cor é amostrada do ícone parecem do Windows 10. Ao ativar esta opção, o gradiente do Windows 8.1 é obtido a partir da cor de cada bloco, incluindo o BackgroundColor que os apps empacotados declaram no manifesto. Ao desativá-la, volta o aspecto liso da 1.0.0."
+  $description: "This setting concerns the following. Windows 8 and 8.1 never drew flat tiles: the tile colour is lighter towards the top and darker towards the bottom. Windows 10 and 11 replaced that with a flat fill, which is why the UWP apps, the 8.x Metro style apps and the tiles whose colour is sampled from the app icon look like Windows 10. Turning this on derives the Windows 8.1 gradient from the colour of every tile, including the BackgroundColor that packaged apps declare in their manifest. Turning it off restores the flat 1.0.0 look."
+  $description:it: "Questa impostazione riguarda quanto segue. Windows 8 e 8.1 non disegnavano mai tile piatte: il colore della tile è più chiaro in alto e più scuro in basso. Windows 10 e 11 l'hanno sostituito con un riempimento pieno, ed è per questo che le app UWP, le app in stile Metro di Windows 8.x e le tile il cui colore è campionato dall'icona sembrano di Windows 10. Attivando questa opzione la sfumatura di Windows 8.1 viene ricavata dal colore di ogni tile, incluso il BackgroundColor che le app in pacchetto dichiarano nel loro manifesto. Disattivandola si torna all'aspetto piatto della 1.0.0."
+  $description:es: "Esta configuración se refiere a lo siguiente. Windows 8 y 8.1 nunca dibujaban iconos planos: el color del icono es más claro arriba y más oscuro abajo. Windows 10 y 11 lo sustituyeron por un relleno plano, y por eso las aplicaciones UWP, las aplicaciones estilo Metro de 8.x y los iconos cuyo color se muestrea del icono de la aplicación parecen de Windows 10. Al activarlo, el degradado de Windows 8.1 se obtiene del color de cada icono, incluido el BackgroundColor que las aplicaciones empaquetadas declaran en su manifiesto. Al desactivarlo se recupera el aspecto plano de la 1.0.0."
+  $description:fr: "Ce paramètre concerne les éléments suivants. Windows 8 et 8.1 ne dessinaient jamais de vignettes unies : la couleur de la vignette est plus claire en haut et plus sombre en bas. Windows 10 et 11 l'ont remplacée par un fond uni, et c'est pourquoi les applications UWP, les applications de style Metro 8.x et les vignettes dont la couleur est échantillonnée depuis l'icône ressemblent à Windows 10. En activant ce paramètre, le dégradé de Windows 8.1 est calculé à partir de la couleur de chaque vignette, y compris le BackgroundColor que les applications packagées déclarent dans leur manifeste. Le désactiver restaure l'aspect uni de la 1.0.0."
+  $description:pt: "Esta configuração refere-se ao seguinte. O Windows 8 e 8.1 nunca desenhavam blocos lisos: a cor do bloco é mais clara em cima e mais escura em baixo. O Windows 10 e 11 substituíram isso por um preenchimento liso, e é por isso que os apps UWP, os apps no estilo Metro do 8.x e os blocos cuja cor é amostrada do ícone parecem do Windows 10. Ao ativar esta opção, o gradiente do Windows 8.1 é obtido a partir da cor de cada bloco, incluindo o BackgroundColor que os apps empacotados declaram no manifesto. Ao desativá-la, volta o aspecto liso da 1.0.0."
 - tileGradientStrength: subtle
   $name: "Gradient strength"
   $name:it: "Intensità della sfumatura"
   $name:es: "Intensidad del degradado"
   $name:fr: "Intensité du dégradé"
   $name:pt: "Intensidade do gradiente"
-  $description: "How pronounced the Windows 8/8.1 gradient is. Subtle (the default) is closest to the Windows 8 start screen, Normal matches Windows 8.1, Strong is more visible. Changes apply immediately."
-  $description:it: "Quanto è marcata la sfumatura di Windows 8/8.1. Sobria è la più vicina alla schermata Start di Windows 8, Normale corrisponde a Windows 8.1, Forte è più visibile. Le modifiche si applicano subito."
-  $description:es: "Cómo de marcado es el degradado de Windows 8/8.1. Sutil es el más cercano a la pantalla de inicio de Windows 8, Normal corresponde a Windows 8.1 y Fuerte es más visible. Los cambios se aplican al momento."
-  $description:fr: "L'intensité du dégradé Windows 8/8.1. Subtil est le plus proche de l'écran d'accueil de Windows 8, Normal correspond à Windows 8.1 et Fort est plus visible. Les changements s'appliquent immédiatement."
-  $description:pt: "O quão marcado é o gradiente do Windows 8/8.1. Sutil é o mais próximo da Tela Inicial do Windows 8, Normal corresponde ao Windows 8.1 e Forte é mais visível. As mudanças valem na hora."
+  $description: "This setting concerns the following. How pronounced the Windows 8/8.1 gradient is. Subtle (the default) is closest to the Windows 8 start screen, Normal matches Windows 8.1, Strong is more visible. Changes apply immediately."
+  $description:it: "Questa impostazione riguarda quanto segue. Quanto è marcata la sfumatura di Windows 8/8.1. Sobria è la più vicina alla schermata Start di Windows 8, Normale corrisponde a Windows 8.1, Forte è più visibile. Le modifiche si applicano subito."
+  $description:es: "Esta configuración se refiere a lo siguiente. Cómo de marcado es el degradado de Windows 8/8.1. Sutil es el más cercano a la pantalla de inicio de Windows 8, Normal corresponde a Windows 8.1 y Fuerte es más visible. Los cambios se aplican al momento."
+  $description:fr: "Ce paramètre concerne les éléments suivants. L'intensité du dégradé Windows 8/8.1. Subtil est le plus proche de l'écran d'accueil de Windows 8, Normal correspond à Windows 8.1 et Fort est plus visible. Les changements s'appliquent immédiatement."
+  $description:pt: "Esta configuração refere-se ao seguinte. O quão marcado é o gradiente do Windows 8/8.1. Sutil é o mais próximo da Tela Inicial do Windows 8, Normal corresponde ao Windows 8.1 e Forte é mais visível. As mudanças valem na hora."
   $options:
   - subtle: "Subtle (closest to the Windows 8 tiles)"
   - normal: "Normal (Windows 8.1 look)"
@@ -365,22 +617,22 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
   $name:es: "Mantener el degradado sobre la ilustración de la aplicación"
   $name:fr: "Conserver le dégradé par-dessus l'illustration de l'application"
   $name:pt: "Manter o gradiente sobre a arte do aplicativo"
-  $description: "Windows 10/11 packaged apps usually ship artwork that covers the whole tile, so the gradient behind it would never be visible. This draws the Windows 8.1 gradient over the artwork as well, which is what makes those tiles match the Windows 8/8.1 apps. Turn it off to keep the artwork untouched."
-  $description:it: "Le app in pacchetto di Windows 10/11 di solito hanno una grafica che copre tutta la tile, quindi la sfumatura sotto non si vedrebbe. Questa opzione disegna la sfumatura di Windows 8.1 anche sopra la grafica, ed è ciò che fa somigliare queste tile a quelle di Windows 8/8.1. Disattivala per lasciare intatta la grafica."
-  $description:es: "Las aplicaciones empaquetadas de Windows 10/11 suelen incluir una ilustración que cubre todo el icono, así que el degradado de debajo nunca se vería. Esta opción dibuja el degradado de Windows 8.1 también sobre la ilustración, que es lo que hace que esos iconos se parezcan a los de Windows 8/8.1. Desactívala para dejar la ilustración intacta."
-  $description:fr: "Les applications packagées de Windows 10/11 fournissent souvent une illustration qui couvre toute la vignette, si bien que le dégradé placé dessous ne serait jamais visible. Ce paramètre dessine aussi le dégradé Windows 8.1 par-dessus l'illustration, ce qui rapproche ces vignettes de celles de Windows 8/8.1. Désactivez-le pour laisser l'illustration intacte."
-  $description:pt: "Os apps empacotados do Windows 10/11 costumam trazer uma arte que cobre todo o bloco, então o gradiente por baixo nunca apareceria. Esta opção desenha o gradiente do Windows 8.1 também sobre a arte, e é isso que faz esses blocos se parecerem com os do Windows 8/8.1. Desative para deixar a arte intacta."
+  $description: "This setting concerns the following. Windows 10/11 packaged apps usually ship artwork that covers the whole tile, so the gradient behind it would never be visible. This draws the Windows 8.1 gradient over the artwork as well, which is what makes those tiles match the Windows 8/8.1 apps. Turn it off to keep the artwork untouched."
+  $description:it: "Questa impostazione riguarda quanto segue. Le app in pacchetto di Windows 10/11 di solito hanno una grafica che copre tutta la tile, quindi la sfumatura sotto non si vedrebbe. Questa opzione disegna la sfumatura di Windows 8.1 anche sopra la grafica, ed è ciò che fa somigliare queste tile a quelle di Windows 8/8.1. Disattivala per lasciare intatta la grafica."
+  $description:es: "Esta configuración se refiere a lo siguiente. Las aplicaciones empaquetadas de Windows 10/11 suelen incluir una ilustración que cubre todo el icono, así que el degradado de debajo nunca se vería. Esta opción dibuja el degradado de Windows 8.1 también sobre la ilustración, que es lo que hace que esos iconos se parezcan a los de Windows 8/8.1. Desactívala para dejar la ilustración intacta."
+  $description:fr: "Ce paramètre concerne les éléments suivants. Les applications packagées de Windows 10/11 fournissent souvent une illustration qui couvre toute la vignette, si bien que le dégradé placé dessous ne serait jamais visible. Ce paramètre dessine aussi le dégradé Windows 8.1 par-dessus l'illustration, ce qui rapproche ces vignettes de celles de Windows 8/8.1. Désactivez-le pour laisser l'illustration intacte."
+  $description:pt: "Esta configuração refere-se ao seguinte. Os apps empacotados do Windows 10/11 costumam trazer uma arte que cobre todo o bloco, então o gradiente por baixo nunca apareceria. Esta opção desenha o gradiente do Windows 8.1 também sobre a arte, e é isso que faz esses blocos se parecerem com os do Windows 8/8.1. Desative para deixar a arte intacta."
 - shellCompat: auto
   $name: "Compatibility with StartAllBack and ExplorerPatcher"
   $name:it: "Compatibilità con StartAllBack ed ExplorerPatcher"
   $name:es: "Compatibilidad con StartAllBack y ExplorerPatcher"
   $name:fr: "Compatibilité avec StartAllBack et ExplorerPatcher"
   $name:pt: "Compatibilidade com o StartAllBack e o ExplorerPatcher"
-  $description: "StartAllBack and ExplorerPatcher patch the shell while Explorer starts, in the same phase in which Windhawk loads this mod. In this mode the mod leaves the shell completely alone until the taskbar exists, and then waits for the delay below, so that the patched taskbar can be created first. Auto detects StartAllBack and ExplorerPatcher. Always on applies the delay in every case, Always off never does (the 1.0.0 behaviour). Read at sign-in and when Explorer starts."
-  $description:it: "StartAllBack ed ExplorerPatcher modificano la shell mentre Explorer si avvia, nella stessa fase in cui Windhawk carica questa mod. In questa modalità la mod non tocca per nulla la shell finché la barra delle applicazioni non esiste, e poi attende il ritardo indicato sotto, così la barra modificata può essere creata per prima. Auto rileva StartAllBack ed ExplorerPatcher. Attiva applica sempre il ritardo, Disattiva mai (comportamento della 1.0.0). Viene letta all'accesso e all'avvio di Explorer."
-  $description:es: "StartAllBack y ExplorerPatcher modifican el shell mientras Explorer se inicia, en la misma fase en la que Windhawk carga esta mod. En este modo la mod no toca el shell hasta que existe la barra de tareas y después espera el retraso de abajo, para que la barra modificada pueda crearse primero. Auto detecta StartAllBack y ExplorerPatcher. Activada aplica siempre el retraso, Desactivada nunca (comportamiento de la 1.0.0). Se lee al iniciar sesión y al arrancar Explorer."
-  $description:fr: "StartAllBack et ExplorerPatcher modifient le shell pendant le démarrage d'Explorer, dans la même phase où Windhawk charge ce mod. Dans ce mode, le mod ne touche pas au shell tant que la barre des tâches n'existe pas, puis attend le délai ci-dessous, afin que la barre modifiée puisse être créée en premier. Auto détecte StartAllBack et ExplorerPatcher. Activé applique toujours le délai, Désactivé jamais (comportement de la 1.0.0). Ce paramètre est lu à l'ouverture de session et au démarrage d'Explorer."
-  $description:pt: "O StartAllBack e o ExplorerPatcher modificam o shell enquanto o Explorer inicia, na mesma fase em que o Windhawk carrega esta mod. Neste modo a mod não toca no shell até a barra de tarefas existir e depois espera o atraso abaixo, para que a barra modificada possa ser criada primeiro. Auto detecta o StartAllBack e o ExplorerPatcher. Ativada aplica sempre o atraso, Desativada nunca (comportamento da 1.0.0). É lida ao entrar e quando o Explorer inicia."
+  $description: "This setting concerns the following. StartAllBack and ExplorerPatcher patch the shell while Explorer starts, in the same phase in which Windhawk loads this mod. In this mode the mod leaves the shell completely alone until the taskbar exists, and then waits for the delay below, so that the patched taskbar can be created first. Auto detects StartAllBack and ExplorerPatcher. Always on applies the delay in every case, Always off never does (the 1.0.0 behaviour). Read at sign-in and when Explorer starts."
+  $description:it: "Questa impostazione riguarda quanto segue. StartAllBack ed ExplorerPatcher modificano la shell mentre Explorer si avvia, nella stessa fase in cui Windhawk carica questa mod. In questa modalità la mod non tocca per nulla la shell finché la barra delle applicazioni non esiste, e poi attende il ritardo indicato sotto, così la barra modificata può essere creata per prima. Auto rileva StartAllBack ed ExplorerPatcher. Attiva applica sempre il ritardo, Disattiva mai (comportamento della 1.0.0). Viene letta all'accesso e all'avvio di Explorer."
+  $description:es: "Esta configuración se refiere a lo siguiente. StartAllBack y ExplorerPatcher modifican el shell mientras Explorer se inicia, en la misma fase en la que Windhawk carga esta mod. En este modo la mod no toca el shell hasta que existe la barra de tareas y después espera el retraso de abajo, para que la barra modificada pueda crearse primero. Auto detecta StartAllBack y ExplorerPatcher. Activada aplica siempre el retraso, Desactivada nunca (comportamiento de la 1.0.0). Se lee al iniciar sesión y al arrancar Explorer."
+  $description:fr: "Ce paramètre concerne les éléments suivants. StartAllBack et ExplorerPatcher modifient le shell pendant le démarrage d'Explorer, dans la même phase où Windhawk charge ce mod. Dans ce mode, le mod ne touche pas au shell tant que la barre des tâches n'existe pas, puis attend le délai ci-dessous, afin que la barre modifiée puisse être créée en premier. Auto détecte StartAllBack et ExplorerPatcher. Activé applique toujours le délai, Désactivé jamais (comportement de la 1.0.0). Ce paramètre est lu à l'ouverture de session et au démarrage d'Explorer."
+  $description:pt: "Esta configuração refere-se ao seguinte. O StartAllBack e o ExplorerPatcher modificam o shell enquanto o Explorer inicia, na mesma fase em que o Windhawk carrega esta mod. Neste modo a mod não toca no shell até a barra de tarefas existir e depois espera o atraso abaixo, para que a barra modificada possa ser criada primeiro. Auto detecta o StartAllBack e o ExplorerPatcher. Ativada aplica sempre o atraso, Desativada nunca (comportamento da 1.0.0). É lida ao entrar e quando o Explorer inicia."
   $options:
   - auto: "Auto (on when StartAllBack or ExplorerPatcher is detected)"
   - always: "Always on"
@@ -407,88 +659,59 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
   $name:es: "Retraso antes de crear la ventana de la pantalla de inicio (milisegundos)"
   $name:fr: "Délai avant de créer la fenêtre de l'écran d'accueil (millisecondes)"
   $name:pt: "Atraso antes de criar a janela da Tela Inicial (milissegundos)"
-  $description: "Used only when the compatibility mode above is active. After the taskbar appears the mod waits this long before it creates its window, its buffers and its keyboard hook, so that StartAllBack and ExplorerPatcher can finish. Allowed range 0 to 60000; default 4000. Raise it to 8000 or 10000 if the taskbar still comes back in the classic style."
-  $description:it: "Usato solo quando la modalità di compatibilità qui sopra è attiva. Dopo la comparsa della barra delle applicazioni la mod attende questo tempo prima di creare la propria finestra, i propri buffer e l'hook da tastiera, così StartAllBack ed ExplorerPatcher possono finire. Intervallo consentito da 0 a 60000; predefinito 4000. Alzalo a 8000 o 10000 se la barra continua a tornare in stile classico."
-  $description:es: "Se usa solo cuando el modo de compatibilidad de arriba está activo. Tras aparecer la barra de tareas, la mod espera este tiempo antes de crear su ventana, sus búferes y su enlace de teclado, para que StartAllBack y ExplorerPatcher puedan terminar. Rango permitido de 0 a 60000; predeterminado 4000. Auméntalo a 8000 o 10000 si la barra sigue volviendo al estilo clásico."
-  $description:fr: "Utilisé uniquement lorsque le mode de compatibilité ci-dessus est actif. Une fois la barre des tâches apparue, le mod attend ce délai avant de créer sa fenêtre, ses tampons et son hook clavier, afin que StartAllBack et ExplorerPatcher puissent terminer. Plage autorisée de 0 à 60000 ; défaut 4000. Passez à 8000 ou 10000 si la barre revient encore au style classique."
-  $description:pt: "Usado apenas quando o modo de compatibilidade acima está ativo. Depois de a barra de tarefas aparecer, a mod espera este tempo antes de criar sua janela, seus buffers e seu hook de teclado, para que o StartAllBack e o ExplorerPatcher possam terminar. Faixa permitida de 0 a 60000; padrão 4000. Aumente para 8000 ou 10000 se a barra continuar voltando ao estilo clássico."
+  $description: "This setting concerns the following. Used only when the compatibility mode above is active. After the taskbar appears the mod waits this long before it creates its window, its buffers and its keyboard hook, so that StartAllBack and ExplorerPatcher can finish. Allowed range 0 to 60000; default 4000. Raise it to 8000 or 10000 if the taskbar still comes back in the classic style."
+  $description:it: "Questa impostazione riguarda quanto segue. Usato solo quando la modalità di compatibilità qui sopra è attiva. Dopo la comparsa della barra delle applicazioni la mod attende questo tempo prima di creare la propria finestra, i propri buffer e l'hook da tastiera, così StartAllBack ed ExplorerPatcher possono finire. Intervallo consentito da 0 a 60000; predefinito 4000. Alzalo a 8000 o 10000 se la barra continua a tornare in stile classico."
+  $description:es: "Esta configuración se refiere a lo siguiente. Se usa solo cuando el modo de compatibilidad de arriba está activo. Tras aparecer la barra de tareas, la mod espera este tiempo antes de crear su ventana, sus búferes y su enlace de teclado, para que StartAllBack y ExplorerPatcher puedan terminar. Rango permitido de 0 a 60000; predeterminado 4000. Auméntalo a 8000 o 10000 si la barra sigue volviendo al estilo clásico."
+  $description:fr: "Ce paramètre concerne les éléments suivants. Utilisé uniquement lorsque le mode de compatibilité ci-dessus est actif. Une fois la barre des tâches apparue, le mod attend ce délai avant de créer sa fenêtre, ses tampons et son hook clavier, afin que StartAllBack et ExplorerPatcher puissent terminer. Plage autorisée de 0 à 60000 ; défaut 4000. Passez à 8000 ou 10000 si la barre revient encore au style classique."
+  $description:pt: "Esta configuração refere-se ao seguinte. Usado apenas quando o modo de compatibilidade acima está ativo. Depois de a barra de tarefas aparecer, a mod espera este tempo antes de criar sua janela, seus buffers e seu hook de teclado, para que o StartAllBack e o ExplorerPatcher possam terminar. Faixa permitida de 0 a 60000; padrão 4000. Aumente para 8000 ou 10000 se a barra continuar voltando ao estilo clássico."
 - deferStartHook: true
   $name: "Let Windows load the Start menu code"
   $name:it: "Lascia che Windows carichi il codice del menu Start"
   $name:es: "Dejar que Windows cargue el código del menú Inicio"
   $name:fr: "Laisser Windows charger le code du menu Démarrer"
   $name:pt: "Deixar o Windows carregar o código do menu Iniciar"
-  $description: "The mod opens this Start screen by hooking XamlLauncher::ShowStartView in twinui.pcshell.dll. Loading that DLL during Explorer start-up is what used to disturb StartAllBack and ExplorerPatcher, so the mod now waits for Windows to load it and hooks it from a background thread. The forced load is kept as a fallback, done 15 seconds after the shell has settled; turn this off to go back to loading the DLL immediately at sign-in. Read when the mod starts."
-  $description:it: "La mod apre questa schermata Start agganciando XamlLauncher::ShowStartView in twinui.pcshell.dll. Caricare quella DLL durante l'avvio di Explorer è ciò che disturbava StartAllBack ed ExplorerPatcher, quindi ora la mod aspetta che la carichi Windows e la aggancia da un thread in background. Il caricamento forzato resta come riserva, 15 secondi dopo che la shell si è stabilizzata; disattiva questa opzione per tornare a caricare la DLL subito all'accesso. Viene letta all'avvio della mod."
-  $description:es: "La mod abre esta pantalla de inicio enganchando XamlLauncher::ShowStartView en twinui.pcshell.dll. Cargar esa DLL durante el inicio de Explorer es lo que molestaba a StartAllBack y ExplorerPatcher, así que ahora la mod espera a que la cargue Windows y la engancha desde un hilo en segundo plano. La carga forzada se mantiene como reserva, 15 segundos después de que el shell se estabilice; desactiva esta opción para volver a cargar la DLL al iniciar sesión. Se lee al arrancar la mod."
-  $description:fr: "Le mod ouvre cet écran d'accueil en ancrant XamlLauncher::ShowStartView dans twinui.pcshell.dll. Charger cette DLL pendant le démarrage d'Explorer est ce qui perturbait StartAllBack et ExplorerPatcher ; le mod attend donc maintenant que Windows la charge et l'ancre depuis un thread d'arrière-plan. Le chargement forcé reste en secours, 15 secondes après la stabilisation du shell ; désactivez ce paramètre pour revenir au chargement immédiat à l'ouverture de session. Lu au démarrage du mod."
-  $description:pt: "A mod abre esta Tela Inicial ancorando XamlLauncher::ShowStartView em twinui.pcshell.dll. Carregar essa DLL durante o início do Explorer é o que incomodava o StartAllBack e o ExplorerPatcher, então agora a mod espera que o Windows a carregue e a ancora a partir de uma thread em segundo plano. O carregamento forçado continua como reserva, 15 segundos depois de o shell se estabilizar; desative para voltar a carregar a DLL logo ao entrar. É lida quando a mod inicia."
+  $description: "This setting concerns the following. The mod opens this Start screen by hooking XamlLauncher::ShowStartView in twinui.pcshell.dll. Loading that DLL during Explorer start-up is what used to disturb StartAllBack and ExplorerPatcher, so the mod now waits for Windows to load it and hooks it from a background thread. The forced load is kept as a fallback, done 15 seconds after the shell has settled; turn this off to go back to loading the DLL immediately at sign-in. Read when the mod starts."
+  $description:it: "Questa impostazione riguarda quanto segue. La mod apre questa schermata Start agganciando XamlLauncher::ShowStartView in twinui.pcshell.dll. Caricare quella DLL durante l'avvio di Explorer è ciò che disturbava StartAllBack ed ExplorerPatcher, quindi ora la mod aspetta che la carichi Windows e la aggancia da un thread in background. Il caricamento forzato resta come riserva, 15 secondi dopo che la shell si è stabilizzata; disattiva questa opzione per tornare a caricare la DLL subito all'accesso. Viene letta all'avvio della mod."
+  $description:es: "Esta configuración se refiere a lo siguiente. La mod abre esta pantalla de inicio enganchando XamlLauncher::ShowStartView en twinui.pcshell.dll. Cargar esa DLL durante el inicio de Explorer es lo que molestaba a StartAllBack y ExplorerPatcher, así que ahora la mod espera a que la cargue Windows y la engancha desde un hilo en segundo plano. La carga forzada se mantiene como reserva, 15 segundos después de que el shell se estabilice; desactiva esta opción para volver a cargar la DLL al iniciar sesión. Se lee al arrancar la mod."
+  $description:fr: "Ce paramètre concerne les éléments suivants. Le mod ouvre cet écran d'accueil en ancrant XamlLauncher::ShowStartView dans twinui.pcshell.dll. Charger cette DLL pendant le démarrage d'Explorer est ce qui perturbait StartAllBack et ExplorerPatcher ; le mod attend donc maintenant que Windows la charge et l'ancre depuis un thread d'arrière-plan. Le chargement forcé reste en secours, 15 secondes après la stabilisation du shell ; désactivez ce paramètre pour revenir au chargement immédiat à l'ouverture de session. Lu au démarrage du mod."
+  $description:pt: "Esta configuração refere-se ao seguinte. A mod abre esta Tela Inicial ancorando XamlLauncher::ShowStartView em twinui.pcshell.dll. Carregar essa DLL durante o início do Explorer é o que incomodava o StartAllBack e o ExplorerPatcher, então agora a mod espera que o Windows a carregue e a ancora a partir de uma thread em segundo plano. O carregamento forçado continua como reserva, 15 segundos depois de o shell se estabilizar; desative para voltar a carregar a DLL logo ao entrar. É lida quando a mod inicia."
 - startButtonHook: true
   $name: "Open with the StartAllBack Start button"
   $name:it: "Apri con il pulsante Start di StartAllBack"
   $name:es: "Abrir con el botón Inicio de StartAllBack"
   $name:fr: "Ouvrir avec le bouton Démarrer de StartAllBack"
   $name:pt: "Abrir com o botão Iniciar do StartAllBack"
-  $description: "StartAllBack draws its own Start button, which the Windows key setting can't catch. With this on, clicking it opens this Start screen instead of the Windows 11 Start menu. Only used while StartAllBack is running. Turn this off if you want StartAllBack's own Start menu back."
-  $description:it: "StartAllBack disegna un proprio pulsante Start, che l'opzione del tasto Windows non può intercettare. Con questa opzione attiva, facendo clic su di esso si apre questa schermata Start invece del menu Start di Windows 11. Viene usata solo quando StartAllBack è in esecuzione. Disattivala se vuoi riavere il menu Start di StartAllBack."
-  $description:es: "StartAllBack dibuja su propio botón Inicio, que la opción de la tecla Windows no puede capturar. Con esta opción activada, al hacer clic en él se abre esta pantalla de inicio en lugar del menú Inicio de Windows 11. Solo se usa mientras StartAllBack está en ejecución. Desactívala si quieres recuperar el menú Inicio de StartAllBack."
-  $description:fr: "StartAllBack dessine son propre bouton Démarrer, que l'option de la touche Windows ne peut pas capturer. Avec cette option active, cliquer dessus ouvre cet écran d'accueil au lieu du menu Démarrer de Windows 11. Utilisée uniquement quand StartAllBack est en cours d'exécution. Désactivez-la pour retrouver le menu Démarrer de StartAllBack."
-  $description:pt: "O StartAllBack desenha seu próprio botão Iniciar, que a opção da tecla Windows não consegue capturar. Com esta opção ativa, clicar nele abre esta Tela Inicial em vez do menu Iniciar do Windows 11. Só é usada enquanto o StartAllBack está em execução. Desative-a se quiser o menu Iniciar do StartAllBack de volta."
-- seedStartLayout: false
-  $name: "Populate Start with a Windows 8.1 style layout from installed apps"
-  $name:it: "Popola Start con un layout stile Windows 8.1 dalle app installate"
-  $name:es: "Rellenar Inicio con un diseño estilo Windows 8.1 desde las apps instaladas"
-  $name:fr: "Peupler l'écran d'accueil façon Windows 8.1 depuis les applications installées"
-  $name:pt: "Preencher a Tela Inicial com um layout estilo Windows 8.1 dos apps instalados"
-  $description: "This setting is optional and off by default. There are no real Metro apps left to download on Windows 10/11, so to spare you pinning dozens of apps by hand, turning this on pins the modern counterparts of the Windows 8.1 inbox apps that are actually installed (Mail/Outlook, Calendar, Weather, Photos, Edge, News, Camera, Xbox, Music, Movies, OneDrive, Maps, Settings, Calculator, Clock, Notepad, Paint) in Windows 8.1 sizes and groups - Wide Mail, Large Weather and so on. It only adds groups after your current tiles, never removes or moves anything, skips apps that are already pinned or not installed, and the added tiles are ordinary tiles you can resize, move or unpin. Turning it off again changes nothing that was added."
-  $description:it: "Questa impostazione è opzionale e disattivata in partenza. Su Windows 10/11 non restano vere app Metro da scaricare, quindi per risparmiarti di pinnare decine di app a mano, attivandola vengono pinnate le controparti moderne delle app di sistema di Windows 8.1 che sono davvero installate (Posta/Outlook, Calendario, Meteo, Foto, Edge, Notizie, Fotocamera, Xbox, Musica, Film, OneDrive, Mappe, Impostazioni, Calcolatrice, Orologio, Blocco note, Paint) con dimensioni e gruppi in stile 8.1: Posta Larga, Meteo Grande e così via. Aggiunge solo gruppi dopo le tue tile attuali, non rimuove né sposta nulla, salta le app già pinnate o non installate, e le tile aggiunte sono tile normali da ridimensionare, spostare o rimuovere. Disattivandola non cambia nulla di ciò che è stato aggiunto."
-  $description:es: "Esta configuración es opcional y viene desactivada. En Windows 10/11 ya no quedan apps Metro reales para descargar, así que, para ahorrarte fijar docenas de apps a mano, al activarla se fijan las equivalentes modernas de las apps del sistema de Windows 8.1 que estén instaladas (Correo/Outlook, Calendario, Tiempo, Fotos, Edge, Noticias, Cámara, Xbox, Música, Películas, OneDrive, Mapas, Configuración, Calculadora, Reloj, Bloc de notas, Paint) con tamaños y grupos estilo 8.1: Correo Ancho, Tiempo Grande, etc. Solo añade grupos tras tus iconos actuales, nunca quita ni mueve nada, salta las apps ya fijadas o no instaladas, y los iconos añadidos son normales: puedes redimensionarlos, moverlos o quitarlos. Desactivarla no cambia lo ya añadido."
-  $description:fr: "Ce paramètre est optionnel et désactivé par défaut. Sur Windows 10/11, il ne reste plus de vraies applications Metro à télécharger ; pour vous épargner d'épingler des dizaines d'applications à la main, l'activer épingle les équivalents modernes des applications système de Windows 8.1 réellement installées (Courrier/Outlook, Calendrier, Météo, Photos, Edge, Actualités, Caméra, Xbox, Musique, Films, OneDrive, Cartes, Paramètres, Calculatrice, Horloge, Bloc-notes, Paint) aux tailles et groupes de Windows 8.1 : Courrier Large, Météo Grand, etc. Il ajoute seulement des groupes après vos vignettes actuelles, ne retire ni ne déplace rien, ignore les applications déjà épinglées ou absentes, et les vignettes ajoutées sont ordinaires : redimensionnables, déplaçables, retirables. Le désactiver ne change rien à ce qui a été ajouté."
-  $description:pt: "Esta configuração é opcional e vem desativada. No Windows 10/11 não restam apps Metro de verdade para baixar, então, para poupar você de fixar dezenas de apps manualmente, ao ativá-la são fixados os equivalentes modernos dos apps de sistema do Windows 8.1 que estiverem instalados (Email/Outlook, Calendário, Clima, Fotos, Edge, Notícias, Câmera, Xbox, Música, Filmes, OneDrive, Mapas, Configurações, Calculadora, Relógio, Bloco de Notas, Paint) com tamanhos e grupos no estilo 8.1: Email Largo, Clima Grande e assim por diante. Ela apenas adiciona grupos depois dos seus blocos atuais, nunca remove nem move nada, pula apps já fixados ou não instalados, e os blocos adicionados são comuns: redimensionáveis, móveis e removíveis. Desativá-la não muda o que foi adicionado."
-- openAtLogon: true
-  $name: "Open Start once at sign-in"
-  $name:it: "Apri Start una volta all'accesso"
-  $name:es: "Abrir Inicio una vez al iniciar sesión"
-  $name:fr: "Ouvrir l'écran d'accueil une fois à l'ouverture de session"
-  $name:pt: "Abrir a Tela Inicial uma vez ao entrar"
-  $description: "This setting shows Start after the Explorer desktop is ready on a new sign-in, using the slower 8102-style tile reveal. Does not reopen Start when this mod is edited or Explorer is restarted later in the same sign-in. Turn off to keep the desktop at sign-in."
-  $description:it: "Questa impostazione mostra Start dopo che il desktop di Explorer è pronto a un nuovo accesso, usando la rivelazione delle tile più lenta in stile 8102. Non riapre Start se questa mod viene modificata o se Explorer viene riavviato più tardi nella stessa sessione. Disattivala per mantenere il desktop all'accesso."
-  $description:es: "Esta configuración muestra Inicio cuando el escritorio de Explorer está listo tras un nuevo inicio de sesión, con la revelación de iconos más lenta al estilo 8102. No reabre Inicio si se edita esta mod o se reinicia Explorer más tarde en la misma sesión. Desactívala para mantener el escritorio al iniciar sesión."
-  $description:fr: "Ce paramètre affiche l'écran d'accueil dès que le bureau d'Explorer est prêt après une nouvelle ouverture de session, avec la révélation des vignettes plus lente de style 8102. Il ne rouvre pas l'écran d'accueil si le mod est modifié ou si Explorer redémarre plus tard dans la même session. Désactivez-le pour garder le bureau à l'ouverture de session."
-  $description:pt: "Esta configuração mostra a Tela Inicial quando a área de trabalho do Explorer está pronta após um novo logon, usando a revelação de blocos mais lenta no estilo 8102. Não reabre a Tela Inicial se este mod for editado ou se o Explorer reiniciar depois no mesmo logon. Desative para manter a área de trabalho ao entrar."
-- startOnPointerMonitor: true
-  $name: "Open the Start screen on the monitor that holds the pointer"
-  $name:it: "Apri la schermata Start sul monitor dove sta il puntatore"
-  $name:es: "Abrir la pantalla de inicio en el monitor donde está el puntero"
-  $name:fr: "Ouvrir l'écran d'accueil sur le moniteur du pointeur"
-  $name:pt: "Abrir a Tela Inicial no monitor onde está o ponteiro"
-  $description: "On: the screen opens on whichever monitor the mouse pointer is on, which is what this mod has always done. Off: it always opens on the primary monitor. The position is decided when the screen opens, so no reload is needed."
-  $description:it: "Attiva: la schermata si apre sul monitor dove sta il puntatore del mouse, cioè quello che il mod ha sempre fatto. Disattiva: si apre sempre sul monitor principale. La posizione viene decisa all'apertura della schermata, quindi non serve ricaricare il mod."
-  $description:es: "Activada: la pantalla se abre en el monitor donde está el puntero del ratón, que es lo que la mod ha hecho siempre. Desactivada: se abre siempre en el monitor principal."
-  $description:fr: "Activé : l'écran s'ouvre sur le moniteur où se trouve le pointeur de la souris, ce que le mod a toujours fait. Désactivé : il s'ouvre toujours sur le moniteur principal."
-  $description:pt: "Ativado: a tela abre no monitor onde está o ponteiro do mouse, que é o que o mod sempre fez. Desativado: abre sempre no monitor principal."
-- allAppsAtSignIn: false
-  $name: "Open the list of all apps once at sign-in"
-  $name:it: "Apri l'elenco di tutte le app una volta all'accesso"
-  $name:es: "Abrir la lista de todas las aplicaciones una vez al iniciar sesión"
-  $name:fr: "Ouvrir la liste de toutes les applications une fois à l'ouverture de session"
-  $name:pt: "Abrir a lista de todos os apps uma vez ao entrar"
-  $description: "With 'Open Start once at sign-in' on, the screen opens on the list of all apps instead of the tiles. It only affects that automatic opening: pressing the Windows key later still shows the tiles first."
-  $description:it: "Con 'Apri Start una volta all'accesso' attivo, la schermata si apre sull'elenco di tutte le app invece che sulle tile. Vale solo per quell'apertura automatica: premendo il tasto Windows più tardi si vedono comunque le tile."
-  $description:es: "Con 'Abrir Inicio una vez al iniciar sesión' activo, la pantalla se abre en la lista de todas las aplicaciones en lugar de los iconos."
-  $description:fr: "Avec 'Ouvrir l'écran d'accueil une fois à l'ouverture de session', l'écran s'ouvre sur la liste de toutes les applications au lieu des vignettes."
-  $description:pt: "Com 'Abrir a Tela Inicial uma vez ao entrar' ativado, a tela abre na lista de todos os apps em vez dos blocos."
-- desktopAppsFirstInCategories: false
-  $name: "Desktop programs before Store apps in the list of all apps"
-  $name:it: "Programmi desktop prima delle app dello Store nell'elenco di tutte le app"
-  $name:es: "Programas de escritorio antes que las apps de la Store en la lista de todas las aplicaciones"
-  $name:fr: "Programmes de bureau avant les applications du Store dans la liste de toutes les applications"
-  $name:pt: "Programas de desktop antes dos apps da Store na lista de todos os apps"
-  $description: "This only matters with the 'by category' sort of the list of all apps. On: desktop programs are listed before the Store apps. Off: the Store apps come first, as in the Windows 8.1 Start screen and in this mod."
-  $description:it: "Conta solo con l'ordinamento 'per categoria' dell'elenco di tutte le app. Attiva: i programmi desktop sono elencati prima delle app dello Store. Disattiva: prima le app dello Store, come nella schermata Start di Windows 8.1 e come fa questo mod."
-  $description:es: "Solo cuenta con el orden 'por categoría' de la lista de todas las aplicaciones. Activada: los programas de escritorio van antes que las apps de la Store. Desactivada: las apps van primero, como en Windows 8.1."
-  $description:fr: "Ne compte qu'avec le tri 'par catégorie' de la liste de toutes les applications. Activé : les programmes de bureau passent avant les applications du Store. Désactivé : les applications passent en premier, comme sous Windows 8.1."
-  $description:pt: "Só conta com a ordenação 'por categoria' da lista de todos os apps. Ativado: os programas de desktop vêm antes dos apps da Store. Desativado: os apps vêm primeiro, como no Windows 8.1."
+  $description: "This setting concerns the following. StartAllBack draws its own Start button, which the Windows key setting can't catch. With this on, clicking it opens this Start screen instead of the Windows 11 Start menu. Only used while StartAllBack is running. Turn this off if you want StartAllBack's own Start menu back."
+  $description:it: "Questa impostazione riguarda quanto segue. StartAllBack disegna un proprio pulsante Start, che l'opzione del tasto Windows non può intercettare. Con questa opzione attiva, facendo clic su di esso si apre questa schermata Start invece del menu Start di Windows 11. Viene usata solo quando StartAllBack è in esecuzione. Disattivala se vuoi riavere il menu Start di StartAllBack."
+  $description:es: "Esta configuración se refiere a lo siguiente. StartAllBack dibuja su propio botón Inicio, que la opción de la tecla Windows no puede capturar. Con esta opción activada, al hacer clic en él se abre esta pantalla de inicio en lugar del menú Inicio de Windows 11. Solo se usa mientras StartAllBack está en ejecución. Desactívala si quieres recuperar el menú Inicio de StartAllBack."
+  $description:fr: "Ce paramètre concerne les éléments suivants. StartAllBack dessine son propre bouton Démarrer, que l'option de la touche Windows ne peut pas capturer. Avec cette option active, cliquer dessus ouvre cet écran d'accueil au lieu du menu Démarrer de Windows 11. Utilisée uniquement quand StartAllBack est en cours d'exécution. Désactivez-la pour retrouver le menu Démarrer de StartAllBack."
+  $description:pt: "Esta configuração refere-se ao seguinte. O StartAllBack desenha seu próprio botão Iniciar, que a opção da tecla Windows não consegue capturar. Com esta opção ativa, clicar nele abre esta Tela Inicial em vez do menu Iniciar do Windows 11. Só é usada enquanto o StartAllBack está em execução. Desative-a se quiser o menu Iniciar do StartAllBack de volta."
+- interceptMode: auto
+  $name: "How the Windows key / Start button are caught"
+  $name:it: "Come vengono intercettati il tasto Windows e il pulsante Start"
+  $name:es: "Cómo se capturan la tecla Windows y el botón Inicio"
+  $name:fr: "Comment la touche Windows et le bouton Démarrer sont capturés"
+  $name:pt: "Como a tecla Windows e o botão Iniciar são capturados"
+  $description: "This setting chooses how the Windows key and the Start button are intercepted. Changing this needs the mod to be disabled and enabled again."
+  $description:it: "Questa impostazione sceglie come vengono intercettati il tasto Windows e il pulsante Start. Per modificarla è necessario disabilitare e riabilitare la mod."
+  $description:es: "Esta configuración elige cómo se interceptan la tecla Windows y el botón Inicio. Cambiarla requiere desactivar y volver a activar la mod."
+  $description:fr: "Ce paramètre choisit comment la touche Windows et le bouton Démarrer sont interceptés. Le modifier nécessite de désactiver puis réactiver le mod."
+  $description:pt: "Esta configuração escolhe como a tecla Windows e o botão Iniciar são interceptados. Alterá-la exige desativar e ativar o mod novamente."
+  $options:
+  - auto: "Hook the Start menu inside Explorer (recommended), plus the keyboard hook as a backup"
+  - keyboard: "Keyboard hook only (the taskbar Start button is not caught)"
+  $options:it:
+  - auto: "Aggancia il menu Start dentro Explorer (consigliato), più l'hook da tastiera come riserva"
+  - keyboard: "Solo hook da tastiera (il pulsante Start della barra non viene intercettato)"
+  $options:es:
+  - auto: "Enganchar el menú Inicio dentro de Explorer (recomendado), más el hook de teclado como reserva"
+  - keyboard: "Solo hook de teclado (el botón Inicio de la barra no se captura)"
+  $options:fr:
+  - auto: "Ancrer le menu Démarrer dans Explorer (recommandé), plus le hook clavier en secours"
+  - keyboard: "Hook clavier uniquement (le bouton Démarrer de la barre n'est pas capturé)"
+  $options:pt:
+  - auto: "Ancorar o menu Iniciar dentro do Explorer (recomendado), mais o hook de teclado como reserva"
+  - keyboard: "Somente hook de teclado (o botão Iniciar da barra não é capturado)"
 */
 // ==/WindhawkModSettings==
 
@@ -523,6 +746,8 @@ hint; clicking anywhere in the panel does nothing else, and a click outside it c
 #include <math.h>
 #include <exception>
 #include <atomic>
+#include <mutex>
+#include <winhttp.h>
 #include <unordered_map>
 #include <memory>
 #include <optional>
@@ -898,6 +1123,11 @@ struct Tile {
     float px = 0.0f, py = 0.0f, tx = 0.0f, ty = 0.0f;
     COLORREF appC = 0;
     bool hasAppC = false;
+    bool customTile = false;
+    COLORREF customColor = RGB(70, 23, 180);
+    std::wstring customIcon;
+    std::wstring customLabel;
+    std::wstring customImage[4];
     // A tile drawn with the Windows 8.1 shortcut look: the flat blue of the desktop programs with
     // the program's own icon on it. mg is -1 for these tiles; this only decides how they are painted.
     bool mpShortcut = false;
@@ -1301,6 +1531,24 @@ static int g_advHoverRow = -1, g_advPressedRow = -1;
 static int g_resizeHoverRow = -1, g_resizePressedRow = -1;
 
 static HDC g_tileDC[MAX_TILES][2] = {};
+static volatile LONG g_calendarSlide = 0;
+struct CalendarSurface {
+    HDC dc = NULL;
+    HBITMAP bmp = NULL;
+    HGDIOBJ old = NULL;
+    void* bits = NULL;
+    ID2D1Bitmap* gpu = NULL;
+    int w = 0, h = 0, date = 0;
+};
+static CalendarSurface g_calendarFace[MAX_TILES];
+static void FreeCalendarFace(int i) {
+    CalendarSurface& c = g_calendarFace[i];
+    if (c.gpu) c.gpu->Release();
+    if (c.dc) { if (c.old) SelectObject(c.dc, c.old); DeleteDC(c.dc); }
+    if (c.bmp) DeleteObject(c.bmp);
+    c = CalendarSurface{};
+}
+
 static HBITMAP g_tileBmp[MAX_TILES][2] = {};
 static HGDIOBJ g_tileOld[MAX_TILES][2] = {};
 static void* g_tileBits[MAX_TILES][2] = {};
@@ -1401,6 +1649,7 @@ static void BlitIconGdi(HDC dc, const UiIcon& ic, const RECT& r, bool hover, BYT
 static void IconDestRect(const RECT& hit, RECT* out);
 static int UserTextWidth();
 static void DrawAppIconOrFallback(HDC dc, HICON icon, int x, int y, int size);
+static void UpdateTileAppColor(Tile& t);
 static void UpdateTileAppColors();
 static void SetBr(COLORREF c, float a);
 static void FillRc(float l, float t, float r, float b, COLORREF c, float a = 1.0f);
@@ -2068,18 +2317,17 @@ static void BlendFillGdi(HDC dc, int l, int t, int r, int b, COLORREF c, BYTE a)
 }
 
 // --- the taskbar of Windows 8.1 inside the Start screen ------------------------------------
-// In Windows 8.1 the Start screen covers the taskbar, and the taskbar comes back when the pointer
-// touches the bottom edge of the screen. The window of this mod is created in a z-band above the
-// taskbar, so the taskbar cannot be raised over it without touching a window of the shell; the
-// Start window gives the space back instead. SetWindowRgn clips the bottom strip of the window
-// away and, as its documentation says, "the system does not display any portion of a window that
-// lies outside of the window region": what is under the strip - the taskbar - becomes visible
-// again, and the clicks there go to it instead of to this window. Nothing of the shell is
-// modified, and the region is removed again as soon as the pointer leaves the strip.
+// The Start window gives space to the taskbar at the bottom edge. The ordinary
+// taskbar uses a window region; the companion observes the actual window bounds
+// and requires resizing the Start window itself. Neither path changes shell windows.
 static volatile bool g_trayRevealOn = true;   // the taskbarOnBottomHover setting
 static volatile bool g_trayReveal = false;    // the strip is given back (or is being given back)
 static volatile LONG g_trayRevealH = 0;       // pixels of the window clipped away right now
 static volatile LONG g_trayBarH = 0;          // height of the taskbar of this monitor
+static HWND g_trayCompanion = NULL;            // detected recreation, never modified
+static bool g_trayCompanionMode = false;       // resize our window instead of a region
+static bool g_trayCompanionWaiting = false;
+static ULONGLONG g_trayWaitSince = 0, g_trayReadySince = 0;
 static bool g_trayRegionSet = false;          // a region is currently set on the window
 static bool g_trayHookOn = false;             // the mouse hook watches the strip
 static bool g_trayArmed = false;              // the pointer left the bottom edge since Start opened
@@ -2443,6 +2691,7 @@ static HWND CreateTopWindow(int w, int h) {
 static void FreeBuffers() {
     g_snapReady = false;
     ReleaseGpuTarget();
+    for (int i = 0; i < MAX_TILES; ++i) FreeCalendarFace(i);
     g_bgBits = g_snapBits = NULL;
     for (int i = 0; i < g_tileCount; ++i) for (int v = 0; v < 2; ++v) {
         if (g_tileDC[i][v]) {
@@ -3040,9 +3289,6 @@ static void DrawDesktopWallpaperTile(HDC dc, HDC screen, int w, int h) {
     SetBkMode(dc, TRANSPARENT);
     SelectObject(dc, g_fLabel);
     RECT label = { 12, h - 30, w - 8, h - 8 };
-    RECT shadow = label; OffsetRect(&shadow, 1, 1);
-    SetTextColor(dc, RGB(17, 12, 35));
-    DrawTextW(dc, T(STR_DESKTOP), -1, &shadow, DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_NOPREFIX);
     SetTextColor(dc, RGB(255, 255, 255));
     DrawTextW(dc, T(STR_DESKTOP), -1, &label, DT_LEFT | DT_BOTTOM | DT_SINGLELINE | DT_NOPREFIX);
 }
@@ -3075,11 +3321,1563 @@ static void DrawModernTileCaption(HDC dc, const wchar_t* text, int w, int h, boo
         DrawTextW(dc, text, -1, &label, flags);
         return;
     }
-    RECT shadow = label; OffsetRect(&shadow, ScI(1), ScI(1));
-    SetTextColor(dc, RGB(17, 12, 35));
-    DrawTextW(dc, text, -1, &shadow, flags);
     SetTextColor(dc, RGB(255, 255, 255));
     DrawTextW(dc, text, -1, &label, flags);
+}
+
+// The four supplied reference images, embedded as transparent white glyphs.
+// The uniform source background is removed so each tile retains its own colour.
+static const unsigned char kIconMail[] = {
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0xb7,
+    0x00, 0x00, 0x00, 0xb7, 0x08, 0x06, 0x00, 0x00, 0x00, 0x50, 0x6e, 0xcf, 0x9f, 0x00, 0x00, 0x06, 0x58, 0x49, 0x44, 0x41,
+    0x54, 0x78, 0xda, 0xed, 0xdd, 0xf1, 0x71, 0xdb, 0x36, 0x18, 0xc6, 0xe1, 0xd7, 0x99, 0x80, 0x23, 0xb0, 0x1b, 0xa8, 0x13,
+    0x44, 0xd9, 0xc0, 0x9a, 0xa0, 0x4a, 0x17, 0x90, 0x3a, 0x81, 0xb5, 0x81, 0xd5, 0x05, 0x6a, 0x77, 0x81, 0x9a, 0x1b, 0x84,
+    0x9e, 0x20, 0xdc, 0x20, 0x1c, 0x81, 0x1b, 0xb8, 0x7f, 0x08, 0x6a, 0x79, 0x2a, 0xa5, 0x52, 0xc4, 0x07, 0x12, 0x20, 0x7f,
+    0xcf, 0x5d, 0x2e, 0xce, 0x5d, 0xa2, 0xd8, 0xe4, 0x2b, 0xf0, 0x03, 0x3e, 0x11, 0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc3, 0x3d, 0xf4, 0xf9, 0x4b, 0x1f, 0x1f, 0x1f, 0x1f, 0x1c, 0x2a, 0x44, 0x13, 0xda,
+    0x87, 0x87, 0x5e, 0xb9, 0xfd, 0xc4, 0xa1, 0xc2, 0x5c, 0x11, 0x6e, 0x10, 0x6e, 0x80, 0x70, 0x03, 0x84, 0x1b, 0x20, 0xdc,
+    0x00, 0xe1, 0x06, 0x08, 0x37, 0x08, 0x77, 0x4b, 0xcd, 0xa1, 0x42, 0x24, 0x6a, 0xeb, 0x70, 0xff, 0x2c, 0xa9, 0xe0, 0xb8,
+    0x62, 0x62, 0x85, 0xcb, 0xa2, 0x69, 0xb8, 0x1b, 0x49, 0x1b, 0x49, 0x5f, 0xdd, 0xd7, 0xc0, 0x98, 0x1a, 0x97, 0xbd, 0xcd,
+    0x3d, 0xf9, 0xeb, 0xfb, 0xd9, 0x92, 0xf6, 0x1f, 0x57, 0x92, 0x5e, 0xdc, 0xef, 0x40, 0x68, 0x95, 0x0b, 0x76, 0xf5, 0x4f,
+    0x68, 0xfb, 0x7d, 0xb4, 0x64, 0xd0, 0x84, 0xb2, 0x92, 0xf4, 0x45, 0xd2, 0x91, 0xe3, 0x8e, 0xc0, 0x8e, 0x2e, 0x6b, 0xd5,
+    0x90, 0x7f, 0x3c, 0x64, 0xe4, 0x6e, 0xdb, 0x48, 0xfa, 0x43, 0x52, 0xc6, 0x79, 0x80, 0x71, 0x19, 0xf2, 0xab, 0xa4, 0xb7,
+    0xce, 0xd0, 0xf6, 0x1c, 0xb9, 0x7d, 0xc3, 0x2d, 0x49, 0xb9, 0xfb, 0x26, 0x28, 0x53, 0x60, 0x55, 0x86, 0x6c, 0x74, 0x63,
+    0x55, 0x24, 0x64, 0x59, 0x72, 0xa9, 0x76, 0x33, 0xd8, 0x03, 0xe7, 0x05, 0x9e, 0x0e, 0x2e, 0x4b, 0xb5, 0xc5, 0x8b, 0x59,
+    0x8c, 0xdc, 0x6d, 0x9f, 0x75, 0x5a, 0xae, 0xa1, 0x4c, 0xc1, 0xbd, 0x65, 0xc8, 0xa3, 0xa4, 0xf7, 0x5e, 0xa1, 0x1d, 0x71,
+    0xe4, 0x6e, 0x7b, 0x97, 0xf4, 0x93, 0xa4, 0x92, 0xf3, 0x85, 0x9e, 0x4a, 0x97, 0x99, 0x77, 0xeb, 0x17, 0xfe, 0x14, 0xe8,
+    0x5d, 0xf8, 0x45, 0xd2, 0x9e, 0xf3, 0x86, 0xff, 0xb1, 0x77, 0x59, 0x69, 0x42, 0xbc, 0xb8, 0x75, 0x59, 0x72, 0x69, 0xe5,
+    0x26, 0x9b, 0x39, 0xe7, 0x11, 0x17, 0xf3, 0xb4, 0x8d, 0x86, 0x2e, 0xf1, 0x4d, 0x54, 0x96, 0x74, 0xcd, 0x7c, 0x69, 0xdd,
+    0xa3, 0xad, 0x70, 0x99, 0xa8, 0x42, 0xff, 0x47, 0x63, 0x7c, 0x2a, 0xb0, 0x11, 0xad, 0x7b, 0x0c, 0x6c, 0xa1, 0x8f, 0x11,
+    0xee, 0xef, 0xf2, 0x5f, 0xc7, 0x7e, 0x95, 0x47, 0xb7, 0x09, 0x49, 0xab, 0xdc, 0xb9, 0x7f, 0xf5, 0x7c, 0x9d, 0x95, 0xcb,
+    0xa2, 0x69, 0xb8, 0x57, 0x92, 0xbe, 0x49, 0xda, 0x1a, 0xfd, 0x90, 0x47, 0xce, 0xf7, 0x62, 0x1c, 0x8d, 0x06, 0xb5, 0xad,
+    0xcb, 0x60, 0xef, 0x41, 0x76, 0xc8, 0xa6, 0x3c, 0x85, 0x51, 0x89, 0x41, 0xeb, 0x7e, 0xfe, 0x65, 0xc8, 0xd5, 0x16, 0xfa,
+    0x1d, 0x32, 0x9d, 0x3e, 0xa8, 0xf7, 0xd8, 0x9a, 0x50, 0x3e, 0x84, 0x0a, 0xb7, 0xf7, 0x6c, 0xb7, 0x25, 0x17, 0xad, 0xfb,
+    0xb9, 0x96, 0x21, 0x37, 0x5b, 0xe8, 0x77, 0x54, 0x0c, 0xff, 0x59, 0x6d, 0x0b, 0xbd, 0xe3, 0x54, 0xee, 0x6a, 0x9f, 0x27,
+    0xcf, 0x6f, 0xbe, 0x16, 0xad, 0xfb, 0xb9, 0x39, 0xc8, 0xa6, 0x85, 0xfe, 0xe4, 0x32, 0x96, 0x0f, 0x7d, 0x01, 0x8b, 0xbd,
+    0x02, 0x4b, 0xa3, 0x19, 0x30, 0xad, 0xfb, 0xf4, 0xcb, 0x90, 0x47, 0xf9, 0x77, 0x1a, 0x33, 0x37, 0x5a, 0xaf, 0xaf, 0x86,
+    0x76, 0xc4, 0xbd, 0x02, 0xd7, 0x92, 0x7e, 0xb8, 0x80, 0xfb, 0xa0, 0x75, 0x9f, 0xae, 0x52, 0x36, 0x2d, 0xf4, 0x8d, 0xcb,
+    0xd2, 0xda, 0xe2, 0x9b, 0xb2, 0x5a, 0xe7, 0xce, 0x24, 0xfd, 0x25, 0xe9, 0xd9, 0xe0, 0xdd, 0x4f, 0xeb, 0x3e, 0x2d, 0x7b,
+    0xd9, 0xb4, 0xd0, 0x9f, 0x5d, 0x86, 0xcc, 0xae, 0xdc, 0x21, 0xb6, 0x30, 0x0e, 0x3a, 0x99, 0x40, 0x34, 0x26, 0x5b, 0x54,
+    0x98, 0x72, 0x0b, 0xe3, 0x95, 0x9b, 0x08, 0x6c, 0x0d, 0x66, 0xdc, 0xb4, 0xee, 0xe3, 0x54, 0xc8, 0xa6, 0x85, 0xbe, 0x95,
+    0x4d, 0x83, 0x70, 0xb4, 0x70, 0x9f, 0xcb, 0x94, 0x17, 0xf7, 0xcb, 0xe7, 0x32, 0xd3, 0x88, 0xd6, 0x7d, 0x6c, 0x93, 0x46,
+    0x8b, 0x16, 0xba, 0x55, 0x3e, 0x46, 0x2f, 0x4b, 0x42, 0x5d, 0xbe, 0x56, 0xe2, 0xae, 0xfb, 0x29, 0x55, 0xba, 0xb8, 0x0b,
+    0x7d, 0xaa, 0x72, 0x33, 0xa6, 0x27, 0x2b, 0xe4, 0xee, 0xd2, 0xb3, 0x33, 0x38, 0xb8, 0xb4, 0xee, 0xa7, 0x71, 0x94, 0x4d,
+    0x0b, 0x7d, 0x27, 0xcf, 0xb5, 0xeb, 0xd8, 0x46, 0xee, 0xb6, 0x52, 0x36, 0x6b, 0xe2, 0xb4, 0xee, 0xc7, 0x2b, 0x43, 0xac,
+    0x5a, 0xe8, 0x37, 0xd7, 0xae, 0x43, 0x8c, 0xdc, 0x53, 0x3c, 0xf0, 0xa9, 0x91, 0xcd, 0x62, 0xff, 0xdd, 0xb3, 0x6c, 0xdc,
+    0x7d, 0xa5, 0xb4, 0x58, 0xf5, 0x32, 0x6f, 0xce, 0xc5, 0xfc, 0xc0, 0xa7, 0xcc, 0x8d, 0xe0, 0xbe, 0x6b, 0xe2, 0xb5, 0x68,
+    0xdd, 0x87, 0x72, 0x90, 0x4d, 0x0b, 0xfd, 0xd9, 0x9d, 0xeb, 0x49, 0xae, 0xb0, 0x53, 0x3f, 0xaa, 0x2f, 0xda, 0xd1, 0x61,
+    0xc1, 0x65, 0x48, 0xf4, 0x57, 0xd5, 0x54, 0x1e, 0xd5, 0xb7, 0x72, 0x13, 0x0c, 0x5a, 0xf7, 0xd3, 0x2b, 0x65, 0xd7, 0x42,
+    0x0f, 0xb6, 0x76, 0x7d, 0x8f, 0x18, 0x36, 0x9f, 0xcf, 0x74, 0x6a, 0xbb, 0x5a, 0xac, 0x89, 0xd3, 0xba, 0x1f, 0x66, 0x2f,
+    0xff, 0x16, 0x7a, 0xe6, 0xce, 0xa1, 0x69, 0x0b, 0x3d, 0xe5, 0xb2, 0xa4, 0xab, 0x4c, 0x89, 0x62, 0x2d, 0x75, 0x21, 0x6a,
+    0x25, 0xd8, 0x83, 0x48, 0xf5, 0x09, 0xc2, 0xe7, 0x32, 0xc5, 0x62, 0x4d, 0x9c, 0xd6, 0xfd, 0x6d, 0x85, 0x6c, 0x5a, 0xe8,
+    0xbb, 0x58, 0xca, 0x90, 0xd8, 0xc3, 0x7d, 0x76, 0x74, 0x23, 0xaf, 0x6f, 0x99, 0x42, 0xeb, 0xbe, 0xfb, 0xb8, 0x58, 0xb5,
+    0xd0, 0xdf, 0x14, 0x71, 0x53, 0x2d, 0xb6, 0xb2, 0x24, 0xd4, 0xec, 0x7d, 0xd4, 0xcb, 0x66, 0xc4, 0xac, 0xca, 0xbe, 0x49,
+    0x57, 0xa7, 0x52, 0x2d, 0x4b, 0xba, 0x46, 0x87, 0x52, 0xfe, 0xb7, 0xb3, 0x55, 0xa2, 0x75, 0x7f, 0x94, 0x4d, 0x0b, 0xfd,
+    0x49, 0x13, 0xae, 0x5d, 0xcf, 0x69, 0xe4, 0x6e, 0x2b, 0xdd, 0xa8, 0x53, 0x7b, 0xbe, 0xce, 0xd2, 0x5a, 0xf7, 0x8d, 0x6c,
+    0x5a, 0xe8, 0xb9, 0xbb, 0xfa, 0xad, 0x27, 0x0f, 0x6d, 0xc4, 0xed, 0xf7, 0x58, 0x4e, 0xd4, 0x12, 0x5a, 0xf7, 0x95, 0x6c,
+    0x9a, 0x64, 0x51, 0x0d, 0x08, 0x73, 0x29, 0x4b, 0xba, 0xca, 0x94, 0xf3, 0xed, 0x6c, 0x3e, 0x07, 0xba, 0xd6, 0xfc, 0x5b,
+    0xf7, 0x07, 0xf9, 0xb7, 0xd0, 0x33, 0x05, 0xb8, 0xfd, 0x8b, 0xb2, 0x64, 0x21, 0x93, 0x23, 0x26, 0xe1, 0x8c, 0xdc, 0xd7,
+    0x0e, 0xfe, 0x37, 0xf9, 0xaf, 0x89, 0xcf, 0xa9, 0x75, 0x5f, 0xca, 0xa6, 0x85, 0xbe, 0xd3, 0x9d, 0x5b, 0x97, 0xc5, 0x28,
+    0xf5, 0x67, 0xbf, 0x67, 0xb2, 0x5b, 0x13, 0x4f, 0xbd, 0x75, 0xbf, 0x97, 0x4d, 0x0b, 0xfd, 0xbc, 0x76, 0x9d, 0xfc, 0x95,
+    0x2c, 0xe5, 0xb2, 0xa4, 0xab, 0x8e, 0xde, 0x1a, 0x5d, 0x8e, 0x53, 0x6a, 0xdd, 0xd7, 0xb2, 0x69, 0xa1, 0x7f, 0xd6, 0x69,
+    0x17, 0xd6, 0xe8, 0x7f, 0xee, 0x25, 0x94, 0x25, 0x97, 0x72, 0xd9, 0xad, 0x89, 0xa7, 0xd2, 0xba, 0x2f, 0x64, 0xd3, 0x42,
+    0x3f, 0xaf, 0x5d, 0xe7, 0x33, 0xca, 0xc3, 0xac, 0x46, 0xee, 0xcb, 0xda, 0xd3, 0xe2, 0x76, 0xb6, 0xad, 0xfc, 0x57, 0x66,
+    0x42, 0x4d, 0x1a, 0x7f, 0x93, 0xff, 0x7e, 0xd7, 0xe7, 0x32, 0x64, 0x9d, 0x54, 0x68, 0x17, 0x38, 0x72, 0xb7, 0xad, 0x65,
+    0xb3, 0xc5, 0xdb, 0xab, 0xe2, 0xdb, 0x30, 0xbf, 0x92, 0xcd, 0x46, 0xee, 0xa6, 0x5b, 0x97, 0x31, 0xa1, 0x1c, 0x7f, 0xb2,
+    0x69, 0xb1, 0xc5, 0xdb, 0x39, 0x4c, 0xc7, 0x08, 0x7e, 0xa6, 0xa3, 0xd1, 0x9b, 0x2d, 0xd9, 0xb5, 0x6b, 0xca, 0x92, 0xee,
+    0x80, 0x5a, 0xac, 0x89, 0x4f, 0xd5, 0xa9, 0x6b, 0x64, 0xd3, 0x99, 0x5d, 0x69, 0x06, 0x1f, 0x20, 0x5b, 0x7a, 0x59, 0xd2,
+    0x75, 0x52, 0x2d, 0x1e, 0x7b, 0xf2, 0xa6, 0x91, 0x9e, 0xc4, 0xd5, 0x31, 0xc1, 0xf5, 0x0d, 0xf6, 0x56, 0x33, 0x58, 0xbb,
+    0xa6, 0x2c, 0xb9, 0x5e, 0xa6, 0xbc, 0xc8, 0x7f, 0x4d, 0xbc, 0xd6, 0x78, 0xad, 0xfb, 0x83, 0x6c, 0x5a, 0xe8, 0x6f, 0x0a,
+    0xbc, 0x75, 0x19, 0x65, 0x49, 0x3c, 0x6a, 0xd9, 0xad, 0x0d, 0x17, 0x01, 0x42, 0xd3, 0xc8, 0xae, 0x85, 0x3e, 0xbb, 0xdb,
+    0xed, 0x28, 0x4b, 0x6e, 0xcb, 0x65, 0x73, 0x3b, 0x5b, 0x88, 0xd6, 0x7d, 0x29, 0x9b, 0x16, 0xba, 0xf7, 0x63, 0x37, 0x18,
+    0xb9, 0xd3, 0x57, 0xca, 0x66, 0x4d, 0x7c, 0x27, 0xff, 0x15, 0x95, 0xbd, 0xa4, 0xdf, 0x0d, 0xca, 0xaf, 0xe4, 0xd6, 0xae,
+    0x43, 0x8c, 0xdc, 0x84, 0x3b, 0x8e, 0x32, 0x20, 0xf6, 0x32, 0x89, 0xb2, 0x24, 0xf1, 0xc9, 0x66, 0x29, 0x9b, 0x35, 0xf1,
+    0x7b, 0x5b, 0xf7, 0x85, 0x6c, 0x56, 0x60, 0x26, 0xdd, 0xba, 0x8c, 0xb2, 0x24, 0x0d, 0x95, 0x6c, 0xee, 0x5e, 0xd9, 0xea,
+    0x76, 0xeb, 0xbe, 0x91, 0x4d, 0x0b, 0x3d, 0xd7, 0xc2, 0x36, 0x04, 0x65, 0xe4, 0xf6, 0x2b, 0x2d, 0x2c, 0x1e, 0x7b, 0xf2,
+    0xaa, 0xeb, 0xdd, 0xc4, 0x4a, 0x36, 0x2d, 0xf4, 0xad, 0x22, 0xdd, 0x33, 0x84, 0x91, 0x3b, 0x7e, 0xaf, 0x6e, 0x74, 0x6d,
+    0x0c, 0x42, 0xf8, 0x8b, 0xfb, 0xfa, 0x4f, 0xd9, 0x7c, 0xe0, 0xe9, 0xd9, 0xe0, 0x0d, 0xc8, 0x84, 0x72, 0xc1, 0xe1, 0xb6,
+    0x9c, 0xec, 0x59, 0x5e, 0x59, 0x16, 0xbd, 0x55, 0x1c, 0x65, 0x89, 0x9d, 0x5c, 0x36, 0x6b, 0xe2, 0x16, 0x46, 0x7d, 0xec,
+    0x06, 0x65, 0xc9, 0xb2, 0x14, 0x9a, 0x66, 0x7b, 0xb6, 0x4c, 0xa7, 0xf6, 0xf9, 0x23, 0xa7, 0x80, 0xb2, 0x24, 0xa4, 0x46,
+    0x36, 0x6b, 0xe2, 0x7d, 0xb1, 0xb1, 0x3e, 0x65, 0xc9, 0xa8, 0xa3, 0x68, 0x29, 0xff, 0xdb, 0xd9, 0xfa, 0x48, 0x66, 0xeb,
+    0x32, 0xca, 0x92, 0xf9, 0xa9, 0x64, 0xb3, 0x26, 0xde, 0x55, 0xe7, 0xf3, 0x30, 0x2b, 0x46, 0xee, 0x49, 0xad, 0x64, 0xf3,
+    0xd8, 0x93, 0xb6, 0x68, 0x1e, 0xbb, 0x91, 0x3a, 0xc2, 0x6d, 0x53, 0xa6, 0x58, 0x3c, 0xf6, 0xe4, 0x3c, 0x69, 0x9c, 0xfd,
+    0xed, 0x5f, 0x94, 0x25, 0xe9, 0x96, 0x29, 0x43, 0x6e, 0x67, 0x5b, 0x89, 0xfd, 0xc3, 0x29, 0x4b, 0x12, 0x29, 0x53, 0x9e,
+    0x7a, 0x8e, 0xbe, 0x99, 0xfe, 0xfd, 0xdc, 0x35, 0xc1, 0x66, 0xe4, 0x4e, 0x4a, 0xa1, 0xd3, 0x6a, 0x47, 0xd5, 0xf1, 0x26,
+    0x58, 0x8b, 0x75, 0xeb, 0xa0, 0x23, 0x37, 0xe1, 0x06, 0x65, 0x09, 0x90, 0x1a, 0xc2, 0x0d, 0xc2, 0x0d, 0x10, 0x6e, 0x80,
+    0x70, 0x03, 0x84, 0x1b, 0x20, 0xdc, 0x00, 0xe1, 0x06, 0xe1, 0x06, 0x08, 0x37, 0x40, 0xb8, 0x01, 0xc2, 0x0d, 0x10, 0x6e,
+    0x80, 0x70, 0x83, 0x70, 0x03, 0x84, 0x1b, 0x20, 0xdc, 0x00, 0xe1, 0x06, 0x08, 0x37, 0x40, 0xb8, 0x41, 0xb8, 0x01, 0xc2,
+    0x0d, 0x10, 0x6e, 0x80, 0x70, 0x03, 0x84, 0x1b, 0x20, 0xdc, 0x00, 0xe1, 0x06, 0xe1, 0x06, 0x08, 0x37, 0x40, 0xb8, 0x01,
+    0xc2, 0x0d, 0x10, 0x6e, 0x80, 0x70, 0x83, 0x70, 0x03, 0x84, 0x1b, 0x20, 0xdc, 0x00, 0xe1, 0x06, 0x08, 0x37, 0x40, 0xb8,
+    0x41, 0xb8, 0x01, 0xc2, 0x0d, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x24, 0xeb,
+    0x6f, 0x17, 0xb7, 0xe6, 0x4a, 0xfa, 0xdc, 0x57, 0x7e, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60,
+    0x82,
+};
+static const unsigned char kIconCalendar[] = {
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0xb6,
+    0x00, 0x00, 0x00, 0xb6, 0x08, 0x06, 0x00, 0x00, 0x00, 0x74, 0xf0, 0x77, 0x04, 0x00, 0x00, 0x01, 0xa9, 0x49, 0x44, 0x41,
+    0x54, 0x78, 0xda, 0xed, 0xdc, 0x41, 0x8a, 0xc3, 0x30, 0x0c, 0x40, 0xd1, 0x28, 0xf4, 0xfe, 0x57, 0x56, 0x4f, 0x10, 0x10,
+    0xa6, 0x76, 0x6d, 0xe5, 0xbd, 0xf5, 0x30, 0x82, 0xf0, 0x11, 0xea, 0xc6, 0xd7, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0xd3, 0x45, 0xe5, 0x8f, 0x32, 0x33, 0x7d, 0x2a, 0xb6, 0x08, 0x36, 0xa2, 0xd4, 0xec, 0xed, 0x53,
+    0xd1, 0x91, 0xb0, 0x11, 0x36, 0x08, 0x1b, 0x84, 0x0d, 0xc2, 0x06, 0x61, 0x23, 0x6c, 0x10, 0x36, 0x08, 0x1b, 0x84, 0x0d,
+    0xc2, 0x06, 0x61, 0x23, 0x6c, 0x10, 0x36, 0x08, 0x1b, 0x84, 0x0d, 0xc2, 0x06, 0x61, 0x23, 0x6c, 0x10, 0x36, 0x08, 0x1b,
+    0x84, 0x0d, 0xc2, 0x46, 0xd8, 0xd0, 0xcf, 0x67, 0xd2, 0xff, 0x0d, 0x9f, 0x96, 0xa2, 0x29, 0xaf, 0x8c, 0xd9, 0xd8, 0x38,
+    0x45, 0x40, 0xd8, 0xd0, 0xf0, 0xc6, 0x6e, 0x77, 0xb3, 0x3d, 0xfc, 0x76, 0x30, 0x6b, 0xd3, 0xdf, 0x5f, 0x36, 0x36, 0x4e,
+    0x11, 0x10, 0x36, 0x08, 0x1b, 0x84, 0x0d, 0xc2, 0x46, 0xd8, 0x20, 0x6c, 0x10, 0x36, 0x08, 0x1b, 0x84, 0x0d, 0xc2, 0x46,
+    0xd8, 0x20, 0x6c, 0x10, 0x36, 0x08, 0x1b, 0x84, 0x0d, 0xc2, 0x46, 0xd8, 0x20, 0x6c, 0x10, 0x36, 0x08, 0x1b, 0xea, 0x3a,
+    0x3e, 0xbf, 0x10, 0x66, 0x1d, 0x35, 0xcb, 0xc6, 0x06, 0x61, 0x23, 0x6c, 0x70, 0x63, 0x8f, 0xf1, 0x14, 0x98, 0x59, 0x4b,
+    0xef, 0x77, 0x1b, 0x1b, 0xa7, 0x08, 0x08, 0x1b, 0x84, 0x0d, 0xc2, 0x06, 0x61, 0x23, 0x6c, 0x10, 0x36, 0x08, 0x1b, 0x84,
+    0x0d, 0xc2, 0x06, 0x61, 0x23, 0x6c, 0x10, 0x36, 0x08, 0x1b, 0x84, 0x0d, 0xc2, 0x06, 0x61, 0x23, 0x6c, 0x10, 0x36, 0x08,
+    0x1b, 0x84, 0x0d, 0x75, 0xab, 0x9e, 0x5f, 0xf0, 0x14, 0x98, 0x59, 0x36, 0x36, 0x08, 0x1b, 0x84, 0x8d, 0x1b, 0xfb, 0xb7,
+    0x3c, 0x05, 0x66, 0xd6, 0xd2, 0xfb, 0xdd, 0xc6, 0xc6, 0x29, 0x02, 0xc2, 0x06, 0x61, 0x83, 0xb0, 0x41, 0xd8, 0x08, 0x1b,
+    0x84, 0x0d, 0xc2, 0x06, 0x61, 0x83, 0xb0, 0x41, 0xd8, 0x08, 0x1b, 0x84, 0x0d, 0xc2, 0x06, 0x61, 0x83, 0xb0, 0x41, 0xd8,
+    0x08, 0x1b, 0x84, 0x0d, 0xc2, 0x06, 0x61, 0x43, 0x9d, 0x27, 0xce, 0xcc, 0xfa, 0xf7, 0x2c, 0x1b, 0x1b, 0x84, 0x8d, 0xb0,
+    0xc1, 0x8d, 0x3d, 0xc6, 0x53, 0x60, 0x67, 0xcd, 0xb2, 0xb1, 0x41, 0xd8, 0x20, 0x6c, 0x10, 0x36, 0x08, 0x1b, 0x61, 0x83,
+    0xb0, 0x41, 0xd8, 0x20, 0x6c, 0x10, 0x36, 0x08, 0x1b, 0x61, 0x83, 0xb0, 0x41, 0xd8, 0x20, 0x6c, 0x10, 0x36, 0xc2, 0x06,
+    0x61, 0x83, 0xb0, 0x41, 0xd8, 0x20, 0x6c, 0x10, 0x36, 0x2f, 0xe2, 0x89, 0x33, 0xb3, 0x6c, 0x6c, 0x10, 0x36, 0x08, 0x1b,
+    0xce, 0xb8, 0xb1, 0xd3, 0xa7, 0xc5, 0xc6, 0x06, 0x61, 0x83, 0xb0, 0x11, 0x36, 0x08, 0x1b, 0x84, 0x0d, 0xc2, 0x06, 0x61,
+    0x83, 0xb0, 0x11, 0x36, 0x08, 0x1b, 0x84, 0x0d, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xec,
+    0xeb, 0x0b, 0xe4, 0x7b, 0x19, 0x53, 0xfc, 0x32, 0xca, 0xd0, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42,
+    0x60, 0x82,
+};
+static const unsigned char kIconWeather[] = {
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x72,
+    0x00, 0x00, 0x00, 0x72, 0x08, 0x06, 0x00, 0x00, 0x00, 0x8f, 0xdd, 0x85, 0x7d, 0x00, 0x00, 0x07, 0x10, 0x49, 0x44, 0x41,
+    0x54, 0x78, 0xda, 0xed, 0x5d, 0xdb, 0x51, 0xe3, 0x4a, 0x10, 0x3d, 0x6c, 0xed, 0x3f, 0x22, 0x02, 0x44, 0x04, 0x38, 0x03,
+    0xb1, 0x11, 0xa0, 0x8d, 0x00, 0x93, 0xc0, 0x96, 0x33, 0x58, 0x13, 0xc1, 0x5d, 0x93, 0x00, 0xf6, 0x4d, 0x60, 0x4d, 0x04,
+    0x6b, 0x22, 0xb0, 0x88, 0x00, 0x11, 0x81, 0xb5, 0x11, 0xcc, 0xfd, 0x70, 0xbb, 0xd0, 0x15, 0xb2, 0x34, 0x9a, 0x87, 0xe6,
+    0xe1, 0x3e, 0x55, 0x2a, 0xb0, 0x6c, 0x4b, 0x33, 0x73, 0xdc, 0x3d, 0xdd, 0xad, 0xe9, 0x1e, 0x80, 0xc1, 0x60, 0x30, 0x18,
+    0x0c, 0x06, 0x83, 0xc1, 0xf0, 0x1d, 0x67, 0x5d, 0x6f, 0x0a, 0x21, 0x62, 0xe8, 0xe3, 0x14, 0x40, 0x0a, 0x60, 0x0d, 0xa0,
+    0x08, 0x9a, 0xac, 0xb3, 0xb3, 0x93, 0x24, 0x32, 0x01, 0xb0, 0x01, 0x70, 0x5d, 0x3b, 0xf7, 0x4c, 0xc4, 0x56, 0xb1, 0x11,
+    0xf9, 0x25, 0x62, 0x6d, 0xf3, 0xab, 0x41, 0x22, 0x00, 0xdc, 0x02, 0x78, 0x60, 0xd5, 0x1a, 0x16, 0x84, 0x6a, 0xbf, 0x59,
+    0x22, 0x19, 0xce, 0xc0, 0x44, 0x32, 0x91, 0x0c, 0x26, 0x92, 0xc1, 0x44, 0x32, 0x98, 0x48, 0x55, 0x5f, 0xb4, 0x20, 0x0b,
+    0x78, 0xc9, 0x44, 0xea, 0x0d, 0xe4, 0x82, 0x06, 0x71, 0xe2, 0xe0, 0xfe, 0xd3, 0x9a, 0x2f, 0x7a, 0x87, 0x7d, 0x84, 0x88,
+    0xfd, 0x48, 0x05, 0x6c, 0x00, 0x64, 0xf4, 0xff, 0x5f, 0x1a, 0xc8, 0x6a, 0x44, 0x3f, 0xb2, 0x04, 0x70, 0x59, 0x7b, 0x7d,
+    0x45, 0xe7, 0xd8, 0x8f, 0x1c, 0x88, 0xac, 0xf6, 0xff, 0x39, 0x80, 0x7c, 0xe4, 0x7b, 0xd7, 0x49, 0x7c, 0x76, 0x49, 0x62,
+    0xe8, 0xaa, 0x75, 0xd5, 0x78, 0x3d, 0x1b, 0xf1, 0xde, 0xf7, 0x8d, 0xd7, 0x5e, 0xcf, 0x91, 0x36, 0x55, 0x6b, 0x5e, 0x93,
+    0xa0, 0x27, 0x00, 0x2f, 0x8a, 0x52, 0xb1, 0x69, 0x9c, 0xbb, 0x91, 0xbc, 0x96, 0x8e, 0x6a, 0x4d, 0x00, 0xec, 0x1a, 0x2a,
+    0xf6, 0x4a, 0x43, 0xb2, 0x0f, 0x3f, 0x8a, 0x35, 0x1d, 0xc6, 0x55, 0x2b, 0xfa, 0x88, 0x54, 0x3c, 0xe6, 0xe2, 0x33, 0xa6,
+    0x8a, 0xd7, 0x7a, 0x6b, 0x5c, 0x67, 0x29, 0xf9, 0xbd, 0x2e, 0xf4, 0x7d, 0x77, 0xd6, 0xf8, 0xfc, 0x4c, 0xb1, 0xed, 0xd3,
+    0x96, 0x7b, 0x2f, 0x54, 0xc7, 0x55, 0x19, 0x8a, 0x37, 0x4c, 0x3b, 0x06, 0x50, 0x85, 0xcc, 0x59, 0xcb, 0x75, 0x12, 0xcb,
+    0x44, 0x96, 0x0a, 0xf7, 0x93, 0x21, 0xf1, 0x80, 0xd4, 0x34, 0x91, 0x36, 0xe6, 0xc8, 0xcb, 0x8e, 0xf7, 0x9e, 0xc8, 0xa4,
+    0x1f, 0x82, 0x65, 0x8b, 0xa5, 0x6a, 0x73, 0xae, 0x6c, 0x1a, 0x39, 0x2b, 0x0c, 0x7f, 0x7e, 0x39, 0xa5, 0xbe, 0xaa, 0x8c,
+    0x91, 0x37, 0xc6, 0xce, 0xdf, 0x9e, 0xf7, 0x87, 0x92, 0x59, 0x91, 0xc5, 0xd8, 0x1c, 0xa8, 0x3e, 0xdc, 0xd0, 0xbc, 0x76,
+    0x56, 0x3b, 0x2e, 0xe8, 0xfc, 0x10, 0x23, 0xe7, 0xc9, 0x30, 0x89, 0x32, 0x63, 0x64, 0x16, 0x1a, 0x73, 0xe4, 0x6f, 0xd1,
+    0x8f, 0x21, 0x6a, 0x76, 0xd2, 0xf2, 0xfd, 0x5c, 0xa3, 0x7d, 0xc7, 0x8e, 0xa4, 0x71, 0x8f, 0xad, 0x41, 0x75, 0x7a, 0xc0,
+    0x26, 0x94, 0x39, 0xf2, 0x30, 0x20, 0x5b, 0xc3, 0x64, 0x6e, 0x85, 0x10, 0x3b, 0x21, 0xc4, 0x3f, 0x44, 0x2c, 0x2c, 0x1d,
+    0x13, 0xba, 0xc7, 0x6e, 0x60, 0xfb, 0x64, 0x48, 0xdc, 0x2a, 0xce, 0xb7, 0xce, 0x88, 0xb4, 0x41, 0x66, 0xaa, 0x33, 0x08,
+    0x8a, 0xed, 0x4f, 0x7c, 0x21, 0xd1, 0x25, 0x91, 0xb6, 0x24, 0xd3, 0xb7, 0x63, 0x14, 0x12, 0xfb, 0x88, 0x1c, 0x23, 0xd6,
+    0x9a, 0x00, 0xf8, 0x23, 0x11, 0xf4, 0xbe, 0x37, 0x18, 0x3d, 0x49, 0x6b, 0x96, 0xe1, 0xc1, 0x91, 0x7f, 0xa3, 0xbf, 0xef,
+    0x06, 0x43, 0x6d, 0x32, 0x86, 0x4d, 0x01, 0xe0, 0x1b, 0x0c, 0xac, 0xdc, 0x73, 0x11, 0x10, 0x18, 0x53, 0x32, 0x13, 0x32,
+    0x7c, 0x16, 0x42, 0x88, 0x42, 0xc8, 0xa3, 0xa0, 0xef, 0xe4, 0x16, 0xfc, 0x44, 0xa3, 0x92, 0xe8, 0x83, 0x6a, 0x55, 0x21,
+    0x53, 0xd6, 0x59, 0xce, 0x28, 0xca, 0x53, 0x09, 0x7d, 0x54, 0x74, 0xad, 0xcc, 0x40, 0xd0, 0xc3, 0x0a, 0x89, 0x3e, 0x11,
+    0xd9, 0x47, 0xe6, 0x4e, 0xd2, 0xa5, 0xc8, 0xc8, 0x84, 0xb7, 0x85, 0x8d, 0x24, 0xa1, 0x39, 0xb5, 0x79, 0x14, 0x12, 0x7d,
+    0x23, 0xf2, 0x18, 0x99, 0x3b, 0x09, 0x97, 0x22, 0xb5, 0x4c, 0x60, 0x1b, 0xa1, 0x7d, 0xda, 0x61, 0xd2, 0x42, 0xe6, 0xd6,
+    0x96, 0x75, 0xed, 0x1b, 0x91, 0x4d, 0x32, 0x65, 0x48, 0x9c, 0x09, 0x77, 0x98, 0x0d, 0x20, 0xd3, 0x1a, 0x89, 0xbe, 0x12,
+    0x59, 0x27, 0x33, 0xef, 0xf9, 0xcc, 0x5a, 0xb8, 0xc7, 0xba, 0x87, 0xa0, 0x9c, 0xa2, 0x59, 0x56, 0xfd, 0xdc, 0x50, 0x97,
+    0x7a, 0x24, 0xf8, 0x9c, 0x84, 0xe3, 0x12, 0xaf, 0x14, 0xa7, 0xad, 0x5c, 0x35, 0x20, 0xc4, 0xa5, 0x1e, 0x13, 0xf2, 0xf5,
+    0xae, 0x3d, 0x6a, 0xd3, 0x35, 0xb5, 0x69, 0xe2, 0xe3, 0x80, 0xe9, 0x4a, 0x64, 0x42, 0x4e, 0x71, 0x42, 0xce, 0x7c, 0x19,
+    0xa1, 0x24, 0x7a, 0x23, 0x99, 0x36, 0x03, 0x02, 0xeb, 0x16, 0x4b, 0x6f, 0xaa, 0x39, 0x6f, 0x16, 0xc2, 0x7f, 0x14, 0x1a,
+    0xf3, 0x61, 0x4a, 0x2b, 0x28, 0x4a, 0xf2, 0x5f, 0xa7, 0x3e, 0x18, 0x3b, 0xc7, 0xfc, 0xa8, 0x92, 0x1a, 0x3b, 0xb4, 0xb3,
+    0x4b, 0x11, 0x0e, 0x96, 0x03, 0xfb, 0x96, 0x75, 0xf4, 0xcf, 0x39, 0x91, 0x0b, 0xc9, 0x0e, 0xcb, 0x3a, 0xd8, 0xa1, 0x21,
+    0x97, 0xd0, 0x30, 0xd3, 0x96, 0xa5, 0x23, 0x4d, 0x1f, 0xda, 0x0b, 0xf7, 0xe3, 0x4e, 0xd2, 0x51, 0x2f, 0x3a, 0x08, 0x4d,
+    0x0c, 0x85, 0xda, 0xc6, 0x46, 0xd5, 0xa1, 0x75, 0xa6, 0x12, 0x7d, 0xda, 0x99, 0x52, 0xad, 0x26, 0xac, 0xd6, 0x55, 0x6d,
+    0x59, 0xc5, 0xb2, 0xc3, 0x08, 0xe8, 0x32, 0x5e, 0x1e, 0xb0, 0x5f, 0x80, 0x1c, 0x1a, 0xce, 0x71, 0x3c, 0x95, 0xfd, 0xad,
+    0xa3, 0x4f, 0x05, 0x19, 0x89, 0x57, 0x18, 0x63, 0xbd, 0xac, 0x86, 0xc1, 0x72, 0xd7, 0xb2, 0x8c, 0x71, 0xab, 0x11, 0x80,
+    0xf6, 0x1d, 0x69, 0xc7, 0xaa, 0x86, 0x3a, 0x9e, 0x06, 0x04, 0xe6, 0x9d, 0xaf, 0xa2, 0xab, 0x48, 0x4a, 0xaf, 0x48, 0x52,
+    0xd7, 0x35, 0xc9, 0x6d, 0xc3, 0x1c, 0xe1, 0x63, 0xde, 0xa1, 0xad, 0x4a, 0x7a, 0xff, 0x8a, 0x9e, 0xb9, 0xbe, 0xd8, 0x68,
+    0xc0, 0x58, 0x91, 0x9d, 0x94, 0x08, 0xae, 0x5a, 0x7c, 0xc6, 0x1d, 0xe2, 0xc0, 0xc5, 0x91, 0xfe, 0x19, 0xf3, 0x37, 0x7d,
+    0x88, 0xec, 0x94, 0x47, 0x3a, 0x94, 0x23, 0x1e, 0xe4, 0x47, 0xb4, 0x53, 0x10, 0x91, 0x1d, 0x5d, 0x14, 0x1e, 0x47, 0x70,
+    0x54, 0x22, 0x3e, 0x56, 0xc3, 0x77, 0xbe, 0x56, 0xbe, 0x8a, 0x49, 0xad, 0x76, 0xa9, 0xd7, 0xe8, 0x83, 0xe6, 0x37, 0x88,
+    0x0f, 0xce, 0xfa, 0xe4, 0x92, 0xc8, 0x6f, 0x11, 0x12, 0xf9, 0xed, 0x14, 0x89, 0xbc, 0x8e, 0x90, 0xc8, 0xeb, 0x53, 0x24,
+    0x32, 0x8d, 0x90, 0x48, 0x67, 0x7d, 0x72, 0x69, 0xec, 0x08, 0xc4, 0x09, 0x6b, 0x05, 0x0b, 0x75, 0x8c, 0x9d, 0x04, 0x1f,
+    0xf1, 0x53, 0xa1, 0x78, 0xcc, 0xc1, 0x98, 0x6b, 0x8c, 0x5f, 0x45, 0x1c, 0x24, 0x5d, 0x37, 0xf8, 0xda, 0xd3, 0x80, 0x35,
+    0xfe, 0x5f, 0x59, 0x83, 0x31, 0x3e, 0xce, 0xf1, 0x51, 0xe3, 0xe7, 0x46, 0x55, 0x22, 0x99, 0x44, 0x7f, 0x90, 0xe9, 0x18,
+    0x3b, 0x25, 0x8f, 0x9f, 0x37, 0x28, 0x75, 0x88, 0xfc, 0x0e, 0x8d, 0x72, 0x22, 0x0c, 0x63, 0x58, 0x13, 0x17, 0x5e, 0x5a,
+    0xad, 0x6f, 0x11, 0xba, 0x20, 0x25, 0xd4, 0xeb, 0xf1, 0x58, 0xb5, 0x5a, 0x6d, 0xe2, 0x3d, 0x42, 0xc9, 0x71, 0xd6, 0x27,
+    0x97, 0x44, 0xbe, 0x46, 0x48, 0xe4, 0xeb, 0x29, 0x12, 0xf9, 0x27, 0x42, 0x22, 0x9d, 0xf5, 0x89, 0x1f, 0x63, 0x99, 0xc5,
+    0x49, 0x3e, 0xc6, 0xaa, 0x10, 0xf8, 0x16, 0x47, 0x0d, 0x14, 0x70, 0x98, 0xe0, 0xe3, 0x3a, 0x89, 0x67, 0x11, 0x11, 0x91,
+    0x4e, 0xfb, 0x32, 0x96, 0x6a, 0x4d, 0x6a, 0x52, 0x18, 0xab, 0x7a, 0xbd, 0xb0, 0x2d, 0x91, 0x2e, 0x55, 0x6b, 0x8a, 0x8f,
+    0x2c, 0xad, 0xe9, 0x11, 0xf5, 0xba, 0x8a, 0x80, 0xc4, 0x63, 0x85, 0x07, 0x67, 0xb5, 0xbe, 0x27, 0xce, 0x5a, 0xa7, 0x59,
+    0x44, 0x68, 0xd3, 0x92, 0x32, 0x70, 0x6a, 0x0b, 0x94, 0x8b, 0x96, 0xca, 0x21, 0xa9, 0xf0, 0x3c, 0xf5, 0xbc, 0x9e, 0x2e,
+    0x76, 0x0c, 0x99, 0x46, 0x32, 0x90, 0xaf, 0x58, 0x74, 0x64, 0x5f, 0x75, 0x15, 0x9a, 0x98, 0xfa, 0x48, 0xa4, 0x0c, 0x11,
+    0xdb, 0x9e, 0x24, 0x9e, 0x5d, 0x80, 0x24, 0xee, 0x3a, 0x92, 0x78, 0x66, 0x12, 0x7d, 0x1a, 0x94, 0x7e, 0x68, 0x9b, 0xc8,
+    0xbe, 0x8a, 0x1b, 0xb2, 0xf9, 0x0e, 0xb1, 0xa6, 0xd5, 0xb5, 0xe5, 0xc1, 0xb4, 0x65, 0x75, 0xa5, 0xc2, 0xb3, 0xdc, 0x8f,
+    0x43, 0xf0, 0x78, 0x4e, 0x96, 0x9c, 0x6c, 0xbe, 0xc3, 0x1a, 0x9e, 0x57, 0xf2, 0x6f, 0x60, 0x89, 0xfe, 0x27, 0x43, 0x07,
+    0x63, 0xee, 0x90, 0x07, 0x73, 0xac, 0x7f, 0xe7, 0x18, 0x5e, 0x59, 0xda, 0xb8, 0x44, 0x26, 0x35, 0xc3, 0x66, 0x43, 0xbf,
+    0x40, 0xdb, 0x65, 0xce, 0x5c, 0x43, 0xa7, 0x9e, 0x4e, 0x2a, 0x84, 0xf8, 0xd9, 0x22, 0xa5, 0x99, 0x88, 0xac, 0x3c, 0x4b,
+    0x02, 0xb9, 0x6a, 0x92, 0x2e, 0x23, 0x38, 0x46, 0xaa, 0x3d, 0xe2, 0x63, 0x09, 0xc7, 0xab, 0x84, 0x74, 0x07, 0xb9, 0x59,
+    0xf6, 0x84, 0xc8, 0x4c, 0x3c, 0x23, 0xb1, 0x22, 0x12, 0x9d, 0x84, 0x16, 0x43, 0xac, 0xb3, 0x53, 0xd0, 0xbc, 0x52, 0x70,
+    0x9b, 0xfc, 0x8f, 0xb5, 0x26, 0x34, 0x28, 0x79, 0xcf, 0xaf, 0x7f, 0xed, 0xc1, 0x38, 0xad, 0x7b, 0xd4, 0x69, 0x4e, 0x9f,
+    0x49, 0xbc, 0x14, 0x0b, 0xcb, 0x75, 0xe8, 0x8a, 0x9a, 0xe9, 0xdd, 0x57, 0x54, 0xf0, 0x87, 0x43, 0xc3, 0xe6, 0x87, 0x44,
+    0x51, 0xc1, 0xca, 0x40, 0xfd, 0x9d, 0x20, 0xcb, 0x7c, 0x16, 0x2d, 0x7e, 0x54, 0xa8, 0x65, 0x3e, 0x2b, 0x83, 0xc5, 0x94,
+    0x82, 0x2a, 0xbc, 0x5b, 0x74, 0x38, 0xc5, 0xa1, 0x15, 0xde, 0xad, 0x2c, 0x54, 0xc6, 0x0a, 0xa2, 0x14, 0xb6, 0x4c, 0x79,
+    0xb2, 0x21, 0xa5, 0xb0, 0x9f, 0x0c, 0x85, 0xf6, 0x76, 0x03, 0x2b, 0x6e, 0xc8, 0x04, 0xfa, 0x8d, 0x93, 0xe9, 0xcb, 0xf3,
+    0xc8, 0x0d, 0xfa, 0xd3, 0xce, 0x54, 0x76, 0x1a, 0x48, 0xb0, 0x5f, 0x85, 0x7d, 0x43, 0xc7, 0x64, 0x80, 0x15, 0xba, 0xa1,
+    0xe3, 0x05, 0xe6, 0xf7, 0xbf, 0x02, 0x0c, 0x17, 0x20, 0x74, 0xed, 0x47, 0xda, 0x24, 0xb1, 0xeb, 0x39, 0xe8, 0x65, 0xed,
+    0xff, 0x43, 0xd8, 0x10, 0x18, 0x7f, 0xbb, 0x08, 0x63, 0x64, 0xba, 0xdc, 0x2e, 0x42, 0x56, 0x9d, 0xc6, 0xbe, 0x81, 0x8b,
+    0x11, 0x35, 0xeb, 0x6a, 0x8e, 0x34, 0x4d, 0x62, 0xe8, 0x5b, 0x2a, 0x69, 0x93, 0xe9, 0x82, 0x48, 0x1b, 0x92, 0x78, 0xa8,
+    0x6f, 0xba, 0x10, 0xf6, 0x37, 0x39, 0x5b, 0xd0, 0xbd, 0x66, 0x3e, 0x49, 0xa6, 0x0b, 0x22, 0xd7, 0x86, 0x49, 0xcc, 0x14,
+    0x9e, 0x05, 0x9a, 0xd8, 0x76, 0xb0, 0xb4, 0xa0, 0x66, 0x83, 0xd9, 0x76, 0x70, 0x62, 0x61, 0x4e, 0x6c, 0x16, 0xac, 0x7d,
+    0x93, 0x24, 0x3f, 0x69, 0x21, 0x2a, 0x1b, 0x78, 0xaf, 0xcc, 0x02, 0x99, 0x93, 0x10, 0x88, 0xcc, 0x0c, 0x93, 0xd8, 0xe6,
+    0xb3, 0xcd, 0x25, 0xbe, 0xd7, 0x85, 0x21, 0xed, 0x5f, 0x5a, 0x30, 0x80, 0xb2, 0x10, 0x88, 0x34, 0xbd, 0x59, 0xf6, 0x5c,
+    0x31, 0x68, 0xa0, 0x4a, 0x64, 0xdb, 0x4e, 0xeb, 0xa9, 0x61, 0x32, 0x83, 0xd8, 0x2c, 0xbb, 0x04, 0xf0, 0x68, 0xd0, 0x4f,
+    0x6c, 0x2e, 0x81, 0x58, 0xc1, 0x7e, 0x26, 0xf5, 0xa2, 0xa7, 0x0d, 0xb2, 0x4b, 0x41, 0xee, 0x5b, 0xce, 0x3f, 0xda, 0x68,
+    0xbf, 0xcd, 0x80, 0x40, 0x0e, 0xe0, 0xb6, 0xd6, 0xa9, 0x17, 0xc5, 0x6b, 0xfc, 0x6e, 0x9c, 0xbb, 0x91, 0xbc, 0x96, 0x50,
+    0xed, 0x37, 0x3e, 0xaf, 0x80, 0x7f, 0x87, 0x7a, 0x52, 0x6e, 0x56, 0xfb, 0x21, 0x3c, 0xeb, 0x3c, 0x96, 0x0b, 0x71, 0x85,
+    0x40, 0xfd, 0x39, 0xe0, 0x6d, 0x43, 0xda, 0x65, 0x33, 0x82, 0x75, 0x88, 0x3c, 0xfc, 0xf8, 0xee, 0x6a, 0xaf, 0x9d, 0xa7,
+    0xe1, 0x87, 0xb8, 0x42, 0xe0, 0x10, 0x5a, 0xbb, 0x6d, 0x9c, 0x7b, 0x18, 0xf1, 0xfe, 0x4f, 0x06, 0xd4, 0xeb, 0x49, 0xac,
+    0x10, 0x18, 0x3a, 0x37, 0x56, 0x23, 0x4b, 0xc4, 0x4b, 0x63, 0x2e, 0xdb, 0xf8, 0x4c, 0xe4, 0x57, 0x8f, 0xdb, 0x76, 0xd1,
+    0x78, 0xfd, 0x2f, 0xc6, 0xcf, 0x3f, 0xfc, 0x0e, 0xe0, 0x27, 0x3d, 0x29, 0xf9, 0xe5, 0x33, 0x91, 0x3e, 0xcf, 0x91, 0x29,
+    0xf6, 0x2b, 0xe9, 0x52, 0x92, 0x8e, 0x7c, 0x20, 0x91, 0xba, 0x73, 0xa4, 0x7f, 0x64, 0x05, 0x6c, 0xec, 0xe8, 0xe0, 0xa4,
+    0x88, 0xfc, 0x02, 0x46, 0x14, 0x60, 0x22, 0x99, 0x48, 0x06, 0x13, 0xc9, 0x60, 0x22, 0x19, 0xa7, 0x47, 0xe4, 0xe3, 0x91,
+    0xf3, 0xab, 0x18, 0x3b, 0x1b, 0xb3, 0xfb, 0x91, 0x60, 0x1f, 0x66, 0xcb, 0x6b, 0xe7, 0x0a, 0x98, 0x4b, 0x89, 0x63, 0x3f,
+    0x72, 0x64, 0x4c, 0xb0, 0x8f, 0xd9, 0x96, 0xa1, 0x4b, 0xa3, 0xf2, 0x72, 0x48, 0x06, 0x83, 0xc1, 0x60, 0x30, 0x18, 0x0c,
+    0x06, 0xc3, 0x0b, 0xfc, 0x07, 0x1c, 0xb6, 0xb7, 0xe2, 0x8f, 0x38, 0x5b, 0x17, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e,
+    0x44, 0xae, 0x42, 0x60, 0x82,
+};
+static const unsigned char kIconCalculator[] = {
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x01, 0x2c,
+    0x00, 0x00, 0x01, 0x2c, 0x08, 0x06, 0x00, 0x00, 0x00, 0x79, 0x7d, 0x8e, 0x75, 0x00, 0x00, 0x0b, 0x9b, 0x49, 0x44, 0x41,
+    0x54, 0x78, 0xda, 0xed, 0xdd, 0x5d, 0xa8, 0x65, 0xe7, 0x5d, 0xc7, 0xf1, 0xdf, 0x7f, 0xef, 0x19, 0xcd, 0xbc, 0xd9, 0xa4,
+    0xa8, 0x45, 0x8d, 0x26, 0x0a, 0x89, 0x15, 0x91, 0x52, 0x45, 0x23, 0x42, 0xda, 0x8a, 0x18, 0xb0, 0xf5, 0xed, 0xa6, 0xd6,
+    0x62, 0xd1, 0x4b, 0x11, 0xdb, 0x2b, 0xf1, 0x46, 0x6d, 0xc5, 0x1b, 0xc5, 0x4b, 0xa5, 0x20, 0xf5, 0xaa, 0x17, 0x5e, 0x54,
+    0x11, 0xc4, 0x0b, 0x2b, 0x34, 0x48, 0xdb, 0xd0, 0x34, 0x82, 0x20, 0x08, 0x6d, 0x6e, 0x6b, 0xa4, 0x36, 0x6d, 0x89, 0x34,
+    0x7d, 0xc9, 0xa4, 0x33, 0x73, 0xf6, 0xfe, 0x7b, 0x71, 0x9e, 0xdd, 0x9c, 0xce, 0xa4, 0x73, 0xe6, 0x9c, 0xb3, 0xe9, 0x59,
+    0x6b, 0xef, 0xcf, 0x07, 0xc2, 0x99, 0x4c, 0xc3, 0xea, 0x7e, 0xd6, 0x7a, 0xd6, 0x77, 0x3d, 0x6b, 0x9f, 0xb3, 0xd7, 0x49,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x5d, 0x56, 0xfb, 0x32, 0xd0, 0xee,
+    0x2e, 0x87, 0x9b, 0x9d, 0x3d, 0x91, 0xab, 0x5a, 0xb0, 0xe6, 0x1f, 0xa9, 0xc5, 0x18, 0x63, 0x57, 0xd5, 0xda, 0xb4, 0x66,
+    0x87, 0xe7, 0xfa, 0x72, 0xfc, 0x71, 0xbd, 0xcb, 0xf1, 0xaa, 0x1d, 0x3d, 0x78, 0x8b, 0x11, 0xa9, 0x3e, 0xf2, 0x77, 0x17,
+    0x93, 0x5c, 0x4a, 0xb2, 0x34, 0xbd, 0xd9, 0x95, 0xa9, 0x9e, 0xe4, 0x66, 0x55, 0x5d, 0x7f, 0x95, 0x78, 0xed, 0x64, 0xb8,
+    0x76, 0x2a, 0x58, 0xe3, 0xb6, 0x6f, 0x51, 0x55, 0xab, 0xf1, 0xef, 0x3f, 0x95, 0xe4, 0x97, 0x92, 0x3c, 0x96, 0xe4, 0xc1,
+    0x24, 0xd7, 0x92, 0x5c, 0x34, 0xcf, 0xd9, 0xa1, 0x60, 0xbd, 0x9c, 0xe4, 0x85, 0x24, 0xcf, 0x26, 0x79, 0x32, 0xc9, 0x47,
+    0xab, 0xea, 0xff, 0x36, 0x17, 0xee, 0x5d, 0xbb, 0xb3, 0xd8, 0x99, 0x60, 0x1d, 0x3d, 0x38, 0xdd, 0xfd, 0x96, 0x24, 0x7f,
+    0x38, 0x62, 0xe5, 0xbd, 0x2b, 0xf6, 0xc9, 0xff, 0x24, 0xf9, 0xdb, 0x24, 0x7f, 0x55, 0x55, 0x5f, 0xeb, 0xee, 0xe5, 0xe6,
+    0x02, 0x2e, 0x58, 0x13, 0x5a, 0x59, 0x55, 0x55, 0x77, 0xf7, 0x7d, 0x49, 0xfe, 0x22, 0xc9, 0xbb, 0x93, 0x5c, 0x18, 0xff,
+    0xf3, 0x6a, 0x97, 0x6f, 0x7f, 0x61, 0xac, 0xb4, 0x36, 0x36, 0x6f, 0x79, 0xfc, 0x57, 0x92, 0xdf, 0xab, 0xaa, 0x67, 0x76,
+    0x29, 0x5a, 0xb3, 0x3f, 0x89, 0x8f, 0xc4, 0xea, 0x81, 0x24, 0x7f, 0x97, 0xe4, 0xad, 0xe3, 0x00, 0xae, 0xe3, 0xfd, 0x2a,
+    0xf6, 0xcf, 0x7a, 0xfc, 0x73, 0x21, 0xc9, 0x57, 0x92, 0xfc, 0x76, 0x55, 0xfd, 0xf3, 0xae, 0x44, 0x6b, 0xd6, 0xc1, 0x1a,
+    0xef, 0x59, 0xd5, 0x38, 0x38, 0xff, 0x98, 0xe4, 0x57, 0x92, 0xdc, 0x1a, 0xff, 0x6e, 0x45, 0xc5, 0x3e, 0x5b, 0x8d, 0x0b,
+    0xf6, 0xf5, 0x24, 0x6f, 0xab, 0xaa, 0x8f, 0xed, 0xc2, 0x7b, 0x5a, 0x8b, 0xb9, 0x07, 0x77, 0x1c, 0x80, 0xf7, 0x1e, 0x89,
+    0xd5, 0x45, 0xb1, 0x82, 0x2c, 0x47, 0xb4, 0x2e, 0x27, 0xf9, 0x60, 0x77, 0xbf, 0xee, 0xf0, 0x1a, 0x3f, 0xef, 0x9f, 0x47,
+    0x9c, 0x6d, 0xb0, 0x36, 0x57, 0x8b, 0xee, 0x7e, 0x43, 0x0e, 0xdf, 0x60, 0xdf, 0x2c, 0x83, 0x81, 0x6f, 0x8e, 0xd6, 0x43,
+    0x49, 0xde, 0x37, 0x7e, 0xcc, 0x41, 0xb0, 0xce, 0xd9, 0x1f, 0x24, 0xf9, 0xce, 0x1c, 0xbe, 0x6f, 0x65, 0x65, 0x05, 0x77,
+    0x9e, 0xe3, 0xeb, 0x24, 0xbf, 0xd3, 0xdd, 0x8f, 0x8e, 0x8b, 0xfc, 0x62, 0xce, 0x83, 0x99, 0xf3, 0xea, 0xea, 0xc1, 0x24,
+    0xbf, 0x3a, 0x62, 0xb5, 0x30, 0x37, 0xe1, 0x0e, 0x35, 0xce, 0x8f, 0x2b, 0x49, 0xde, 0x71, 0xe4, 0xef, 0x04, 0xeb, 0xdb,
+    0x7c, 0x10, 0x92, 0xe4, 0x4d, 0x49, 0x5e, 0x63, 0x75, 0x05, 0xc7, 0x5f, 0xe7, 0x93, 0x3c, 0x31, 0x56, 0x57, 0xb3, 0x7d,
+    0xe3, 0x7d, 0xee, 0xab, 0x92, 0x9f, 0x1e, 0x07, 0xa2, 0xcd, 0x47, 0xb8, 0xeb, 0x79, 0x5e, 0x49, 0x5e, 0x9f, 0xe4, 0x7b,
+    0xc7, 0x8f, 0x01, 0x2d, 0xe6, 0x3a, 0x90, 0xb9, 0x5e, 0x2d, 0x92, 0xe4, 0x87, 0xac, 0xac, 0xe0, 0x9e, 0xdd, 0x9f, 0xe4,
+    0x75, 0x73, 0x2f, 0xef, 0x9c, 0x83, 0x75, 0xd5, 0x1c, 0x84, 0x63, 0x6d, 0x2e, 0xea, 0x17, 0xe6, 0x7e, 0xce, 0xcc, 0xfd,
+    0x96, 0xd0, 0x1b, 0xed, 0x70, 0xba, 0x73, 0xa6, 0x9c, 0xf0, 0x00, 0x82, 0x05, 0x20, 0x58, 0x80, 0x60, 0x01, 0x08, 0x16,
+    0xb0, 0xc7, 0x7c, 0x58, 0xf8, 0x4e, 0x7e, 0x10, 0x95, 0xa9, 0xd8, 0x3c, 0x3e, 0x09, 0xc1, 0x32, 0x49, 0x40, 0xb0, 0xe6,
+    0xbd, 0xb2, 0xaa, 0x24, 0x5f, 0x4c, 0xf2, 0xf9, 0xb1, 0x6f, 0xac, 0xb4, 0x38, 0xaf, 0x8b, 0xe6, 0x41, 0x92, 0xd7, 0xe6,
+    0xf0, 0x97, 0xa7, 0xf8, 0xac, 0xac, 0x60, 0xdd, 0x61, 0xf3, 0x48, 0xe5, 0xf7, 0x27, 0xf9, 0xcb, 0x1c, 0x3e, 0x08, 0x70,
+    0x65, 0xb7, 0x70, 0x0e, 0x96, 0x39, 0x7c, 0x18, 0xe5, 0x3b, 0x93, 0x7c, 0x30, 0x1e, 0xf7, 0x2d, 0x58, 0x77, 0x71, 0xab,
+    0xaa, 0x6e, 0x76, 0xf7, 0xad, 0x7d, 0xf9, 0x6d, 0xba, 0x4c, 0x6c, 0xa9, 0xff, 0xca, 0xef, 0x29, 0xb8, 0x69, 0x6f, 0x08,
+    0xd6, 0x71, 0x16, 0xe3, 0x31, 0xb2, 0xcb, 0xee, 0xb6, 0xc2, 0xe2, 0x5c, 0x56, 0x58, 0x63, 0xee, 0xf9, 0x2e, 0xbe, 0x60,
+    0x1d, 0x7f, 0x81, 0x1b, 0x57, 0xb7, 0xb6, 0xc2, 0xe2, 0x9c, 0x56, 0x58, 0xdf, 0x98, 0x83, 0xf6, 0xc6, 0x6d, 0xab, 0x09,
+    0xbb, 0x00, 0x10, 0x2c, 0x00, 0xc1, 0x02, 0x04, 0x0b, 0x40, 0xb0, 0x00, 0x04, 0x0b, 0x10, 0x2c, 0x00, 0xc1, 0x02, 0x10,
+    0x2c, 0x40, 0xb0, 0x00, 0x04, 0x0b, 0x40, 0xb0, 0x00, 0xc1, 0x02, 0x10, 0x2c, 0x00, 0xc1, 0x02, 0x04, 0x0b, 0x40, 0xb0,
+    0x00, 0x04, 0x0b, 0x10, 0x2c, 0x00, 0xc1, 0x02, 0x10, 0x2c, 0x40, 0xb0, 0x00, 0x04, 0x0b, 0x40, 0xb0, 0x00, 0xc1, 0x02,
+    0x10, 0x2c, 0x00, 0xc1, 0x02, 0x04, 0x0b, 0x40, 0xb0, 0x00, 0xc1, 0x02, 0x10, 0x2c, 0x00, 0xc1, 0x02, 0x04, 0x0b, 0x40,
+    0xb0, 0x00, 0x04, 0x0b, 0x10, 0x2c, 0x00, 0xc1, 0x02, 0x10, 0x2c, 0x40, 0xb0, 0x00, 0x04, 0x0b, 0x40, 0xb0, 0x00, 0xc1,
+    0x02, 0x10, 0x2c, 0x80, 0x7b, 0x77, 0xc1, 0x2e, 0xb8, 0x43, 0x75, 0xf7, 0x22, 0xc9, 0xa2, 0xbb, 0xdb, 0xee, 0xe0, 0x3c,
+    0x16, 0x12, 0x63, 0xee, 0x59, 0x50, 0x08, 0xd6, 0xb1, 0x6e, 0x54, 0xd5, 0x3a, 0xc9, 0xda, 0xae, 0xe0, 0x9c, 0xac, 0x93,
+    0xa4, 0xbb, 0x5f, 0xb6, 0x2b, 0x04, 0xeb, 0x5b, 0xae, 0xac, 0xc6, 0xd7, 0x1f, 0xee, 0xee, 0x9f, 0x48, 0x72, 0x29, 0xc9,
+    0xca, 0x6e, 0xe1, 0x1c, 0x2c, 0x93, 0xbc, 0x9c, 0xe4, 0xf5, 0xb7, 0xcd, 0x4d, 0xc1, 0xb2, 0x0b, 0x5e, 0x59, 0x86, 0x8f,
+    0xaf, 0xbf, 0x3f, 0xfe, 0x81, 0xa9, 0xcd, 0x4d, 0xc1, 0xb2, 0x0b, 0xee, 0xe0, 0x7d, 0x2b, 0xa6, 0xb8, 0xf2, 0x47, 0xb0,
+    0x4c, 0x10, 0xb0, 0xd4, 0x04, 0x10, 0x2c, 0x40, 0xb0, 0x00, 0x04, 0x0b, 0x40, 0xb0, 0x00, 0xc1, 0x02, 0x10, 0x2c, 0x00,
+    0xc1, 0x02, 0x04, 0x0b, 0x40, 0xb0, 0x00, 0x04, 0x0b, 0x10, 0x2c, 0x00, 0xc1, 0x02, 0x10, 0x2c, 0x40, 0xb0, 0x00, 0xce,
+    0x99, 0xe7, 0x61, 0xdd, 0x5d, 0x67, 0xfa, 0xcf, 0x76, 0xaf, 0x2d, 0x5c, 0x78, 0x56, 0x7b, 0x30, 0xc6, 0x75, 0xa6, 0xff,
+    0x70, 0xc6, 0xa5, 0x53, 0x4e, 0xb0, 0xce, 0x7a, 0xa2, 0xec, 0xc3, 0x24, 0xda, 0x87, 0x31, 0xba, 0x9b, 0x10, 0xac, 0x9d,
+    0x5e, 0x59, 0x55, 0x92, 0x2f, 0x25, 0xf9, 0xf0, 0x44, 0x57, 0x59, 0x35, 0x56, 0x46, 0x0f, 0x26, 0xf9, 0x85, 0x23, 0xaf,
+    0xf9, 0xa4, 0x63, 0xfc, 0x72, 0x92, 0x7f, 0x49, 0x72, 0x90, 0xe9, 0x3d, 0x6d, 0x75, 0x33, 0xc6, 0xef, 0x4f, 0xf2, 0x8b,
+    0x67, 0xdc, 0xd6, 0x47, 0x92, 0x3c, 0x3f, 0xe2, 0xdc, 0x13, 0x9c, 0x6f, 0x17, 0x93, 0xbc, 0x2d, 0xc9, 0x77, 0x9d, 0xe2,
+    0x58, 0x0a, 0x96, 0x60, 0xa5, 0x92, 0x7c, 0xa6, 0xaa, 0xde, 0x35, 0xe9, 0x17, 0xda, 0xfd, 0xf8, 0x19, 0x83, 0xf5, 0xbf,
+    0x55, 0xf5, 0x5b, 0x13, 0x1f, 0xe3, 0x63, 0x5b, 0x08, 0xd6, 0x9f, 0x54, 0xd5, 0x7f, 0x4c, 0x7c, 0x9c, 0xcf, 0x0a, 0x96,
+    0x60, 0x9d, 0x69, 0xff, 0x74, 0xf7, 0xe5, 0x24, 0x37, 0xc6, 0x04, 0x9a, 0xd2, 0x95, 0x79, 0x39, 0x56, 0x1f, 0x57, 0xcf,
+    0x7a, 0xab, 0xd4, 0xdd, 0xd7, 0x92, 0x5c, 0x9f, 0xf0, 0x18, 0xaf, 0x6d, 0x61, 0x5b, 0xd7, 0xba, 0x7b, 0x79, 0x64, 0x9b,
+    0x53, 0x5a, 0x45, 0x76, 0x92, 0x2b, 0x6e, 0x5b, 0x05, 0x6b, 0x1b, 0x2b, 0xad, 0x55, 0x55, 0xad, 0xba, 0xbb, 0xaa, 0x6a,
+    0x32, 0x27, 0x73, 0x77, 0x67, 0xbc, 0xae, 0x6d, 0xdc, 0xae, 0xee, 0xc3, 0x18, 0xd7, 0x63, 0x5b, 0xa9, 0xaa, 0xd5, 0x84,
+    0xc6, 0x58, 0x55, 0xd5, 0xdd, 0xed, 0x77, 0x60, 0xde, 0xcb, 0xd5, 0xd5, 0x2e, 0x00, 0x04, 0x0b, 0x40, 0xb0, 0x00, 0xc1,
+    0x02, 0x10, 0x2c, 0x00, 0xc1, 0x02, 0x04, 0x0b, 0x40, 0xb0, 0x00, 0x04, 0x0b, 0x10, 0x2c, 0x00, 0xc1, 0x02, 0x10, 0x2c,
+    0x40, 0xb0, 0x00, 0x04, 0x0b, 0x40, 0xb0, 0x00, 0xc1, 0x02, 0x10, 0x2c, 0x00, 0xc1, 0x02, 0x04, 0x0b, 0x40, 0xb0, 0x00,
+    0x04, 0x0b, 0x10, 0x2c, 0x00, 0xc1, 0x02, 0x10, 0x2c, 0x40, 0xb0, 0x00, 0x04, 0x0b, 0x40, 0xb0, 0x00, 0xc1, 0x02, 0x10,
+    0x2c, 0x40, 0xb0, 0x00, 0x04, 0x0b, 0x40, 0xb0, 0x00, 0xc1, 0x02, 0x10, 0x2c, 0x00, 0xc1, 0x02, 0xf6, 0xcb, 0x05, 0xbb,
+    0xe0, 0x58, 0xd5, 0xdd, 0x35, 0xbe, 0x4e, 0xf2, 0x75, 0x19, 0xe3, 0x89, 0xc7, 0x58, 0x13, 0x1b, 0x63, 0xb6, 0x34, 0x46,
+    0xc1, 0xda, 0x73, 0x9d, 0xe4, 0x46, 0x55, 0xf5, 0xf8, 0xf3, 0x94, 0x1c, 0x24, 0x49, 0x77, 0xdf, 0x34, 0xc6, 0x7b, 0x72,
+    0x73, 0x8c, 0xf1, 0x60, 0x82, 0x73, 0x2c, 0xdd, 0x7d, 0x63, 0x82, 0xfb, 0x5f, 0xb0, 0x66, 0x76, 0xab, 0xfc, 0x48, 0x92,
+    0x67, 0xba, 0x7b, 0x3d, 0xc5, 0x95, 0x5f, 0x92, 0x75, 0x92, 0x07, 0x4e, 0x79, 0x7b, 0xbf, 0xf9, 0xef, 0x1f, 0x4e, 0xf2,
+    0x89, 0x89, 0x8f, 0xf1, 0xfe, 0x2d, 0x6c, 0xeb, 0x03, 0xdd, 0xfd, 0xe5, 0x31, 0xee, 0x29, 0x86, 0x61, 0x99, 0xe4, 0xa1,
+    0x53, 0x1e, 0x4b, 0xc1, 0x22, 0x49, 0x72, 0x25, 0xc9, 0x63, 0x3b, 0x3e, 0xc6, 0x4b, 0x7b, 0x30, 0xc6, 0x24, 0xf9, 0x71,
+    0xd3, 0x59, 0xb0, 0xf6, 0xc1, 0x7a, 0x5c, 0x91, 0x6b, 0x62, 0x57, 0xe6, 0x3a, 0xf2, 0xba, 0x16, 0xc6, 0x68, 0x8c, 0x82,
+    0xc5, 0xbe, 0x2c, 0xcf, 0x8d, 0x11, 0x07, 0x11, 0x40, 0xb0, 0x00, 0xc1, 0x02, 0x10, 0x2c, 0x00, 0xc1, 0x02, 0x04, 0x0b,
+    0x40, 0xb0, 0x00, 0x04, 0x0b, 0x10, 0x2c, 0x00, 0xc1, 0x02, 0x38, 0x31, 0x1f, 0xcd, 0xb9, 0xbb, 0xce, 0xe1, 0x67, 0xd0,
+    0xa6, 0x6c, 0x1b, 0x9f, 0x41, 0x5b, 0xed, 0xc1, 0x18, 0x37, 0x9f, 0x25, 0x9c, 0xb2, 0xa5, 0x53, 0x4e, 0xb0, 0xce, 0x7a,
+    0xa2, 0xec, 0xc3, 0x24, 0xda, 0x87, 0x31, 0xba, 0x9b, 0x10, 0xac, 0x9d, 0x5e, 0x59, 0x55, 0x92, 0x17, 0x93, 0x3c, 0x39,
+    0x56, 0x20, 0x53, 0x7b, 0x22, 0x64, 0xe5, 0xf0, 0x61, 0x74, 0x3f, 0x90, 0xe4, 0xcd, 0x47, 0x5e, 0xf3, 0x49, 0xc7, 0xf8,
+    0x95, 0x24, 0x1f, 0x19, 0xdb, 0x9a, 0xea, 0x18, 0xbf, 0x2f, 0xc9, 0xcf, 0x9f, 0x71, 0x5b, 0x1f, 0x4d, 0xf2, 0xfc, 0x98,
+    0xf3, 0x3d, 0xc1, 0xf9, 0x76, 0x31, 0xc9, 0x13, 0x49, 0xae, 0x9d, 0xe2, 0x58, 0x0a, 0x96, 0x60, 0xa5, 0x92, 0x7c, 0xa6,
+    0xaa, 0x7e, 0x63, 0xd2, 0x2f, 0xb4, 0xfb, 0x2d, 0xe3, 0x64, 0x3c, 0x6d, 0xb0, 0x3e, 0x5b, 0x55, 0x6f, 0x9f, 0xf8, 0x18,
+    0x7f, 0x2e, 0xc9, 0xd3, 0x67, 0xdc, 0xcc, 0x1f, 0x55, 0xd5, 0xbf, 0x4f, 0x78, 0x8c, 0x95, 0xe4, 0xd3, 0x49, 0x7e, 0x4c,
+    0xb0, 0x04, 0xeb, 0xd4, 0xb7, 0x11, 0xdd, 0x7d, 0x29, 0xc9, 0x8d, 0x4c, 0xef, 0x39, 0x4a, 0xcb, 0xb1, 0xf2, 0xbb, 0x6f,
+    0x0b, 0x63, 0xbc, 0x9a, 0xe4, 0xfa, 0x84, 0xc7, 0x78, 0x79, 0x0b, 0xdb, 0xba, 0xdc, 0xdd, 0x8b, 0x23, 0xdb, 0x9c, 0xd2,
+    0x2a, 0xb2, 0x73, 0xf8, 0xb0, 0x48, 0xb7, 0xad, 0x82, 0x75, 0x66, 0xeb, 0xaa, 0x5a, 0x77, 0x77, 0x8d, 0x67, 0x82, 0x4f,
+    0xe6, 0x8a, 0x3c, 0x5e, 0x57, 0xef, 0xc1, 0x18, 0xd7, 0x5b, 0x1e, 0xe3, 0x7a, 0x62, 0x63, 0xec, 0x89, 0x3e, 0xa2, 0x7a,
+    0x7a, 0x2b, 0x08, 0xbb, 0x00, 0x10, 0x2c, 0x00, 0xc1, 0x02, 0x04, 0x0b, 0x40, 0xb0, 0x00, 0x04, 0x0b, 0x10, 0x2c, 0x00,
+    0xc1, 0x02, 0x10, 0x2c, 0x40, 0xb0, 0x00, 0x04, 0x0b, 0x40, 0xb0, 0x00, 0xc1, 0x02, 0x10, 0x2c, 0x00, 0xc1, 0x02, 0x04,
+    0x0b, 0x40, 0xb0, 0x00, 0x04, 0x0b, 0x10, 0x2c, 0x00, 0xc1, 0x02, 0x10, 0x2c, 0x40, 0xb0, 0x00, 0x04, 0x0b, 0x40, 0xb0,
+    0x00, 0xc1, 0x02, 0x10, 0x2c, 0x00, 0xc1, 0x02, 0x04, 0x0b, 0x40, 0xb0, 0x00, 0xc1, 0x02, 0x10, 0x2c, 0x00, 0xc1, 0x02,
+    0x04, 0x0b, 0x40, 0xb0, 0x00, 0x04, 0x0b, 0xd8, 0x2f, 0x17, 0xec, 0x82, 0xe3, 0xa3, 0xde, 0xdd, 0xcb, 0x24, 0xe9, 0xee,
+    0x9e, 0xd8, 0xeb, 0xda, 0xd6, 0x45, 0x67, 0x9f, 0xc6, 0xb8, 0x98, 0xd8, 0x18, 0x6b, 0x8b, 0x63, 0x14, 0xac, 0x3d, 0xb7,
+    0xae, 0xaa, 0x97, 0xa7, 0xfa, 0xda, 0x46, 0x60, 0x5e, 0xda, 0xc2, 0x18, 0xbf, 0xb6, 0xe3, 0x63, 0x4c, 0x92, 0x97, 0xaa,
+    0x6a, 0x95, 0x64, 0x35, 0xd1, 0xb1, 0x7e, 0xb5, 0xbb, 0xd7, 0x4e, 0x39, 0xc1, 0x3a, 0xd5, 0x55, 0x6f, 0x7c, 0x7d, 0xa4,
+    0xbb, 0x3f, 0x3e, 0x4e, 0x9c, 0x4a, 0xd2, 0x13, 0x7b, 0x8d, 0x07, 0x49, 0xbe, 0xe7, 0xb6, 0xd7, 0x7c, 0xd2, 0x31, 0x3e,
+    0xdc, 0xdd, 0x4f, 0x8d, 0x13, 0x79, 0xaa, 0x63, 0xfc, 0xee, 0x2d, 0x6c, 0xeb, 0x03, 0xdd, 0xfd, 0xc2, 0x98, 0xf3, 0x53,
+    0x1b, 0x63, 0x27, 0x59, 0x26, 0x79, 0xe8, 0x94, 0xc7, 0x52, 0xb0, 0x04, 0x2b, 0x49, 0x72, 0x35, 0xc9, 0x9b, 0x66, 0xf6,
+    0x9a, 0x4f, 0xfa, 0xdf, 0x5f, 0x4e, 0xf2, 0xf8, 0x1e, 0x1c, 0xd3, 0x37, 0xcc, 0x70, 0xfe, 0x21, 0x58, 0x27, 0xd2, 0x9b,
+    0xdb, 0x92, 0x89, 0x4f, 0xee, 0xb3, 0xbe, 0xff, 0xb1, 0xda, 0x83, 0x31, 0xae, 0x27, 0xb6, 0xb2, 0x7a, 0x35, 0x4b, 0xa7,
+    0x9c, 0x60, 0x9d, 0xf5, 0x44, 0xd9, 0x87, 0x49, 0xb4, 0x0f, 0x63, 0xf4, 0xa6, 0xb6, 0x83, 0x08, 0x20, 0x58, 0x00, 0x82,
+    0x05, 0x08, 0x16, 0x80, 0x60, 0x01, 0x08, 0x16, 0x20, 0x58, 0x00, 0x82, 0x05, 0x08, 0x96, 0x5d, 0x00, 0x08, 0x16, 0x80,
+    0x60, 0x01, 0xfb, 0xca, 0x67, 0x09, 0xef, 0xae, 0x33, 0x8f, 0x0f, 0x06, 0x2f, 0x8d, 0xf1, 0x58, 0xab, 0xcc, 0xe3, 0xc3,
+    0xcf, 0x9e, 0xd4, 0x20, 0x58, 0x67, 0x3a, 0x51, 0x2e, 0x18, 0xe3, 0x4e, 0xf0, 0x24, 0x04, 0xc1, 0xda, 0xe9, 0x95, 0x55,
+    0x25, 0x79, 0x21, 0xc9, 0x3f, 0x64, 0xba, 0x0f, 0xb7, 0xbb, 0x95, 0xe4, 0x47, 0x92, 0xfc, 0xda, 0x91, 0xd7, 0x7c, 0xd2,
+    0x31, 0x7e, 0x29, 0xc9, 0x87, 0xc6, 0xb6, 0x16, 0x99, 0xe6, 0x03, 0xfc, 0x1e, 0x4e, 0xf2, 0xeb, 0x67, 0xdc, 0xd6, 0x3f,
+    0x25, 0x79, 0x2e, 0xd3, 0x7c, 0x80, 0xdf, 0x3a, 0xc9, 0x77, 0x24, 0xf9, 0xcd, 0x24, 0xf7, 0x9f, 0xe2, 0x58, 0x32, 0xe9,
+    0x9a, 0x74, 0xd7, 0xf8, 0xfa, 0x64, 0x1f, 0x3a, 0xe8, 0xed, 0x5a, 0x8d, 0xaf, 0xff, 0x39, 0x83, 0x7d, 0xf1, 0xf8, 0x6d,
+    0xaf, 0xf9, 0xa4, 0x63, 0xfc, 0xf4, 0x0c, 0xc6, 0xf8, 0xb3, 0x5b, 0x38, 0xa6, 0x3f, 0x33, 0x83, 0x71, 0x3e, 0x7b, 0xca,
+    0x63, 0x79, 0x12, 0x8f, 0x8f, 0xff, 0xaf, 0x59, 0xae, 0x38, 0xad, 0xb0, 0x8e, 0xb9, 0x8d, 0xe8, 0xee, 0xcb, 0x49, 0x6e,
+    0x4c, 0x70, 0x85, 0xb5, 0x1c, 0x2b, 0xbf, 0xab, 0x67, 0xdc, 0xce, 0xa2, 0xbb, 0xaf, 0x25, 0xb9, 0xbe, 0xc3, 0x63, 0x4c,
+    0x92, 0xab, 0xe3, 0x24, 0xdd, 0x6c, 0x73, 0x4a, 0x2b, 0xac, 0x4e, 0x72, 0x25, 0xbe, 0x09, 0x26, 0x58, 0x5b, 0xb8, 0x35,
+    0x5c, 0x55, 0xd5, 0xaa, 0xbb, 0xab, 0xaa, 0x26, 0x73, 0x32, 0x77, 0x77, 0xc6, 0xeb, 0xda, 0xc6, 0x13, 0x51, 0xf7, 0x61,
+    0x8c, 0xeb, 0xb1, 0xad, 0x8c, 0x5f, 0x46, 0x31, 0x99, 0xbb, 0x85, 0xaa, 0xea, 0xee, 0x5e, 0x39, 0xdd, 0xee, 0xe1, 0xea,
+    0x6a, 0x17, 0x00, 0x82, 0x05, 0x20, 0x58, 0x80, 0x60, 0x01, 0x08, 0x16, 0x80, 0x60, 0x01, 0x82, 0x05, 0x20, 0x58, 0x00,
+    0x82, 0x05, 0x08, 0x16, 0x80, 0x60, 0x01, 0x08, 0x16, 0x20, 0x58, 0x00, 0x82, 0x05, 0x20, 0x58, 0x80, 0x60, 0x01, 0x08,
+    0x16, 0x80, 0x60, 0x01, 0x82, 0x05, 0x20, 0x58, 0x00, 0x82, 0x05, 0x08, 0x16, 0x80, 0x60, 0x01, 0x08, 0x16, 0x20, 0x58,
+    0x00, 0x82, 0x05, 0x20, 0x58, 0x80, 0x60, 0x01, 0x08, 0x16, 0x20, 0x58, 0x00, 0x82, 0x05, 0x20, 0x58, 0x80, 0x60, 0x01,
+    0x08, 0x16, 0xc0, 0x56, 0x5c, 0xb0, 0x0b, 0x8e, 0x55, 0xdd, 0x5d, 0xe3, 0xeb, 0x24, 0x5f, 0x97, 0x31, 0x9e, 0x78, 0x8c,
+    0x35, 0xb1, 0x31, 0x66, 0x4b, 0x63, 0x14, 0x2c, 0xb2, 0xae, 0xaa, 0x4e, 0x32, 0xa9, 0x33, 0xb9, 0xbb, 0xd7, 0x55, 0xd5,
+    0xdd, 0xbd, 0x36, 0xc6, 0x7b, 0x1f, 0xe3, 0x66, 0x9b, 0x53, 0x1a, 0xe6, 0x66, 0xac, 0x4e, 0x35, 0xc1, 0x3a, 0xf3, 0xd5,
+    0x2f, 0xc9, 0xb2, 0xbb, 0x17, 0xe3, 0xcf, 0x53, 0x9a, 0xe8, 0xcb, 0x24, 0xeb, 0xf1, 0xf5, 0xcc, 0xdb, 0xda, 0x87, 0x31,
+    0x1e, 0x19, 0xeb, 0xd4, 0xe6, 0x58, 0x6f, 0x69, 0x8c, 0x82, 0xb5, 0xa7, 0x36, 0xef, 0xed, 0x3d, 0x92, 0xe4, 0x13, 0xe3,
+    0xa4, 0x99, 0xdc, 0x92, 0xbd, 0xbb, 0x57, 0x49, 0x1e, 0xb8, 0xed, 0x35, 0x9f, 0x74, 0x8c, 0x0f, 0x27, 0x79, 0x2a, 0xc9,
+    0x6a, 0xc2, 0x63, 0xbc, 0x7f, 0x0b, 0x9b, 0xfa, 0x9b, 0xee, 0x7e, 0x71, 0xa2, 0x61, 0xd8, 0x04, 0xeb, 0xa1, 0x53, 0x1e,
+    0x4b, 0xc1, 0x22, 0x49, 0x72, 0x29, 0xc9, 0x4f, 0xee, 0xf8, 0x18, 0xef, 0x4b, 0xf2, 0xc6, 0x3d, 0x38, 0x96, 0x8f, 0x9a,
+    0xce, 0x82, 0xb5, 0x0f, 0xa6, 0xfc, 0xde, 0x42, 0x8f, 0x55, 0xd1, 0x62, 0x0b, 0x63, 0xec, 0x4c, 0xf3, 0x8d, 0x5f, 0x63,
+    0x44, 0xb0, 0x4e, 0x71, 0xeb, 0x64, 0x8c, 0xc6, 0x88, 0x83, 0x08, 0x20, 0x58, 0x80, 0x60, 0x01, 0x08, 0x16, 0x80, 0x60,
+    0x01, 0x82, 0x75, 0x9e, 0x36, 0xdf, 0x9a, 0xfe, 0xba, 0x43, 0x08, 0xc7, 0xda, 0xfc, 0x68, 0xff, 0xfa, 0xc8, 0x39, 0xd3,
+    0x73, 0x1c, 0xc8, 0xdc, 0x57, 0x58, 0x5f, 0x30, 0x17, 0xe1, 0x9e, 0x5d, 0x4f, 0xf2, 0x82, 0x15, 0xd6, 0xf9, 0xad, 0xb0,
+    0x3e, 0x65, 0x0e, 0xc2, 0x3d, 0xaf, 0xb0, 0x9e, 0x4b, 0xf2, 0xbc, 0x15, 0xd6, 0xf9, 0x1d, 0x80, 0x8f, 0x8d, 0x65, 0xee,
+    0x62, 0xae, 0x07, 0x00, 0xbe, 0x8d, 0xe7, 0xcb, 0x27, 0xab, 0xea, 0xeb, 0xdd, 0xbd, 0x9c, 0xd8, 0x13, 0x2b, 0x76, 0x3f,
+    0x58, 0xe3, 0x99, 0x46, 0x9f, 0x4a, 0xf2, 0xcc, 0x58, 0x71, 0x79, 0x3c, 0x07, 0xdc, 0xfd, 0x8e, 0xe4, 0x43, 0x73, 0x1f,
+    0xc8, 0x2c, 0x83, 0x35, 0xae, 0x0e, 0x8b, 0xaa, 0x3a, 0x48, 0xf2, 0xd7, 0xe6, 0x23, 0x7c, 0x4b, 0x9b, 0x3b, 0x90, 0xa7,
+    0x92, 0x7c, 0x7c, 0x5c, 0xe8, 0x67, 0x7b, 0x71, 0x9f, 0xf5, 0x53, 0x0e, 0x8f, 0x3c, 0x8d, 0xf2, 0x5f, 0x93, 0x3c, 0x91,
+    0xe4, 0x20, 0x3e, 0x1f, 0x09, 0x47, 0x63, 0xb5, 0xb9, 0xf5, 0x7b, 0x73, 0x55, 0x3d, 0xdd, 0xdd, 0x8b, 0xaa, 0x9a, 0x6d,
+    0xb0, 0xe6, 0xfe, 0x5d, 0xc2, 0x1a, 0x3b, 0xff, 0x77, 0x93, 0x7c, 0x6e, 0xc4, 0xea, 0xc0, 0x3c, 0x85, 0x6c, 0x9e, 0x20,
+    0xbb, 0x4c, 0xf2, 0xbe, 0x11, 0xab, 0xe5, 0x9c, 0x63, 0x35, 0xfb, 0x60, 0x55, 0xd5, 0x7a, 0x5c, 0x31, 0xfe, 0x3b, 0xc9,
+    0xdb, 0x93, 0x7c, 0xf1, 0x48, 0xb4, 0xbc, 0x09, 0xcf, 0xbe, 0x5a, 0x8d, 0xaf, 0xcb, 0x24, 0xef, 0xaf, 0xaa, 0x3f, 0x1f,
+    0x4f, 0x94, 0x9d, 0xfd, 0xfb, 0xbc, 0xb3, 0xff, 0x49, 0xf7, 0x11, 0xad, 0x65, 0x55, 0x7d, 0x32, 0xc9, 0x5b, 0x93, 0x3c,
+    0x3b, 0xa2, 0x55, 0xe3, 0xc0, 0xad, 0xc5, 0x8b, 0x3d, 0x58, 0x4d, 0xad, 0x8f, 0xcc, 0xf7, 0xe5, 0xf8, 0xbb, 0x3f, 0xab,
+    0xaa, 0xf7, 0x8c, 0x58, 0xf5, 0x5c, 0xbf, 0x33, 0xf8, 0x4d, 0xe7, 0xfb, 0xce, 0x1c, 0xb1, 0xc3, 0x68, 0xad, 0xba, 0xfb,
+    0xb5, 0x49, 0xfe, 0x78, 0xdc, 0x26, 0x5e, 0x79, 0x95, 0x03, 0x0b, 0xbb, 0xe6, 0xf6, 0xf3, 0xf8, 0xe9, 0x24, 0x7f, 0x5a,
+    0x55, 0xff, 0xb6, 0xf9, 0x0d, 0x41, 0xbb, 0x10, 0xab, 0x9d, 0x0a, 0xd6, 0x88, 0xd6, 0x37, 0xde, 0x50, 0xec, 0xee, 0x47,
+    0x93, 0xbc, 0x33, 0xc9, 0x2f, 0x27, 0xf9, 0xd1, 0x24, 0xd7, 0xcc, 0x6b, 0x76, 0xd4, 0x41, 0x92, 0xcf, 0xe6, 0xf0, 0x47,
+    0x7c, 0xfe, 0x3e, 0xc9, 0x87, 0xab, 0xea, 0xd6, 0xe6, 0x22, 0xbe, 0xcb, 0x65, 0xde, 0x85, 0x68, 0x55, 0x0e, 0x7f, 0xe4,
+    0x61, 0xb5, 0x89, 0x58, 0x0e, 0x1f, 0xee, 0xff, 0x83, 0x49, 0x5e, 0x93, 0xe4, 0xa2, 0xf9, 0xcd, 0x0e, 0xdd, 0x0a, 0xbe,
+    0x94, 0xc3, 0x8f, 0xa8, 0x3d, 0x57, 0x55, 0x2f, 0xbe, 0xda, 0xc5, 0x5b, 0xb0, 0x66, 0xb2, 0xda, 0x3a, 0x5c, 0x09, 0xef,
+    0xd6, 0x15, 0x06, 0x8e, 0x9b, 0xf3, 0x79, 0xe5, 0xf7, 0x4c, 0xee, 0xfc, 0xbd, 0xef, 0x2e, 0x1e, 0xc4, 0xcd, 0xcf, 0x6a,
+    0xf9, 0xcd, 0xba, 0xec, 0xf2, 0x4a, 0xab, 0x77, 0x35, 0x52, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x93, 0xf3, 0xff, 0xf9, 0x6c, 0x18, 0x50, 0xcf, 0x1d, 0x7e, 0xd5, 0x00, 0x00, 0x00, 0x00,
+    0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+};
+static bool DrawEmbeddedTileIcon(Gdiplus::Graphics& g, const unsigned char* data,
+                                 size_t length, float x, float y, float size) {
+    if (!g_gdipToken || size <= 0) return false;
+    IStream* stream = SHCreateMemStream(data, static_cast<UINT>(length));
+    if (!stream) return false;
+    bool ok = false;
+    {
+        Gdiplus::Bitmap image(stream, FALSE);
+        if (image.GetLastStatus() == Gdiplus::Ok) {
+            g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+            ok = g.DrawImage(&image, Gdiplus::RectF(x, y, size, size)) == Gdiplus::Ok;
+        }
+    }
+    stream->Release();
+    return ok;
+}
+
+// Vector artwork adapted from Windows 8.1/10 Start Menu Recreation (GPL-3.0).
+static bool DrawImportedMetroIcon(HDC dc, const wchar_t* target, int x, int y, int size) {
+    enum class Icon { None, Weather, Calculator, Mail, Calendar, Settings, Photos, Xbox, Cloud, Solitaire, Store, Camera, Clock, Maps, Music, Video, Recorder } icon = Icon::None;
+    if (!target) return false;
+    const wchar_t* id = target;
+    const wchar_t* prefix = L"shell:AppsFolder\\";
+    if (!_wcsnicmp(id, prefix, wcslen(prefix))) id += wcslen(prefix);
+    if (_wcsicmp(id,L"windhawk:weather-tile-v1")==0) icon=Icon::Weather;
+    else if (_wcsicmp(id,L"windhawk:calendar-tile-v1")==0) icon=Icon::Calendar;
+    else if (_wcsicmp(id, L"windows.immersivecontrolpanel_cw5n1h2txyewy!microsoft.windows.immersivecontrolpanel") == 0) icon = Icon::Settings;
+    else if (_wcsicmp(id, L"Microsoft.BingWeather_8wekyb3d8bbwe!App") == 0) icon = Icon::Weather;
+    else if (_wcsicmp(id, L"Microsoft.WindowsCalculator_8wekyb3d8bbwe!App") == 0) icon = Icon::Calculator;
+    else if (_wcsicmp(id, L"microsoft.windowscommunicationsapps_8wekyb3d8bbwe!microsoft.windowslive.mail") == 0 ||
+             _wcsicmp(id, L"Microsoft.OutlookForWindows_8wekyb3d8bbwe!Microsoft.OutlookforWindows") == 0) icon = Icon::Mail;
+    else if (_wcsicmp(id, L"microsoft.windowscommunicationsapps_8wekyb3d8bbwe!microsoft.windowslive.calendar") == 0) icon = Icon::Calendar;
+    else if (_wcsicmp(id,L"Microsoft.WindowsStore_8wekyb3d8bbwe!App")==0) icon=Icon::Store;
+    else if (_wcsicmp(id,L"Microsoft.WindowsCamera_8wekyb3d8bbwe!App")==0) icon=Icon::Camera;
+    else if (_wcsicmp(id,L"Microsoft.WindowsAlarms_8wekyb3d8bbwe!App")==0 || _wcsicmp(id,L"windhawk:clock-tile-v1")==0) icon=Icon::Clock;
+    else if (_wcsicmp(id,L"Microsoft.WindowsMaps_8wekyb3d8bbwe!App")==0) icon=Icon::Maps;
+    else if (_wcsicmp(id,L"Microsoft.ZuneMusic_8wekyb3d8bbwe!Microsoft.ZuneMusic")==0) icon=Icon::Music;
+    else if (_wcsicmp(id,L"Microsoft.ZuneVideo_8wekyb3d8bbwe!Microsoft.ZuneVideo")==0) icon=Icon::Video;
+    else if (_wcsicmp(id,L"Microsoft.WindowsSoundRecorder_8wekyb3d8bbwe!App")==0) icon=Icon::Recorder;
+    else if (_wcsicmp(id,L"Microsoft.Windows.Photos_8wekyb3d8bbwe!App")==0) icon=Icon::Photos;
+    else if (_wcsicmp(id,L"Microsoft.GamingApp_8wekyb3d8bbwe!Microsoft.Xbox.App")==0 ||
+             _wcsicmp(id,L"Microsoft.XboxApp_8wekyb3d8bbwe!Microsoft.XboxApp")==0) icon=Icon::Xbox;
+    else if (_wcsicmp(id,L"Microsoft.MicrosoftSolitaireCollection_8wekyb3d8bbwe!App")==0) icon=Icon::Solitaire;
+    else if (!_wcsicmp(id,L"Microsoft.SkyDrive.Desktop")) icon=Icon::Cloud;
+    if (icon == Icon::None || !g_gdipToken || size <= 0) return false;
+    Gdiplus::Graphics g(dc);
+    if (g.GetLastStatus() != Gdiplus::Ok) return false;
+    const unsigned char* embedded = nullptr;
+    size_t embeddedSize = 0;
+    switch (icon) {
+    case Icon::Mail: embedded = kIconMail; embeddedSize = sizeof(kIconMail); break;
+    case Icon::Calendar: embedded = kIconCalendar; embeddedSize = sizeof(kIconCalendar); break;
+    case Icon::Weather: embedded = kIconWeather; embeddedSize = sizeof(kIconWeather); break;
+    case Icon::Calculator: embedded = kIconCalculator; embeddedSize = sizeof(kIconCalculator); break;
+    default: break;
+    }
+    if (embedded && DrawEmbeddedTileIcon(g, embedded, embeddedSize,
+                                        (float)x, (float)y, (float)size)) return true;
+    g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    g.TranslateTransform(static_cast<Gdiplus::REAL>(x), static_cast<Gdiplus::REAL>(y));
+    const Gdiplus::REAL scale = size / 48.0f;
+    g.ScaleTransform(scale, scale);
+    Gdiplus::Pen pen(Gdiplus::Color(255,255,255,255), 2.5f);
+    Gdiplus::SolidBrush white(Gdiplus::Color(255,255,255,255));
+    if (icon == Icon::Weather) {
+        g.DrawEllipse(&pen, 17.0f, 7.0f, 14.0f, 14.0f);
+        g.DrawLine(&pen, 24.0f, 1.0f, 24.0f, 5.0f);
+        g.DrawLine(&pen, 8.0f, 14.0f, 13.0f, 14.0f);
+        g.DrawLine(&pen, 35.0f, 14.0f, 40.0f, 14.0f);
+        g.DrawLine(&pen, 13.0f, 4.0f, 16.0f, 7.0f);
+        g.DrawLine(&pen, 32.0f, 7.0f, 35.0f, 4.0f);
+        g.FillEllipse(&white, 7.0f, 25.0f, 14.0f, 13.0f);
+        g.FillEllipse(&white, 14.0f, 20.0f, 18.0f, 18.0f);
+        g.FillEllipse(&white, 27.0f, 25.0f, 14.0f, 13.0f);
+    } else if (icon == Icon::Settings) {
+        // Scaled vector contour.
+        const Gdiplus::PointF outer[] = {
+            Gdiplus::PointF(16.333f,0.000f),
+            Gdiplus::PointF(16.000f,0.331f),
+            Gdiplus::PointF(15.333f,0.331f),
+            Gdiplus::PointF(15.000f,0.662f),
+            Gdiplus::PointF(14.667f,0.662f),
+            Gdiplus::PointF(14.333f,0.993f),
+            Gdiplus::PointF(14.000f,0.993f),
+            Gdiplus::PointF(13.000f,1.655f),
+            Gdiplus::PointF(12.333f,1.655f),
+            Gdiplus::PointF(11.333f,2.317f),
+            Gdiplus::PointF(11.333f,2.648f),
+            Gdiplus::PointF(11.000f,2.979f),
+            Gdiplus::PointF(11.000f,3.310f),
+            Gdiplus::PointF(11.333f,3.641f),
+            Gdiplus::PointF(11.333f,4.303f),
+            Gdiplus::PointF(12.000f,5.297f),
+            Gdiplus::PointF(12.000f,5.959f),
+            Gdiplus::PointF(12.333f,6.290f),
+            Gdiplus::PointF(12.333f,6.621f),
+            Gdiplus::PointF(12.667f,6.952f),
+            Gdiplus::PointF(12.667f,7.283f),
+            Gdiplus::PointF(13.333f,8.276f),
+            Gdiplus::PointF(12.333f,9.269f),
+            Gdiplus::PointF(12.000f,9.269f),
+            Gdiplus::PointF(10.667f,10.593f),
+            Gdiplus::PointF(10.333f,10.593f),
+            Gdiplus::PointF(10.333f,10.924f),
+            Gdiplus::PointF(8.667f,12.579f),
+            Gdiplus::PointF(8.667f,12.910f),
+            Gdiplus::PointF(8.333f,13.241f),
+            Gdiplus::PointF(7.667f,13.241f),
+            Gdiplus::PointF(7.333f,12.910f),
+            Gdiplus::PointF(6.667f,12.910f),
+            Gdiplus::PointF(6.333f,12.579f),
+            Gdiplus::PointF(6.000f,12.579f),
+            Gdiplus::PointF(5.667f,12.248f),
+            Gdiplus::PointF(5.000f,12.248f),
+            Gdiplus::PointF(4.667f,11.917f),
+            Gdiplus::PointF(4.333f,11.917f),
+            Gdiplus::PointF(3.333f,11.255f),
+            Gdiplus::PointF(2.667f,11.255f),
+            Gdiplus::PointF(2.333f,11.586f),
+            Gdiplus::PointF(2.000f,11.586f),
+            Gdiplus::PointF(2.000f,11.917f),
+            Gdiplus::PointF(1.667f,12.248f),
+            Gdiplus::PointF(1.667f,12.579f),
+            Gdiplus::PointF(1.000f,13.572f),
+            Gdiplus::PointF(1.000f,14.234f),
+            Gdiplus::PointF(0.667f,14.566f),
+            Gdiplus::PointF(0.667f,14.897f),
+            Gdiplus::PointF(0.000f,15.890f),
+            Gdiplus::PointF(0.000f,17.876f),
+            Gdiplus::PointF(0.333f,18.207f),
+            Gdiplus::PointF(0.667f,18.207f),
+            Gdiplus::PointF(1.667f,18.869f),
+            Gdiplus::PointF(2.333f,18.869f),
+            Gdiplus::PointF(3.333f,19.531f),
+            Gdiplus::PointF(4.000f,19.531f),
+            Gdiplus::PointF(4.333f,19.862f),
+            Gdiplus::PointF(4.667f,19.862f),
+            Gdiplus::PointF(5.333f,20.524f),
+            Gdiplus::PointF(5.000f,20.855f),
+            Gdiplus::PointF(5.000f,26.814f),
+            Gdiplus::PointF(5.333f,27.145f),
+            Gdiplus::PointF(5.333f,27.476f),
+            Gdiplus::PointF(5.000f,27.807f),
+            Gdiplus::PointF(4.667f,27.807f),
+            Gdiplus::PointF(3.667f,28.469f),
+            Gdiplus::PointF(3.000f,28.469f),
+            Gdiplus::PointF(2.000f,29.131f),
+            Gdiplus::PointF(1.333f,29.131f),
+            Gdiplus::PointF(1.000f,29.462f),
+            Gdiplus::PointF(0.667f,29.462f),
+            Gdiplus::PointF(0.000f,30.124f),
+            Gdiplus::PointF(0.000f,31.779f),
+            Gdiplus::PointF(0.333f,32.110f),
+            Gdiplus::PointF(0.333f,32.441f),
+            Gdiplus::PointF(1.000f,33.434f),
+            Gdiplus::PointF(1.000f,34.097f),
+            Gdiplus::PointF(1.333f,34.428f),
+            Gdiplus::PointF(1.333f,34.759f),
+            Gdiplus::PointF(1.667f,35.090f),
+            Gdiplus::PointF(1.667f,35.421f),
+            Gdiplus::PointF(2.333f,36.414f),
+            Gdiplus::PointF(3.667f,36.414f),
+            Gdiplus::PointF(4.667f,35.752f),
+            Gdiplus::PointF(5.333f,35.752f),
+            Gdiplus::PointF(5.667f,35.421f),
+            Gdiplus::PointF(6.000f,35.421f),
+            Gdiplus::PointF(6.333f,35.090f),
+            Gdiplus::PointF(7.000f,35.090f),
+            Gdiplus::PointF(8.000f,34.428f),
+            Gdiplus::PointF(9.667f,36.083f),
+            Gdiplus::PointF(9.667f,36.414f),
+            Gdiplus::PointF(10.667f,37.407f),
+            Gdiplus::PointF(11.000f,37.407f),
+            Gdiplus::PointF(12.333f,38.731f),
+            Gdiplus::PointF(12.667f,38.731f),
+            Gdiplus::PointF(13.333f,39.393f),
+            Gdiplus::PointF(13.333f,40.386f),
+            Gdiplus::PointF(13.000f,40.717f),
+            Gdiplus::PointF(13.000f,41.379f),
+            Gdiplus::PointF(12.667f,41.710f),
+            Gdiplus::PointF(12.667f,42.041f),
+            Gdiplus::PointF(12.333f,42.372f),
+            Gdiplus::PointF(12.333f,43.034f),
+            Gdiplus::PointF(11.667f,44.028f),
+            Gdiplus::PointF(11.667f,45.352f),
+            Gdiplus::PointF(12.333f,46.014f),
+            Gdiplus::PointF(13.000f,46.014f),
+            Gdiplus::PointF(13.333f,46.345f),
+            Gdiplus::PointF(13.667f,46.345f),
+            Gdiplus::PointF(14.667f,47.007f),
+            Gdiplus::PointF(15.333f,47.007f),
+            Gdiplus::PointF(15.667f,47.338f),
+            Gdiplus::PointF(16.333f,47.338f),
+            Gdiplus::PointF(16.667f,47.669f),
+            Gdiplus::PointF(18.000f,47.669f),
+            Gdiplus::PointF(18.667f,47.007f),
+            Gdiplus::PointF(18.667f,46.345f),
+            Gdiplus::PointF(19.333f,45.352f),
+            Gdiplus::PointF(19.333f,44.690f),
+            Gdiplus::PointF(19.667f,44.359f),
+            Gdiplus::PointF(19.667f,44.028f),
+            Gdiplus::PointF(20.333f,43.034f),
+            Gdiplus::PointF(20.333f,42.372f),
+            Gdiplus::PointF(20.667f,42.041f),
+            Gdiplus::PointF(22.333f,42.041f),
+            Gdiplus::PointF(22.667f,42.372f),
+            Gdiplus::PointF(24.000f,42.372f),
+            Gdiplus::PointF(24.333f,42.041f),
+            Gdiplus::PointF(26.667f,42.041f),
+            Gdiplus::PointF(27.000f,41.710f),
+            Gdiplus::PointF(28.000f,42.703f),
+            Gdiplus::PointF(28.000f,43.366f),
+            Gdiplus::PointF(28.333f,43.697f),
+            Gdiplus::PointF(28.333f,44.359f),
+            Gdiplus::PointF(28.667f,44.690f),
+            Gdiplus::PointF(28.667f,45.021f),
+            Gdiplus::PointF(29.000f,45.352f),
+            Gdiplus::PointF(29.000f,45.683f),
+            Gdiplus::PointF(29.333f,46.014f),
+            Gdiplus::PointF(29.333f,46.345f),
+            Gdiplus::PointF(29.667f,46.676f),
+            Gdiplus::PointF(29.667f,47.007f),
+            Gdiplus::PointF(30.333f,47.669f),
+            Gdiplus::PointF(31.333f,47.669f),
+            Gdiplus::PointF(32.333f,47.007f),
+            Gdiplus::PointF(33.000f,47.007f),
+            Gdiplus::PointF(33.333f,46.676f),
+            Gdiplus::PointF(33.667f,46.676f),
+            Gdiplus::PointF(34.667f,46.014f),
+            Gdiplus::PointF(35.333f,46.014f),
+            Gdiplus::PointF(36.333f,45.352f),
+            Gdiplus::PointF(36.333f,43.366f),
+            Gdiplus::PointF(36.000f,43.034f),
+            Gdiplus::PointF(36.000f,42.703f),
+            Gdiplus::PointF(35.333f,41.710f),
+            Gdiplus::PointF(35.333f,41.048f),
+            Gdiplus::PointF(35.000f,40.717f),
+            Gdiplus::PointF(35.000f,40.386f),
+            Gdiplus::PointF(34.333f,39.393f),
+            Gdiplus::PointF(34.333f,38.731f),
+            Gdiplus::PointF(35.000f,38.069f),
+            Gdiplus::PointF(35.333f,38.069f),
+            Gdiplus::PointF(37.333f,36.083f),
+            Gdiplus::PointF(37.333f,35.752f),
+            Gdiplus::PointF(39.000f,34.097f),
+            Gdiplus::PointF(39.333f,34.097f),
+            Gdiplus::PointF(40.333f,34.759f),
+            Gdiplus::PointF(41.000f,34.759f),
+            Gdiplus::PointF(42.000f,35.421f),
+            Gdiplus::PointF(42.667f,35.421f),
+            Gdiplus::PointF(43.000f,35.752f),
+            Gdiplus::PointF(43.333f,35.752f),
+            Gdiplus::PointF(44.333f,36.414f),
+            Gdiplus::PointF(45.000f,36.414f),
+            Gdiplus::PointF(45.333f,36.083f),
+            Gdiplus::PointF(45.667f,36.083f),
+            Gdiplus::PointF(45.667f,35.752f),
+            Gdiplus::PointF(46.000f,35.421f),
+            Gdiplus::PointF(46.000f,35.090f),
+            Gdiplus::PointF(46.667f,34.097f),
+            Gdiplus::PointF(46.667f,33.434f),
+            Gdiplus::PointF(47.000f,33.103f),
+            Gdiplus::PointF(47.000f,32.441f),
+            Gdiplus::PointF(47.667f,31.448f),
+            Gdiplus::PointF(47.667f,29.793f),
+            Gdiplus::PointF(46.667f,29.131f),
+            Gdiplus::PointF(46.000f,29.131f),
+            Gdiplus::PointF(45.000f,28.469f),
+            Gdiplus::PointF(44.333f,28.469f),
+            Gdiplus::PointF(44.000f,28.138f),
+            Gdiplus::PointF(43.667f,28.138f),
+            Gdiplus::PointF(43.333f,27.807f),
+            Gdiplus::PointF(43.000f,27.807f),
+            Gdiplus::PointF(42.667f,27.476f),
+            Gdiplus::PointF(42.333f,27.476f),
+            Gdiplus::PointF(41.667f,26.814f),
+            Gdiplus::PointF(41.667f,26.483f),
+            Gdiplus::PointF(42.000f,26.152f),
+            Gdiplus::PointF(42.000f,21.517f),
+            Gdiplus::PointF(41.667f,21.186f),
+            Gdiplus::PointF(41.667f,20.524f),
+            Gdiplus::PointF(42.000f,20.193f),
+            Gdiplus::PointF(42.333f,20.193f),
+            Gdiplus::PointF(42.667f,19.862f),
+            Gdiplus::PointF(43.000f,19.862f),
+            Gdiplus::PointF(44.000f,19.200f),
+            Gdiplus::PointF(44.667f,19.200f),
+            Gdiplus::PointF(45.000f,18.869f),
+            Gdiplus::PointF(45.333f,18.869f),
+            Gdiplus::PointF(46.333f,18.207f),
+            Gdiplus::PointF(47.000f,18.207f),
+            Gdiplus::PointF(47.667f,17.545f),
+            Gdiplus::PointF(47.667f,16.221f),
+            Gdiplus::PointF(47.333f,15.890f),
+            Gdiplus::PointF(47.333f,15.228f),
+            Gdiplus::PointF(46.667f,14.234f),
+            Gdiplus::PointF(46.667f,13.572f),
+            Gdiplus::PointF(46.333f,13.241f),
+            Gdiplus::PointF(46.333f,12.910f),
+            Gdiplus::PointF(46.000f,12.579f),
+            Gdiplus::PointF(46.000f,12.248f),
+            Gdiplus::PointF(45.333f,11.255f),
+            Gdiplus::PointF(44.000f,11.255f),
+            Gdiplus::PointF(43.000f,11.917f),
+            Gdiplus::PointF(42.333f,11.917f),
+            Gdiplus::PointF(41.333f,12.579f),
+            Gdiplus::PointF(40.667f,12.579f),
+            Gdiplus::PointF(40.333f,12.910f),
+            Gdiplus::PointF(40.000f,12.910f),
+            Gdiplus::PointF(39.667f,13.241f),
+            Gdiplus::PointF(39.333f,13.241f),
+            Gdiplus::PointF(39.000f,13.572f),
+            Gdiplus::PointF(38.667f,13.572f),
+            Gdiplus::PointF(38.333f,13.241f),
+            Gdiplus::PointF(38.333f,12.910f),
+            Gdiplus::PointF(36.667f,11.255f),
+            Gdiplus::PointF(36.667f,10.924f),
+            Gdiplus::PointF(36.333f,10.593f),
+            Gdiplus::PointF(36.000f,10.593f),
+            Gdiplus::PointF(34.000f,8.607f),
+            Gdiplus::PointF(34.000f,7.945f),
+            Gdiplus::PointF(34.667f,6.952f),
+            Gdiplus::PointF(34.667f,6.290f),
+            Gdiplus::PointF(35.000f,5.959f),
+            Gdiplus::PointF(35.000f,5.628f),
+            Gdiplus::PointF(35.333f,5.297f),
+            Gdiplus::PointF(35.333f,4.634f),
+            Gdiplus::PointF(36.000f,3.641f),
+            Gdiplus::PointF(36.000f,2.317f),
+            Gdiplus::PointF(35.333f,1.655f),
+            Gdiplus::PointF(34.667f,1.655f),
+            Gdiplus::PointF(34.333f,1.324f),
+            Gdiplus::PointF(34.000f,1.324f),
+            Gdiplus::PointF(33.000f,0.662f),
+            Gdiplus::PointF(32.333f,0.662f),
+            Gdiplus::PointF(32.000f,0.331f),
+            Gdiplus::PointF(31.333f,0.331f),
+            Gdiplus::PointF(31.000f,0.000f),
+            Gdiplus::PointF(29.667f,0.000f),
+            Gdiplus::PointF(29.000f,0.662f),
+            Gdiplus::PointF(29.000f,0.993f),
+            Gdiplus::PointF(28.333f,1.986f),
+            Gdiplus::PointF(28.333f,2.648f),
+            Gdiplus::PointF(28.000f,2.979f),
+            Gdiplus::PointF(28.000f,3.641f),
+            Gdiplus::PointF(27.333f,4.634f),
+            Gdiplus::PointF(27.333f,5.297f),
+            Gdiplus::PointF(26.667f,5.959f),
+            Gdiplus::PointF(26.333f,5.628f),
+            Gdiplus::PointF(20.333f,5.628f),
+            Gdiplus::PointF(19.667f,4.966f),
+            Gdiplus::PointF(19.667f,4.303f),
+            Gdiplus::PointF(19.333f,3.972f),
+            Gdiplus::PointF(19.333f,3.641f),
+            Gdiplus::PointF(18.667f,2.648f),
+            Gdiplus::PointF(18.667f,1.986f),
+            Gdiplus::PointF(18.333f,1.655f),
+            Gdiplus::PointF(18.333f,1.324f),
+            Gdiplus::PointF(18.000f,0.993f),
+            Gdiplus::PointF(18.000f,0.662f),
+            Gdiplus::PointF(17.333f,0.000f)
+        };
+        const Gdiplus::PointF inner[] = {
+            Gdiplus::PointF(22.000f,12.248f),
+            Gdiplus::PointF(25.333f,12.248f),
+            Gdiplus::PointF(25.667f,12.579f),
+            Gdiplus::PointF(26.667f,12.579f),
+            Gdiplus::PointF(27.000f,12.910f),
+            Gdiplus::PointF(27.667f,12.910f),
+            Gdiplus::PointF(28.000f,13.241f),
+            Gdiplus::PointF(28.667f,13.241f),
+            Gdiplus::PointF(29.333f,13.903f),
+            Gdiplus::PointF(29.667f,13.903f),
+            Gdiplus::PointF(30.333f,14.566f),
+            Gdiplus::PointF(30.667f,14.566f),
+            Gdiplus::PointF(33.333f,17.214f),
+            Gdiplus::PointF(33.333f,17.545f),
+            Gdiplus::PointF(34.000f,18.207f),
+            Gdiplus::PointF(34.000f,18.538f),
+            Gdiplus::PointF(34.333f,18.869f),
+            Gdiplus::PointF(34.333f,19.531f),
+            Gdiplus::PointF(35.000f,20.524f),
+            Gdiplus::PointF(35.000f,21.517f),
+            Gdiplus::PointF(35.333f,21.848f),
+            Gdiplus::PointF(35.333f,26.152f),
+            Gdiplus::PointF(35.000f,26.483f),
+            Gdiplus::PointF(35.000f,27.145f),
+            Gdiplus::PointF(34.667f,27.476f),
+            Gdiplus::PointF(34.667f,28.138f),
+            Gdiplus::PointF(34.333f,28.469f),
+            Gdiplus::PointF(34.333f,28.800f),
+            Gdiplus::PointF(34.000f,29.131f),
+            Gdiplus::PointF(34.000f,29.462f),
+            Gdiplus::PointF(33.667f,29.793f),
+            Gdiplus::PointF(33.667f,30.124f),
+            Gdiplus::PointF(32.667f,31.117f),
+            Gdiplus::PointF(32.667f,31.448f),
+            Gdiplus::PointF(31.000f,33.103f),
+            Gdiplus::PointF(30.667f,33.103f),
+            Gdiplus::PointF(30.000f,33.766f),
+            Gdiplus::PointF(29.667f,33.766f),
+            Gdiplus::PointF(29.000f,34.428f),
+            Gdiplus::PointF(28.333f,34.428f),
+            Gdiplus::PointF(28.000f,34.759f),
+            Gdiplus::PointF(27.667f,34.759f),
+            Gdiplus::PointF(27.333f,35.090f),
+            Gdiplus::PointF(26.667f,35.090f),
+            Gdiplus::PointF(26.333f,35.421f),
+            Gdiplus::PointF(24.667f,35.421f),
+            Gdiplus::PointF(24.333f,35.752f),
+            Gdiplus::PointF(23.000f,35.752f),
+            Gdiplus::PointF(22.667f,35.421f),
+            Gdiplus::PointF(21.000f,35.421f),
+            Gdiplus::PointF(20.667f,35.090f),
+            Gdiplus::PointF(20.000f,35.090f),
+            Gdiplus::PointF(19.000f,34.428f),
+            Gdiplus::PointF(18.333f,34.428f),
+            Gdiplus::PointF(18.000f,34.097f),
+            Gdiplus::PointF(17.667f,34.097f),
+            Gdiplus::PointF(16.667f,33.103f),
+            Gdiplus::PointF(16.333f,33.103f),
+            Gdiplus::PointF(14.333f,31.117f),
+            Gdiplus::PointF(14.333f,30.786f),
+            Gdiplus::PointF(13.667f,30.124f),
+            Gdiplus::PointF(13.667f,29.793f),
+            Gdiplus::PointF(13.000f,29.131f),
+            Gdiplus::PointF(13.000f,28.469f),
+            Gdiplus::PointF(12.667f,28.138f),
+            Gdiplus::PointF(12.667f,27.476f),
+            Gdiplus::PointF(12.333f,27.145f),
+            Gdiplus::PointF(12.333f,26.483f),
+            Gdiplus::PointF(12.000f,26.152f),
+            Gdiplus::PointF(12.000f,21.848f),
+            Gdiplus::PointF(12.333f,21.517f),
+            Gdiplus::PointF(12.333f,20.524f),
+            Gdiplus::PointF(12.667f,20.193f),
+            Gdiplus::PointF(12.667f,19.531f),
+            Gdiplus::PointF(13.000f,19.200f),
+            Gdiplus::PointF(13.000f,18.869f),
+            Gdiplus::PointF(13.333f,18.538f),
+            Gdiplus::PointF(13.333f,18.207f),
+            Gdiplus::PointF(14.000f,17.545f),
+            Gdiplus::PointF(14.000f,17.214f),
+            Gdiplus::PointF(16.667f,14.566f),
+            Gdiplus::PointF(17.000f,14.566f),
+            Gdiplus::PointF(18.000f,13.572f),
+            Gdiplus::PointF(18.333f,13.572f),
+            Gdiplus::PointF(18.667f,13.241f),
+            Gdiplus::PointF(19.333f,13.241f),
+            Gdiplus::PointF(19.667f,12.910f),
+            Gdiplus::PointF(20.333f,12.910f),
+            Gdiplus::PointF(20.667f,12.579f),
+            Gdiplus::PointF(21.667f,12.579f)
+        };
+        Gdiplus::GraphicsPath gear(Gdiplus::FillModeAlternate);
+        gear.AddPolygon(outer, ARRAYSIZE(outer));
+        gear.AddPolygon(inner, ARRAYSIZE(inner));
+        g.FillPath(&white,&gear);
+    } else if (icon == Icon::Store) {
+        // Perspective Store bag and Windows mark.
+        Gdiplus::GraphicsPath store(Gdiplus::FillModeAlternate);
+        { const Gdiplus::PointF pts[] = {{13.244f,1.639f},{11.195f,4.215f},{10.171f,6.556f},{9.966f,7.961f},{9.761f,8.195f},{9.761f,11.941f},{9.351f,12.410f},{8.737f,12.410f},{8.532f,12.644f},{6.483f,12.878f},{6.278f,13.112f},{5.459f,13.112f},{5.254f,13.346f},{3.000f,13.815f},{3.000f,40.976f},{5.663f,41.444f},{5.868f,41.678f},{6.688f,41.678f},{6.893f,41.912f},{7.712f,41.912f},{7.917f,42.146f},{8.737f,42.146f},{8.941f,42.380f},{9.761f,42.380f},{9.966f,42.615f},{10.785f,42.615f},{10.990f,42.849f},{11.810f,42.849f},{12.015f,43.083f},{12.834f,43.083f},{13.039f,43.317f},{13.859f,43.317f},{14.063f,43.551f},{14.883f,43.551f},{15.088f,43.785f},{15.907f,43.785f},{16.112f,44.020f},{17.137f,44.020f},{17.341f,44.254f},{20.005f,44.722f},{20.210f,44.956f},{21.234f,44.956f},{21.439f,45.190f},{24.102f,45.659f},{24.307f,45.893f},{25.332f,45.893f},{25.537f,46.127f},{28.200f,46.595f},{28.405f,46.829f},{29.429f,46.829f},{29.634f,47.063f},{32.298f,47.532f},{32.502f,47.766f},{34.141f,47.532f},{34.756f,47.063f},{35.166f,47.063f},{35.780f,46.595f},{36.190f,46.595f},{36.805f,46.127f},{37.829f,45.893f},{38.444f,45.424f},{40.288f,44.722f},{40.288f,10.068f},{36.395f,9.366f},{33.527f,7.024f},{32.093f,7.024f},{31.888f,7.259f},{30.249f,7.493f},{29.224f,7.961f},{28.815f,7.493f},{28.610f,6.556f},{27.790f,4.917f},{25.946f,2.810f},{24.307f,1.873f},{25.127f,2.810f},{25.537f,3.746f},{25.946f,3.980f},{27.380f,5.854f},{27.995f,7.259f},{27.995f,7.961f},{27.790f,8.195f},{25.537f,8.663f},{25.332f,8.429f},{24.922f,5.854f},{23.693f,3.278f},{22.463f,1.873f},{21.234f,0.937f},{20.824f,0.937f},{19.595f,0.234f},{18.980f,0.234f},{18.776f,0.000f},{16.522f,0.000f},{16.317f,0.234f},{15.498f,0.234f}}; store.AddPolygon(pts, ARRAYSIZE(pts)); }
+        // Four separate panes leave a clean, even cross in the Windows mark.
+        { const Gdiplus::PointF pts[] = {{9.4f,20.3f},{15.6f,19.4f},{15.6f,26.6f},{9.4f,26.6f}}; store.AddPolygon(pts, ARRAYSIZE(pts)); }
+        { const Gdiplus::PointF pts[] = {{17.0f,19.1f},{25.5f,17.9f},{25.5f,26.6f},{17.0f,26.6f}}; store.AddPolygon(pts, ARRAYSIZE(pts)); }
+        { const Gdiplus::PointF pts[] = {{9.4f,28.0f},{15.6f,28.0f},{15.6f,34.7f},{9.4f,33.8f}}; store.AddPolygon(pts, ARRAYSIZE(pts)); }
+        { const Gdiplus::PointF pts[] = {{17.0f,28.0f},{25.5f,28.0f},{25.5f,36.1f},{17.0f,34.9f}}; store.AddPolygon(pts, ARRAYSIZE(pts)); }
+        { const Gdiplus::PointF pts[] = {{24.102f,5.854f},{24.512f,7.259f},{24.512f,8.663f},{24.307f,8.898f},{22.873f,9.132f},{21.849f,9.600f},{21.029f,9.600f},{20.824f,9.834f},{20.005f,9.834f},{19.800f,10.068f},{18.776f,10.068f},{18.571f,10.302f},{15.907f,10.771f},{15.702f,11.005f},{14.883f,11.005f},{14.678f,11.239f},{14.268f,10.771f},{14.268f,10.068f},{15.293f,6.790f},{16.112f,5.385f},{17.751f,3.512f},{18.980f,2.810f},{18.776f,2.576f},{17.546f,2.576f},{15.907f,4.215f},{14.883f,5.854f},{13.859f,8.429f},{13.449f,11.239f},{11.605f,11.941f},{10.580f,11.941f},{10.376f,11.707f},{10.376f,9.132f},{10.580f,8.898f},{10.580f,7.961f},{11.605f,5.151f},{14.063f,2.107f},{16.112f,0.937f},{18.980f,0.937f},{19.185f,1.171f},{19.800f,1.171f},{21.644f,2.341f},{23.283f,4.215f}}; store.AddPolygon(pts, ARRAYSIZE(pts)); }
+        g.FillPath(&white,&store);
+    } else if (icon == Icon::Camera) {
+        g.DrawRectangle(&pen,5.0f,13.0f,38.0f,26.0f);
+        g.DrawLine(&pen,12.0f,13.0f,16.0f,8.0f);g.DrawLine(&pen,16.0f,8.0f,28.0f,8.0f);
+        g.DrawLine(&pen,28.0f,8.0f,32.0f,13.0f);g.DrawEllipse(&pen,17.0f,18.0f,14.0f,14.0f);
+    } else if (icon == Icon::Clock) {
+        g.DrawEllipse(&pen,5.0f,5.0f,38.0f,38.0f);g.DrawLine(&pen,24.0f,10.0f,24.0f,25.0f);
+        g.DrawLine(&pen,24.0f,25.0f,34.0f,30.0f);
+    } else if (icon == Icon::Maps) {
+        g.DrawEllipse(&pen,13.0f,5.0f,22.0f,22.0f);g.DrawEllipse(&pen,20.0f,12.0f,8.0f,8.0f);
+        g.DrawLine(&pen,14.0f,21.0f,24.0f,42.0f);g.DrawLine(&pen,34.0f,21.0f,24.0f,42.0f);
+    } else if (icon == Icon::Music) {
+        // Scaled vector contour for the Music tile.
+        Gdiplus::GraphicsPath shape(Gdiplus::FillModeAlternate);
+        { const Gdiplus::PointF pts[] = {{37.818f,26.667f},{36.364f,26.667f},{35.394f,27.636f},{34.909f,27.636f},{34.424f,28.606f},{34.424f,30.061f},{33.939f,30.545f},{33.939f,33.939f},{33.455f,34.424f},{33.455f,37.818f},{32.970f,38.303f},{32.970f,41.212f},{32.485f,41.697f},{32.485f,44.606f},{32.970f,45.576f},{33.939f,46.545f},{34.909f,46.545f},{35.394f,47.030f},{36.848f,46.545f},{39.273f,43.636f},{39.758f,42.667f},{39.758f,41.697f},{40.242f,41.212f},{40.242f,40.242f},{40.727f,39.758f},{40.727f,37.818f},{41.212f,37.333f},{41.212f,32.485f},{40.727f,32.000f},{40.727f,30.545f},{40.242f,30.061f},{40.242f,29.091f},{39.758f,28.121f}}; shape.AddPolygon(pts, ARRAYSIZE(pts)); }
+        { const Gdiplus::PointF pts[] = {{9.697f,26.667f},{7.758f,28.121f},{7.273f,29.091f},{7.273f,30.061f},{6.788f,30.545f},{6.788f,32.000f},{6.303f,32.485f},{6.303f,37.333f},{6.788f,37.818f},{6.788f,39.758f},{7.273f,40.242f},{7.273f,41.212f},{7.758f,41.697f},{7.758f,42.667f},{8.242f,43.636f},{10.667f,46.545f},{12.121f,47.030f},{12.606f,46.545f},{13.576f,46.545f},{14.545f,45.576f},{15.030f,44.606f},{15.030f,41.697f},{14.545f,41.212f},{14.545f,38.303f},{14.061f,37.818f},{14.061f,34.424f},{13.576f,33.939f},{13.576f,30.545f},{13.091f,30.061f},{13.091f,28.606f},{12.121f,27.152f},{11.152f,26.667f}}; shape.AddPolygon(pts, ARRAYSIZE(pts)); }
+        { const Gdiplus::PointF pts[] = {{8.727f,4.848f},{4.848f,8.727f},{4.848f,9.212f},{2.909f,11.636f},{1.939f,13.576f},{1.939f,14.545f},{0.970f,16.000f},{0.970f,17.455f},{0.485f,17.939f},{0.485f,19.394f},{0.000f,19.879f},{0.000f,26.182f},{0.970f,27.636f},{0.970f,33.939f},{1.455f,34.424f},{1.455f,36.848f},{1.939f,37.333f},{1.939f,39.273f},{2.424f,39.758f},{2.424f,41.212f},{2.909f,41.697f},{2.909f,42.667f},{3.879f,44.606f},{4.364f,45.091f},{5.333f,45.091f},{5.333f,44.121f},{4.364f,42.667f},{4.364f,41.697f},{3.394f,39.758f},{3.394f,38.303f},{2.909f,37.818f},{2.909f,35.394f},{2.424f,34.909f},{2.424f,31.030f},{1.939f,30.545f},{1.939f,27.152f},{2.909f,26.182f},{2.909f,21.818f},{3.394f,21.333f},{3.394f,19.394f},{3.879f,18.909f},{3.879f,17.455f},{4.364f,16.970f},{4.364f,16.000f},{5.818f,13.091f},{6.788f,12.121f},{6.788f,11.636f},{11.636f,6.788f},{12.121f,6.788f},{13.091f,5.818f},{15.030f,4.848f},{16.000f,4.848f},{17.939f,3.879f},{19.879f,3.879f},{20.364f,3.394f},{27.152f,3.394f},{27.636f,3.879f},{29.576f,3.879f},{30.061f,4.364f},{32.485f,4.848f},{34.424f,5.818f},{35.394f,6.788f},{35.879f,6.788f},{40.727f,11.636f},{40.727f,12.121f},{41.697f,13.091f},{43.152f,16.000f},{43.152f,16.970f},{43.636f,17.455f},{43.636f,18.909f},{44.121f,19.394f},{44.121f,21.333f},{44.606f,21.818f},{44.606f,26.182f},{45.576f,27.152f},{45.576f,30.545f},{45.091f,31.030f},{45.091f,34.909f},{44.606f,35.394f},{44.606f,37.818f},{44.121f,38.303f},{44.121f,39.758f},{43.636f,40.242f},{43.152f,42.667f},{42.182f,44.121f},{42.182f,45.091f},{43.152f,45.091f},{44.606f,42.667f},{44.606f,41.697f},{45.091f,41.212f},{45.091f,39.758f},{45.576f,39.273f},{45.576f,37.333f},{46.061f,36.848f},{46.061f,34.424f},{46.545f,33.939f},{46.545f,27.636f},{47.515f,26.182f},{47.515f,19.879f},{47.030f,19.394f},{47.030f,17.939f},{46.545f,17.455f},{46.545f,16.000f},{45.576f,14.545f},{45.576f,13.576f},{44.606f,11.636f},{42.667f,9.212f},{42.667f,8.727f},{38.788f,4.848f},{38.303f,4.848f},{37.333f,3.879f},{32.485f,1.455f},{31.515f,1.455f},{31.030f,0.970f},{29.576f,0.970f},{29.091f,0.485f},{25.697f,0.485f},{25.212f,0.000f},{22.303f,0.000f},{21.818f,0.485f},{18.424f,0.485f},{17.939f,0.970f},{16.485f,0.970f}}; shape.AddPolygon(pts, ARRAYSIZE(pts)); }
+        g.FillPath(&white,&shape);
+    } else if (icon == Icon::Video) {
+        g.DrawRectangle(&pen,6.0f,11.0f,36.0f,29.0f);Gdiplus::PointF play[]={{19,17},{19,34},{33,25}};g.FillPolygon(&white,play,3);
+    } else if (icon == Icon::Recorder) {
+        g.DrawEllipse(&pen,17.0f,5.0f,14.0f,25.0f);g.DrawArc(&pen,12.0f,13.0f,24.0f,22.0f,0.0f,180.0f);
+        g.DrawLine(&pen,24.0f,35.0f,24.0f,43.0f);g.DrawLine(&pen,16.0f,43.0f,32.0f,43.0f);
+    } else if (icon == Icon::Photos) {
+        // Recreated geometry, not extracted Microsoft artwork.
+        g.DrawRectangle(&pen,5.0f,8.0f,38.0f,32.0f);
+        g.FillEllipse(&white,12.0f,13.0f,7.0f,7.0f);
+        Gdiplus::PointF mountains[]={{8,36},{19,23},{25,29},{30,23},{40,36}};
+        g.FillPolygon(&white,mountains,5);
+    } else if (icon == Icon::Xbox) {
+        g.DrawEllipse(&pen,5.0f,5.0f,38.0f,38.0f);
+        Gdiplus::Pen cross(Gdiplus::Color(255,255,255,255),4.0f);
+        g.DrawBezier(&cross,11.0f,35.0f,16.0f,20.0f,30.0f,10.0f,36.0f,12.0f);
+        g.DrawBezier(&cross,12.0f,12.0f,19.0f,11.0f,33.0f,21.0f,37.0f,35.0f);
+    } else if (icon == Icon::Cloud) {
+        g.FillEllipse(&white,5.0f,23.0f,17.0f,13.0f);
+        g.FillEllipse(&white,15.0f,13.0f,20.0f,23.0f);
+        g.FillEllipse(&white,29.0f,22.0f,14.0f,14.0f);
+        g.FillRectangle(&white,11.0f,28.0f,27.0f,8.0f);
+    } else if (icon == Icon::Solitaire) {
+        g.DrawRectangle(&pen,10.0f,5.0f,25.0f,34.0f);
+        g.DrawLine(&pen,15.0f,42.0f,39.0f,42.0f);
+        g.DrawLine(&pen,39.0f,11.0f,39.0f,42.0f);
+        Gdiplus::PointF diamond[]={{22.5f,14.0f},{29.0f,22.0f},{22.5f,30.0f},{16.0f,22.0f}};
+        g.FillPolygon(&white,diamond,4);
+    } else if (icon == Icon::Calculator) {
+        g.DrawRectangle(&pen, 11.0f, 5.0f, 26.0f, 38.0f);
+        g.FillRectangle(&white, 15.0f, 9.0f, 18.0f, 7.0f);
+        for (int row=0; row<3; ++row) for (int col=0; col<3; ++col)
+            g.FillRectangle(&white, 15.0f+col*7, 21.0f+row*7, 4.0f, 4.0f);
+    } else if (icon == Icon::Mail) {
+        // White envelope silhouette from the reference, with a transparent V.
+        const Gdiplus::PointF flap[] = {{8.6f,12.6f},{39.4f,12.6f},{39.4f,14.4f},
+                                       {24.0f,25.7f},{8.6f,14.4f}};
+        const Gdiplus::PointF body[] = {{8.6f,16.9f},{22.4f,27.0f},{24.0f,27.6f},
+                                       {25.6f,27.0f},{39.4f,16.9f},
+                                       {39.4f,35.4f},{8.6f,35.4f}};
+        g.FillPolygon(&white, flap, 5);
+        g.FillPolygon(&white, body, 7);
+    } else {
+        g.DrawRectangle(&pen, 7.0f, 9.0f, 34.0f, 32.0f);
+        g.DrawLine(&pen, 7.0f, 18.0f, 41.0f, 18.0f);
+        g.DrawLine(&pen, 15.0f, 5.0f, 15.0f, 13.0f);
+        g.DrawLine(&pen, 33.0f, 5.0f, 33.0f, 13.0f);
+        for (int row=0; row<2; ++row) for (int col=0; col<3; ++col)
+            g.FillRectangle(&white, 13.0f+col*9, 23.0f+row*9, 5.0f, 5.0f);
+    }
+    return g.GetLastStatus() == Gdiplus::Ok;
+}
+
+
+static bool IsLocalInfoTile(const wchar_t* id) {
+    return id && (!_wcsicmp(id,L"windhawk:weather-tile-v1") || !_wcsicmp(id,L"windhawk:calendar-tile-v1") || !_wcsicmp(id,L"windhawk:clock-tile-v1"));
+}
+static const wchar_t* LocalInfoUrl(const wchar_t* id) {
+    if (!id) return NULL;
+    if (!_wcsicmp(id,L"windhawk:weather-tile-v1")) return L"https://www.msn.com/weather";
+    if (!_wcsicmp(id,L"windhawk:calendar-tile-v1")) return L"https://outlook.live.com/calendar/";
+    if (!_wcsicmp(id,L"windhawk:clock-tile-v1")) return L"https://apps.microsoft.com/detail/9wzdncrfj3pr";
+    return NULL;
+}
+// Local slideshow adapted from Windows 8.1/10 Start Menu Recreation (GPL-3.0).
+class LocalPhotoSlideshow {
+    HANDLE stop_=nullptr, thread_=nullptr;
+    HWND owner_=nullptr;
+    std::mutex mutex_;
+    std::vector<BYTE> current_, previous_;
+    ULONGLONG changed_=0;
+    static constexpr int side_=256;
+    static DWORD WINAPI Worker(void* raw) {
+        auto* self=static_cast<LocalPhotoSlideshow*>(raw);
+        HRESULT init=CoInitializeEx(nullptr,COINIT_MULTITHREADED);
+        try { self->Run(); } catch (...) { Wh_Log(L"[Photos] worker failed"); }
+        if (SUCCEEDED(init)) CoUninitialize();
+        return 0;
+    }
+    void Run() {
+        PWSTR raw=nullptr;
+        // The known folder may be redirected; the Shell supplies its current path.
+        // https://learn.microsoft.com/windows/win32/api/shlobj_core/nf-shlobj_core-shgetknownfolderpath
+        HRESULT hr=SHGetKnownFolderPath(FOLDERID_Pictures,KF_FLAG_DEFAULT,nullptr,&raw);
+        std::wstring root=SUCCEEDED(hr) && raw ? raw : L"";
+        if(raw)CoTaskMemFree(raw);
+        // Only fixed local drives. Avoid waking remote and offline content.
+        if(root.size()<3 || root[1]!=L':' || root[2]!=L'\\') return;
+        wchar_t drive[]={root[0],L':',L'\\',0};
+        if(GetDriveTypeW(drive)!=DRIVE_FIXED) return;
+        DWORD folder=GetFileAttributesW(root.c_str());
+        if(folder==INVALID_FILE_ATTRIBUTES || (folder & (FILE_ATTRIBUTE_REPARSE_POINT|FILE_ATTRIBUTE_OFFLINE))) return;
+        std::vector<std::wstring> files;
+            WIN32_FIND_DATAW entry{};
+            HANDLE find=FindFirstFileW((root+L"\\*").c_str(),&entry);
+            if(find!=INVALID_HANDLE_VALUE) {
+                do {
+                    if(WaitForSingleObject(stop_,0)!=WAIT_TIMEOUT) break;
+                    if(entry.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY|FILE_ATTRIBUTE_REPARSE_POINT|FILE_ATTRIBUTE_OFFLINE)) continue;
+                    unsigned long long bytes=((unsigned long long)entry.nFileSizeHigh<<32)|entry.nFileSizeLow;
+                    if(!bytes || bytes>16ull*1024*1024) continue;
+                    std::wstring name=entry.cFileName; size_t dot=name.find_last_of(L'.');
+                    if(dot==std::wstring::npos) continue;
+                    const wchar_t* ext=name.c_str()+dot;
+                    if(_wcsicmp(ext,L".jpg") && _wcsicmp(ext,L".jpeg") && _wcsicmp(ext,L".png")) continue;
+                    files.push_back(root+L"\\"+name);
+                } while(files.size()<128 && FindNextFileW(find,&entry));
+                FindClose(find);
+            }
+        std::sort(files.begin(),files.end());
+        std::vector<std::vector<BYTE>> thumbnails(files.size());
+        std::vector<bool> attempted(files.size(),false);
+        size_t next=0;
+        while(WaitForSingleObject(stop_,0)==WAIT_TIMEOUT) {
+            if(!files.empty() && WaitForSingleObject(stop_,0)==WAIT_TIMEOUT) {
+                const size_t index=next++ % files.size();
+                if (!attempted[index]) {
+                attempted[index]=true;
+                const std::wstring& path=files[index];
+                Gdiplus::Bitmap source(path.c_str(),FALSE);
+                const bool sourceValid = source.GetLastStatus() == Gdiplus::Ok;
+                const UINT originalWidth = source.GetWidth(), originalHeight = source.GetHeight();
+                const bool safeSize = originalWidth && originalHeight && originalWidth <= 10000 &&
+                    originalHeight <= 10000 && (unsigned long long)originalWidth * originalHeight <= 40000000;
+                if (sourceValid && safeSize) {
+                    // Honor EXIF orientation before measuring and cropping camera photos.
+                    UINT size = source.GetPropertyItemSize(PropertyTagOrientation);
+                    if (size >= sizeof(Gdiplus::PropertyItem) && size <= 65536) {
+                        std::vector<BYTE> storage(size);
+                        auto* property = reinterpret_cast<Gdiplus::PropertyItem*>(storage.data());
+                        if (source.GetPropertyItem(PropertyTagOrientation, size, property) == Gdiplus::Ok &&
+                            property->type == PropertyTagTypeShort && property->length >= sizeof(USHORT) && property->value) {
+                            USHORT orientation = 1;
+                            memcpy(&orientation, property->value, sizeof(orientation));
+                            const Gdiplus::RotateFlipType transforms[] = {
+                                Gdiplus::RotateNoneFlipNone, Gdiplus::RotateNoneFlipNone,
+                                Gdiplus::RotateNoneFlipX, Gdiplus::Rotate180FlipNone,
+                                Gdiplus::Rotate180FlipX, Gdiplus::Rotate90FlipX,
+                                Gdiplus::Rotate90FlipNone, Gdiplus::Rotate270FlipX,
+                                Gdiplus::Rotate270FlipNone
+                            };
+                            if (orientation >= 2 && orientation <= 8) source.RotateFlip(transforms[orientation]);
+                        }
+                    }
+                }
+                UINT w=source.GetWidth(), h=source.GetHeight();
+                if(sourceValid && safeSize && w && h && w<=10000 && h<=10000 && (unsigned long long)w*h<=40000000) {
+                    Gdiplus::Bitmap thumb(side_,side_,PixelFormat32bppARGB);
+                    Gdiplus::Status drawStatus;
+                    {
+                        Gdiplus::Graphics graphics(&thumb);
+                        graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+                        float crop=(float)(std::min)(w,h),x=(w-crop)/2,y=(h-crop)/2;
+                        drawStatus=graphics.DrawImage(&source,Gdiplus::Rect(0,0,side_,side_),x,y,crop,crop,Gdiplus::UnitPixel);
+                    }
+                    if(drawStatus==Gdiplus::Ok) {
+                        Gdiplus::Rect r(0,0,side_,side_); Gdiplus::BitmapData data{};
+                        if(thumb.LockBits(&r,Gdiplus::ImageLockModeRead,PixelFormat32bppARGB,&data)==Gdiplus::Ok) {
+                            std::vector<BYTE> pixels(side_*side_*4);
+                            for(int row=0;row<side_;row++) memcpy(pixels.data()+row*side_*4,(BYTE*)data.Scan0+row*data.Stride,side_*4);
+                            thumb.UnlockBits(&data);
+                            thumbnails[index]=std::move(pixels);
+                        }
+                    }
+                }
+                }
+                if (!thumbnails[index].empty() && WaitForSingleObject(stop_,0)==WAIT_TIMEOUT) {
+                    {std::lock_guard<std::mutex> lock(mutex_);
+                     previous_=std::move(current_);current_=thumbnails[index];changed_=GetTickCount64();}
+                    PostMessageW(owner_,(WM_APP + 20),0,0);
+                }
+            }
+            if(WaitForSingleObject(stop_,8000)!=WAIT_TIMEOUT) break;
+        }
+    }
+public:
+    // Stop is called from UiTeardown, not under the loader lock at process exit.
+    void Start(HWND owner) {
+        if(thread_ || !owner) return;
+        owner_=owner;stop_=CreateEventW(nullptr,TRUE,FALSE,nullptr);
+        if(stop_) thread_=CreateThread(nullptr,0,Worker,this,0,nullptr);
+        if(stop_ && !thread_){CloseHandle(stop_);stop_=nullptr;}
+    }
+    void Stop() {
+        if(stop_)SetEvent(stop_);
+        if(thread_){WaitForSingleObject(thread_,INFINITE);CloseHandle(thread_);thread_=nullptr;}
+        if(stop_){CloseHandle(stop_);stop_=nullptr;}
+        std::lock_guard<std::mutex> lock(mutex_);current_.clear();previous_.clear();changed_=0;
+    }
+    bool Draw(HDC dc,const RECT& rc,bool slide,COLORREF background) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if(current_.empty()) return false;
+        int w=rc.right-rc.left,h=rc.bottom-rc.top;if(w<=0 || h<=0)return false;
+        Gdiplus::Graphics g(dc);if(g.GetLastStatus()!=Gdiplus::Ok)return false;
+        g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+        g.SetClip(Gdiplus::Rect(rc.left,rc.top,w,h));
+        Gdiplus::SolidBrush backgroundBrush(Gdiplus::Color(255,GetRValue(background),GetGValue(background),GetBValue(background)));
+        g.FillRectangle(&backgroundBrush,rc.left,rc.top,w,h);
+        float t=(std::min)(1.0f,(GetTickCount64()-changed_)/400.0f);
+        Gdiplus::Bitmap now(side_,side_,side_*4,PixelFormat32bppARGB,current_.data());
+        // Fill the tile without stretching a square thumbnail on wide tiles.
+        auto drawCover = [&](Gdiplus::Bitmap* image, int y, int height) {
+            float sw=(float)side_, sh=(float)side_;
+            if (w>h) sh=sw*(float)h/(float)w;
+            else sw=sh*(float)w/(float)h;
+            g.DrawImage(image, Gdiplus::Rect(rc.left,y,w,height),
+                        (side_-sw)/2, (side_-sh)/2, sw, sh, Gdiplus::UnitPixel);
+        };
+        if(!previous_.empty() && t<1.0f) {
+            Gdiplus::Bitmap prev(side_,side_,side_*4,PixelFormat32bppARGB,previous_.data());
+            if (slide) {
+                int dy=(int)(h*(t*t*(3.0f-2.0f*t)));
+                drawCover(&prev,rc.top+dy,h);
+                drawCover(&now,rc.top+dy-h,h);
+            }
+            else {
+                float z=(std::max)(0.05f,cosf((t<0.5f?t:1.0f-t)*3.14159265f));
+                int ht=(std::max)(1,(int)(h*z));
+                drawCover(t<0.5f?&prev:&now,rc.top+(h-ht)/2,ht);
+            }
+        } else drawCover(&now,rc.top,h);
+        return true;
+    }
+};
+
+
+static LocalPhotoSlideshow g_photoSlideshow;
+static volatile LONG g_photoEnabled = 0;
+static DWORD g_photoAnimationTick = 0;
+static bool IsPhotoTile(const Tile& t) {
+    if (!t.alive || t.customTile || !t.target) return false;
+    const wchar_t* id=t.target; const wchar_t* prefix=L"shell:AppsFolder\\";
+    if (!_wcsnicmp(id,prefix,wcslen(prefix))) id+=wcslen(prefix);
+    return !_wcsicmp(id,L"Microsoft.Windows.Photos_8wekyb3d8bbwe!App");
+}
+static void UpdatePhotoWorker();
+static void RefreshPhotoSurfaces();
+
+// Weather network code adapted from Windows 8.1/10 Start Menu Recreation (GPL-3.0).
+class ScreenWeather {
+    HANDLE stop_ = NULL, thread_ = NULL;
+    HWND owner_ = NULL;
+    std::wstring latitude_, longitude_, label_;
+    bool ipLocation_ = false;
+    std::mutex mutex_;
+    double temperature_ = 0;
+    int code_ = 0;
+    ULONGLONG updated_ = 0;
+    // Restrict input to literal ASCII decimal coordinates; never treat it as URL text.
+    static bool ParseCoordinate(const std::wstring& text, double limit, double& value) {
+        if (text.empty() || text.size() > 20) return false;
+        size_t i = text[0] == L'-' ? 1 : 0;
+        bool digit = false, dot = false; double n = 0, fraction = 0.1;
+        for (; i < text.size(); ++i) {
+            wchar_t c = text[i];
+            if (c == L'.' && !dot) { dot = true; continue; }
+            if (c < L'0' || c > L'9') return false;
+            digit = true;
+            if (dot) { n += (c-L'0')*fraction; fraction *= 0.1; }
+            else n = n*10 + (c-L'0');
+            if (n > limit) return false;
+        }
+        if (!digit) return false;
+        value = text[0] == L'-' ? -n : n;
+        return true;
+    }
+    // Coordinates are rounded to roughly city scale, formatted without depending on locale.
+    static std::wstring FormatWeatherCoordinate(double value) {
+        bool negative = value < 0;
+        unsigned long long n = static_cast<unsigned long long>(fabs(value)*10000.0 + 0.5);
+        wchar_t out[32]{};
+        swprintf_s(out, ARRAYSIZE(out), L"%ls%llu.%04llu", negative ? L"-" : L"", n/10000, n%10000);
+        return out;
+    }
+    static const wchar_t* PrivateWeatherLabel() {
+        switch (PRIMARYLANGID(GetUserDefaultUILanguage())) {
+            case LANG_ITALIAN: return L"Mondo";
+            case LANG_SPANISH: return L"Mundo";
+            case LANG_PORTUGUESE: return L"Mundo";
+            case LANG_FRENCH: return L"Monde";
+            case LANG_GERMAN: return L"Welt";
+            default: return L"World";
+        }
+    }
+    static bool WeatherNumber(const std::string& json, const char* key, double& out) {
+        std::string needle = std::string("\"") + key + "\"";
+        size_t pos = json.find(needle);
+        if (pos == std::string::npos || (pos = json.find(':', pos + needle.size())) == std::string::npos) return false;
+        ++pos; while (pos < json.size() && (json[pos] == ' ' || json[pos] == '\n')) ++pos;
+        bool negative = pos < json.size() && json[pos] == '-'; if (negative) ++pos;
+        bool digit = false, dot = false; double n=0, fraction=0.1;
+        for (; pos < json.size(); ++pos) {
+            char c=json[pos];
+            if (c == '.' && !dot) { dot=true; continue; }
+            if (c < '0' || c > '9') break;
+            digit=true;
+            if (dot) { n+=(c-'0')*fraction; fraction*=0.1; } else n=n*10+(c-'0');
+            if (n > 10000) return false;
+        }
+        if (!digit || pos == json.size() || (json[pos] != ',' && json[pos] != '}' && json[pos] != ' ' && json[pos] != '\n')) return false;
+        out = negative ? -n : n; return true;
+    }
+    struct AsyncRequest {
+        HANDLE done = NULL, closed = NULL;
+        DWORD status = 0, bytes = 0;
+        char buffer[4096] = {};
+    };
+    static void CALLBACK WeatherCallback(HINTERNET, DWORD_PTR context, DWORD status, void*, DWORD length) {
+        auto* state = reinterpret_cast<AsyncRequest*>(context);
+        if (!state) return;
+        if (status == WINHTTP_CALLBACK_STATUS_HANDLE_CLOSING) {
+            SetEvent(state->closed);
+        } else if (status == WINHTTP_CALLBACK_STATUS_SENDREQUEST_COMPLETE ||
+                   status == WINHTTP_CALLBACK_STATUS_HEADERS_AVAILABLE ||
+                   status == WINHTTP_CALLBACK_STATUS_READ_COMPLETE ||
+                   status == WINHTTP_CALLBACK_STATUS_REQUEST_ERROR) {
+            state->status = status;
+            state->bytes = length;
+            SetEvent(state->done);
+        }
+    }
+    bool HttpGet(const wchar_t* host, const std::wstring& path, size_t limit, std::string& body) {
+        AsyncRequest state;
+        state.done = CreateEventW(NULL, FALSE, FALSE, NULL);
+        state.closed = CreateEventW(NULL, TRUE, FALSE, NULL);
+        HINTERNET session = NULL, conn = NULL, req = NULL;
+        bool registered = false, ok = false;
+        if (state.done && state.closed && WaitForSingleObject(stop_, 0) == WAIT_TIMEOUT) {
+            session = WinHttpOpen(L"Win81StartWeather/1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+                                  WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, WINHTTP_FLAG_ASYNC);
+        }
+        if (session) {
+            WinHttpSetTimeouts(session, 3000, 3000, 3000, 3000);
+            conn = WinHttpConnect(session, host, INTERNET_DEFAULT_HTTPS_PORT, 0);
+        }
+        if (conn) req = WinHttpOpenRequest(conn, L"GET", path.c_str(), NULL, WINHTTP_NO_REFERER,
+                                           WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
+        if (req) {
+            DWORD_PTR context = reinterpret_cast<DWORD_PTR>(&state);
+            DWORD disable = WINHTTP_DISABLE_REDIRECTS;
+            if (WinHttpSetOption(req, WINHTTP_OPTION_CONTEXT_VALUE, &context, sizeof(context)) &&
+                WinHttpSetOption(req, WINHTTP_OPTION_DISABLE_FEATURE, &disable, sizeof(disable)) &&
+                WinHttpSetStatusCallback(req, WeatherCallback,
+                    WINHTTP_CALLBACK_FLAG_SENDREQUEST_COMPLETE | WINHTTP_CALLBACK_FLAG_HEADERS_AVAILABLE |
+                    WINHTTP_CALLBACK_FLAG_READ_COMPLETE | WINHTTP_CALLBACK_FLAG_REQUEST_ERROR |
+                    WINHTTP_CALLBACK_FLAG_HANDLES, 0) != WINHTTP_INVALID_STATUS_CALLBACK) {
+                registered = true;
+                HANDLE waits[] = {stop_, state.done};
+                auto completed = [&](DWORD expected) {
+                    return WaitForMultipleObjects(2, waits, FALSE, INFINITE) == WAIT_OBJECT_0 + 1 &&
+                           state.status == expected;
+                };
+                if (WinHttpSendRequest(req, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA,
+                                       0, 0, context) && completed(WINHTTP_CALLBACK_STATUS_SENDREQUEST_COMPLETE) &&
+                    WinHttpReceiveResponse(req, NULL) && completed(WINHTTP_CALLBACK_STATUS_HEADERS_AVAILABLE)) {
+                    DWORD status = 0, size = sizeof(status);
+                    if (WinHttpQueryHeaders(req, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                                            WINHTTP_HEADER_NAME_BY_INDEX, &status, &size,
+                                            WINHTTP_NO_HEADER_INDEX) && status == 200) {
+                        for (;;) {
+                            if (!WinHttpReadData(req, state.buffer, sizeof(state.buffer), NULL) ||
+                                !completed(WINHTTP_CALLBACK_STATUS_READ_COMPLETE)) break;
+                            if (!state.bytes) { ok = true; break; }
+                            if (body.size() + state.bytes > limit) break;
+                            try { body.append(state.buffer, state.bytes); }
+                            catch (const std::bad_alloc&) { break; }
+                        }
+                    }
+                }
+            }
+            // This thread is the sole owner of the asynchronous request. A pending
+            // operation can be cancelled here; its context stays alive until the
+            // final HANDLE_CLOSING notification, including after cancellation.
+            WinHttpCloseHandle(req);
+            if (registered) WaitForSingleObject(state.closed, INFINITE);
+        }
+        if (conn) WinHttpCloseHandle(conn);
+        if (session) WinHttpCloseHandle(session);
+        if (state.done) CloseHandle(state.done);
+        if (state.closed) CloseHandle(state.closed);
+        return ok;
+    }
+    bool IpWeatherLocation(std::wstring& lat, std::wstring& lon) {
+        std::string body;
+        if (!HttpGet(L"ipwho.is", L"/", 16384, body)) return false;
+        double la = 0, lo = 0;
+        size_t k = body.find("\"success\"");
+        size_t c = k == std::string::npos ? k : body.find(':', k + 9);
+        if (c != std::string::npos) {
+            ++c;
+            while (c < body.size() && (body[c] == ' ' || body[c] == '\n' || body[c] == '\r' || body[c] == '\t')) ++c;
+        }
+        if (c == std::string::npos || body.compare(c, 4, "true") || c + 4 >= body.size() ||
+            (body[c+4] != ',' && body[c+4] != '}' && body[c+4] != ' ') ||
+            !WeatherNumber(body, "latitude", la) || !WeatherNumber(body, "longitude", lo) ||
+            la < -90 || la > 90 || lo < -180 || lo > 180) return false;
+        lat = FormatWeatherCoordinate(la); lon = FormatWeatherCoordinate(lo); return true;
+    }
+    bool FetchWeather(const std::wstring& lat, const std::wstring& lon, double& temp, int& code) {
+        std::wstring path = L"/v1/forecast?latitude=" + lat + L"&longitude=" + lon +
+            L"&current=temperature_2m,weather_code&forecast_days=1";
+        std::string body;
+        if (!HttpGet(L"api.open-meteo.com", path, 32768, body)) return false;
+        size_t current = body.find("\"current\":{");
+        if (current == std::string::npos) return false;
+        size_t end = body.find('}', current);
+        if (end == std::string::npos) return false;
+        std::string obj = body.substr(current, end-current+1);
+        double c = 0;
+        if (!WeatherNumber(obj, "temperature_2m", temp) || temp < -100 || temp > 70 ||
+            !WeatherNumber(obj, "weather_code", c) || c < 0 || c > 99 || c != (int)c) return false;
+        code = (int)c; return true;
+    }
+
+    static DWORD WINAPI Worker(void* raw) {
+        auto* self = static_cast<ScreenWeather*>(raw);
+        try {
+            std::wstring lat = self->latitude_, lon = self->longitude_;
+            bool located = !lat.empty() && !lon.empty();
+            while (WaitForSingleObject(self->stop_, 0) == WAIT_TIMEOUT) {
+                if (!located && self->ipLocation_) located = self->IpWeatherLocation(lat, lon);
+                if (WaitForSingleObject(self->stop_, 0) != WAIT_TIMEOUT) break;
+                double temperature = 0;
+                int code = 0;
+                bool ok = located && self->FetchWeather(lat, lon, temperature, code);
+                if (WaitForSingleObject(self->stop_, 0) != WAIT_TIMEOUT) break;
+                if (ok) {
+                    {
+                        std::lock_guard<std::mutex> lock(self->mutex_);
+                        self->temperature_ = temperature;
+                        self->code_ = code;
+                        self->updated_ = GetTickCount64();
+                    }
+                    Wh_Log(L"[Weather] current data received successfully");
+                    if (self->owner_) PostMessageW(self->owner_, WM_APP + 21, 0, 0);
+                } else if (located) Wh_Log(L"[Weather] forecast request failed; retry in 30 minutes");
+                const DWORD delay = located ? 30 * 60 * 1000 : 5 * 60 * 1000;
+                if (WaitForSingleObject(self->stop_, delay) != WAIT_TIMEOUT) break;
+            }
+        } catch (...) {
+            Wh_Log(L"[Weather] worker failed");
+        }
+        return 0;
+    }
+public:
+    void Start(HWND owner) {
+        if (thread_ || !owner || !Wh_GetIntSetting(L"weatherOnline")) return;
+        WindhawkUtils::StringSetting lat(WindhawkUtils::StringSetting::make(L"weatherLatitude"));
+        WindhawkUtils::StringSetting lon(WindhawkUtils::StringSetting::make(L"weatherLongitude"));
+        WindhawkUtils::StringSetting label(WindhawkUtils::StringSetting::make(L"weatherLocationName"));
+        latitude_ = lat.get(); longitude_ = lon.get(); label_ = label.get();
+        if (label_.size() > 80) label_.resize(80);
+        const bool manual = !latitude_.empty() && !longitude_.empty();
+        double la = 0, lo = 0;
+        if (manual && (!ParseCoordinate(latitude_, 90, la) || !ParseCoordinate(longitude_, 180, lo))) {
+            Wh_Log(L"[Weather] invalid coordinates; no request sent");
+            return;
+        }
+        ipLocation_ = !manual && Wh_GetIntSetting(L"weatherIpLocation") != 0;
+        if (!manual && !ipLocation_) {
+            Wh_Log(L"[Weather] no coordinates; IP location is disabled");
+            return;
+        }
+        if (!manual) { latitude_.clear(); longitude_.clear(); }
+        owner_ = owner;
+        stop_ = CreateEventW(NULL, TRUE, FALSE, NULL);
+        if (stop_) thread_ = CreateThread(NULL, 0, Worker, this, 0, NULL);
+        if (stop_ && !thread_) { CloseHandle(stop_); stop_ = NULL; }
+    }
+    void Stop() {
+        if (stop_) SetEvent(stop_);
+        if (thread_) { WaitForSingleObject(thread_, INFINITE); CloseHandle(thread_); thread_ = NULL; }
+        if (stop_) { CloseHandle(stop_); stop_ = NULL; }
+        std::lock_guard<std::mutex> lock(mutex_);
+        updated_ = 0;
+        owner_ = NULL;
+    }
+    bool Current(double& temperature, int& code) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!updated_ || GetTickCount64() - updated_ > 3ull * 60 * 60 * 1000) return false;
+        temperature = temperature_;
+        code = code_;
+        return true;
+    }
+    const wchar_t* Label() const {
+        return InterlockedCompareExchange(&g_privacyMode, 0, 0) ? PrivateWeatherLabel() : label_.c_str();
+    }
+};
+static ScreenWeather g_weather;
+static bool IsWeatherTile(const Tile& t) {
+    if (!t.alive || t.customTile || !t.target) return false;
+    const wchar_t* id = t.target;
+    const wchar_t* prefix = L"shell:AppsFolder\\";
+    if (!_wcsnicmp(id, prefix, wcslen(prefix))) id += wcslen(prefix);
+    return !_wcsicmp(id, L"windhawk:weather-tile-v1") ||
+           !_wcsicmp(id, L"Microsoft.BingWeather_8wekyb3d8bbwe!App");
+}
+
+static void UpdateWeatherWorker() {
+    bool found = false;
+    for (int i = 0; i < g_tileCount; ++i) {
+        if (IsWeatherTile(g_tiles[i])) { found = true; break; }
+    }
+    if (found) g_weather.Start(g_wnd); else g_weather.Stop();
+}
+
+static int GetUiLanguageIndex() {
+    switch (PRIMARYLANGID(GetUserDefaultUILanguage())) {
+        case 0x10: return 0; // Italian
+        case 0x09: return 1; // English
+        case 0x0A: return 2; // Spanish
+        case 0x0C: return 3; // French
+        case 0x29: return 4; // Persian
+        case 0x01: return 5; // Arabic
+        case 0x16: return 6; // Portuguese
+        case 0x04: return 7; // Chinese
+        case 0x11: return 8; // Japanese
+        case 0x15: return 9; // Polish
+        case 0x19: return 10; // Russian
+        default: return 1;
+    }
+}
+
+// Descriptions derived from Open-Meteo's WMO weather codes, not an API text.
+// Intensity is intentionally omitted when several WMO codes share a label.
+static int WeatherKind(int code) {
+    switch (code) {
+    case 0:return 0; case 1:return 1; case 2:return 2; case 3:return 3;
+    case 45:return 4; case 48:return 5;
+    case 51:case 53:case 55:return 6; case 56:case 57:return 7;
+    case 61:case 63:case 65:return 8; case 66:case 67:return 9;
+    case 71:case 73:case 75:return 10; case 77:return 11;
+    case 80:case 81:case 82:return 12; case 85:case 86:return 13;
+    case 95:case 97:return 14; case 96:case 99:return 15;
+    default:return 16;
+    }
+}
+static const wchar_t* WeatherDescription(int code) {
+    static const wchar_t* const names[][11] = {
+        {L"Sereno", L"Clear sky", L"Despejado", L"Ciel dégagé", L"آسمان صاف", L"سماء صافية", L"Céu limpo", L"晴朗", L"快晴", L"Bezchmurnie", L"Ясно"},
+        {L"Prevalentemente sereno", L"Mainly clear", L"Mayormente despejado", L"Généralement dégagé", L"عمدتاً صاف", L"صحو غالباً", L"Predominantemente limpo", L"大部晴朗", L"おおむね晴れ", L"Przeważnie bezchmurnie", L"Преимущественно ясно"},
+        {L"Parzialmente nuvoloso", L"Partly cloudy", L"Parcialmente nublado", L"Partiellement nuageux", L"نیمه ابری", L"غائم جزئياً", L"Parcialmente nublado", L"局部多云", L"所により曇り", L"Częściowe zachmurzenie", L"Переменная облачность"},
+        {L"Coperto", L"Overcast", L"Cubierto", L"Couvert", L"ابری", L"غائم", L"Encoberto", L"阴天", L"曇り", L"Pochmurno", L"Пасмурно"},
+        {L"Nebbia", L"Fog", L"Niebla", L"Brouillard", L"مه", L"ضباب", L"Nevoeiro", L"雾", L"霧", L"Mgła", L"Туман"},
+        {L"Nebbia con brina", L"Rime fog", L"Niebla con escarcha", L"Brouillard givrant", L"مه یخ\u200Cزده", L"ضباب متجمد", L"Nevoeiro com geada", L"雾凇", L"着氷性の霧", L"Mgła osadzająca szadź", L"Туман с инеем"},
+        {L"Pioviggine", L"Drizzle", L"Llovizna", L"Bruine", L"نم\u200Cنم باران", L"رذاذ", L"Chuvisco", L"毛毛雨", L"霧雨", L"Mżawka", L"Морось"},
+        {L"Pioviggine gelata", L"Freezing drizzle", L"Llovizna helada", L"Bruine verglaçante", L"نم\u200Cنم باران یخ\u200Cزده", L"رذاذ متجمد", L"Chuvisco gelado", L"冻毛毛雨", L"着氷性の霧雨", L"Marznąca mżawka", L"Ледяная морось"},
+        {L"Pioggia", L"Rain", L"Lluvia", L"Pluie", L"باران", L"مطر", L"Chuva", L"雨", L"雨", L"Deszcz", L"Дождь"},
+        {L"Pioggia gelata", L"Freezing rain", L"Lluvia helada", L"Pluie verglaçante", L"باران یخ\u200Cزده", L"مطر متجمد", L"Chuva gelada", L"冻雨", L"着氷性の雨", L"Marznący deszcz", L"Ледяной дождь"},
+        {L"Neve", L"Snow", L"Nieve", L"Neige", L"برف", L"ثلج", L"Neve", L"雪", L"雪", L"Śnieg", L"Снег"},
+        {L"Nevischio granuloso", L"Snow grains", L"Granos de nieve", L"Grains de neige", L"دانه\u200Cهای برف", L"حبيبات ثلج", L"Grãos de neve", L"米雪", L"霧雪", L"Ziarna śnieżne", L"Снежные зёрна"},
+        {L"Rovesci di pioggia", L"Rain showers", L"Chubascos", L"Averses de pluie", L"رگبار باران", L"زخات مطر", L"Aguaceiros", L"阵雨", L"にわか雨", L"Przelotne opady deszczu", L"Ливневый дождь"},
+        {L"Rovesci di neve", L"Snow showers", L"Chubascos de nieve", L"Averses de neige", L"رگبار برف", L"زخات ثلج", L"Aguaceiros de neve", L"阵雪", L"にわか雪", L"Przelotne opady śniegu", L"Снегопад"},
+        {L"Temporale", L"Thunderstorm", L"Tormenta", L"Orage", L"رعدوبرق", L"عاصفة رعدية", L"Trovoada", L"雷暴", L"雷雨", L"Burza", L"Гроза"},
+        {L"Temporale con grandine", L"Thunderstorm with hail", L"Tormenta con granizo", L"Orage avec grêle", L"رعدوبرق با تگرگ", L"عاصفة رعدية مع بَرَد", L"Trovoada com granizo", L"雷暴伴冰雹", L"ひょうを伴う雷雨", L"Burza z gradem", L"Гроза с градом"},
+        {L"Condizioni sconosciute", L"Unknown conditions", L"Condiciones desconocidas", L"Conditions inconnues", L"وضعیت نامشخص", L"حالة غير معروفة", L"Condições desconhecidas", L"天气状况未知", L"天候不明", L"Nieznane warunki", L"Неизвестные условия"},
+    };
+    return names[WeatherKind(code)][GetUiLanguageIndex()];
+}
+// Original vector sun, based on the shape and proportions in the reference.
+static void DrawWeatherLogo(HDC dc, const RECT& rc) {
+    if (!g_gdipToken || rc.right<=rc.left || rc.bottom<=rc.top) return;
+    Gdiplus::Graphics g(dc); if (g.GetLastStatus()!=Gdiplus::Ok) return;
+    g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    g.TranslateTransform((Gdiplus::REAL)rc.left,(Gdiplus::REAL)rc.top);
+    g.ScaleTransform((rc.right-rc.left)/64.0f,(rc.bottom-rc.top)/64.0f);
+    Gdiplus::SolidBrush white(Gdiplus::Color(255,255,255,255));
+    Gdiplus::Pen ray(Gdiplus::Color(255,255,255,255),3.5f);
+    ray.SetStartCap(Gdiplus::LineCapRound); ray.SetEndCap(Gdiplus::LineCapRound);
+    g.FillEllipse(&white,16.0f,16.0f,32.0f,32.0f);
+    for (int i=0;i<12;++i) {
+        const double angle=i*3.14159265358979323846/6.0;
+        float dx=(float)cos(angle), dy=(float)sin(angle);
+        g.DrawLine(&ray,32.0f+dx*21.0f,32.0f+dy*21.0f,32.0f+dx*27.5f,32.0f+dy*27.5f);
+    }
+}
+
+// Original GDI+ vector art, inspired by the flat Weather tile, not Microsoft assets.
+static void DrawWeatherPicture(HDC dc, int code, const RECT& rc) {
+    if (!g_gdipToken || rc.right<=rc.left || rc.bottom<=rc.top) return;
+    Gdiplus::Graphics g(dc); if (g.GetLastStatus()!=Gdiplus::Ok) return;
+    g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    g.TranslateTransform((Gdiplus::REAL)rc.left,(Gdiplus::REAL)rc.top);
+    g.ScaleTransform((rc.right-rc.left)/48.0f,(rc.bottom-rc.top)/48.0f);
+    Gdiplus::Pen pen(Gdiplus::Color(255,255,255,255),2.0f);
+    Gdiplus::SolidBrush white(Gdiplus::Color(255,255,255,255));
+    const int k=WeatherKind(code);
+    if (k<=2) {
+        g.DrawEllipse(&pen,9.0f,4.0f,16.0f,16.0f);
+        g.DrawLine(&pen,17.0f,0.0f,17.0f,3.0f);
+        g.DrawLine(&pen,4.0f,4.0f,7.0f,7.0f);
+        g.DrawLine(&pen,27.0f,4.0f,30.0f,7.0f);
+        g.DrawLine(&pen,1.0f,12.0f,6.0f,12.0f);
+        g.DrawLine(&pen,28.0f,12.0f,33.0f,12.0f);
+    }
+    if (k>=2 && k<=15) {
+        g.FillEllipse(&white,5.0f,18.0f,16.0f,13.0f);
+        g.FillEllipse(&white,13.0f,12.0f,20.0f,20.0f);
+        g.FillEllipse(&white,27.0f,19.0f,16.0f,12.0f);
+        g.FillRectangle(&white,12.0f,24.0f,25.0f,7.0f);
+    }
+    if ((k>=6 && k<=9) || k==12)
+        for (int i=0;i<3;++i) g.DrawLine(&pen,12.0f+i*10,35.0f,9.0f+i*10,43.0f);
+    if (k==10 || k==11 || k==13)
+        for (int i=0;i<3;++i) { float x=10.0f+i*12;
+            g.DrawLine(&pen,x,34.0f,x,44.0f); g.DrawLine(&pen,x-4,39.0f,x+4,39.0f);
+            g.DrawLine(&pen,x-3,36.0f,x+3,42.0f); g.DrawLine(&pen,x+3,36.0f,x-3,42.0f); }
+    if (k==14 || k==15) { Gdiplus::PointF bolt[]={{25,30},{18,39},{24,39},{20,47},{33,35},{26,35}}; g.FillPolygon(&white,bolt,6); }
+    if (k==4 || k==5) { g.DrawLine(&pen,6.0f,36.0f,38.0f,36.0f); g.DrawLine(&pen,11.0f,42.0f,42.0f,42.0f); }
+    if (k==16) { g.DrawEllipse(&pen,15.0f,10.0f,18.0f,18.0f); g.DrawLine(&pen,24.0f,28.0f,24.0f,35.0f); }
+}
+
+static bool IsCalendarLiveTile(const Tile& t) {
+    if (!InterlockedCompareExchange(&g_calendarSlide, 0, 0) || !t.alive || t.customTile ||
+        t.cw == TS_SMALL || !t.target) return false;
+    const wchar_t* prefix = L"shell:AppsFolder\\";
+    const wchar_t* id = t.target;
+    if (!_wcsnicmp(id, prefix, wcslen(prefix))) id += wcslen(prefix);
+    return !_wcsicmp(id, L"microsoft.windowscommunicationsapps_8wekyb3d8bbwe!microsoft.windowslive.calendar") ||
+           !_wcsicmp(id, L"windhawk:calendar-tile-v1");
+}
+static float CalendarSlide(int i, bool* oldBack) {
+    DWORD elapsed = NowMs() - g_openTick;
+    DWORD cycle = elapsed / 4000, inCycle = elapsed % 4000;
+    *oldBack = cycle > 0 && (cycle & 1) == 0;
+    if (!cycle) { *oldBack = false; return 0.0f; }
+    float p = std::min(1.0f, inCycle / 400.0f);
+    return p * p * (3.0f - 2.0f * p);
+}
+static bool EnsureCalendarFace(int i, int w, int h) {
+    SYSTEMTIME st; GetLocalTime(&st);
+    int date = st.wYear * 10000 + st.wMonth * 100 + st.wDay;
+    CalendarSurface& c = g_calendarFace[i];
+    if (c.dc && c.w == w && c.h == h && c.date == date) return true;
+    FreeCalendarFace(i);
+    if (w <= 0 || h <= 0 || w > 4096 || h > 4096) return false;
+    HDC screen = GetDC(NULL);
+    if (!screen) return false;
+    c.dc = CreateCompatibleDC(screen);
+    c.bmp = c.dc ? MakeDib(screen, w, h, &c.bits) : NULL;
+    ReleaseDC(NULL, screen);
+    if (!c.dc || !c.bmp || !c.bits) { FreeCalendarFace(i); return false; }
+    c.old = SelectObject(c.dc, c.bmp);
+    if (!c.old || c.old == HGDI_ERROR) { c.old = NULL; FreeCalendarFace(i); return false; }
+    c.w = w; c.h = h; c.date = date;
+    const Tile& t = g_tiles[i];
+    COLORREF color = IsLocalInfoTile(t.target) ? RGB(0,114,198) : (t.hasAppC ? t.appC : t.c1);
+    HBRUSH brush = CreateSolidBrush(color);
+    RECT full = {0,0,w,h};
+    if (!brush) { FreeCalendarFace(i); return false; }
+    FillRect(c.dc, &full, brush); DeleteObject(brush);
+    SetBkMode(c.dc, TRANSPARENT); SetTextColor(c.dc, RGB(255,255,255));
+    wchar_t day[16] = {}, weekday[64] = {}, month[64] = {};
+    GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, NULL, L"d", day, ARRAYSIZE(day), NULL);
+    GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, NULL, L"dddd", weekday, ARRAYSIZE(weekday), NULL);
+    GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, NULL, L"MMMM yyyy", month, ARRAYSIZE(month), NULL);
+    HFONT dayFont = CreateFontW(-ScI(34),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI Light");
+    HGDIOBJ previous = SelectObject(c.dc, dayFont ? dayFont : g_fTitle);
+    RECT dr = {ScI(8),ScI(6),w-ScI(8),ScI(46)};
+    DrawTextW(c.dc, day, -1, &dr, DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
+    SelectObject(c.dc, g_fLabel);
+    RECT wr = {ScI(8),ScI(46),w-ScI(8),ScI(66)};
+    DrawTextW(c.dc, weekday, -1, &wr, DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
+    RECT mr = {ScI(8),h-ScI(25),w-ScI(8),h-ScI(4)};
+    DrawTextW(c.dc, month, -1, &mr, DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
+    SelectObject(c.dc, previous); if (dayFont) DeleteObject(dayFont);
+    GdiFlush();
+    return true;
+}
+
+// The medium Weather tile alternates between the real forecast and a logo face.
+static bool IsWeatherLiveTile(const Tile& t) {
+    double temperature = 0; int code = 0;
+    return t.cw == TS_MEDIUM && IsWeatherTile(t) && g_weather.Current(temperature, code);
+}
+static bool EnsureWeatherFace(int i, int w, int h) {
+    CalendarSurface& c = g_calendarFace[i];
+    if (c.dc && c.w == w && c.h == h && c.date == -1) return true;
+    FreeCalendarFace(i);
+    if (w <= 0 || h <= 0 || w > 4096 || h > 4096) return false;
+    HDC screen = GetDC(NULL);
+    if (!screen) return false;
+    c.dc = CreateCompatibleDC(screen);
+    c.bmp = c.dc ? MakeDib(screen, w, h, &c.bits) : NULL;
+    ReleaseDC(NULL, screen);
+    if (!c.dc || !c.bmp || !c.bits) { FreeCalendarFace(i); return false; }
+    c.old = SelectObject(c.dc, c.bmp);
+    if (!c.old || c.old == HGDI_ERROR) { c.old = NULL; FreeCalendarFace(i); return false; }
+    c.w = w; c.h = h; c.date = -1;
+    const Tile& tile = g_tiles[i];
+    COLORREF color = tile.hasAppC ? tile.appC : tile.c1;
+    HBRUSH brush = CreateSolidBrush(color);
+    if (!brush) { FreeCalendarFace(i); return false; }
+    RECT area = {0, 0, w, h}; FillRect(c.dc, &area, brush); DeleteObject(brush);
+    int side = std::max(1, std::min(ScI(64), std::min(w-ScI(12), h-ScI(30))));
+    int x = (w-side)/2, y = (h-side)/2-ScI(7);
+    if (!DrawImportedMetroIcon(c.dc, tile.target, x, y, side)) {
+        RECT icon = {x, y, x+side, y+side}; DrawWeatherPicture(c.dc, 0, icon);
+    }
+    DrawModernTileCaption(c.dc, tile.label, w, h);
+    GdiFlush();
+    return true;
 }
 
 static void DrawTileHover(HDC dc, int w, int h) {
@@ -3468,10 +5266,16 @@ static void MetroGlyph(Gdiplus::Graphics& g, int kind, float x, float y, float s
         break;
     }
     case MG_MAIL: {
-        g.FillRectangle(&br, 8.0f * u, 22.0f * u, 84.0f * u, 56.0f * u);
-        GP::SolidBrush cut(clear);
-        GP::PointF tri[] = { GP::PointF(14.0f * u, 30.0f * u), GP::PointF(50.0f * u, 56.0f * u), GP::PointF(86.0f * u, 30.0f * u) };
-        g.FillPolygon(&cut, tri, 3);
+        // The gap is left unpainted so it follows the tile colour.
+        GP::PointF flap[] = {{18.0f*u,26.0f*u},{82.0f*u,26.0f*u},
+                             {82.0f*u,30.0f*u},{50.0f*u,53.5f*u},
+                             {18.0f*u,30.0f*u}};
+        GP::PointF body[] = {{18.0f*u,35.0f*u},{46.7f*u,56.2f*u},
+                             {50.0f*u,57.4f*u},{53.3f*u,56.2f*u},
+                             {82.0f*u,35.0f*u},{82.0f*u,74.0f*u},
+                             {18.0f*u,74.0f*u}};
+        g.FillPolygon(&br, flap, 5);
+        g.FillPolygon(&br, body, 7);
         break;
     }
     case MG_CALENDAR:
@@ -3632,6 +5436,21 @@ static void DrawSimulatedTile(HDC dc, Tile& t, int w, int h, bool hover) {
     const bool small = (t.cw == TS_SMALL) || h < ScI(100);
     const int bs = small ? ScI(38) : (t.cw == TS_LARGE ? ScI(96) : ScI(64));
     auto drawIcon = [&](int x, int y) {
+        const unsigned char* data = nullptr;
+        size_t bytes = 0;
+        if (!t.customTile) {
+            switch (t.mg) {
+            case MG_MAIL: data = kIconMail; bytes = sizeof(kIconMail); break;
+            case MG_CALENDAR: data = kIconCalendar; bytes = sizeof(kIconCalendar); break;
+            case MG_WEATHER: data = kIconWeather; bytes = sizeof(kIconWeather); break;
+            case MG_CALC: data = kIconCalculator; bytes = sizeof(kIconCalculator); break;
+            default: break;
+            }
+        }
+        if (data) {
+            Gdiplus::Graphics g(dc);
+            if (DrawEmbeddedTileIcon(g, data, bytes, (float)x, (float)y, (float)bs)) return;
+        }
         if (t.pinBmp) {
             HDC src = CreateCompatibleDC(dc);
             if (src) {
@@ -3728,7 +5547,12 @@ static Gdiplus::Bitmap* IconToGpBitmap(HICON ico) {
 // name in the bottom left corner. Drawn with GDI+ so the icon keeps its transparency, then the
 // caption goes on with the same font the other tiles use.
 static void DrawProgramShortcutTile(HDC tdc, const Tile& t, int w, int h, bool hover) {
-    FillDesktopProgramTile(tdc, w, h);
+    if (InterlockedCompareExchange(&g_appTileColors, 0, 0) && t.hasAppC && t.mg < 0) {
+        HBRUSH brush = CreateSolidBrush(t.appC);
+        RECT rect = {0, 0, w, h};
+        if (brush) { FillRect(tdc, &rect, brush); DeleteObject(brush); }
+        else FillDesktopProgramTile(tdc, w, h);
+    } else FillDesktopProgramTile(tdc, w, h);
     HICON icon = t.icon;
     if (icon) {
         // Measured on the Windows 8.1 tiles of the desktop programs: the icon takes about 36% of
@@ -3789,6 +5613,49 @@ static void BuildOneTile(int i, HDC screenDC) {
             }
             ReleaseSRWLockShared(&g_artLock);
         }
+        if (t.customTile) {
+            HBRUSH br = CreateSolidBrush(t.customColor);
+            RECT r = {0, 0, w, h};
+            if (br) { FillRect(tdc, &r, br); DeleteObject(br); }
+            auto drawLocal = [&](const std::wstring& path, bool full) -> bool {
+                if (path.empty() || PathIsRelativeW(path.c_str()) || PathIsUNCW(path.c_str())) return false;
+                WIN32_FILE_ATTRIBUTE_DATA attr = {};
+                if (!GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &attr) ||
+                    (attr.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) ||
+                    attr.nFileSizeHigh || attr.nFileSizeLow > 8 * 1024 * 1024) return false;
+                Gdiplus::Image img(path.c_str(), FALSE);
+                if (img.GetLastStatus() != Gdiplus::Ok || !img.GetWidth() || !img.GetHeight() ||
+                    img.GetWidth() > 8192 || img.GetHeight() > 8192) return false;
+                Gdiplus::Graphics g(tdc);
+                g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+                int dw = full ? w : std::max(1, (int)(std::min(w, h) * .44f));
+                int dh = full ? h : dw;
+                return g.DrawImage(&img, (w-dw)/2, (h-dh)/2, dw, dh) == Gdiplus::Ok;
+            };
+            bool artDrawn = t.cw >= 0 && t.cw < 4 && drawLocal(t.customImage[t.cw], true);
+            bool iconDrawn = false;
+            if (!artDrawn && !t.customIcon.empty() && !PathIsRelativeW(t.customIcon.c_str()) &&
+                !PathIsUNCW(t.customIcon.c_str())) {
+                WIN32_FILE_ATTRIBUTE_DATA attr = {};
+                if (GetFileAttributesExW(t.customIcon.c_str(), GetFileExInfoStandard, &attr) &&
+                    !(attr.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) &&
+                    !attr.nFileSizeHigh && attr.nFileSizeLow <= 8 * 1024 * 1024) {
+                    int side = std::max(1, (int)(std::min(w, h) * .44f));
+                    HICON ico = (HICON)LoadImageW(NULL, t.customIcon.c_str(), IMAGE_ICON, side, side, LR_LOADFROMFILE);
+                    if (ico) { iconDrawn = DrawIconEx(tdc, (w-side)/2, (h-side)/2, ico, side, side, 0, NULL, DI_NORMAL) != FALSE; DestroyIcon(ico); }
+                }
+                if (!iconDrawn) iconDrawn = drawLocal(t.customIcon, false);
+            }
+            if (!artDrawn && !iconDrawn) {
+                if (t.icon) {
+                    int side = std::max(1, (int)(std::min(w, h) * .44f));
+                    DrawIconEx(tdc, (w-side)/2, (h-side)/2, t.icon, side, side, 0, NULL, DI_NORMAL);
+                }
+            }
+            if (t.cw != TS_SMALL) DrawModernTileCaption(tdc, t.customLabel.c_str(), w, h);
+            if (hover) DrawTileHover(tdc, w, h);
+            continue;
+        }
         // A desktop program: the Windows 8.1 shortcut tile, and nothing else to paint.
         if (t.mpShortcut) {
             DrawProgramShortcutTile(tdc, t, w, h, variant != 0);
@@ -3801,7 +5668,16 @@ static void BuildOneTile(int i, HDC screenDC) {
         const bool shaded = TileGradientPair(base, &topColor, &bottomColor);
         // A tile of a desktop program keeps the Windows 8.1 blue: its light gradient is drawn
         // across the tile, not shaded top to bottom like the other tiles.
-        const bool desktopTheme = t.mg < 0 && t.style != PINNED_APP &&
+        const bool sampledDesktop = t.mg < 0 && t.style != PINNED_APP &&
+                                    t.style != DESKTOP_REFERENCE && t.hasAppC &&
+                                    InterlockedCompareExchange(&g_appTileColors, 0, 0);
+        if (IsLocalInfoTile(t.target)) {
+            c1 = c2 = base = !_wcsicmp(t.target,L"windhawk:weather-tile-v1") ? RGB(0,137,179) :
+                   !_wcsicmp(t.target,L"windhawk:calendar-tile-v1") ? RGB(0,114,198) : RGB(70,80,145);
+            topColor = bottomColor = base;
+        }
+        if (sampledDesktop) c1 = c2 = base;
+        const bool desktopTheme = !IsLocalInfoTile(t.target) && !sampledDesktop && t.mg < 0 && t.style != PINNED_APP &&
                                   t.c1 == kDesktopTileLeft && t.c2 == kDesktopTileRight;
         if (shaded && t.style == DESKTOP_REFERENCE) {
             // The desktop tile is a live wallpaper preview: keep its own dark-to-light shading.
@@ -3833,6 +5709,68 @@ static void BuildOneTile(int i, HDC screenDC) {
         }
 
         SetBkMode(tdc, TRANSPARENT);
+        if (IsPhotoTile(t) && InterlockedCompareExchange(&g_photoEnabled,0,0) && g_open) {
+            RECT photoRect = {0,0,w,h};
+            if (g_photoSlideshow.Draw(tdc,photoRect,true,t.hasAppC ? t.appC : t.c1)) {
+                if (t.cw != TS_SMALL) DrawModernTileCaption(tdc,t.label,w,h);
+                if (hover) DrawTileHover(tdc,w,h);
+                continue;
+            }
+        }
+        double weatherTemperature = 0;
+        int weatherCode = 0;
+        if (IsWeatherTile(t) && g_weather.Current(weatherTemperature, weatherCode)) {
+            const int pad = ScI(8);
+            wchar_t temperature[32] = {};
+            swprintf_s(temperature, ARRAYSIZE(temperature), L"%.0f°", weatherTemperature);
+            SetBkMode(tdc, TRANSPARENT);
+            SetTextColor(tdc, RGB(255,255,255));
+            if (t.cw == TS_SMALL) {
+                SelectObject(tdc, g_fLabel);
+                RECT temp = {pad, pad, w-pad, h-pad};
+                DrawTextW(tdc, temperature, -1, &temp, DT_LEFT|DT_TOP|DT_SINGLELINE|DT_END_ELLIPSIS);
+            } else {
+                const bool wide = t.cw == TS_WIDE;
+                const int side = std::min(ScI(wide ? 64 : 48), std::max(1, std::min(w/2-pad*2, h-ScI(42))));
+                RECT icon = wide ? RECT{pad,pad,pad+side,pad+side} : RECT{w-pad-side,pad,w-pad,pad+side};
+                DrawWeatherPicture(tdc, weatherCode, icon);
+                RECT text = wide ? RECT{icon.right+pad,pad,w-pad,h-ScI(27)} : RECT{pad,pad,icon.left-2,h-ScI(27)};
+                HFONT font = CreateFontW(-ScI(30),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Segoe UI Light");
+                HGDIOBJ oldFont = SelectObject(tdc, font ? font : g_fLabel);
+                DrawTextW(tdc,temperature,-1,&text,DT_LEFT|DT_TOP|DT_SINGLELINE|DT_END_ELLIPSIS);
+                SelectObject(tdc, g_fLabelMedium ? g_fLabelMedium : g_fLabel);
+                text.top += ScI(wide ? 34 : 48);
+                if (!wide) text.right = w-pad;
+                const wchar_t* label = g_weather.Label();
+                if (label && *label && text.top < text.bottom) {
+                    DrawTextW(tdc,label,-1,&text,DT_LEFT|DT_TOP|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
+                    text.top += ScI(16);
+                }
+                if (text.top < text.bottom)
+                    DrawTextW(tdc,WeatherDescription(weatherCode),-1,&text,DT_LEFT|DT_TOP|DT_WORDBREAK|DT_END_ELLIPSIS);
+                SelectObject(tdc, oldFont);
+                if (font) DeleteObject(font);
+                DrawModernTileCaption(tdc,t.label,w,h);
+            }
+            if (hover) DrawTileHover(tdc,w,h);
+            continue;
+        }
+        if (!t.customTile && t.target && (t.style == PINNED_APP || IsLocalInfoTile(t.target))) {
+            const bool small = t.cw == TS_SMALL;
+            int size = ScI(small ? 32 : 48), x = (w-size)/2, y = (h-size)/2 - (small ? 0 : ScI(13));
+            if (DrawImportedMetroIcon(tdc, t.target, x, y, size)) {
+                if (IsLocalInfoTile(t.target) && !_wcsicmp(t.target,L"windhawk:clock-tile-v1") && !small) {
+                    wchar_t timeText[64] = {};
+                    GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, TIME_NOSECONDS, NULL, NULL, timeText, ARRAYSIZE(timeText));
+                    RECT clockRect = {ScI(8),ScI(8),w-ScI(8),ScI(40)};
+                    SetTextColor(tdc, RGB(255,255,255)); SelectObject(tdc, g_fLabel);
+                    DrawTextW(tdc, timeText, -1, &clockRect, DT_LEFT|DT_TOP|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
+                }
+                if (!small) DrawModernTileCaption(tdc, t.label, w, h);
+                if (hover) DrawTileHover(tdc, w, h);
+                continue;
+            }
+        }
         if (t.mg < 0 && t.style == PINNED_APP && aw > 0 && ah > 0 && art.size() == (size_t)aw * (size_t)ah * 4) {
                 HDC src = CreateCompatibleDC(tdc);
                 void* artBits = NULL;
@@ -4065,7 +6003,17 @@ static float LogonHeaderShift(bool account, float to) {
     return (account ? -shift : shift) * ((float)g_sw / 1920.0f);
 }
 
+static int g_resizeFadeTile = -1;
+static DWORD g_resizeFadeTick = 0;
+static float ResizeFadeOpacity(int i) {
+    if (i != g_resizeFadeTile) return 1.0f;
+    DWORD elapsed = NowMs() - g_resizeFadeTick;
+    if (elapsed >= 200) return 1.0f;
+    return 0.70f + 0.30f * ((float)elapsed / 200.0f);
+}
+
 static void DrawTile(int i, float a, float slide, float gs) {
+    a *= ResizeFadeOpacity(i);
     if (a <= 0.0f) return;
     const Tile& t = g_tiles[i];
     RECT r; TileRect(t, &r);
@@ -4092,7 +6040,16 @@ static void DrawTile(int i, float a, float slide, float gs) {
         }
     }
     BLENDFUNCTION bf = { AC_SRC_OVER, 0, (BYTE)(255.0f * Clamp01(a)), 0 };
-    AlphaBlend(g_bbDC, dx, dy, dw, dh, tdc, 0, 0, w, h, bf);
+    if ((IsCalendarLiveTile(t) && EnsureCalendarFace(i, w, h)) ||
+        (IsWeatherLiveTile(t) && EnsureWeatherFace(i, w, h))) {
+        bool oldBack; float p = CalendarSlide(i, &oldBack);
+        int cut = std::max(0, std::min(h, (int)(h * p)));
+        HDC oldFace = oldBack ? g_calendarFace[i].dc : tdc;
+        HDC nextFace = oldBack ? tdc : g_calendarFace[i].dc;
+        int dcut = dh * cut / h;
+        if (dh-dcut > 0) AlphaBlend(g_bbDC, dx, dy+dcut, dw, dh-dcut, oldFace, 0, 0, w, h-cut, bf);
+        if (dcut > 0) AlphaBlend(g_bbDC, dx, dy, dw, dcut, nextFace, 0, h-cut, w, cut, bf);
+    } else AlphaBlend(g_bbDC, dx, dy, dw, dh, tdc, 0, 0, w, h, bf);
 }
 
 static void DrawHeader(float a, HDC sdc, float userA = -1.0f) {
@@ -4158,6 +6115,7 @@ static void DrawHeader(float a, HDC sdc, float userA = -1.0f) {
 }
 
 static void ReleaseGpuTarget() {
+    for (int i = 0; i < MAX_TILES; ++i) if (g_calendarFace[i].gpu) { g_calendarFace[i].gpu->Release(); g_calendarFace[i].gpu = NULL; }
     for (int i = 0; i < g_tileCount; ++i) for (int v = 0; v < 2; ++v) {
         if (g_tileGpu[i][v]) { g_tileGpu[i][v]->Release(); g_tileGpu[i][v] = NULL; }
     }
@@ -4338,8 +6296,10 @@ static bool InitGpu() {
         D2D1_RENDER_TARGET_TYPE_HARDWARE,
         D2D1::PixelFormat(DXGI_FORMAT_UNKNOWN, D2D1_ALPHA_MODE_UNKNOWN),
         96.0f, 96.0f);
+    RECT client = {};
+    if (!GetClientRect(g_wnd, &client) || client.right <= 0 || client.bottom <= 0) return false;
     D2D1_HWND_RENDER_TARGET_PROPERTIES hp = D2D1::HwndRenderTargetProperties(
-        g_wnd, D2D1::SizeU((UINT32)g_sw, (UINT32)g_sh), D2D1_PRESENT_OPTIONS_NONE);
+        g_wnd, D2D1::SizeU((UINT32)client.right, (UINT32)client.bottom), D2D1_PRESENT_OPTIONS_NONE);
     HRESULT hr = g_d2dFactory->CreateHwndRenderTarget(p, hp, &g_rt);
     if (FAILED(hr)) { ReleaseGpuTarget(); return false; }
     g_rt->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_CLEARTYPE);
@@ -4444,6 +6404,7 @@ static void DrawHeaderGpu(float a, float userA = -1.0f) {
 }
 
 static void DrawTileGpu(int i, float a, float slide, float gs) {
+    a *= ResizeFadeOpacity(i);
     if (!g_tiles[i].alive) return;
     const Tile& t = g_tiles[i];
     RECT r; TileRect(t, &r);
@@ -4465,9 +6426,27 @@ static void DrawTileGpu(int i, float a, float slide, float gs) {
     D2D1_RECT_F dest = D2D1::RectF(ncx - dw * 0.5f, ncy - dh * 0.5f, ncx + dw * 0.5f, ncy + dh * 0.5f);
     const bool pixelExact = dw == w && dh == h &&
                             dest.left == (float)(int)dest.left && dest.top == (float)(int)dest.top;
-    if (bitmap) g_rt->DrawBitmap(bitmap, dest, Clamp01(a),
-                                 pixelExact ? D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR
-                                            : D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+    D2D1_BITMAP_INTERPOLATION_MODE interp = pixelExact ? D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR : D2D1_BITMAP_INTERPOLATION_MODE_LINEAR;
+    if (bitmap && ((IsCalendarLiveTile(t) && EnsureCalendarFace(i, (int)w, (int)h)) ||
+                   (IsWeatherLiveTile(t) && EnsureWeatherFace(i, (int)w, (int)h)))) {
+        CalendarSurface& c = g_calendarFace[i];
+        if (!c.gpu) { D2D1_BITMAP_PROPERTIES bp = GpuBitmapProperties(); g_rt->CreateBitmap(D2D1::SizeU((UINT32)w,(UINT32)h), c.bits, (UINT32)w*4, &bp, &c.gpu); }
+        if (c.gpu) {
+            bool oldBack; float p = CalendarSlide(i, &oldBack);
+            ID2D1Bitmap* oldFace = oldBack ? c.gpu : bitmap;
+            ID2D1Bitmap* nextFace = oldBack ? bitmap : c.gpu;
+            if (p < 1.0f) {
+                D2D1_RECT_F d = D2D1::RectF(dest.left, dest.top + dh * p, dest.right, dest.bottom);
+                D2D1_RECT_F src = D2D1::RectF(0, 0, w, h * (1 - p));
+                g_rt->DrawBitmap(oldFace, d, Clamp01(a), interp, src);
+            }
+            if (p > 0.0f) {
+                D2D1_RECT_F d = D2D1::RectF(dest.left, dest.top, dest.right, dest.top + dh * p);
+                D2D1_RECT_F src = D2D1::RectF(0, h * (1 - p), w, h);
+                g_rt->DrawBitmap(nextFace, d, Clamp01(a), interp, src);
+            }
+        } else g_rt->DrawBitmap(bitmap,dest,Clamp01(a),interp);
+    } else if (bitmap) g_rt->DrawBitmap(bitmap,dest,Clamp01(a),interp);
     if (g_scratch && g_barVisible && g_barMode == 1 && g_barIdx == i) {
         SetBr(RGB(255, 140, 32), 1.0f);
         g_rt->DrawRectangle(D2D1::RectF(dest.left + 1.5f, dest.top + 1.5f, dest.right - 1.5f, dest.bottom - 1.5f),
@@ -4936,6 +6915,29 @@ static void LoadIconFor(size_t i) {
     const AppEntry& a = g_apps[i];
     if (a.desktop) return;
     std::wstring path = AppTarget(a);
+    if (a.charmCat == CC_APP && !a.exe && g_gdipToken) {
+        const int side = 64;
+        HDC screen = GetDC(NULL); HDC dc = screen ? CreateCompatibleDC(screen) : NULL;
+        void* bits = NULL; HBITMAP bmp = dc ? MakeDib(screen,side,side,&bits) : NULL;
+        if (screen) ReleaseDC(NULL,screen);
+        if (dc && bmp && bits) {
+            HGDIOBJ old = SelectObject(dc,bmp);
+            if (old && old != HGDI_ERROR) {
+                RECT r = {0,0,side,side}; HBRUSH bg = CreateSolidBrush(RGB(0,114,198));
+                if (bg) { FillRect(dc,&r,bg); DeleteObject(bg); }
+                bool drawn = bg && DrawImportedMetroIcon(dc,path.c_str(),8,8,48);
+                GdiFlush();
+                if (drawn) {
+                    BYTE* copy = new (std::nothrow) BYTE[side*side*4];
+                    if (copy) { memcpy(copy,bits,side*side*4); for (int j=3;j<side*side*4;j+=4) copy[j]=255;
+                        g_icons[i].px=copy; g_icons[i].w=side; g_icons[i].h=side; InterlockedExchange(&g_icons[i].ready,1); }
+                }
+                SelectObject(dc,old);
+            }
+        }
+        if (bmp) DeleteObject(bmp); if (dc) DeleteDC(dc);
+        if (InterlockedCompareExchange(&g_icons[i].ready,0,0)) return;
+    }
     if (a.charmCat == CC_FILE) {
         SHFILEINFOW info = {};
         const DWORD attrs = a.dir ? FILE_ATTRIBUTE_DIRECTORY : FILE_ATTRIBUTE_NORMAL;
@@ -5943,6 +7945,19 @@ static DWORD WINAPI AppsThread(LPVOID) {
 
     if (g_settingsBuilt) AppendSettingsTo(list);   // refreshes reuse the settings built at start-up
     AddCharmSystemEntries(list);
+    {
+        const bool it = PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_ITALIAN;
+        struct Local { const wchar_t* id; const wchar_t* en; const wchar_t* italian; const wchar_t* words; };
+        const Local items[] = {
+            {L"windhawk:weather-tile-v1",L"Weather (tile)",L"Meteo (riquadro)",L"weather meteo"},
+            {L"windhawk:calendar-tile-v1",L"Calendar (tile)",L"Calendario (riquadro)",L"calendar calendario"},
+            {L"windhawk:clock-tile-v1",L"Clock (tile)",L"Orologio (riquadro)",L"clock orologio alarms sveglie"}
+        };
+        for (const auto& item : items) {
+            AddApp(list, it ? item.italian : item.en, item.id, false, false, CC_APP, true, true);
+            list.back().keywords = item.words;
+        }
+    }
     Wh_Log(L"Search: %u catalog entries including charm settings", (unsigned)list.size());
 
     g_catalogBuiltTick = GetTickCount64();
@@ -6307,7 +8322,8 @@ static void LaunchEntry(const AppEntry& a) {
     if (a.launchKind != 0) { CloseStart(); LaunchSettingEntry(a); return; }
     std::wstring target = AppTarget(a);
     CloseStart();
-    ShellExecuteW(NULL, L"open", target.c_str(), NULL, NULL, SW_SHOWNORMAL);
+    const wchar_t* url = LocalInfoUrl(target.c_str());
+    ShellExecuteW(NULL, L"open", url ? url : target.c_str(), NULL, NULL, SW_SHOWNORMAL);
 }
 static void LaunchResult(int i) {
     if (i < 0 || i >= (int)g_results.size()) return;
@@ -6603,10 +8619,37 @@ static void ReleaseTileSurface(int i) {
 }
 
 static void RebuildTile(int i) {
+    FreeCalendarFace(i);
     ReleaseTileSurface(i);
     HDC screen = GetDC(NULL);
     if (screen) { BuildOneTile(i, screen); ReleaseDC(NULL, screen); }
     GdiFlush();
+}
+
+static void RefreshPhotoSurfaces() {
+    if (!g_open || !InterlockedCompareExchange(&g_photoEnabled,0,0)) return;
+    for (int i=0; i<g_tileCount; ++i) {
+        Tile& t=g_tiles[i]; if (!IsPhotoTile(t)) continue;
+        RECT bounds; TileRect(t,&bounds); int w=bounds.right-bounds.left,h=bounds.bottom-bounds.top;
+        if (w<=0 || h<=0) continue;
+        for (int v=0;v<2;++v) {
+            HDC dc=g_tileDC[i][v]; if (!dc || !g_tileBits[i][v]) continue;
+            RECT r={0,0,w,h};
+            if (!g_photoSlideshow.Draw(dc,r,true,t.hasAppC ? t.appC : t.c1)) continue;
+            if (t.cw!=TS_SMALL) DrawModernTileCaption(dc,t.label,w,h);
+            if (v) DrawTileHover(dc,w,h);
+            GdiFlush();
+            if (g_tileGpu[i][v] && FAILED(g_tileGpu[i][v]->CopyFromMemory(NULL,g_tileBits[i][v],(UINT32)w*4))) {
+                g_tileGpu[i][v]->Release(); g_tileGpu[i][v]=NULL;
+            }
+        }
+    }
+}
+static void UpdatePhotoWorker() {
+    bool want = g_open && InterlockedCompareExchange(&g_photoEnabled,0,0);
+    bool found=false;
+    if (want) for (int i=0;i<g_tileCount;++i) if (IsPhotoTile(g_tiles[i])) {found=true;break;}
+    if (found) g_photoSlideshow.Start(g_wnd); else g_photoSlideshow.Stop();
 }
 
 static void ApplyPackageArtChanges() {
@@ -7320,6 +9363,8 @@ static void PinAppSized(const wchar_t* name, const std::wstring& target, int cw,
     Relayout(true);
     RebuildTile(idx);
     SaveLayout();
+    UpdatePhotoWorker();
+    UpdateWeatherWorker();
     RepaintNow();
 }
 static void PinApp(const wchar_t* name, const std::wstring& target) {
@@ -7496,6 +9541,8 @@ static void UnpinTile(int idx) {
         MetroRemovedAdd(key);
     }
     RemoveTileFromOrder(idx);
+    UpdatePhotoWorker();
+    UpdateWeatherWorker();
     Relayout(true);
     ClampScroll();
     SaveLayout();
@@ -7614,6 +9661,7 @@ static void SyncMetroTiles(bool create) {
                 if (t.icon) { DestroyIcon(t.icon); t.icon = NULL; }
                 if (t.pinBmp) { DeleteObject(t.pinBmp); t.pinBmp = NULL; }
                 LoadPinIcon(t);
+                UpdateTileAppColor(t);
                 coloursDirty = true;
                 RebuildTile(i);
                 changed = true;
@@ -7645,6 +9693,7 @@ static void SyncMetroTiles(bool create) {
                 if (t.icon) { DestroyIcon(t.icon); t.icon = NULL; }
                 if (t.pinBmp) { DeleteObject(t.pinBmp); t.pinBmp = NULL; }
                 LoadPinIcon(t);
+                UpdateTileAppColor(t);
                 RebuildTile(i);
                 changed = true;
             }
@@ -7705,6 +9754,7 @@ static void SyncMetroTiles(bool create) {
                 if (t.icon) { DestroyIcon(t.icon); t.icon = NULL; }
                 if (t.pinBmp) { DeleteObject(t.pinBmp); t.pinBmp = NULL; }
                 LoadPinIcon(t);
+                UpdateTileAppColor(t);
                 RebuildTile(i);
                 changed = true;
             }
@@ -7807,6 +9857,8 @@ static void ResizeTileTo(int idx, int size) {
     bool allowed = false;
     for (int i = 0; i < count; ++i) if (supported[i] == size) allowed = true;
     if (!allowed || g_tiles[idx].cw == size) return;
+    g_resizeFadeTile = idx;
+    g_resizeFadeTick = NowMs();
     g_tiles[idx].cw = size;
     RebuildTile(idx);
     Relayout(true);
@@ -8794,7 +10846,10 @@ static COLORREF SystemAccentColor() {
 }
 
 static HICON g_stockAppIcon = NULL;
-[[clang::no_destroy]] static std::optional<
+#ifdef __clang__
+[[clang::no_destroy]]
+#endif
+static std::optional<
     std::unordered_map<HICON, std::unique_ptr<Gdiplus::Bitmap>>>
     g_iconBitmapCache{std::in_place};
 
@@ -9692,26 +11747,26 @@ static void GlyphRingBrush(Gdiplus::Graphics& g, float cx, float cy, float R, fl
     const float rp = R - t * 0.5f;
     g.DrawEllipse(&ring, cx - rp, cy - rp, rp * 2.0f, rp * 2.0f);
 }
-// The arrow inside the ring: a shaft with a straight chevron head, both filled, as this mod has
-// always drawn it. Its proportions are percentages of the box, so it looks the same at every DPI.
-// The shape is filled with whatever brush the caller gives: a solid white for the normal glyph, a
-// gradient of the accent colour for the one laid over it while the pointer is on the arrow.
+// The arrow is derived from the reference silhouette and scales with the icon box.
 static void GlyphArrowBrush(Gdiplus::Graphics& g, float sz, bool down, Gdiplus::Brush& br) {
     float cx, cy, R, t;
     GlyphRingFrame(sz, &cx, &cy, &R, &t);
     GlyphRingBrush(g, cx, cy, R, t, br);
-    const float d = down ? 1.0f : -1.0f;
-    const float shaftW = sz * 0.10f, headW = sz * 0.333f;
-    const float yT = cy - d * sz * 0.22f;   // top of the shaft
-    const float yB = cy - d * sz * 0.04f;   // where the head starts
-    const float yS = cy + d * sz * 0.07f;
-    const float yP = cy + d * sz * 0.22f;   // the tip
-    Gdiplus::PointF pts[9] = {
-        { cx - shaftW * 0.5f, yT }, { cx + shaftW * 0.5f, yT },
-        { cx + shaftW * 0.5f, yB }, { cx + headW * 0.5f, yB },
-        { cx + headW * 0.5f, yS }, { cx, yP },
-        { cx - headW * 0.5f, yS }, { cx - headW * 0.5f, yB },
-        { cx - shaftW * 0.5f, yB } };
+    // Trace the supplied up-arrow silhouette; mirror it vertically for All Apps.
+    const float scale = sz * 0.0043f * 0.975f;
+    const float x0 = cx - 145.0f * scale;
+    // Shorten the shaft while preserving the reference arrowhead and ring.
+    const float y0 = cy - 137.5f * scale;
+    const Gdiplus::PointF reference[] = {
+        {145,75}, {198,128}, {198,160}, {157,120}, {157,200},
+        {132,200}, {132,120}, {92,160}, {92,128}
+    };
+    Gdiplus::PointF pts[9];
+    for (int i = 0; i < 9; ++i) {
+        pts[i].X = x0 + reference[i].X * scale;
+        float y = y0 + reference[i].Y * scale;
+        pts[i].Y = down ? sz - y : y;
+    }
     g.FillPolygon(&br, pts, 9);
 }
 static void GlyphArrow(Gdiplus::Graphics& g, float sz, bool down, const Gdiplus::Color& c) {
@@ -11120,7 +13175,7 @@ static void BuildMenuEntries(int kind, std::vector<UserMenuEntry>& out) {
     } else if (kind == 4) {
         if (!g_ctxAppValid) return;
         const AppEntry& a = g_ctxApp;
-        bool fileish = !a.parse.empty() && wcsstr(a.parse.c_str(), L"shell:") == NULL &&
+        bool fileish = !IsLocalInfoTile(a.parse.c_str()) && !a.parse.empty() && wcsstr(a.parse.c_str(), L"shell:") == NULL &&
                        wcsstr(a.parse.c_str(), L"ms-") == NULL;
         out.push_back({ T(STR_CTX_OPEN), CM_OPEN });
         if (a.charmCat == CC_APP && !AppTarget(a).empty())
@@ -11137,7 +13192,7 @@ static void BuildMenuEntries(int kind, std::vector<UserMenuEntry>& out) {
         const Tile& tile = g_tiles[g_ctxTile];
         SelectedItem item = CurrentSelection();
         out.push_back({ T(STR_CTX_UNPIN_START), TC_UNPIN });
-        if (tile.kind == 1) out.push_back({ T(STR_CTX_UNINSTALL), TC_UNINSTALL });
+        if (tile.kind == 1 && !IsLocalInfoTile(tile.target)) out.push_back({ T(STR_CTX_UNINSTALL), TC_UNINSTALL });
         // A simulated Metro tile can go back to this mod's normal tile, keeping its program.
         if (tile.mg >= 0) out.push_back({ T(STR_CTX_STANDARD_TILE), TC_STANDARD_TILE });
         out.push_back({ (item.classic || item.computer) ? T(STR_CTX_NEWWINDOW) : T(STR_CTX_OPEN), TC_OPEN });
@@ -11343,6 +13398,7 @@ static void ShowMenuFor(HWND owner, RECT anchor, int kind) {
             if (t.icon) { DestroyIcon(t.icon); t.icon = NULL; }
             if (t.pinBmp) { DeleteObject(t.pinBmp); t.pinBmp = NULL; }
             LoadPinIcon(t);
+            UpdateTileAppColor(t);
             RebuildTile(g_ctxTile);
             SaveLayout();
             RepaintNow();
@@ -11756,32 +13812,67 @@ static void CaptureDesktop() {
 
 // The height of the taskbar that sits at the bottom of the monitor the Start screen is on, in the
 // pixels of this window, or 0 when there is none to give the space back to (taskbar on another
-// edge, automatic hide, another shell). Only the windows of this process are looked at, as
-// everywhere else in this mod.
-static int TrayBarHeight() {
-    static const wchar_t* const kBars[] = { L"Shell_TrayWnd", L"Shell_SecondaryTrayWnd" };
-    const DWORD self = GetCurrentProcessId();
+// edge, automatic hide, another shell). Native windows are checked against the
+// shell process when available; a recreated secondary bar can have a different PID.
+static int TrayFindBar(const wchar_t* const* classes, int count, bool requireVisible, HWND* result) {
     const int bottom = g_monY + g_sh;
-    for (const wchar_t* cls : kBars) {
+    POINT pt = {g_monX + g_sw / 2, g_monY + g_sh / 2};
+    HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+    for (int k = 0; k < count; ++k) {
         HWND bar = NULL;
-        for (int guard = 0; guard < 8 && (bar = FindWindowExW(NULL, bar, cls, NULL)) != NULL; ++guard) {
-            DWORD pid = 0;
-            GetWindowThreadProcessId(bar, &pid);
-            if (pid != self) continue;
-            RECT rc;
-            if (!GetWindowRect(bar, &rc)) continue;
-            if (rc.bottom != bottom) continue;                              // not at this bottom edge
-            if (rc.right <= g_monX || rc.left >= g_monX + g_sw) continue;   // not on this monitor
-            const int h = rc.bottom - rc.top;
-            if (h >= 8 && h <= g_sh / 2) return h;
+        for (int guard = 0; guard < 32 && (bar = FindWindowExW(NULL, bar, classes[k], NULL)); ++guard) {
+            RECT rc = {};
+            if (requireVisible && !IsWindowVisible(bar)) continue;
+            if (!_wcsnicmp(classes[k], L"Shell_", 6)) {
+                DWORD pid = 0; GetWindowThreadProcessId(bar, &pid);
+                HWND shell = GetShellWindow(); DWORD shellPid = 0;
+                if (shell) GetWindowThreadProcessId(shell, &shellPid);
+                // Secondary tray may live in the same shell; if shell is absent,
+                // retain the previous conservative class/monitor check.
+                if (shellPid && pid != shellPid) continue;
+            }
+            if (!GetWindowRect(bar, &rc) || MonitorFromWindow(bar, MONITOR_DEFAULTTONEAREST) != monitor) continue;
+            if (rc.bottom != bottom || rc.right <= g_monX || rc.left >= g_monX + g_sw) continue;
+            int h = rc.bottom - rc.top;
+            if (h < ScI(8) || h > g_sh / 2) continue;
+            if (result) *result = bar;
+            return h;
         }
     }
     return 0;
+}
+static int TrayBarHeight() {
+    static const wchar_t* const recreated[] = { L"WH_Taskbar81_GDILab", L"WH_Taskbar81Secondary" };
+    static const wchar_t* const native[] = { L"Shell_TrayWnd", L"Shell_SecondaryTrayWnd" };
+    g_trayCompanion = NULL;
+    int height = TrayFindBar(recreated, ARRAYSIZE(recreated), false, &g_trayCompanion);
+    if (height) return height; // even if hidden in fullscreen, never choose the native bar instead
+    return TrayFindBar(native, ARRAYSIZE(native), true, NULL);
+}
+static bool NativeBarAtBottom() {
+    static const wchar_t* const native[] = { L"Shell_TrayWnd", L"Shell_SecondaryTrayWnd" };
+    return TrayFindBar(native, ARRAYSIZE(native), true, NULL) > 0;
 }
 // Clip the bottom strip of the window away, or give it back when the strip has closed again.
 static void TrayApplyRegion() {
     if (!g_wnd) return;
     int h = (int)g_trayRevealH;
+    if (g_trayCompanionMode) {
+        // SetWindowRgn does not change GetWindowRect; the recreated taskbar would
+        // continue to see a fullscreen window. Resize only our own Start window.
+        if (g_trayRegionSet) { SetWindowRgn(g_wnd, NULL, TRUE); g_trayRegionSet = false; }
+        if (!SetWindowPos(g_wnd, NULL, 0, 0, g_sw, std::max(1, g_sh - h),
+                          SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE)) {
+            Wh_Log(L"[START-TRAY] resize failed: %lu", GetLastError());
+            g_trayReveal = false; g_trayDisabled = true;
+            g_trayRevealH = 0;
+            SetWindowPos(g_wnd, NULL, 0, 0, g_sw, g_sh,
+                         SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+            g_trayCompanionMode = g_trayCompanionWaiting = false;
+            g_trayCompanion = NULL;
+        }
+        return;
+    }
     if (h <= 0) {
         if (g_trayRegionSet) { SetWindowRgn(g_wnd, NULL, TRUE); g_trayRegionSet = false; }
         return;
@@ -11807,9 +13898,44 @@ static void TrayApplyRegion() {
 // Tick, which is what keeps the frames coming for as long as the strip moves.
 static bool TrayRevealTick(float dt) {
     if (!g_wnd) return false;
-    const int want = g_trayReveal ? (int)g_trayBarH : 0;
+    int want = g_trayReveal ? (int)g_trayBarH : 0;
     int h = (int)g_trayRevealH;
-    if (h == want) return false;
+    if (g_trayCompanionMode && g_trayReveal) {
+        ULONGLONG now = GetTickCount64();
+        bool companionVisible = g_trayCompanion && IsWindow(g_trayCompanion) && IsWindowVisible(g_trayCompanion);
+        bool nativeVisible = NativeBarAtBottom();
+        if (!g_trayCompanionWaiting && (!companionVisible || nativeVisible)) {
+            g_trayCompanionWaiting = true;
+            g_trayWaitSince = now; g_trayReadySince = 0;
+            Wh_Log(L"[START-TRAY] companion no longer ready; retracting");
+        }
+        if (g_trayCompanionWaiting) {
+            if (companionVisible && !nativeVisible) {
+                if (!g_trayReadySince) g_trayReadySince = now;
+                if (now - g_trayReadySince >= 250) {
+                    g_trayCompanionWaiting = false;
+                    Wh_Log(L"[START-TRAY] companion ready");
+                }
+            } else g_trayReadySince = 0;
+            if (g_trayCompanionWaiting && now - g_trayWaitSince >= 2000) {
+                Wh_Log(L"[START-TRAY] companion unavailable; reveal cancelled");
+                g_trayReveal = false; g_trayArmed = false;
+                g_trayCompanionWaiting = false; want = 0;
+            }
+            if (g_trayCompanionWaiting) {
+                // Only the probe pixel is exposed, including when the native
+                // taskbar reappears after the animation has already begun.
+                if (h != 1) { g_trayRevealH = 1; TrayApplyRegion(); return true; }
+                return true;
+            }
+        }
+    }
+    if (h == want) {
+        if (!h && !g_trayReveal && g_trayCompanionMode) {
+            g_trayCompanionMode = false; g_trayCompanion = NULL;
+        }
+        return false;
+    }
     int step = (int)((float)(want > h ? want : h) * dt * 1000.0f / kTrayMs) + 1;
     if (h < want) { h += step; if (h > want) h = want; }
     else { h -= step; if (h < want) h = want; }
@@ -11822,10 +13948,13 @@ static void TrayRevealReset() {
     g_trayReveal = false;
     g_trayArmed = false;
     SetTrayMouseHook(false);
-    if (g_trayRevealH != 0) {
+    if (g_trayRevealH != 0 || g_trayCompanionMode) {
         g_trayRevealH = 0;
         TrayApplyRegion();
     }
+    g_trayCompanion = NULL;
+    g_trayCompanionMode = g_trayCompanionWaiting = false;
+    g_trayWaitSince = g_trayReadySince = 0;
 }
 // The strip must not open while something else owns the bottom of the screen or the pointer: the
 // scroll bar being dragged, a tile being dragged, the app bar, the search charm, a menu, the zoom
@@ -11860,6 +13989,10 @@ static void TrayEdgeHover(int mx, int my) {
     const int h = TrayBarHeight();
     if (h <= 0) return;               // nothing at the bottom of this monitor to give space to
     g_trayBarH = h;
+    g_trayCompanionMode = g_trayCompanion != NULL;
+    g_trayCompanionWaiting = g_trayCompanionMode;
+    g_trayWaitSince = GetTickCount64(); g_trayReadySince = 0;
+    Wh_Log(L"[START-TRAY] open companion=%d height=%d", g_trayCompanionMode ? 1 : 0, h);
     g_trayReveal = true;
     SetTrayMouseHook(true);
     // The pointer is about to be over the taskbar: nothing of the Start screen stays lit, and the
@@ -11967,6 +14100,7 @@ static void OpenStart(bool atLogon = false) {
     g_openTick = g_lastTick = NowMs();
     g_open = true;
     g_closing = false;
+    UpdatePhotoWorker();
     g_dirty = true;
     if (atLogon && g_allAppsAtSignIn.load()) {
         // allAppsAtSignIn: the automatic opening shows the list of all apps.
@@ -12000,6 +14134,9 @@ static void CloseStart(bool immediate) {
     bool instantDesktop = immediate && g_firstDesktopAfterLogon;
     if (instantDesktop) g_firstDesktopAfterLogon = false;
     g_open = false;
+    UpdatePhotoWorker();
+    g_photoAnimationTick = 0;
+    for (int i=0;i<g_tileCount;++i) if (IsPhotoTile(g_tiles[i])) RebuildTile(i);
     if (g_namingGroup >= 0) CommitNaming();
     g_customize = false;
     HideBar();
@@ -12039,7 +14176,8 @@ static void Launch(int i) {
         wchar_t full[MAX_PATH] = L"";
         if (FileInSystemDir(target, full, ARRAYSIZE(full)) && full[0]) exe = full;
     }
-    ShellExecuteW(NULL, L"open", exe.c_str(), NULL, NULL, SW_SHOWNORMAL);
+    const wchar_t* url = LocalInfoUrl(target);
+    ShellExecuteW(NULL, L"open", url ? url : exe.c_str(), NULL, NULL, SW_SHOWNORMAL);
 }
 
 static int HitTile(int mx, int my) {
@@ -12065,6 +14203,43 @@ static void Tick() {
     if (dt > 0.1f) dt = 0.1f;
     g_lastTick = now;
     bool changed = false;
+    if (g_resizeFadeTile >= 0) {
+        if ((DWORD)(now - g_resizeFadeTick) < 200 && g_open && !g_closing) changed = true;
+        else g_resizeFadeTile = -1;
+    }
+    if (g_open && !g_closing) {
+        static bool wasWeatherFresh = false;
+        double weatherTemperature = 0;
+        int weatherCode = 0;
+        bool fresh = g_weather.Current(weatherTemperature, weatherCode);
+        if (fresh != wasWeatherFresh) {
+            wasWeatherFresh = fresh;
+            for (int i = 0; i < g_tileCount; ++i) {
+                if (IsWeatherTile(g_tiles[i])) RebuildTile(i);
+            }
+            changed = true;
+        }
+    }
+    if (g_photoAnimationTick && g_open && !g_closing) {
+        RefreshPhotoSurfaces(); changed = true;
+        if ((DWORD)(now-g_photoAnimationTick) >= 450) g_photoAnimationTick = 0;
+    }
+    if (g_open && !g_closing) {
+        SYSTEMTIME time; GetLocalTime(&time);
+        int minute = time.wYear*600000 + time.wMonth*40000 + time.wDay*1440 + time.wHour*60 + time.wMinute;
+        static int lastMinute = -1;
+        if (minute != lastMinute) {
+            lastMinute = minute;
+            for (int i=0; i<g_tileCount; ++i) if (g_tiles[i].alive && g_tiles[i].target &&
+                !_wcsicmp(g_tiles[i].target,L"windhawk:clock-tile-v1")) { RebuildTile(i); changed = true; }
+        }
+    }
+    if (g_open && !g_closing) {
+        DWORD elapsed = now - g_openTick;
+        if (elapsed >= 4000 && elapsed % 4000 < 500)
+            for (int i = 0; i < g_tileCount; ++i)
+                if (IsCalendarLiveTile(g_tiles[i]) || IsWeatherLiveTile(g_tiles[i])) { changed = true; break; }
+    }
     ScrollArrowTick();
 
     if (g_leaveTick) {
@@ -12209,6 +14384,16 @@ static bool TypingCursorAt(int mx, int my) {
     return false;
 }
 
+// Experimental single-contact touch pan state, kept on the window thread.
+struct StartTouchPan {
+    bool active = false;
+    int axis = 0; // 0 undecided, 1 horizontal, 2 vertical
+    POINT start{}, last{};
+    int tile = -1;
+};
+static StartTouchPan g_touchPan;
+static volatile LONG g_experimentalTouch = 0;
+
 static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     return RunGuardedValue<LRESULT>(L"WndProc", 0, [&]() -> LRESULT {
     if (msg != WM_TIMER && msg != WM_PAINT && msg != WM_APP_FRAME &&
@@ -12225,6 +14410,22 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             if (g_bbDC) BitBlt(dc, 0, 0, g_sw, g_sh, g_bbDC, 0, 0, SRCCOPY);
         }
         EndPaint(h, &ps);
+        return 0;
+    }
+    case WM_SIZE: {
+        // Resize is in physical pixels, matching the current HWND client area.
+        // WM_SIZE also covers restoration, DPI/monitor moves and reveal failure.
+        if (g_rt && wp != SIZE_MINIMIZED) {
+            RECT client = {};
+            if (GetClientRect(h, &client) && client.right > 0 && client.bottom > 0) {
+                HRESULT hr = g_rt->Resize(D2D1::SizeU((UINT32)client.right, (UINT32)client.bottom));
+                if (FAILED(hr)) {
+                    Wh_Log(L"[START-TRAY] Direct2D resize failed: 0x%08X; using GDI", (unsigned)hr);
+                    ReleaseGpuTarget();
+                }
+            }
+        }
+        InvalidateRect(h, NULL, FALSE);
         return 0;
     }
     case WM_ERASEBKGND: return 1;
@@ -12278,6 +14479,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         // The option was turned on or off, or the count changed: create or remove the tiles, then
         // refresh the shading and the textures as for any other setting.
         SyncMetroTiles(true);
+        UpdateWeatherWorker();
         if (InterlockedExchange(&g_tileColorsDirty, 0)) UpdateTileAppColors();
         BuildBuffers();
         InitGpu();
@@ -12319,6 +14521,16 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             ApplyPackageArtChanges();
         }
         if (g_dirty && IsWindowVisible(h)) UpdateWindow(h);
+        return 0;
+    case WM_APP + 21:
+        for (int i = 0; i < g_tileCount; ++i) if (IsWeatherTile(g_tiles[i])) RebuildTile(i);
+        RepaintNow();
+        return 0;
+    case WM_APP + 20:
+        if (g_open && InterlockedCompareExchange(&g_photoEnabled,0,0)) {
+            g_photoAnimationTick = NowMs(); RefreshPhotoSurfaces();
+            g_dirty = true; InvalidateRect(h,NULL,FALSE); ResumeFrames();
+        }
         return 0;
     case WM_APP_LOGON_OPEN:
         if (InterlockedCompareExchange(&g_openAtLogon, 0, 0) != 0) {
@@ -12505,13 +14717,6 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         // An icon of the catalog is ready. The rows of the charm that were drawn without it are
         // drawn again, from scratch, so that every visible row shows its icon.
         if (g_charmOpen) { CharmInvalidatePanel(); CharmRender(g_charmCont); }
-        // Tile accent colours are the only thing that depends on icons; skip the
-        // rebuild entirely when appTileColors is off.
-        if (g_appTileColors) {
-            UpdateTileAppColors();
-            if (g_open && !g_closing)
-                PostMessageW(g_wnd, WM_APP_REBUILD_BG, 0, 0);
-        }
         if (g_open && (g_view == VIEW_SEARCH || g_charmOpen)) RepaintNow();
         return 0;
     case WM_APP_PACKAGE_ART:
@@ -13008,6 +15213,77 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             } else OnRightClick((short)LOWORD(lp), (short)HIWORD(lp));
         }
         return 0;
+    case WM_GESTURENOTIFY: {
+        if (!InterlockedCompareExchange(&g_experimentalTouch, 0, 0)) break;
+        // Ask Windows for one-finger horizontal and vertical pan. Other
+        // gestures continue through DefWindowProc and retain normal behavior.
+        GESTURECONFIG config{GID_PAN,
+            GC_PAN | GC_PAN_WITH_SINGLE_FINGER_VERTICALLY |
+                GC_PAN_WITH_SINGLE_FINGER_HORIZONTALLY,
+            GC_PAN_WITH_GUTTER | GC_PAN_WITH_INERTIA};
+        SetGestureConfig(h, 0, 1, &config, sizeof(config));
+        break;
+    }
+    case WM_GESTURE: {
+        if (!InterlockedCompareExchange(&g_experimentalTouch, 0, 0)) break;
+        GESTUREINFO gi{};
+        gi.cbSize = sizeof(gi);
+        if (!GetGestureInfo((HGESTUREINFO)lp, &gi)) break;
+        if (gi.dwID != GID_PAN || !g_open || g_closing || g_charmOpen ||
+            g_zoomOut || (g_view == VIEW_SEARCH && g_queryLen != 0) ||
+            g_dragging) break;
+        POINT pt{gi.ptsLocation.x, gi.ptsLocation.y};
+        ScreenToClient(h, &pt);
+        if (gi.dwFlags & GF_BEGIN) {
+            g_touchPan = {};
+            g_touchPan.active = true;
+            g_touchPan.start = g_touchPan.last = pt;
+            g_touchPan.tile = g_view == VIEW_START ? HitTile(pt.x, pt.y) : -1;
+            // Prevent the mouse compatibility path from launching a tile
+            // after Windows has recognized a pan.
+            g_pressed = -1;
+            if (GetCapture() == h) ReleaseCapture();
+        } else if (g_touchPan.active) {
+            int dx = pt.x - g_touchPan.start.x;
+            int dy = pt.y - g_touchPan.start.y;
+            int step = std::max(1, ScI(10));
+            if (!g_touchPan.axis && (abs(dx) >= step || abs(dy) >= step))
+                g_touchPan.axis = abs(dx) >= abs(dy) ? 1 : 2;
+            if (g_touchPan.axis == 1) {
+                g_scrollTarget -= (float)(pt.x - g_touchPan.last.x);
+                ClampScroll();
+                g_scrollCur = g_scrollTarget;
+                RepaintNow();
+            }
+            g_touchPan.last = pt;
+            if (gi.dwFlags & GF_END) {
+                if (g_touchPan.axis == 2 && abs(dy) >= ScI(45)) {
+                    if (g_view == VIEW_START && dy > 0 && g_touchPan.tile >= 0) {
+                        g_focus = g_touchPan.tile;
+                        ShowBar(1, g_touchPan.tile);
+                    } else if (g_view == VIEW_START && dy < 0) {
+                        EnterAllApps();
+                    } else if (g_view == VIEW_SEARCH && dy > 0) {
+                        LeaveSearch();
+                    }
+                }
+                g_touchPan = {};
+            }
+        }
+        CloseGestureInfoHandle((HGESTUREINFO)lp);
+        return 0;
+    }
+    case WM_MOUSEHWHEEL:
+        // Precision touchpads commonly send horizontal wheel messages.
+        if (InterlockedCompareExchange(&g_experimentalTouch, 0, 0) &&
+            g_open && !g_closing && !g_charmOpen && !g_dragging &&
+            ZoomPresence(NowMs()) <= 0.0f) {
+            g_scrollTarget += (float)GET_WHEEL_DELTA_WPARAM(wp) * 2.5f;
+            ClampScroll();
+            RepaintNow();
+            return 0;
+        }
+        break;
     case WM_MOUSEWHEEL: {
         if (g_open && !g_closing && ZoomPresence(NowMs()) > 0.0f) return 0;
         int delta = GET_WHEEL_DELTA_WPARAM(wp);
@@ -13413,28 +15689,25 @@ static void LoadTileIcons() {
     }
 }
 
-static void UpdateTileAppColors() {
-    for (int i = 0; i < g_tileCount; ++i) {
-        Tile& t = g_tiles[i];
-        t.hasAppC = false;
-        t.appC = t.c1;
-        if (!t.alive) continue;
-        // A simulated tile keeps its Windows 8/8.1 colour: the accent colour of a Windows 10/11 icon
-        // is the modern one and must not replace it.
-        if (t.mg >= 0) continue;
-        bool found = false;
-        COLORREF c = t.c1;
-        if (t.icon) {
-            c = GetIconAccentColor(t.icon, t.c1, &found);
-        } else if (t.pinBmp) {
-            BYTE* px = NULL; int w = 0, h = 0;
-            if (BitmapToPixels(t.pinBmp, &px, &w, &h) && px) {
-                c = AccentFromPremulBgra(px, w, h, t.c1, &found);
-                delete[] px;
-            }
+static void UpdateTileAppColor(Tile& t) {
+    t.hasAppC = false;
+    t.appC = t.c1;
+    if (!t.alive || t.mg >= 0) return;
+    bool found = false;
+    COLORREF c = t.c1;
+    if (t.icon) {
+        c = GetIconAccentColor(t.icon, t.c1, &found);
+    } else if (t.pinBmp) {
+        BYTE* px = NULL; int w = 0, h = 0;
+        if (BitmapToPixels(t.pinBmp, &px, &w, &h) && px) {
+            c = AccentFromPremulBgra(px, w, h, t.c1, &found);
+            delete[] px;
         }
-        if (found) { t.appC = c; t.hasAppC = true; }
     }
+    if (found) { t.appC = c; t.hasAppC = true; }
+}
+static void UpdateTileAppColors() {
+    for (int i = 0; i < g_tileCount; ++i) UpdateTileAppColor(g_tiles[i]);
 }
 
 // True only if the Microsoft Store package is actually registered for this user. The Store tile
@@ -13465,6 +15738,82 @@ static void ApplyStartColourRevision() {
     }
     if (changed) SaveLayout();
     Wh_SetIntValue(L"tileColours81", 1);
+}
+
+// Configuration is read on each reload. The tile capacity is the natural limit,
+// even if the Windhawk array contains more entries. An empty target ends the list.
+struct CustomTileConfig { std::wstring fields[8]; };
+static std::vector<CustomTileConfig> ReadCustomTiles() {
+    std::vector<CustomTileConfig> configs;
+    static const wchar_t* const names[] = { L"name", L"target", L"color", L"icon",
+                                            L"smallImage", L"mediumImage", L"wideImage", L"largeImage" };
+    for (int i = 0; i < MAX_TILES; ++i) {
+        CustomTileConfig cfg;
+        for (int k = 0; k < 8; ++k) {
+            WindhawkUtils::StringSetting value(WindhawkUtils::StringSetting::make(L"customTiles[%d].%s", i, names[k]));
+            cfg.fields[k] = value.get();
+        }
+        if (cfg.fields[1].empty()) break;
+        configs.push_back(std::move(cfg));
+    }
+    return configs;
+}
+static std::vector<std::wstring> CustomTileSnapshot() {
+    std::vector<std::wstring> snapshot;
+    for (const auto& cfg : ReadCustomTiles())
+        for (const auto& field : cfg.fields) snapshot.push_back(field);
+    snapshot.push_back(Wh_GetIntSetting(L"weatherOnline") ? L"1" : L"0");
+    snapshot.push_back(Wh_GetIntSetting(L"weatherIpLocation") ? L"1" : L"0");
+    snapshot.push_back(Wh_GetIntSetting(L"privacyMode") ? L"1" : L"0");
+    for (const wchar_t* key : {L"weatherLatitude", L"weatherLongitude", L"weatherLocationName"}) {
+        WindhawkUtils::StringSetting value(WindhawkUtils::StringSetting::make(key));
+        snapshot.push_back(value.get());
+    }
+    return snapshot;
+}
+static SRWLOCK g_customSnapshotLock = SRWLOCK_INIT;
+static std::vector<std::wstring> g_customSnapshot;
+static void InitCustomTiles() {
+    const auto configs = ReadCustomTiles();
+    int slot = 0;
+    for (const auto& cfg : configs) {
+        ++slot;
+        const auto& fields = cfg.fields;
+        bool invalid = fields[0].empty() || fields[0].size() > 1024 || fields[1].size() > 4096 ||
+                       fields[2].size() != 7 || fields[2][0] != L'#' ||
+                       fields[2].find_first_not_of(L"0123456789abcdefABCDEF", 1) != std::wstring::npos;
+        for (const auto& field : fields)
+            invalid = invalid || field.size() > 4096 || field.find_first_of(L"\r\n\t") != std::wstring::npos;
+        if (invalid) { Wh_Log(L"Custom tile %d: invalid name, target, color or path", slot); continue; }
+        int idx = FindPinned(fields[1].c_str());
+        if (idx < 0) {
+            for (int i = 0; i < g_tileCount; ++i) if (!g_tiles[i].alive) { idx = i; break; }
+            if (g_orderCount >= MAX_TILES) continue;
+            if (idx < 0) { if (g_tileCount >= MAX_TILES) { Wh_Log(L"Custom tile limit reached"); continue; } idx = g_tileCount++; }
+            Tile t = {};
+            t.label = DupW(fields[0].c_str());
+            t.target = DupW(fields[1].c_str());
+            if (!t.label || !t.target) { free((void*)t.label); free((void*)t.target); continue; }
+            t.owned = t.alive = true;
+            t.kind = 1;
+            t.style = IsPackagedAppTarget(t.target) ? PINNED_APP : TOP_APP;
+            t.cw = TS_MEDIUM;
+            t.c1 = t.c2 = RGB(70,23,180);
+            g_tiles[idx] = std::move(t);
+            g_order[g_orderCount++] = idx;
+            g_tileScale[idx] = 1.0f;
+            g_tileGroup[idx] = g_orderCount > 1 ? g_tileGroup[g_order[g_orderCount - 2]] : 0;
+            LoadPinIcon(g_tiles[idx]);
+        }
+        Tile& t = g_tiles[idx];
+        unsigned long rgb = wcstoul(fields[2].c_str()+1, NULL, 16);
+        t.customTile = true;
+        t.customColor = RGB((rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255);
+        t.customIcon = fields[3];
+        t.customLabel = fields[0];
+        for (int size = 0; size < 4; ++size) t.customImage[size] = fields[size + 4];
+    }
+    Relayout(false);
 }
 
 static void InitTiles() {
@@ -13513,6 +15862,7 @@ static void InitTiles() {
         if (t.icon) { DestroyIcon(t.icon); t.icon = NULL; }
         if (t.pinBmp) { DeleteObject(t.pinBmp); t.pinBmp = NULL; }
         LoadPinIcon(t);
+        UpdateTileAppColor(t);
         RebuildTile(i);
     }
     // The Windows 8.1 shortcut look is worked out again here for every tile of the saved layout,
@@ -13529,6 +15879,8 @@ static void InitTiles() {
     // After the saved layout, so the simulated tiles always land at the end of the screen and are
     // only added when they are actually wanted (see SyncMetroTiles).
     SyncMetroTiles(true);
+    InitCustomTiles();
+    for (int i = 0; i < g_tileCount; ++i) g_committedGroup[i] = g_tileGroup[i];
 }
 
 static void UiRun() {
@@ -13567,6 +15919,7 @@ static void UiRun() {
     Relayout(false);
     g_wnd = CreateTopWindow(g_sw, g_sh);
     if (g_wnd) BuildBuffers();
+    if (g_wnd) UpdateWeatherWorker();
     if (g_wnd && InterlockedCompareExchange(&g_openAtLogon, 0, 0) != 0) {
         g_logonStop = CreateEventW(NULL, TRUE, FALSE, NULL);
         if (g_logonStop) g_logonThread = CreateThread(NULL, 0, LogonOpenThread, NULL, 0, NULL);
@@ -13609,6 +15962,8 @@ static void UiRun() {
 }
 
 static void UiTeardown() {
+    g_weather.Stop();
+    g_photoSlideshow.Stop();
     if (g_logonStop) SetEvent(g_logonStop);
     if (g_logonThread) { WaitForSingleObject(g_logonThread, INFINITE); CloseHandle(g_logonThread); g_logonThread = NULL; }
     if (g_logonStop) { CloseHandle(g_logonStop); g_logonStop = NULL; }
@@ -13731,6 +16086,9 @@ static void LoadNavigationOptions() {
 }
 
 static void LoadSettings() {
+    InterlockedExchange(&g_experimentalTouch, Wh_GetIntSetting(L"experimentalTouch") != 0);
+    InterlockedExchange(&g_photoEnabled, Wh_GetIntSetting(L"photoSlideshow") != 0);
+    InterlockedExchange(&g_calendarSlide, Wh_GetIntSetting(L"calendarSlide") != 0);
     g_useWinKey = Wh_GetIntSetting(L"winKey") != 0;
     g_searchEnabled = Wh_GetIntSetting(L"searchOnType") != 0;
     g_trayRevealOn = Wh_GetIntSetting(L"taskbarOnBottomHover") != 0;
@@ -13864,9 +16222,20 @@ static void LoadSettings() {
 // Mod entry points
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     const bool oldKeyboardOnly = g_keyboardOnly;
-    RunGuarded(L"ModSettingsChanged", [] { LoadSettings(); });
-    // The hook set depends on interceptMode, so a change needs a reload.
-    if (bReload && g_keyboardOnly != oldKeyboardOnly) *bReload = TRUE;
+    const LONG oldExperimentalTouch = InterlockedCompareExchange(&g_experimentalTouch, 0, 0);
+    const LONG oldCalendarSlide = InterlockedCompareExchange(&g_calendarSlide, 0, 0);
+    const LONG oldPhotoEnabled = InterlockedCompareExchange(&g_photoEnabled, 0, 0);
+    bool customChanged = false;
+    RunGuarded(L"ModSettingsChanged", [&] {
+        auto current = CustomTileSnapshot();
+        AcquireSRWLockExclusive(&g_customSnapshotLock);
+        customChanged = current != g_customSnapshot;
+        g_customSnapshot.swap(current);
+        ReleaseSRWLockExclusive(&g_customSnapshotLock);
+        LoadSettings();
+    });
+    // Recreate the UI thread to apply custom tile additions, removals and edits.
+    if (bReload && (g_keyboardOnly != oldKeyboardOnly || oldExperimentalTouch != InterlockedCompareExchange(&g_experimentalTouch, 0, 0) || customChanged || oldCalendarSlide != InterlockedCompareExchange(&g_calendarSlide, 0, 0) || oldPhotoEnabled != InterlockedCompareExchange(&g_photoEnabled, 0, 0))) *bReload = TRUE;
     return TRUE;
 }
 
@@ -13898,6 +16267,12 @@ BOOL Wh_ModInit() {
         }
         InterlockedExchange(&g_shellPatch, DetectThirdPartyShell());
         LoadSettings();
+        {
+            auto current = CustomTileSnapshot();
+            AcquireSRWLockExclusive(&g_customSnapshotLock);
+            g_customSnapshot.swap(current);
+            ReleaseSRWLockExclusive(&g_customSnapshotLock);
+        }
         if (g_shellPatch) Wh_Log(L"Third-party shell present (mask 0x%X): compatibility mode is %ls",
                                 (unsigned)g_shellPatch,
                                 ShellCompatActive() ? L"active" : L"inactive");
