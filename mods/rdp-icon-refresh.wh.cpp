@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              rdp-icon-refresh
-// @name            Sharp Taskbar Icons After Remote Desktop
+// @name            Sharp Taskbar Icons After Remote Desktop or Resolution Change
 // @description     Re-renders tray and taskbar button icons after a Remote Desktop session with a different scale, or after a program changes the screen resolution and restores it, so they don't stay blurry
 // @version         1.1
 // @author          Solo_mag
@@ -11,7 +11,11 @@
 
 // ==WindhawkModReadme==
 /*
-# Sharp Taskbar Icons After Remote Desktop
+# Sharp Taskbar Icons After Remote Desktop or Resolution Change
+
+Tray and taskbar icons can stay blurry after a Remote Desktop session with a different
+scale, and after a program (for example a game) changes the screen resolution and
+restores it. This mod renders them again in both cases.
 
 Connecting with Remote Desktop from a device with a different display scale (for example
 the Microsoft Remote Desktop app on a phone, at 200–300%) switches the session to that
@@ -49,8 +53,11 @@ The same blur appears when a program (a game, a full-screen application) switche
 screen to a lower resolution and back. The mod also refreshes the tray and the taskbar
 buttons once the screen mode has stayed the same for a few seconds after a change
 (`WM_DISPLAYCHANGE`). While a full-screen application or a presentation is running, it
-waits until it ends, and it ignores changes that happen during a remote session. This
-can be turned off in the settings.
+waits until it ends (the first time it waits is written to the log), and it ignores
+changes that happen during a remote session. Windows sends `WM_DISPLAYCHANGE` for other
+display events too (a monitor plugged in or removed, docking, projection changes, a
+monitor waking up), so the icons are also refreshed a few seconds after those. This can
+be turned off in the settings.
 
 Icons that existed before the mod was enabled are handled too: their copies are read
 from the tray at refresh time. The exception is an icon a program registered by GUID
@@ -67,11 +74,13 @@ registered while the mod was running are refreshed.
 // ==WindhawkModSettings==
 /*
 - delaySeconds: 3
-  $name: Delay after returning to the local screen (seconds)
+  $name: Delay before refreshing (seconds)
   $description: >-
-    How long the display scale must stay the same before the icons are refreshed. The
-    scale is watched for a minute: if it changes again, or Explorer is still busy and
-    turns the icons down, they are refreshed again.
+    After returning from Remote Desktop: how long the display scale must stay the same
+    before the icons are refreshed. The scale is watched for a minute: if it changes
+    again, or Explorer is still busy and turns the icons down, they are refreshed again.
+    After a screen resolution change: how long the screen mode must stay the same. 0 is
+    taken as 1 second.
 - logToFile: false
   $name: Log refreshes to a file
   $description: >-
@@ -624,6 +633,7 @@ constexpr int kMaxRetries = 5;
 bool g_settling = false;   // the watch after returning from a remote session is running
 bool g_displayPending = false;  // a screen mode change came during the watch
 int g_displayRetries = 0;
+bool g_displayDeferredLogged = false;  // the wait for a full-screen application is logged once
 UINT g_settleDpi = 0;      // the scale seen on the last tick
 int g_settleTicks = 0;     // ticks it has stayed the same
 UINT g_refreshedDpi = 0;   // the scale the icons were last refreshed for
@@ -664,8 +674,11 @@ void OnSettleTick(HWND hwnd) {
             wsprintfW(line, L"back to the local screen: same scale as the remote session (DPI %u), nothing to do", dpi);
             Report(line);
             g_refreshedDpi = dpi;
-        } else if (Refresh(L"back to the local screen", g_retries == 0) ||
-                   ++g_retries > kMaxRetries) {
+            g_displayPending = false;
+        } else if (Refresh(L"back to the local screen", g_retries == 0)) {
+            g_refreshedDpi = dpi;
+            g_displayPending = false;  // covers the mode changes before it
+        } else if (++g_retries > kMaxRetries) {
             g_refreshedDpi = dpi;
         } else {
             g_settleTicks = 0;  // Explorer is still busy: try again later
@@ -698,6 +711,10 @@ void OnDisplayTimer(HWND hwnd) {
     if (!g_refreshOnDisplay || g_settling || GetSystemMetrics(SM_REMOTESESSION))
         return;  // a remote session is handled when it returns to the console
     if (FullScreenRunning()) {
+        if (!g_displayDeferredLogged) {
+            g_displayDeferredLogged = true;
+            Report(L"screen mode changed: waiting for the full-screen application or presentation to end");
+        }
         SetTimer(hwnd, kDisplayTimer, kDisplayRetryMs, nullptr);
         return;
     }
@@ -789,6 +806,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (g_refreshOnDisplay && g_tray && !g_settling && !g_awayFromConsole &&
                 !GetSystemMetrics(SM_REMOTESESSION)) {
                 g_displayRetries = 0;
+                g_displayDeferredLogged = false;
                 int wait = g_delaySeconds < 1 ? 1 : (int)g_delaySeconds;
                 SetTimer(hwnd, kDisplayTimer, wait * 1000, nullptr);
             }
