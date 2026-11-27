@@ -2,7 +2,7 @@
 // @id              desktop-clock-weather
 // @name            Desktop Clock & Weather
 // @description     Time, weekday, date and weekly weather on the desktop - behind icons, not clickable
-// @version         1.0.7
+// @version         1.0.8
 // @author          DineroOne
 // @license         MIT
 // @github          https://github.com/DineroOne
@@ -30,6 +30,8 @@ It first samples the pixels visible behind the widget, when the desktop is unobs
 is unavailable, it estimates brightness from the wallpaper file and Windows wallpaper layout settings.
 This processing is local; no wallpaper data is sent anywhere.
 
+Tested on Windows 10. Other Windows versions are not tested yet; reports are welcome.
+
 ## Why this is a separate mod
 
 [Desktop Live Overlay](https://windhawk.net/mods/desktop-live-overlay) is a general-purpose overlay built from free-form text patterns and system metrics.
@@ -48,6 +50,8 @@ The mod sends HTTPS requests to two Open-Meteo hosts:
 
 Like any web server, Open-Meteo can see your IP address. No API key or account is required.
 No weather requests are made while the city is empty, **Show weather** is off, or `weather` is omitted from the element order.
+
+The forecast API request is sent at startup, whenever a weather-related setting changes, and then every N minutes.
 */
 // ==/WindhawkModReadme==
 
