@@ -4,6 +4,7 @@
 // @description     Stops Windows 11 from redirecting Control Panel pages (System, Troubleshooting, Fonts, ...) to the Settings app
 // @version         3.4.1
 // @author          AdmXP8
+// @github          https://github.com/admxp8
 // @include         explorer.exe
 // @include         rundll32.exe
 // @architecture    x86-64
@@ -12,14 +13,35 @@
 
 // ==WindhawkModReadme==
 /*
-can revive:
-advance sharing settings
-troubleshooting,fonts,system,installed updates,default programs,devices and Printers
-properties on this pc right click menu wich leads to the system applet
-troublshooting link on network sharing center
-task links that lead to a applet that is in the mod(ex:troubleshooting)
-things that this mod cannot do:
-BRO WHAT ELSE YOU NEDD(unhiding)
+# Control Panel Revival
+
+Recent Windows versions redirect several classic Control Panel pages to the
+Settings app. This mod lets the classic pages open again.
+
+## What it restores
+
+* System, including This PC > Properties link
+* Troubleshooting, Installed Updates, Default Programs, Fonts, Devices and Printers
+* Network and Sharing Center (advanced sharing settings)
+* Control Panel task links that lead to these pages
+
+## What it does not do
+
+It does not unhide Control Panel items that Windows hides on purpose
+(for example Personalization or Notification Area Icons). For that, see the separate mod
+`restore-classic-cpls`.
+
+## Settings
+
+* **Extra GUIDs**: additional items, written as
+  `::{XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}`, whose redirect should also be blocked.
+* **Applets to leave redirected**: canonical names (for example
+  `Microsoft.WindowsUpdate`) that should keep opening in Settings.
+
+## Troubleshooting
+
+Turn on logging in the Windhawk UI. `BLOCK ...` lines show what was stopped
+and `MAPLEGACY ...` lines show every applet name Windows tried to map.
 */
 // ==/WindhawkModReadme==
 
@@ -38,7 +60,7 @@ BRO WHAT ELSE YOU NEDD(unhiding)
 #include <wchar.h>
 #include <windhawk_utils.h>
 
-//to in bakhs kafie appletai khe mikhai redirect nashan ro ezafe koni
+//list of applets to restore
 static const WCHAR* kRedirectGuids[] = {
     L"::{BB06C0E4-D293-4F75-8A90-CB05B6477EEE}",  //System
     L"::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}",  //Troubleshooting
@@ -182,7 +204,6 @@ __attribute__((noinline)) static bool CallerChainIsExplorerFrame(bool log) {
     return result;
 }
 
-//kernelbase.dll export
 using CompareStringOrdinal_t = decltype(&CompareStringOrdinal);
 CompareStringOrdinal_t CompareStringOrdinal_orig;
 
@@ -267,7 +288,7 @@ bool MapLegacyName_hook(void* pThis, LPCWSTR legacy, LPWSTR out, UINT u, bool* c
     return r;
 }
 
-const WindhawkUtils::SYMBOL_HOOK shell32Hooks[] = {
+const WindhawkUtils::SYMBOL_HOOK user32DllHooks[] = {
     {
         {L"private: bool __cdecl COpenControlPanel::_MapLegacyName(unsigned short const *,unsigned short *,unsigned int,bool *)"},
         &MapLegacyName_orig,
@@ -291,9 +312,8 @@ BOOL Wh_ModInit() {
                        (void**)&FindStringOrdinal_orig);
 
     HMODULE shell32 = GetModuleHandleW(L"shell32.dll");
-    bool okSym = shell32 && WindhawkUtils::HookSymbols(shell32, shell32Hooks,
-                                                        ARRAYSIZE(shell32Hooks));
-    Wh_Log(L"Revival 2 loaded (_MapLegacyName hook: %d)", (int)okSym);
+    bool okSym = shell32 && WindhawkUtils::HookSymbols(shell32, user32DllHooks,
+                                                        ARRAYSIZE(user32DllHooks));
+    Wh_Log(L"cpl revival loaded (_MapLegacyName hook: %d)", (int)okSym);
     return TRUE;
 }
-//az noskhe ghabli kheili behtare v slop ham nist khodam sakhtam
