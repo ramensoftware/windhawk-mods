@@ -29,36 +29,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/4b120b2bf65bbe07e66560d0a408bd5e2ef67540/mods/acrylic-media-pill.wh.cpp"
       }
     },
-    "aleph-canvas": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795393943372,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795393943372,
-        "users": 0
-      },
-      "metadata": {
-        "author": "CYoJkoY",
-        "compilerOptions": "-ladvapi32 -ld2d1 -ldwmapi -ldwrite -lgdi32 -lole32 -lshell32 -lshcore -luuid -lwindowscodecs",
-        "description": "Arrange open windows across a pannable canvas with live DWM previews.",
-        "github": "https://github.com/CYoJkoY",
-        "include": [
-          "windhawk.exe",
-          "windhawk-mod.exe"
-        ],
-        "license": "MIT",
-        "name": "Aleph - Infinite Window Canvas",
-        "version": "1.8.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7637",
-      "source": {
-        "sha256": "fce119a614fe7a7043ae41d71e484fc989ec0f71581929ee8d96dd176310837b",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/80d1d414458f03515a73ba2dfcba38934d5255dd/mods/aleph-canvas.wh.cpp"
-      }
-    },
     "alt-tab-no-repeat": {
       "details": {
         "defaultSorting": 0,
@@ -429,38 +399,6 @@
       "source": {
         "sha256": "fafde4cdaf899e519719f540b90bd9a1ddd4964d4aa6a1f5e9a88264f2153e9e",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/bf0810bdeda793f19e29b7cd6a4c61cfc13d6efe/mods/explorer-font-size-changer.wh.cpp"
-      }
-    },
-    "explorer-home-devices": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795545412441,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795545412441,
-        "users": 0
-      },
-      "metadata": {
-        "architecture": [
-          "x86-64"
-        ],
-        "author": "crazyboyybs",
-        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi -lcomctl32 -lwindowscodecs -luuid -lgdi32",
-        "description": "Adds a native WinUI section for devices and drives after Quick access on the Windows 11 File Explorer Home page.",
-        "github": "https://github.com/crazyboyybs",
-        "include": [
-          "explorer.exe"
-        ],
-        "license": "MIT",
-        "name": "Devices and drives in Explorer Home",
-        "version": "1.0.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7916",
-      "source": {
-        "sha256": "cc8d69bd1da7cc427da57a76508ec730322b8ec9b0fb4665ca1b8d3408fd8c51",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/d659cb34857338cc1a58400c79016baa6c240b41/mods/explorer-home-devices.wh.cpp"
       }
     },
     "explorer-mouse-actions-plus": {
@@ -961,35 +899,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/55bc696c10f83fae30351bdad76ae4aff978de35/mods/taskbar-edge-color-match.wh.cpp"
       }
     },
-    "taskbar-edge-stop": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795626308581,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795626308581,
-        "users": 0
-      },
-      "metadata": {
-        "author": "voide61",
-        "compilerOptions": "-luser32 -lole32 -lshcore",
-        "description": "On multi-monitor setups, the mouse stops at the taskbar instead of slipping onto the other monitor",
-        "github": "https://github.com/voide61",
-        "include": [
-          "windhawk.exe"
-        ],
-        "license": "MIT",
-        "name": "Taskbar Edge Stop",
-        "version": "1.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7883",
-      "source": {
-        "sha256": "6cfdab5e6dec983ecd72c658d4143910afde3d67674e7fe0e617182511f1b472",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/3ba2957426e20c66686d2c23c2870044e85b931f/mods/taskbar-edge-stop.wh.cpp"
-      }
-    },
     "taskbar-extra-scroll-actions": {
       "details": {
         "defaultSorting": 0,
@@ -1294,35 +1203,6 @@
       "source": {
         "sha256": "94970972112e2297157e0b33c8c76cb50d12e3f69f37f49e9d81b606fe43303e",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/eff123923d62e2e66cd2b40e981c44fecf2dd746/mods/vision.wh.cpp"
-      }
-    },
-    "wheel-context-menu": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795662511612,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795662511612,
-        "users": 0
-      },
-      "metadata": {
-        "author": "Johhannas Reyn",
-        "compilerOptions": "-ld2d1 -ldwrite -ldwmapi -lgdi32 -ladvapi32 -lshell32 -lshcore",
-        "description": "Replaces classic context menus with a fading, rotating wheel you can spin, scroll, type into and rearrange",
-        "github": "https://github.com/JohhannasReyn",
-        "homepage": "https://thegnosys.com",
-        "include": [
-          "explorer.exe"
-        ],
-        "name": "Wheel Context Menu",
-        "version": "0.1"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7732",
-      "source": {
-        "sha256": "48e62693daf7282979294b808e347b5c2e01744984e64fc1eebedbde1854a07e",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/1120133d3c9133749fbd6d4a312e32bc6f24a0dc/mods/wheel-context-menu.wh.cpp"
       }
     },
     "win7-biometric-devices-restorer": {

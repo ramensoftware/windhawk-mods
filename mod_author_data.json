@@ -624,6 +624,12 @@
       "https://ctravkin.ru"
     ]
   },
+  "https://github.com/cyojkoy": {
+    "author": "CYoJkoY",
+    "github": "https://github.com/CYoJkoY",
+    "githubId": 174798161,
+    "homepages": []
+  },
   "https://github.com/cyprinuscarpio": {
     "author": "Waldemar",
     "github": "https://github.com/CyprinusCarpio",
@@ -1371,7 +1377,8 @@
     "github": "https://github.com/JohhannasReyn",
     "githubId": 127910206,
     "homepages": [
-      "https://thegnosys.com/"
+      "https://thegnosys.com/",
+      "https://thegnosys.com"
     ]
   },
   "https://github.com/jtnqr": {
@@ -2735,6 +2742,12 @@
     "homepages": [
       "https://github.com/VitalyTz/windhawk-taskbar-per-monitor-alignment"
     ]
+  },
+  "https://github.com/voide61": {
+    "author": "voide61",
+    "github": "https://github.com/voide61",
+    "githubId": 221621171,
+    "homepages": []
   },
   "https://github.com/vt-idiot": {
     "author": "vt-idiot",

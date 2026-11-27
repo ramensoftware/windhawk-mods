@@ -2,12 +2,319 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-27T04:02:02.000Z</updated>
+    <updated>2026-11-27T05:03:40.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Devices and drives in Explorer Home 1.0.0]]></title>
+        <id>https://windhawk.net/mods/explorer-home-devices#838750ce7cafc0833bedac28633aa4b389c22201</id>
+        <link href="https://windhawk.net/mods/explorer-home-devices"/>
+        <updated>2026-11-27T05:03:40.000Z</updated>
+        <content type="html"><![CDATA[<h1>Devices and drives in the File Explorer Home folder</h1>
+<p><img src="https://raw.githubusercontent.com/crazyboyybs/assets/refs/heads/main/Dispositivos%20e%20unidades.png" alt="Devices and drives in Explorer Home"></p>
+<p>The This PC folder in Windows File Explorer shows your drives, this mod
+brings that to the Home folder. It adds a native <strong>Devices and drives</strong>
+section right after <strong>Quick access</strong>, built with the same WinUI the rest of
+the Home page already uses.</p>
+<p><strong>What you get:</strong></p>
+<ul>
+<li>Drive cards with the real name, icon, type and free-space bar, taken
+straight from the Shell, the same info you'd see in &quot;This PC&quot;.</li>
+<li>Double-click a card to open the drive in the current tab; drag one out to
+create a shortcut, or drag files onto it to copy or move them there.</li>
+<li>Right-click a single file-system drive (or use your keyboard's context-menu
+shortcut) for Explorer's native Windows 11 menu. Hold Shift while
+right-clicking to open the extended classic menu; multiple selections and
+virtual devices automatically use the classic menu too.</li>
+<li>Rename works inline, just like a normal folder.</li>
+<li>The section header can collapse the whole grid if you want it out of the
+way.</li>
+<li>The grid keeps itself up to date automatically whenever a drive is plugged
+in, removed, or its free space changes.</li>
+</ul>
+<p><strong>A quick technical note:</strong> the mod reads Explorer's own WinUI page and
+inserts the section directly into it, without relying on XAML Diagnostics,
+so it plays nicely alongside other Explorer styling mods that need that
+facility for themselves. One consequence: a File Explorer window already
+sitting on Home when the mod is enabled may not pick up the section right
+away. Navigate away and back to Home (or open a new tab) to refresh it;
+windows opened after enabling the mod are unaffected. On some older
+Windows 11 builds, the section shows up at the bottom of Home instead of
+right after Quick access, and the native selection rectangle doesn't draw
+over it during a drag-select — everything else (drive cards, drag and
+drop, context menu, rename) works the same. The modern context menu is
+obtained and rendered through Explorer's own WinRT contracts, including its
+native commands, ordering and icons. If those contracts aren't available,
+or the selection can't be represented as one real file-system item, the mod
+falls back to the complete classic Shell menu.</p>
+<hr>
+<h1>Dispositivos e unidades na pasta Início do Explorador de Arquivos</h1>
+<p>A pasta Este Computador do Explorador de Arquivos do Windows mostra suas
+unidades, esse mod traz isso para a pasta Início. Ele adiciona uma seção
+nativa de <strong>Dispositivos e unidades</strong> logo depois do <strong>Acesso rápido</strong>,
+construída com o mesmo WinUI que o resto da Página Inicial já usa.</p>
+<p><strong>O que você ganha:</strong></p>
+<ul>
+<li>Cards de unidade com nome, ícone, tipo e barra de espaço livre reais,
+vindos direto do Shell, a mesma informação que você veria em &quot;Este
+Computador&quot;.</li>
+<li>Dê duplo clique num card pra abrir a unidade na aba atual; arraste um card
+pra fora pra criar um atalho, ou arraste arquivos pra dentro dele pra
+copiar ou mover.</li>
+<li>Clique com o botão direito numa única unidade do sistema de arquivos (ou
+use o atalho de menu de contexto do teclado) pra abrir o menu nativo do
+Windows 11 do Explorador. Segure Shift durante o clique direito pra abrir o
+menu clássico estendido; seleções múltiplas e dispositivos virtuais também
+usam o menu clássico automaticamente.</li>
+<li>Renomear funciona direto ali, igual numa pasta comum.</li>
+<li>O cabeçalho da seção pode recolher a grade inteira se você quiser tirá-la
+do caminho.</li>
+<li>A grade se atualiza sozinha sempre que uma unidade é conectada, removida,
+ou o espaço livre muda.</li>
+</ul>
+<p><strong>Um detalhe técnico rápido:</strong> o mod lê a própria página WinUI do Explorador
+e insere a seção diretamente nela, sem depender do XAML Diagnostics, então
+ele convive bem com outros mods de estilo do Explorador que precisam desse
+recurso pra si. Uma consequência disso: uma janela do Explorador de Arquivos
+que já esteja aberta na pasta Início quando o mod for ativado pode não
+mostrar a seção na hora. Saia da pasta Início e volte (ou abra uma nova
+aba) pra atualizar; janelas abertas depois de ativar o mod não têm esse
+problema. Em algumas builds mais antigas do Windows 11, a seção aparece no
+final da Página Inicial em vez de logo depois do Acesso rápido, e o
+retângulo de seleção nativo não é desenhado sobre ela durante uma seleção
+por arraste — o resto (cards de unidade, arrastar e soltar, menu de
+contexto, renomear) funciona igual. O menu moderno é obtido e renderizado
+pelos próprios contratos WinRT do Explorador, inclusive com comandos, ordem
+e ícones nativos. Se esses contratos não estiverem disponíveis, ou a seleção
+não puder ser representada como um único item real do sistema de arquivos, o
+mod volta automaticamente ao menu clássico completo do Shell.</p>
+<hr>
+<h1>Dispositivos y unidades en la carpeta Inicio del Explorador de archivos</h1>
+<p>La carpeta Este equipo del Explorador de archivos de Windows muestra tus
+unidades, este mod trae eso a la carpeta Inicio. Agrega una sección nativa
+de <strong>Dispositivos y unidades</strong> justo después de <strong>Acceso rápido</strong>,
+construida con el mismo WinUI que ya usa el resto de la página de Inicio.</p>
+<p><strong>Qué obtienes:</strong></p>
+<ul>
+<li>Tarjetas de unidad con el nombre, ícono, tipo y barra de espacio libre
+reales, tomados directamente del Shell, la misma información que verías
+en &quot;Equipo&quot;.</li>
+<li>Haz doble clic en una tarjeta para abrir la unidad en la pestaña actual;
+arrastra una hacia afuera para crear un acceso directo, o arrastra
+archivos sobre ella para copiarlos o moverlos.</li>
+<li>Haz clic derecho en una sola unidad del sistema de archivos (o usa el atajo
+de menú contextual del teclado) para abrir el menú nativo de Windows 11 del
+Explorador. Mantén Shift durante el clic derecho para abrir el menú clásico
+extendido; las selecciones múltiples y los dispositivos virtuales también
+usan automáticamente el menú clásico.</li>
+<li>Cambiar el nombre funciona en línea, igual que en una carpeta normal.</li>
+<li>El encabezado de la sección puede contraer toda la cuadrícula si quieres
+quitarla de en medio.</li>
+<li>La cuadrícula se actualiza sola cada vez que se conecta o quita una
+unidad, o cambia el espacio libre.</li>
+</ul>
+<p><strong>Un detalle técnico rápido:</strong> el mod lee la propia página WinUI del
+Explorador e inserta la sección directamente en ella, sin depender de XAML
+Diagnostics, así que convive bien con otros mods de estilo del Explorador
+que necesitan ese recurso para sí mismos. Una consecuencia de esto: una
+ventana del Explorador de archivos que ya esté abierta en la carpeta Inicio
+cuando se active el mod puede no mostrar la sección de inmediato. Sal de
+Inicio y vuelve a entrar (o abre una pestaña nueva) para actualizarla; las
+ventanas abiertas después de activar el mod no tienen este problema. En
+algunas builds más antiguas de Windows 11, la sección aparece al final de
+Inicio en lugar de justo después de Acceso rápido, y el rectángulo de
+selección nativo no se dibuja sobre ella durante una selección por
+arrastre — el resto (tarjetas de unidad, arrastrar y soltar, menú
+contextual, cambiar nombre) funciona igual. El menú moderno se obtiene y se
+renderiza mediante los propios contratos WinRT del Explorador, incluidos sus
+comandos, orden e iconos nativos. Si esos contratos no están disponibles, o
+la selección no se puede representar como un único elemento real del sistema
+de archivos, el mod vuelve automáticamente al menú clásico completo del
+Shell.</p>
+]]></content>
+        <author>
+            <name>crazyboyybs</name>
+            <uri>https://github.com/crazyboyybs</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Edge Stop 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-edge-stop#620480ee3ce4410815b02ebf9301c629e7a63fec</id>
+        <link href="https://windhawk.net/mods/taskbar-edge-stop"/>
+        <updated>2026-11-27T05:03:35.000Z</updated>
+        <content type="html"><![CDATA[<h1>Taskbar Edge Stop</h1>
+<p><strong>The problem:</strong> with two monitors, you move the mouse to the taskbar and it slips
+right past it onto the other monitor. With a small or auto-hidden taskbar this
+happens all the time.</p>
+<p><strong>The fix:</strong> the taskbar becomes a &quot;stopper&quot;. The mouse stops on it, so you can
+click your icons without overshooting.</p>
+<p><img src="https://raw.githubusercontent.com/voide61/taskbar-edge-stop/main/demo.gif" alt="Demo"></p>
+<h2>How it works</h2>
+<ul>
+<li>Moving to the taskbar, the mouse <strong>stops on it</strong> (and an auto-hidden taskbar shows up).</li>
+<li>Want to go to the other monitor? <strong>Keep pushing</strong> the mouse a little more.</li>
+<li>Over the taskbar <strong>icons</strong>, you can make it <strong>never cross</strong>, no matter how hard
+you push (option below). Cross through the empty part of the taskbar instead.</li>
+<li>Coming from the other monitor straight onto the taskbar, the way is <strong>free</strong>.</li>
+<li>Moving <strong>sideways</strong> into the taskbar strip of a neighboring monitor (monitors side
+by side) is also stopped, so the mouse doesn't slide onto the wrong taskbar.</li>
+<li>Nothing changes anywhere else on the screen.</li>
+</ul>
+<h2>Works with</h2>
+<ul>
+<li>Monitors stacked vertically or side by side, any size (ultrawide included).</li>
+<li>Small taskbars (other Windhawk mods), auto-hide, and taskbars on any screen edge.</li>
+<li>Plugging in, unplugging or rearranging monitors, and Explorer restarts: the mod
+adapts within a second.</li>
+</ul>
+<h2>Limitations</h2>
+<ul>
+<li>Injected mouse input is ignored, so the mod does nothing in Remote Desktop
+sessions, in virtual machines with guest tools, and with some tablets or
+touchpads that report their movement as injected input.</li>
+<li>Other mods that also act on the mouse crossing between monitors with a low-level
+mouse hook (for example <em>Proportional cursor between monitors</em>) may conflict:
+whichever hook was installed last decides.</li>
+</ul>
+<h2>Settings</h2>
+<ul>
+<li><strong>Extra height above the taskbar:</strong> increase it if the mouse still slips through.
+It follows each monitor's scale, so it looks the same on a 100% and a 200% monitor.</li>
+<li><strong>Push force to cross:</strong> how much to push against the taskbar to cross (0 = never).</li>
+<li><strong>Never cross over the icons:</strong> over the app icons, Start and the system tray icons,
+the mouse never crosses, even when pushing.</li>
+</ul>
+]]></content>
+        <author>
+            <name>voide61</name>
+            <uri>https://github.com/voide61</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Wheel Context Menu 0.1]]></title>
+        <id>https://windhawk.net/mods/wheel-context-menu#82bc0257b0da0d01b8e7c336cc0ff5531c2c979b</id>
+        <link href="https://windhawk.net/mods/wheel-context-menu"/>
+        <updated>2026-11-27T05:03:30.000Z</updated>
+        <content type="html"><![CDATA[<h1>Wheel Context Menu</h1>
+<p>Shows classic (Win32) context menus as a half wheel around the cursor. The
+item on the centre line, or the one under the cursor, is highlighted; items
+fade out toward the top and bottom of the arc.</p>
+<p><img src="https://raw.githubusercontent.com/JohhannasReyn/Wheel-Context-Menu/main/images/demo.gif" alt="Wheel Context Menu in use"></p>
+<h2>Using it</h2>
+<p><strong>Mouse</strong></p>
+<ul>
+<li>Scroll inside the wheel to step one item. Scroll outside it to dismiss.</li>
+<li>Optional &quot;Tilt to spin&quot;: move above or below the centre band to spin the
+wheel, faster the further you go.</li>
+<li>Click a label to choose it. A click on empty space inside the wheel
+chooses the highlighted item by default; that can be changed to do
+nothing, close the menu, or go back out of a submenu. Click outside to
+dismiss.</li>
+<li>Press and pull a label to rearrange. The order is remembered for that menu.</li>
+<li>Right-click inside the wheel for the standard menu.</li>
+</ul>
+<p><strong>Keyboard</strong></p>
+<ul>
+<li>Type a name to jump to it. Up / Down step, Left / Right jump to the ends.</li>
+<li>Enter chooses, Backspace goes back, Esc closes.</li>
+</ul>
+<p><strong>Shape</strong> can be changed from the wheel to a straight menu that keeps every
+feature: &quot;List&quot; is a regular box, &quot;Sliding list&quot; is the wheel straightened
+into a column.</p>
+<p><strong>Last choice note</strong> (off by default) shows what you last chose from a
+wheel, and how long ago, as a greyed entry at the top or bottom of the list
+or in the centre of the wheel. Handy after an accidental click.</p>
+<p><strong>Menu options</strong> (last entry in the menu) changes most settings on the
+spot. A change made there holds until you next change the mod's settings in
+Windhawk, which then take over again.</p>
+<h2>Windows 11</h2>
+<p>Explorer's modern context menu is not a classic menu, so the wheel only
+appears where the classic one would: after &quot;Show more options&quot;, with
+Shift + right-click, or everywhere if you restore the classic menu (for
+example with the &quot;Classic context menu on Windows 11&quot; mod).</p>
+<h2>Other programs</h2>
+<p>Only <code>explorer.exe</code> is targeted by default. Any program that shows classic
+menus through <code>TrackPopupMenu</code> can be added from the mod's Advanced tab.
+Programs that draw their own menus (browsers, Office, most Electron apps)
+are not affected. A program that is not per-monitor DPI aware may misjudge
+clicks on a scaled display.</p>
+<h2>Other context menu mods</h2>
+<p>Mods that replace the same menus, such as Custom Cached Context Menu, hook
+the same functions. With two of them enabled, whichever hook runs first
+takes the menu, so use one at a time.</p>
+<h2>Known limits</h2>
+<ul>
+<li>A menu whose top level has owner-drawn items with no readable text is
+shown as the standard menu instead. Inside a submenu such items show as
+&quot;Item N&quot;.</li>
+<li>Menu icons are not shown.</li>
+<li>Stacked submenus can run past the screen edge when a menu is deep.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Johhannas Reyn</name>
+            <uri>https://github.com/JohhannasReyn</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Aleph - Infinite Window Canvas 1.8.0]]></title>
+        <id>https://windhawk.net/mods/aleph-canvas#16f5f613eb52da98b99f6822accd8eca90cb20f1</id>
+        <link href="https://windhawk.net/mods/aleph-canvas"/>
+        <updated>2026-11-27T05:03:25.000Z</updated>
+        <content type="html"><![CDATA[<h1>Aleph - Infinite Window Canvas</h1>
+<p>Aleph presents eligible application windows on a navigable canvas. Live
+windows use DWM thumbnails; minimized and other-desktop windows use icon cards.
+Drag cards to arrange them without moving the real desktop windows.</p>
+<p><a href="https://imgur.com/a/qpERhgR"><img src="https://raw.githubusercontent.com/CYoJkoY/Yoko-Windhawk-Mods/main/mods/aleph-canvas/doc/assets/aleph-canvas-demo.gif" alt="Aleph Canvas demo"></a></p>
+<h2>Controls</h2>
+<ul>
+<li><code>Ctrl+Alt+Shift+F12</code>: toggle the canvas. Leave the setting empty to disable
+the hotkey. If the hotkey does
+nothing, another program may already use it; pick a different combination.</li>
+<li>Mouse wheel: zoom around the pointer.</li>
+<li>Alt+wheel over a stacked card: cycle the stack; plain wheel still zooms.</li>
+<li>The card header carries up to three buttons: pin, group (windows of the same
+application only), and close. Hovering a button shows its localized label.</li>
+<li>Group joins the windows of one application into a stack; pressing it again
+splits the stack into a row. The grouped state is saved with the layout.</li>
+<li>Hold Alt and drag a card onto another one to make a stack of your own, even
+across different applications; a drop only counts when the cards overlap
+solidly. Hold Alt and drag a member out to release just that window. A plain
+drop never groups anything. Custom stacks are saved with the layout.</li>
+<li>Close sends <code>WM_CLOSE</code> to the real window, so the application closes; the
+card leaves the canvas once the next scan reports the window gone.</li>
+<li>Middle mouse drag: pan the canvas.</li>
+<li>Hold Space and drag empty canvas: pan.</li>
+<li>Drag a card: arrange it; nearby edges snap into alignment.</li>
+<li>Shift+click a stacked card: bring the next window of the same app to the front.</li>
+<li>Double-click a card or press Enter: focus the window; for an other-desktop window, first try to move it here.</li>
+<li>Tab / Shift+Tab: select a card; arrow keys pan; Home fits all cards; Escape hides the canvas.</li>
+<li>Click or drag the minimap: navigate the canvas.</li>
+<li>The canvas hides when another window takes input focus.</li>
+</ul>
+<h2>Notes</h2>
+<p>Card positions are saved in the Windhawk mod storage directory as
+<code>layout-&lt;user-SID&gt;.json</code>.
+Canvas coordinates use physical pixels relative to the virtual desktop origin.
+Card badges and the empty-canvas hint follow the interface language setting.
+<code>Auto</code> uses the system UI language and falls back to English when that language
+is not one of the thirteen supported ones.
+Icon cards ask the shell for the largest available icon (256 px when the jumbo
+image list exists) and fall back to smaller lists, then to the window icon.
+Arranging cards never moves real application windows. Activating an
+other-desktop card asks the documented <code>IVirtualDesktopManager</code> interface to
+move that window onto the desktop displaying the canvas. Windows can reject
+requests for windows owned by another process. A failed move is logged and
+the mod still attempts normal foreground activation, which can also fail.</p>
+]]></content>
+        <author>
+            <name>CYoJkoY</name>
+            <uri>https://github.com/CYoJkoY</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Recent Focus Highlight 0.12.3]]></title>
         <id>https://windhawk.net/mods/taskbar-recent-focus-highlight#a7ff207d21bf1f46785fbd1b30c14bd3fdce1dbb</id>
@@ -729,243 +1036,6 @@ No weather requests are made while the city is empty, <strong>Show weather</stro
         <author>
             <name>DineroOne</name>
             <uri>https://github.com/DineroOne</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Adaptive Tray Contrast 0.3.16]]></title>
-        <id>https://windhawk.net/mods/adaptive-tray-contrast#dd2b0cad4fd0a38e53c19fa604468577ef4f663a</id>
-        <link href="https://windhawk.net/mods/adaptive-tray-contrast"/>
-        <updated>2026-11-26T07:02:38.000Z</updated>
-        <content type="html"><![CDATA[<h1>Adaptive Tray Contrast</h1>
-<p>On a transparent Windows 11 taskbar, a light window can sit behind half the date while the other half is over dark wallpaper. This Windhawk mod chooses black or white for each clock and date character according to the background behind it.</p>
-<p>Supported monochrome tray icons and the Chinese/English input indicator adapt independently. Start, Search, Task View, Widgets and app buttons can switch button themes. For packaged apps that provide both light and dark icon variants, the mod uses the variant that suits each button's background. Colored tray icons and the colored part of the battery keep their original colors. A packaged app's themed icon can cover its own dynamic artwork.</p>
-<p>In 0.3.16, clicking the Chinese/English input indicator hides the previous tinted glyph while the new one is captured. When the native glyph already has the desired color, the mod displays it directly.</p>
-<h2>中文说明</h2>
-<p>在 Windows 11 的透明任务栏上，如果浅色窗口的边缘刚好穿过日期，同一行里，压在浅色窗口上的数字可以变黑，留在深色壁纸上的数字可以保持白色。时间和日期分别逐字符判断。</p>
-<p>模组也会分别调整受支持的单色托盘图标和中英文输入法指示器，切换开始、搜索、任务视图、小组件及应用按钮的深浅主题。打包应用如果自带深浅两套图标，模组会按每个按钮背后的画面选用对应图标。彩色托盘图标和电池的彩色部分保留原色；应用自带的动态图案可能被深浅版图标覆盖。</p>
-<p>从 0.3.16 起，点击“中／英”时会先撤下旧字的着色层，再用新字着色，减少切换瞬间的重影。如果系统原字已经是需要的颜色，就直接显示原字。</p>
-<h2>Demos · 实机演示</h2>
-<h3>App icons · 应用图标</h3>
-<p><strong>Drag a window · 缓慢拖动窗口</strong><br>
-Watch each supported app icon as the window edge passes behind its button.<br>
-窗口边缘扫过不同按钮时，各应用图标分别切换深浅版本。</p>
-<p><img src="https://raw.githubusercontent.com/StillDialing/adaptive-tray-contrast/74698893e81b32dd0d73b301024dc384c16dd2fe/images/app-icons-window-drag.gif" alt="App icons as a window edge moves behind the taskbar"></p>
-<p><strong>Switch between full-screen apps · 切换全屏应用</strong><br>
-Compare the app icons as you switch apps and reveal the taskbar.<br>
-切换全屏应用，观察任务栏显示时应用图标的变化。</p>
-<p><img src="https://raw.githubusercontent.com/StillDialing/adaptive-tray-contrast/74698893e81b32dd0d73b301024dc384c16dd2fe/images/app-icons-window-switch.gif" alt="App icons when switching between full-screen apps"></p>
-<h3>System tray, clock and date · 右侧托盘、时间和日期</h3>
-<p><strong>Drag a window · 缓慢拖动窗口</strong><br>
-Follow the window edge across the tray icons and individual clock and date characters.<br>
-留意窗口边缘经过右侧托盘和日期时，哪些图标、哪些数字先变色。</p>
-<p><img src="https://raw.githubusercontent.com/StillDialing/adaptive-tray-contrast/74698893e81b32dd0d73b301024dc384c16dd2fe/images/tray-window-drag.gif" alt="Tray icons and individual characters as a window moves"></p>
-<p><strong>Switch between full-screen apps · 切换全屏应用</strong><br>
-Compare the right side of the taskbar against the different backgrounds.<br>
-切换全屏应用后，对比不同背景下右侧托盘、时间和日期的颜色。</p>
-<p><img src="https://raw.githubusercontent.com/StillDialing/adaptive-tray-contrast/74698893e81b32dd0d73b301024dc384c16dd2fe/images/tray-window-switch.gif" alt="System tray, clock and date when switching between full-screen apps"></p>
-<h2>Settings · 设置</h2>
-<p>The default sampling interval is 80 ms (adjustable from 40 to 2000 ms). A longer interval samples less often and responds more slowly. Sharp background boundaries can cause brief flicker.</p>
-<p>默认每 80 毫秒采样一次，可在设置中调整为 40 至 2000 毫秒。间隔越长，采样越少，响应也越慢。图标恰好位于深浅交界处时可能短暂闪烁。</p>
-]]></content>
-        <author>
-            <name>StillDialing</name>
-            <uri>https://github.com/StillDialing</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Same-App Window Cycler (Alt+`) 0.1.4]]></title>
-        <id>https://windhawk.net/mods/same-app-window-cycler#a9a990a6a8bf04a18e3c7e40c93300a7b284512c</id>
-        <link href="https://windhawk.net/mods/same-app-window-cycler"/>
-        <updated>2026-11-26T07:02:33.000Z</updated>
-        <content type="html"><![CDATA[<h1>Same-App Window Cycler</h1>
-<p>Brings the macOS <strong>Cmd+`</strong> behavior to Windows. While an app has several
-windows open, press <strong>Alt+`</strong> to jump to its next window, or <strong>Alt+Shift+`</strong>
-to go to the previous one. Repeated presses walk through all of the app's
-windows, and Alt+Shift+` walks through them in the opposite order.</p>
-<p>The shortcut uses the physical key left of <code>1</code>. The key is mapped when the mod
-starts, so it follows the keyboard layout that is active at that time.</p>
-<h2>How it differs from the existing switcher mods</h2>
-<p>Simple Window Switcher, ClassicWindowSwitcher and Windows 7/8.1 Alt+Tab
-Recreation also offer an Alt+` &quot;windows of the current app&quot; mode, but all of
-them replace the native Alt+Tab and show their own switcher UI. This mod leaves
-Alt+Tab untouched and switches windows directly, with no UI. If you already use
-one of those mods for Alt+`, you don't need this one.</p>
-<h2>Conflicts</h2>
-<p>Alt+` is registered as a global hotkey, and only one program can own it.</p>
-<ul>
-<li>Simple Window Switcher registers Alt+` by default (<code>altBacktickBehavior: backward</code>), so if both mods are enabled, whichever registers first gets the
-key and the other one only logs a failure. Set its Alt+` behavior to &quot;none&quot;,
-or don't enable both.</li>
-<li>Windows 7/8.1 Alt+Tab Recreation catches Alt+` with a low-level keyboard hook
-and swallows it. With its <code>onlyThisAppHotkey</code> option on, that mod gets the key
-no matter which one registers first, and this mod's hotkey never fires.</li>
-<li>The same applies to other tools that use Alt+`, such as AutoHotkey scripts.</li>
-<li>Apps that have their own Alt+` or Alt+Shift+` shortcut stop receiving it
-while this mod is on.</li>
-</ul>
-<h2>How it works</h2>
-<p>The mod runs as a tool mod in a dedicated <code>windhawk.exe</code> process and registers a
-global hotkey. When pressed, it takes the foreground window, finds all other
-switchable top-level windows that belong to the same executable on the current
-virtual desktop, and activates the next one.</p>
-<h2>Limitations</h2>
-<ul>
-<li>Windows are grouped by executable path. UWP apps hosted by
-ApplicationFrameHost.exe are all treated as one &quot;app&quot;.</li>
-<li>Windows of elevated (administrator) apps may only flash instead of coming to
-the front.</li>
-<li>&quot;Always on top&quot; windows (such as Picture-in-Picture) are skipped while
-cycling, unless one of them is the current window.</li>
-<li>If you switch keyboard layouts and the key left of <code>1</code> produces a different
-virtual key, the hotkey stays on the key it was registered with. Disable and
-re-enable the mod after changing layouts.</li>
-</ul>
-]]></content>
-        <author>
-            <name>mdozkanji</name>
-            <uri>https://github.com/mdozkanji</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[AltTabs - Browser Tab Switcher HUD 1.2.0]]></title>
-        <id>https://windhawk.net/mods/alttabs#e2c26c23a2cca579ddfcb2072037bd790ae78f37</id>
-        <link href="https://windhawk.net/mods/alttabs"/>
-        <updated>2026-11-26T07:02:27.000Z</updated>
-        <content type="html"><![CDATA[<h1>AltTabs - Browser Tab Switcher HUD</h1>
-<p>Press <strong>Alt+Q</strong> while a Chrome, Edge or Brave window is focused to open a
-searchable list of the tabs in that window. Type to filter, pick a tab with
-the arrow keys, and press <strong>Enter</strong> to switch to it.</p>
-<p><img src="https://raw.githubusercontent.com/Dszae/AltTabs/8fdb2c819e758ff60a8b6b35ea9a46135c42e632/assets/hud.png" alt="AltTabs"></p>
-<h2>Keys</h2>
-<table>
-<thead>
-<tr>
-<th>Key</th>
-<th>Action</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Alt+Q</strong> or <strong>Alt+`</strong></td>
-<td>Open the list, with the tab after the current one selected. While it's open, press again to move down, or with Shift to move up.</td>
-</tr>
-<tr>
-<td>Typing</td>
-<td>Filter the tabs. Several words match tabs that contain all of them.</td>
-</tr>
-<tr>
-<td><strong>↑</strong> <strong>↓</strong>, <strong>Tab</strong>, <strong>Shift+Tab</strong></td>
-<td>Move the selection</td>
-</tr>
-<tr>
-<td><strong>Page Up</strong>, <strong>Page Down</strong></td>
-<td>Move the selection by a page</td>
-</tr>
-<tr>
-<td><strong>Enter</strong> or click</td>
-<td>Switch to the selected tab</td>
-</tr>
-<tr>
-<td><strong>Backspace</strong>, <strong>Ctrl+Backspace</strong></td>
-<td>Delete a character, clear the filter</td>
-</tr>
-<tr>
-<td><strong>Esc</strong></td>
-<td>Close the list</td>
-</tr>
-</tbody>
-</table>
-<p><strong>Alt+`</strong> is the key above Tab on US keyboard layouts. The hotkeys are only
-taken over while a window of an enabled browser is focused. In other apps
-they work as usual.</p>
-<h2>Notes</h2>
-<ul>
-<li>Only the tabs of the focused browser window are listed. The current tab is
-marked with a blue bar.</li>
-<li>Tab titles are read with Windows UI Automation. Browsers don't expose tab
-addresses this way, so the site name next to a tab is taken from the end of
-its title, for example &quot;YouTube&quot; in &quot;Some video - YouTube&quot;. Tabs whose title
-doesn't end with a site name have no label.</li>
-<li>Opera should work too, but hasn't been tested. Vivaldi isn't supported, its
-tab bar is part of a web page.</li>
-<li>The first time the list is opened, the browser turns on its accessibility
-support, as it does for screen readers. This uses some extra CPU and memory
-in the browser while it's on.</li>
-<li>The mod runs in its own Windhawk process. It doesn't inject code into the
-browser or into Explorer.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Dszae</name>
-            <uri>https://github.com/Dszae</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Weather 1.6.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-weather#57aa4fa484da22f897006c168040cb4957025f99</id>
-        <link href="https://windhawk.net/mods/taskbar-weather"/>
-        <updated>2026-11-26T07:02:22.000Z</updated>
-        <content type="html"><![CDATA[<h1>Taskbar Weather</h1>
-<p>The current weather at the left end of the taskbar, with a details card when
-you hover over it. It works on its own, without Windows Widgets.</p>
-<p><img src="https://raw.githubusercontent.com/DavidHiFi/davids-windhawk-mods/main/media/previews/taskbar-weather.png" alt="Taskbar Weather preview"></p>
-<h2>Features</h2>
-<ul>
-<li><strong>Weather icon, temperature and conditions</strong> on the taskbar, updated every
-ten minutes by default.</li>
-<li><strong>Hover card</strong> with the feels-like temperature, today's high and low,
-humidity and wind.</li>
-<li><strong>Click to refresh</strong> at any time.</li>
-<li><strong>Follows the Windows theme:</strong> dark text on a light taskbar, light text on a
-dark one. A setting can force either.</li>
-<li><strong>Celsius and km/h, or Fahrenheit and mph.</strong></li>
-<li><strong>No Widgets, MSN, Edge or location permission.</strong> Data comes from
-Open-Meteo, with no account or API key.</li>
-</ul>
-<h2>How it differs from other weather mods</h2>
-<p><a href="https://windhawk.net/mods/taskbar-clock-customization">Taskbar Clock Customization</a>
-can put weather text inside the clock, and
-<a href="https://windhawk.net/mods/micrographics-taskbar-clock">Micrographics Taskbar Clock</a>
-replaces the clock with one that can show a weather line.
-<a href="https://windhawk.net/mods/windhawk-topbar">TopBar for Windows</a> has a weather
-flyout in its own bar, and Desktop Live Overlay shows weather on the desktop.
-This mod adds its own icon and label at the left end of the stock taskbar,
-keeps the regular clock, shows a details card on hover, and needs no other
-mod.</p>
-<h2>Setup</h2>
-<p>Open the settings and enter your town's <strong>latitude</strong> and <strong>longitude</strong> in
-decimal degrees with a dot, for example <code>51.5074</code> and <code>-0.1278</code> (in most map
-apps, right-click a place to copy them). Add a <strong>place name</strong> to show it in the
-hover card.</p>
-<h2>Privacy and network use</h2>
-<p>The mod needs internet access. Your latitude and longitude, rounded to three
-decimals (about 100 m), are sent to <code>api.open-meteo.com</code> with every request:
-when the taskbar appears, after every settings change, at each update
-interval, once a minute while requests fail, when you click the label, when
-the PC wakes up and when the clock or time zone changes. Open-Meteo also sees
-your IP address. Nothing else is sent. Nothing is sent until both coordinates
-are filled in; clear them to stop all requests.</p>
-<h2>Notes</h2>
-<ul>
-<li>The label sits on top of the taskbar at the left offset you choose and does
-not push other buttons aside. With a centered taskbar, turn off Windows
-Widgets (it shows its own weather in the same place). With a left-aligned
-taskbar, raise the left offset so the label clears the Start button.</li>
-<li>Only the main taskbar shows the weather.</li>
-<li>The mod runs in its own background process, not inside Explorer, so a
-crash in the mod can't take Explorer down with it.</li>
-<li>If a request fails, the last reading stays and the card says when it was
-fetched. A reading is marked as stale once it is older than 30 minutes, or
-twice the update interval if that is longer.</li>
-<li>Vertical taskbars (left or right on Windows 10) are not supported. The
-label is not shown on them.</li>
-</ul>
-<h2>Credits</h2>
-<p>Weather data by <a href="https://open-meteo.com/">Open-Meteo.com</a> (CC BY 4.0).</p>
-]]></content>
-        <author>
-            <name>DavidHiFi</name>
-            <uri>https://github.com/DavidHiFi</uri>
         </author>
     </entry>
 </feed>
