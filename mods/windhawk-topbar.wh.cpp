@@ -71307,8 +71307,8 @@ void WhTool_ModUninit() {
 
     if (!IsSecondaryMonitorInstance()) {
         try { RestoreNativeShellHostWindows(true, true); } catch (...) {}
-        try { optimizer::RestoreThrottledProcesses(); } catch (...) {}
     }
+    try { optimizer::RestoreThrottledProcesses(); } catch (...) {}
     try { live_notif_popup::Cleanup(); } catch (...) {}
     try { HidePinnedTaskTooltip(true); } catch (...) {}
     if (g_topBarHwnd && g_appBarRegistered) {
