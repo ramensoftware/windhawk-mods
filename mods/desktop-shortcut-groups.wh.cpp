@@ -2270,10 +2270,23 @@ struct ItemPosition {
     float y;
 };
 
+// A piece of panel text rendered once and reused on every frame. It's
+// rendered again only when the text, size, color or flags change.
+struct TextCache {
+    Image image;
+    std::wstring text;
+    int width = 0;
+    int height = 0;
+    uint32_t color = 0;
+    UINT flags = 0;
+    bool valid = false;
+};
+
 struct PanelItem {
     std::wstring path;
     std::wstring name;
     Image icon;
+    TextCache label;
 };
 
 struct PanelLayout {
@@ -2313,6 +2326,8 @@ struct PanelState {
     IDWriteFactory* dwriteFactory = nullptr;
     IDWriteTextFormat* titleFormat = nullptr;
     IDWriteTextFormat* labelFormat = nullptr;
+    TextCache titleText;
+    TextCache buttonText;
     int hover = kHitNone;
     int pressed = kHitNone;
     int focus = kHitNone;
@@ -2645,6 +2660,42 @@ void DrawTextToImage(Image& dst,
     DeleteDC(dc);
 }
 
+// Draws text through a cache, so the text isn't laid out and rendered again
+// on every frame (the reorder animation redraws the panel every 15 ms).
+void DrawCachedText(Image& dst,
+                    TextCache& cache,
+                    const std::wstring& text,
+                    const RECT& rect,
+                    HFONT font,
+                    IDWriteTextFormat* textFormat,
+                    uint32_t color,
+                    UINT flags) {
+    int width = rect.right - rect.left;
+    int height = rect.bottom - rect.top;
+    if (width <= 0 || height <= 0 || text.empty()) {
+        return;
+    }
+
+    if (!cache.valid || cache.text != text || cache.width != width ||
+        cache.height != height || cache.color != color ||
+        cache.flags != flags) {
+        cache.image.width = width;
+        cache.image.height = height;
+        cache.image.pixels.assign(static_cast<size_t>(width) * height, 0);
+        RECT local = {0, 0, width, height};
+        DrawTextToImage(cache.image, text, local, font, textFormat, color,
+                        color, color, flags);
+        cache.text = text;
+        cache.width = width;
+        cache.height = height;
+        cache.color = color;
+        cache.flags = flags;
+        cache.valid = true;
+    }
+
+    BlendImage(dst, cache.image, rect.left, rect.top);
+}
+
 std::wstring DisplayNameOf(const std::wstring& path) {
     std::wstring name = FileNameOf(path);
     if (HasShortcutExtension(name)) {
@@ -2750,9 +2801,9 @@ void RenderPanel() {
     RECT button = OpenButtonRect();
     RECT titleRect = {l.padding, l.padding, button.left - Scaled(12),
                       l.padding + l.titleHeight - Scaled(8)};
-    DrawTextToImage(frame, g_panel.title, titleRect, g_panel.titleFont,
-                    g_panel.titleFormat, text, text, text,
-                    DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+    DrawCachedText(frame, g_panel.titleText, g_panel.title, titleRect,
+                   g_panel.titleFont, g_panel.titleFormat, text,
+                   DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 
     // "Open folder" button.
     bool buttonHot = g_panel.hover == kHitOpenFolder;
@@ -2762,8 +2813,9 @@ void RenderPanel() {
                     static_cast<float>(button.bottom),
                     static_cast<float>(l.buttonHeight) / 2, highlight,
                     highlight, highlight, buttonHot ? 46 : 24);
-    DrawTextToImage(frame, L"Open folder", button, g_panel.labelFont,
-                    g_panel.labelFormat, text, text, text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    DrawCachedText(frame, g_panel.buttonText, L"Open folder", button,
+                   g_panel.labelFont, g_panel.labelFormat, text,
+                   DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
     // Items.
     auto drawItem = [&](int i, const RECT& cell, uint32_t backgroundAlpha) {
@@ -2786,11 +2838,11 @@ void RenderPanel() {
         RECT label = {cell.left + Scaled(6),
                       iconTop + l.iconSize + l.labelGap,
                       cell.right - Scaled(6), cell.bottom - Scaled(6)};
-        DrawTextToImage(frame, g_panel.items[i].name, label,
-                        g_panel.labelFont, g_panel.labelFormat, text,
-                        text, text,
-                        DT_CENTER | DT_WORDBREAK | DT_EDITCONTROL |
-                            DT_END_ELLIPSIS);
+        PanelItem& item = g_panel.items[i];
+        DrawCachedText(frame, item.label, item.name, label, g_panel.labelFont,
+                       g_panel.labelFormat, text,
+                       DT_CENTER | DT_WORDBREAK | DT_EDITCONTROL |
+                           DT_END_ELLIPSIS);
     };
 
     bool animated = !g_panel.itemPositions.empty();
