@@ -2,7 +2,7 @@
 // @id              taskbar-mini-folders
 // @name            Taskbar Mini Folders
 // @description     Adds mini folders with a 2x2 icon preview to the Windows 11 taskbar. Click one to open a panel with all its apps, files and shortcuts.
-// @version         1.1.0
+// @version         1.2.0
 // @author          Sanekx Arcs
 // @github          https://github.com/SanekxArcs
 // @include         explorer.exe
@@ -35,13 +35,34 @@ Whatever is in that folder shows up in the mini folder: shortcuts, programs,
 files and other folders. Hidden and system files are skipped. Items are sorted
 by name.
 
+A folder inside a mini folder opens in the same panel. Go back with the arrow
+button, the Backspace key or the back button of the mouse. If there are more
+items than fit on the screen, scroll with the mouse wheel or the Page Up and
+Page Down keys.
+
+If a folder has its own icon (Properties > Customize > Change Icon), the tile
+on the taskbar shows that icon instead of the four small icons. This can be
+turned off in the settings.
+
+### Adding folders automatically
+
+Turn on **Add every folder from TaskbarFolders automatically**, and every
+folder inside `%USERPROFILE%\TaskbarFolders` that has something in it becomes
+a mini folder. Put a new folder there and it shows up on the taskbar right
+away. Delete or rename it, and the taskbar follows. An empty folder is left
+out until you put something in it.
+
+To leave one of these folders out, add it to the **Mini folders** list with
+the same name and turn on **Hide this mini folder**. Folders from the list
+come first, then the automatic ones, sorted by name.
+
 ## Using it
 
 | Action | Result |
 |---|---|
 | Click a mini folder | Opens its panel. Click it again, press Esc or click elsewhere to close the panel |
-| Click an icon in the panel | Opens the app, file or folder |
-| Right-click an icon | Open, Open file location, Remove from this folder (Delete for real files and folders) |
+| Click an icon in the panel | Opens the app or file. A folder opens inside the panel |
+| Right-click an icon | Open, Open in Explorer (folders), Open file location, Remove from this folder (Delete for real files and folders) |
 | **+ Add...** | Pick apps or files. A shortcut to each one is created in the folder |
 | **Open folder** | Opens the folder in Explorer, so you can drag items in, rename or delete them |
 
@@ -60,6 +81,8 @@ most installed apps have a shortcut.
 |---|---|---|
 | Mini folders | Apps, Work, Games | The list of mini folders. Each has a name and an optional path |
 | Hide this mini folder | off | Hides one mini folder from the taskbar without deleting it. Its name, path and files stay, so you can show it again later |
+| Add every folder from TaskbarFolders automatically | off | Every folder in `%USERPROFILE%\TaskbarFolders` that is not empty becomes a mini folder, also new ones |
+| Show the folder's own icon on the tile | on | A folder with a custom icon shows that icon instead of the 2x2 preview |
 | Folder path | empty | Leave empty to use `%USERPROFILE%\TaskbarFolders\<name>`. Any existing folder works, and environment variables are expanded |
 | Position in the taskbar | Next to the Start button | Can also be after the last taskbar app, after a chosen number of taskbar icons, or at the far left edge of the taskbar |
 | Number of taskbar icons before the mini folders | 3 | Only for "After a chosen number of taskbar icons". Start, Search and Task View count too. 0 = before the first icon |
@@ -78,6 +101,8 @@ opens beside the taskbar.
 * The folder of a mini folder (by default inside `%USERPROFILE%\TaskbarFolders`),
   created when you first use **+ Add...** or **Open folder** in it.
 * The shortcuts that **+ Add...** puts into that folder.
+* `%USERPROFILE%\TaskbarFolders` itself, if it doesn't exist yet when you turn
+  on **Add every folder from TaskbarFolders automatically**.
 
 These are your files. The mod never deletes them, so they stay on disk after
 the mod is disabled or removed. Delete the `TaskbarFolders` folder yourself if
@@ -87,9 +112,15 @@ you no longer need it.
 
 * Folder contents and icons are read on a background thread, never on the
   taskbar thread, so a slow disk or a network folder can't freeze the taskbar.
-* Nothing runs in the background: no timers and no folder watching. The tile
-  preview is refreshed when you open the mini folder or change it from the
-  panel.
+* Nothing runs in the background, except one thing: with **Add every folder
+  from TaskbarFolders automatically** on, Windows tells the mod when files or
+  folders are added, removed or renamed inside `TaskbarFolders`. The mod then
+  reads only the top level of `TaskbarFolders` again, half a second after the
+  last change. Nothing else is watched.
+* The tile preview is refreshed when you open the mini folder or change it
+  from the panel.
+* Icons are read only for the items you can see. A big folder opens fast, and
+  the other icons are read when you scroll to them.
 * Opening the same mini folder again reuses the icons that are already loaded.
 
 ## Limitations
@@ -103,8 +134,7 @@ you no longer need it.
 * The mini folders stay together as one group, and they can't be dragged
   between the taskbar icons. Use the position settings to choose where the
   group goes.
-* The panel does not scroll. A folder with many items gets more icons per row
-  so that the panel fits the screen. Items that still don't fit are not shown.
+* Pictures show the icon of their file type, not a preview of the picture.
 
 Tip: unpin the normal taskbar icons and keep everything in mini folders.
 */
@@ -135,6 +165,18 @@ Tip: unpin the normal taskbar icons and keep everything in mini folders.
       $name: Hide this mini folder
       $description: Hides it from the taskbar but keeps its name, path and files, so you can show it again later
   $name: Mini folders
+- autoAdd: false
+  $name: Add every folder from TaskbarFolders automatically
+  $description: >-
+    Every folder inside %USERPROFILE%\TaskbarFolders becomes a mini folder,
+    also new ones you put there later. Empty folders are left out. To leave
+    one out, add it to the list above with the same name and turn on "Hide
+    this mini folder".
+- folderIcon: true
+  $name: Show the folder's own icon on the tile
+  $description: >-
+    If a folder has a custom icon (Properties > Customize > Change Icon, saved
+    in desktop.ini), the tile shows that icon instead of the 2x2 preview.
 - position: left
   $name: Position in the taskbar
   $options:
@@ -200,16 +242,26 @@ namespace wuxm = winrt::Windows::UI::Xaml::Media;
 struct FolderDef {
     std::wstring name;
     std::wstring dir;  // expanded, absolute
+
+    bool operator==(const FolderDef&) const = default;
 };
 
 enum PositionMode { kPosStart = 0, kPosEnd = 1, kPosEdge = 2, kPosAfter = 3 };
 
 struct Settings {
+    // What the taskbar shows: the visible folders of the list, then (with
+    // autoAdd) the other folders found in autoRoot.
     std::vector<FolderDef> folders;
+    std::vector<FolderDef> listed;          // visible folders of the list
+    std::vector<std::wstring> listedDirs;   // all folders of the list, hidden too
+    bool autoAdd = false;
+    std::wstring autoRoot;
+    bool folderIcon = true;
     int mode = 0;  // PositionMode
     int afterIcons = 3;  // for kPosAfter
     int buttonSize = 40;
     int columns = 4;
+    unsigned generation = 0;
 };
 
 std::mutex g_settingsMutex;
@@ -241,18 +293,90 @@ std::wstring SanitizeFileName(std::wstring s) {
     return s.empty() ? L"Folder" : s;
 }
 
-void LoadSettings() {
+// The visible subfolders of `root`, sorted by name.
+std::vector<FolderDef> ListSubfolders(const std::wstring& root) {
+    std::vector<FolderDef> result;
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((root + L"\\*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) {
+        return result;
+    }
+    do {
+        if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ||
+            (fd.dwFileAttributes & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM)) ||
+            wcscmp(fd.cFileName, L".") == 0 || wcscmp(fd.cFileName, L"..") == 0) {
+            continue;
+        }
+        result.push_back({fd.cFileName, root + L"\\" + fd.cFileName});
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    std::sort(result.begin(), result.end(), [](const auto& a, const auto& b) {
+        return StrCmpLogicalW(a.name.c_str(), b.name.c_str()) < 0;
+    });
+    return result;
+}
+
+// True if the folder has at least one item that a mini folder would show.
+bool HasVisibleItems(const std::wstring& dir) {
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((dir + L"\\*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    bool found = false;
+    do {
+        found = wcscmp(fd.cFileName, L".") != 0 && wcscmp(fd.cFileName, L"..") != 0 &&
+                !(fd.dwFileAttributes & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM));
+    } while (!found && FindNextFileW(h, &fd));
+    FindClose(h);
+    return found;
+}
+
+// The list folders, then the auto-added ones that are not in the list (a
+// hidden list entry keeps its folder out). Reads the disk: never call it on
+// the taskbar thread.
+std::vector<FolderDef> BuildFolderList(const Settings& s) {
+    std::vector<FolderDef> folders = s.listed;
+    if (s.autoAdd) {
+        for (auto& f : ListSubfolders(s.autoRoot)) {
+            bool known = std::any_of(s.listedDirs.begin(), s.listedDirs.end(),
+                                     [&](const std::wstring& d) {
+                                         return _wcsicmp(d.c_str(), f.dir.c_str()) == 0;
+                                     });
+            // Empty folders are left out until something is put in them.
+            if (!known && HasVisibleItems(f.dir)) {
+                folders.push_back(std::move(f));
+            }
+        }
+    }
+    return folders;
+}
+
+// Reads the auto-added folders again. Returns true if the list changed.
+bool UpdateAutoFolders() {
+    Settings s = GetSettings();
+    if (!s.autoAdd) {
+        return false;
+    }
+    std::vector<FolderDef> folders = BuildFolderList(s);
+    std::lock_guard<std::mutex> lock(g_settingsMutex);
+    if (g_settings.generation != s.generation || g_settings.folders == folders) {
+        return false;  // settings reloaded meanwhile, or nothing new
+    }
+    g_settings.folders = std::move(folders);
+    return true;
+}
+
+// scanAutoFolders: false in Wh_ModInit, which runs on Explorer's own thread
+// while Explorer starts, so it must not read the disk. The popup thread adds
+// the automatic folders a moment later (kTimerAutoScan).
+void LoadSettings(bool scanAutoFolders) {
     Settings s;
     for (int i = 0; i < 64; i++) {
         std::wstring n = WindhawkUtils::StringSetting::make(L"folders[%d].name", i).get();
         std::wstring p = WindhawkUtils::StringSetting::make(L"folders[%d].path", i).get();
         if (n.empty() && p.empty()) {
             break;
-        }
-        // "Hide this mini folder": skipped, but its settings and files stay.
-        // A missing value (settings saved by version 1.0.0) reads as 0, shown.
-        if (Wh_GetIntSetting(L"folders[%d].hidden", i)) {
-            continue;
         }
 
         FolderDef f;
@@ -264,10 +388,22 @@ void LoadSettings() {
             f.dir.pop_back();
         }
         f.name = n.empty() ? std::wstring(PathFindFileNameW(f.dir.c_str())) : n;
+        s.listedDirs.push_back(f.dir);
+
+        // "Hide this mini folder": skipped, but its settings and files stay.
+        // A missing value (settings saved by version 1.0.0) reads as 0, shown.
+        if (Wh_GetIntSetting(L"folders[%d].hidden", i)) {
+            continue;
+        }
 
         // The folder is not created here: see EnsureFolderExists.
-        s.folders.push_back(std::move(f));
+        s.listed.push_back(std::move(f));
     }
+
+    s.autoAdd = Wh_GetIntSetting(L"autoAdd") != 0;
+    s.autoRoot = ExpandEnv(L"%USERPROFILE%\\TaskbarFolders");
+    s.folderIcon = Wh_GetIntSetting(L"folderIcon") != 0;
+    s.folders = scanAutoFolders ? BuildFolderList(s) : s.listed;
 
     WindhawkUtils::StringSetting position = WindhawkUtils::StringSetting::make(L"position");
     s.mode = wcscmp(position.get(), L"right") == 0   ? kPosEnd
@@ -280,6 +416,7 @@ void LoadSettings() {
     s.columns = std::clamp(Wh_GetIntSetting(L"columns"), 1, 10);
 
     std::lock_guard<std::mutex> lock(g_settingsMutex);
+    s.generation = g_settings.generation + 1;
     g_settings = std::move(s);
 }
 
@@ -355,6 +492,8 @@ struct IconPixels {
     bool operator==(const IconPixels&) const = default;
 };
 
+void NormalizeAlpha(IconPixels& out);
+
 bool GetIconPixels(const std::wstring& path, int size, IconPixels& out) {
     winrt::com_ptr<IShellItemImageFactory> factory;
     if (FAILED(SHCreateItemFromParsingName(path.c_str(), nullptr,
@@ -393,7 +532,135 @@ bool GetIconPixels(const std::wstring& path, int size, IconPixels& out) {
     if (lines == 0) {
         return false;
     }
+    NormalizeAlpha(out);
+    return true;
+}
 
+// Reads a 32-bit bitmap (top-down) into `bgra`. Returns false on failure.
+bool ReadBitmap32(HBITMAP hbm, int w, int h, std::vector<BYTE>& bgra) {
+    BITMAPINFO bi{};
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = w;
+    bi.bmiHeader.biHeight = -h;
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+    bgra.assign((size_t)w * h * 4, 0);
+    HDC dc = GetDC(nullptr);
+    int lines = GetDIBits(dc, hbm, 0, h, bgra.data(), &bi, DIB_RGB_COLORS);
+    ReleaseDC(nullptr, dc);
+    return lines != 0;
+}
+
+bool IconToPixels(HICON icon, IconPixels& out) {
+    ICONINFO ii{};
+    if (!GetIconInfo(icon, &ii)) {
+        return false;
+    }
+    bool ok = false;
+    BITMAP bm{};
+    if (ii.hbmColor && GetObject(ii.hbmColor, sizeof(bm), &bm) && bm.bmWidth > 0 &&
+        bm.bmHeight > 0) {
+        out.w = bm.bmWidth;
+        out.h = bm.bmHeight;
+        ok = ReadBitmap32(ii.hbmColor, out.w, out.h, out.bgra);
+        bool anyAlpha = false;
+        for (size_t i = 3; ok && i < out.bgra.size(); i += 4) {
+            anyAlpha = anyAlpha || out.bgra[i];
+        }
+        // An old icon without alpha: the mask says what is transparent.
+        std::vector<BYTE> mask;
+        if (ok && !anyAlpha && ii.hbmMask && ReadBitmap32(ii.hbmMask, out.w, out.h, mask)) {
+            for (size_t i = 0; i < out.bgra.size(); i += 4) {
+                bool transparent = mask[i] != 0;
+                out.bgra[i + 3] = transparent ? 0 : 255;
+                if (transparent) {
+                    out.bgra[i] = out.bgra[i + 1] = out.bgra[i + 2] = 0;
+                }
+            }
+        }
+    }
+    if (ii.hbmColor) DeleteObject(ii.hbmColor);
+    if (ii.hbmMask) DeleteObject(ii.hbmMask);
+    if (ok) {
+        NormalizeAlpha(out);
+    }
+    return ok;
+}
+
+// The custom icon of a folder, set in its desktop.ini (IconResource, or
+// IconFile + IconIndex). If the icon path no longer exists (the folder was
+// moved) but a file with that name is inside the folder, that file is used.
+bool GetFolderCustomIcon(const std::wstring& dir, int size, IconPixels& out) {
+    std::wstring ini = dir + L"\\desktop.ini";
+    if (GetFileAttributesW(ini.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        return false;
+    }
+    WCHAR buf[1024] = L"";
+    std::wstring file;
+    int index = 0;
+    if (GetPrivateProfileStringW(L".ShellClassInfo", L"IconResource", L"", buf, ARRAYSIZE(buf),
+                                 ini.c_str()) &&
+        *buf) {
+        file = buf;
+        size_t comma = file.rfind(L',');
+        if (comma != std::wstring::npos) {
+            index = _wtoi(file.c_str() + comma + 1);
+            file.resize(comma);
+        }
+    } else if (GetPrivateProfileStringW(L".ShellClassInfo", L"IconFile", L"", buf, ARRAYSIZE(buf),
+                                        ini.c_str()) &&
+               *buf) {
+        file = buf;
+        index = GetPrivateProfileIntW(L".ShellClassInfo", L"IconIndex", 0, ini.c_str());
+    }
+    while (!file.empty() && (file.back() == L' ' || file.back() == L'"')) {
+        file.pop_back();
+    }
+    while (!file.empty() && (file.front() == L' ' || file.front() == L'"')) {
+        file.erase(0, 1);
+    }
+    if (file.empty()) {
+        return false;
+    }
+    file = ExpandEnv(file);
+    if (PathIsRelativeW(file.c_str())) {
+        file = dir + L"\\" + file;
+    }
+    if (GetFileAttributesW(file.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        std::wstring local = dir + L"\\" + PathFindFileNameW(file.c_str());
+        if (GetFileAttributesW(local.c_str()) == INVALID_FILE_ATTRIBUTES) {
+            return false;
+        }
+        file = local;
+    }
+
+    HICON icon = nullptr;
+    if (SHDefExtractIconW(file.c_str(), index, 0, &icon, nullptr, MAKELONG(size, size)) != S_OK) {
+        icon = nullptr;
+    }
+    if (!icon) {
+        return false;
+    }
+    bool ok = IconToPixels(icon, out);
+    DestroyIcon(icon);
+    return ok;
+}
+
+// The icon of a folder item: its own custom icon if it has one, else what
+// the shell shows.
+bool GetItemIconPixels(const std::wstring& path, int size, IconPixels& out) {
+    DWORD attr = GetFileAttributesW(path.c_str());
+    if (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY) &&
+        GetFolderCustomIcon(path, size, out)) {
+        return true;
+    }
+    return GetIconPixels(path, size, out);
+}
+
+// Makes the pixels premultiplied, with alpha. Pixels without any alpha are
+// made opaque.
+void NormalizeAlpha(IconPixels& out) {
     bool anyAlpha = false;
     bool premultiplied = true;
     for (size_t i = 0; i < out.bgra.size(); i += 4) {
@@ -415,7 +682,6 @@ bool GetIconPixels(const std::wstring& path, int size, IconPixels& out) {
             out.bgra[i + 2] = (BYTE)(out.bgra[i + 2] * a / 255);
         }
     }
-    return true;
 }
 
 // ============================================================================
@@ -587,12 +853,14 @@ struct FolderPreview {
     bool loaded = false;
     std::vector<std::wstring> paths;
     std::vector<IconPixels> icons;  // same size as paths; w == 0 if no icon
+    IconPixels folderIcon;  // the folder's own icon (desktop.ini); w == 0 if none
 
     bool operator==(const FolderPreview&) const = default;
 };
 
 constexpr size_t kPreviewCount = 4;
 constexpr int kPreviewIconPx = 32;
+constexpr int kFolderIconPx = 64;
 
 std::mutex g_previewMutex;
 std::vector<FolderPreview> g_previews;  // by folder index
@@ -600,6 +868,14 @@ std::vector<FolderPreview> g_previews;  // by folder index
 // UI thread only. The TaskListButton hook is only needed until a taskbar
 // frame is found.
 bool g_backupTriggerNeeded = true;
+
+// The taskbar thread's dispatcher queue. Other threads use it to ask the
+// taskbar thread to do something later, without sending it a message: a sent
+// message can arrive in the middle of the taskbar's own work.
+std::mutex g_uiQueueMutex;
+// Released with `g_uiQueue = nullptr;` in Wh_ModUninit. No destructor at
+// process exit: the taskbar thread is already gone then.
+[[clang::no_destroy]] winrt::Windows::System::DispatcherQueue g_uiQueue{nullptr};
 
 FrameState* FindFrameState(FrameworkElement const& frame) {
     for (auto& s : g_frames) {
@@ -667,6 +943,17 @@ wuxc::Button MakeFolderButton(int index, const FolderDef& folder, int size,
 
     if (!preview || !preview->loaded || preview->dir != folder.dir) {
         // Not read yet: an empty tile. The panel is rebuilt once it's ready.
+    } else if (preview->folderIcon.w > 0 && preview->folderIcon.h > 0) {
+        // The folder's own icon, like a normal taskbar app icon.
+        border.Background(wuxm::SolidColorBrush(winrt::Windows::UI::Color{0, 0, 0, 0}));
+        border.Padding(Thickness{0, 0, 0, 0});
+        wuxc::Image image;
+        double iconSize = std::round(tile * 0.85);
+        image.Width(iconSize);
+        image.Height(iconSize);
+        image.Stretch(wuxm::Stretch::Uniform);
+        image.Source(MakeImageSource(preview->folderIcon));
+        border.Child(image);
     } else if (preview->paths.empty()) {
         wuxc::FontIcon icon;
         icon.Glyph(L"\uE8B7");  // folder
@@ -1046,19 +1333,26 @@ void RemoveAllPanels() {
     g_injected.clear();
 }
 
+// Builds the panels again in every taskbar frame seen so far, also the ones
+// that had no mini folders before.
 void RebuildAllPanels() {
     std::vector<FrameworkElement> frames;
-    for (auto& inj : g_injected) {
-        if (auto f = inj.frame.get()) {
+    for (auto& s : g_frames) {
+        if (auto f = s.frame.get()) {
             frames.push_back(f);
         }
     }
     RemoveAllPanels();
     for (auto& f : frames) {
+        bool ok = false;
         try {
-            InjectIntoFrame(f);
+            ok = InjectIntoFrame(f);
         } catch (...) {
             Wh_Log(L"Inject error %08X", winrt::to_hresult());
+        }
+        if (FrameState* s = FindFrameState(f)) {
+            s->injected = ok;
+            s->attempts = 0;
         }
     }
 }
@@ -1110,6 +1404,12 @@ void QueueInject(FrameworkElement const& frame) {
         // XAML islands (the Windows 11 taskbar) use DispatcherQueue.
         auto queue = winrt::Windows::System::DispatcherQueue::GetForCurrentThread();
         if (queue) {
+            {
+                std::lock_guard<std::mutex> lock(g_uiQueueMutex);
+                if (!g_uiQueue) {
+                    g_uiQueue = queue;
+                }
+            }
             queued = queue.TryEnqueue(run);
         }
         if (!queued) {
@@ -1187,10 +1487,35 @@ void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
     }
 }
 
+// Any thread. Rebuilds the panels later, from the taskbar thread's
+// dispatcher, and returns at once. Does nothing if no taskbar frame was seen
+// yet: the first injection then reads the current settings and previews.
 void RequestRebuild() {
-    HWND ui = GetTaskbarUiWnd();
-    if (ui) {
-        RunFromWindowThread(ui, [](PVOID) { RebuildAllPanels(); }, nullptr);
+    if (g_unloading) {
+        return;
+    }
+    winrt::Windows::System::DispatcherQueue queue{nullptr};
+    {
+        std::lock_guard<std::mutex> lock(g_uiQueueMutex);
+        queue = g_uiQueue;
+    }
+    if (!queue) {
+        return;
+    }
+    auto pending = std::make_shared<PendingDispatchGuard>();
+    try {
+        queue.TryEnqueue([pending]() {
+            if (g_unloading) {
+                return;
+            }
+            try {
+                RebuildAllPanels();
+            } catch (...) {
+                Wh_Log(L"Rebuild error %08X", winrt::to_hresult());
+            }
+        });
+    } catch (...) {
+        Wh_Log(L"Queue error %08X", winrt::to_hresult());
     }
 }
 
@@ -1229,6 +1554,10 @@ void RefreshPreviews() {
         if (p.paths.size() > kPreviewCount) {
             p.paths.resize(kPreviewCount);
         }
+        if (s.folderIcon && GetFolderCustomIcon(p.dir, kFolderIconPx, p.folderIcon)) {
+            continue;  // the tile shows only this icon
+        }
+        p.folderIcon = {};
         for (auto& path : p.paths) {
             if (g_unloading) {
                 return;
@@ -1261,23 +1590,31 @@ void RefreshPreviews() {
 struct PopupItem {
     std::wstring path;
     std::wstring label;
+    bool isDir = false;
+    bool loaded = false;  // icon read (icons are read when first visible)
     HBITMAP bmp = nullptr;
     int bw = 0;
     int bh = 0;
-    RECT rc{};
+    RECT rc{};  // in content coordinates: y = 0 is the top of the item area
 };
 
-enum HitId { kHitNone = -1, kHitAdd = 100000, kHitOpen = 100001 };
+enum HitId { kHitNone = -1, kHitAdd = 100000, kHitOpen = 100001, kHitBack = 100002 };
+
+const UINT WM_APP_SETTINGS = WM_APP + 0x54;
+constexpr UINT_PTR kTimerAutoScan = 1;
 
 struct PopupState {
     int folder = -1;
+    std::wstring name;     // the mini folder's name
+    std::wstring rootDir;  // the mini folder's directory
+    std::wstring dir;      // the directory shown now (rootDir or a subfolder)
     std::wstring title;
-    std::wstring dir;
     POINT anchor{};
     UINT dpi = 96;
     std::vector<PopupItem> items;
     RECT rcAdd{};
     RECT rcOpen{};
+    RECT rcBack{};
     RECT rcEmpty{};
     int hover = kHitNone;
     bool trackingLeave = false;
@@ -1287,9 +1624,18 @@ struct PopupState {
     int iconPx = 40;
     DWORD hiddenTick = 0;
     int hiddenFolder = -1;
+    // The item area, below the header. It scrolls when the items don't fit.
+    int viewTop = 0;
+    int viewH = 0;
+    int contentH = 0;
+    int cellH = 0;
+    int scrollY = 0;
     // What `items` was loaded from, to reuse it when nothing changed.
     std::wstring itemsDir;
     ULONGLONG itemsStamp = 0;
+    // Folder watching for "add every folder automatically".
+    HANDLE watch = INVALID_HANDLE_VALUE;
+    std::wstring watchDir;
 } g_popup;
 
 HANDLE g_popupThread;
@@ -1341,39 +1687,39 @@ void PopupHide() {
     g_popup.hover = kHitNone;
 }
 
-void PopupShow(int folder, POINT anchor, bool force) {
-    // The window may already be gone when a file picker, a menu or a
-    // confirmation returns while the mod is being unloaded.
-    if (g_unloading || !IsWindow(g_popupWnd)) {
-        return;
-    }
+bool SameDir(const std::wstring& a, const std::wstring& b) {
+    return _wcsicmp(a.c_str(), b.c_str()) == 0;
+}
 
-    if (!force) {
-        if (IsWindowVisible(g_popupWnd) && g_popup.folder == folder) {
-            PopupHide();
+bool PopupInSubfolder() {
+    return !g_popup.dir.empty() && !SameDir(g_popup.dir, g_popup.rootDir);
+}
+
+// Reads the icons of the items that are visible now (plus one row), so a big
+// folder opens fast. Icons of the other items are read when scrolled to.
+void PopupLoadVisibleIcons() {
+    int top = g_popup.scrollY - g_popup.cellH;
+    int bottom = g_popup.scrollY + g_popup.viewH + g_popup.cellH;
+    for (auto& it : g_popup.items) {
+        if (g_unloading) {
             return;
         }
-        // The click that closed the popup (by deactivating it) also arrives
-        // here: treat it as a toggle.
-        if (!IsWindowVisible(g_popupWnd) && g_popup.hiddenFolder == folder &&
-            GetTickCount() - g_popup.hiddenTick < 400) {
-            return;
+        if (it.loaded || it.rc.bottom < top || it.rc.top > bottom) {
+            continue;
+        }
+        it.loaded = true;
+        IconPixels px;
+        if (GetItemIconPixels(it.path, g_popup.iconPx, px)) {
+            it.bmp = MakeDib(px);
+            it.bw = px.w;
+            it.bh = px.h;
         }
     }
+}
 
-    Settings s = GetSettings();
-    if (folder < 0 || folder >= (int)s.folders.size()) {
-        return;
-    }
-
-    g_popup.folder = folder;
-    g_popup.anchor = anchor;
-    g_popup.title = s.folders[folder].name;
-    g_popup.dir = s.folders[folder].dir;
-    g_popup.light = SystemUsesLightTheme();
-    g_popup.hover = kHitNone;
-
-    HMONITOR mon = MonitorFromPoint(anchor, MONITOR_DEFAULTTONEAREST);
+// Lists g_popup.dir, lays the panel out and shows it.
+void PopupLayout(int columnsSetting, bool resetScroll) {
+    HMONITOR mon = MonitorFromPoint(g_popup.anchor, MONITOR_DEFAULTTONEAREST);
     UINT dpiX = 96, dpiY = 96;
     if (FAILED(GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &dpiX, &dpiY))) {
         dpiX = 96;
@@ -1389,7 +1735,26 @@ void PopupShow(int folder, POINT anchor, bool force) {
                                     DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                     CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
 
-    // The panel doesn't scroll: it must fit the work area of the monitor.
+    // Title: the mini folder's name, then the subfolders opened in it.
+    g_popup.title = g_popup.name;
+    if (PopupInSubfolder() && g_popup.dir.size() > g_popup.rootDir.size()) {
+        size_t skip = g_popup.rootDir.size();
+        if (g_popup.rootDir.back() != L'\\') {
+            skip++;  // the backslash after the root ("D:\" already ends with one)
+        }
+        std::wstring rel = g_popup.dir.substr(std::min(skip, g_popup.dir.size()));
+        size_t start = 0;
+        while (start <= rel.size()) {
+            size_t end = rel.find(L'\\', start);
+            if (end == std::wstring::npos) {
+                end = rel.size();
+            }
+            g_popup.title += L"  \u203A  " + rel.substr(start, end - start);
+            start = end + 1;
+        }
+    }
+
+    // The panel must fit the work area of the monitor; more items scroll.
     MONITORINFO mi{sizeof(mi)};
     GetMonitorInfo(mon, &mi);
     RECT work = mi.rcWork;
@@ -1398,65 +1763,57 @@ void PopupShow(int folder, POINT anchor, bool force) {
     int maxCols = std::max(1, (int)(work.right - work.left - gapPx * 2 - pad * 2) / cellW);
     int maxRows = std::max(1, (int)(work.bottom - work.top - gapPx * 2 - headerH - pad) / cellH);
 
-    // Items + icons. Opening the same, unchanged folder again reuses them.
+    // Items. Showing the same, unchanged folder again reuses them and their
+    // icons.
     int iconPx = Px(40);
     ULONGLONG stamp = 0;
     auto paths = ListFolder(g_popup.dir, &stamp);
-    if (paths.size() > (size_t)maxCols * maxRows) {
-        paths.resize((size_t)maxCols * maxRows);  // the rest can't be shown
-    }
-    bool reuse = g_popup.itemsDir == g_popup.dir && g_popup.itemsStamp == stamp &&
+    bool reuse = SameDir(g_popup.itemsDir, g_popup.dir) && g_popup.itemsStamp == stamp &&
                  g_popup.iconPx == iconPx && g_popup.items.size() == paths.size();
     for (size_t i = 0; reuse && i < paths.size(); i++) {
-        reuse = g_popup.items[i].bmp && g_popup.items[i].path == paths[i];
+        reuse = g_popup.items[i].path == paths[i];
     }
     if (!reuse) {
         PopupFreeItems();
         g_popup.iconPx = iconPx;
         for (auto& p : paths) {
-            if (g_unloading) {
-                return;
-            }
             PopupItem it;
             it.path = p;
             it.label = DisplayNameOf(p);
-            IconPixels px;
-            if (GetIconPixels(p, iconPx, px)) {
-                it.bmp = MakeDib(px);
-                it.bw = px.w;
-                it.bh = px.h;
-            }
+            DWORD attr = GetFileAttributesW(p.c_str());
+            it.isDir = attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY);
             g_popup.items.push_back(std::move(it));
         }
         g_popup.itemsDir = g_popup.dir;
         g_popup.itemsStamp = stamp;
     }
 
-    // If the taskbar preview is out of date (files changed in Explorer),
-    // refresh it.
-    {
-        std::vector<std::wstring> first(paths.begin(),
-                                        paths.begin() + std::min(kPreviewCount, paths.size()));
-        bool differs;
-        {
-            std::lock_guard<std::mutex> lock(g_previewMutex);
-            differs = folder >= (int)g_previews.size() || g_previews[folder].paths != first;
-        }
-        if (differs) {
-            QueuePreviewRefresh();
-        }
+    // The taskbar tile may be out of date (files or the folder icon changed
+    // in Explorer): read it again. It is rebuilt only if something changed.
+    if (!PopupInSubfolder()) {
+        QueuePreviewRefresh();
     }
 
-    // Layout. A folder with too many rows for the screen gets more columns.
+    // Layout. A folder with too many rows for the screen gets more columns,
+    // and if that is not enough, the item area scrolls.
     int n = (int)g_popup.items.size();
-    int cols = std::max(1, std::min({s.columns, maxCols, std::max(n, 1)}));
+    int cols = std::max(1, std::min({columnsSetting, maxCols, std::max(n, 1)}));
     int rows = n ? (n + cols - 1) / cols : 1;
     if (rows > maxRows) {
         cols = std::min(maxCols, (n + maxRows - 1) / maxRows);
         rows = (n + cols - 1) / cols;
     }
-    int w = std::max(pad * 2 + cols * cellW, Px(300));
-    int h = headerH + rows * cellH + pad;
+    int visibleRows = std::min(rows, maxRows);
+    int w = std::max(pad * 2 + cols * cellW, Px(320));
+    int h = headerH + visibleRows * cellH + pad;
+    g_popup.viewTop = headerH;
+    g_popup.viewH = visibleRows * cellH;
+    g_popup.contentH = rows * cellH;
+    g_popup.cellH = cellH;
+    if (resetScroll) {
+        g_popup.scrollY = 0;
+    }
+    g_popup.scrollY = std::clamp(g_popup.scrollY, 0, g_popup.contentH - g_popup.viewH);
 
     HDC dc = GetDC(g_popupWnd);
     HFONT old = (HFONT)SelectObject(dc, g_popup.font);
@@ -1471,17 +1828,28 @@ void PopupShow(int folder, POINT anchor, bool force) {
     g_popup.rcOpen = {w - pad - szOpen.cx - btnPadX * 2, btnTop, w - pad, btnBottom};
     g_popup.rcAdd = {g_popup.rcOpen.left - Px(6) - szAdd.cx - btnPadX * 2, btnTop,
                      g_popup.rcOpen.left - Px(6), btnBottom};
+    if (PopupInSubfolder()) {
+        g_popup.rcBack = {Px(8), btnTop, Px(8) + (btnBottom - btnTop) + Px(4), btnBottom};
+    } else {
+        g_popup.rcBack = {};
+    }
 
     int startX = (w - cols * cellW) / 2;
     for (int i = 0; i < n; i++) {
         int c = i % cols, r = i / cols;
-        g_popup.items[i].rc = {startX + c * cellW, headerH + r * cellH,
-                               startX + (c + 1) * cellW, headerH + (r + 1) * cellH};
+        g_popup.items[i].rc = {startX + c * cellW, r * cellH, startX + (c + 1) * cellW,
+                               (r + 1) * cellH};
     }
     g_popup.rcEmpty = {pad, headerH, w - pad, headerH + cellH};
 
+    PopupLoadVisibleIcons();
+    if (g_unloading) {
+        return;
+    }
+
     // Position above (or below) the taskbar, centered on the click. Beside
     // it if the taskbar is on the left or right side of the screen.
+    POINT anchor = g_popup.anchor;
     int x = anchor.x - w / 2;
     x = std::max((int)work.left + gapPx, std::min(x, (int)work.right - w - gapPx));
     int yCentered = anchor.y - h / 2;
@@ -1512,13 +1880,107 @@ void PopupShow(int folder, POINT anchor, bool force) {
     SetForegroundWindow(g_popupWnd);
 }
 
+// Opens a mini folder's panel. With keepPlace, the subfolder and the scroll
+// position shown before stay (after "+ Add..." or a delete).
+void PopupShow(int folder, POINT anchor, bool force, bool keepPlace = false) {
+    // The window may already be gone when a file picker, a menu or a
+    // confirmation returns while the mod is being unloaded.
+    if (g_unloading || !IsWindow(g_popupWnd)) {
+        return;
+    }
+
+    if (!force) {
+        if (IsWindowVisible(g_popupWnd) && g_popup.folder == folder) {
+            PopupHide();
+            return;
+        }
+        // The click that closed the popup (by deactivating it) also arrives
+        // here: treat it as a toggle.
+        if (!IsWindowVisible(g_popupWnd) && g_popup.hiddenFolder == folder &&
+            GetTickCount() - g_popup.hiddenTick < 400) {
+            return;
+        }
+    }
+
+    Settings s = GetSettings();
+    if (folder < 0 || folder >= (int)s.folders.size()) {
+        return;
+    }
+
+    const std::wstring& root = s.folders[folder].dir;
+    keepPlace = keepPlace && g_popup.folder == folder && SameDir(g_popup.rootDir, root) &&
+                GetFileAttributesW(g_popup.dir.c_str()) != INVALID_FILE_ATTRIBUTES;
+    g_popup.folder = folder;
+    g_popup.anchor = anchor;
+    g_popup.name = s.folders[folder].name;
+    g_popup.rootDir = root;
+    if (!keepPlace) {
+        g_popup.dir = root;
+    }
+    g_popup.light = SystemUsesLightTheme();
+    g_popup.hover = kHitNone;
+    PopupLayout(s.columns, !keepPlace);
+}
+
+// Shows a subfolder (or the parent folder) inside the panel.
+// dir is a copy: the caller may pass a string from g_popup.items, which
+// PopupLayout frees.
+void PopupNavigate(std::wstring dir) {
+    g_popup.dir = std::move(dir);
+    g_popup.hover = kHitNone;
+    PopupLayout(GetSettings().columns, true);
+}
+
+void PopupBack() {
+    if (!PopupInSubfolder()) {
+        return;
+    }
+    std::wstring parent = g_popup.dir;
+    size_t slash = parent.rfind(L'\\');
+    if (slash == std::wstring::npos || slash < g_popup.rootDir.size()) {
+        parent = g_popup.rootDir;
+    } else {
+        parent.resize(slash);
+    }
+    PopupNavigate(parent);
+}
+
+void PopupScrollBy(int dy) {
+    int maxScroll = std::max(0, g_popup.contentH - g_popup.viewH);
+    int y = std::clamp(g_popup.scrollY + dy, 0, maxScroll);
+    if (y == g_popup.scrollY) {
+        return;
+    }
+    g_popup.scrollY = y;
+    PopupLoadVisibleIcons();
+    InvalidateRect(g_popupWnd, nullptr, FALSE);
+}
+
 int PopupHitTest(POINT pt) {
+    if (PtInRect(&g_popup.rcBack, pt)) return kHitBack;
     if (PtInRect(&g_popup.rcAdd, pt)) return kHitAdd;
     if (PtInRect(&g_popup.rcOpen, pt)) return kHitOpen;
+    if (pt.y < g_popup.viewTop || pt.y >= g_popup.viewTop + g_popup.viewH) {
+        return kHitNone;
+    }
+    POINT content{pt.x, pt.y - g_popup.viewTop + g_popup.scrollY};
     for (int i = 0; i < (int)g_popup.items.size(); i++) {
-        if (PtInRect(&g_popup.items[i].rc, pt)) return i;
+        if (PtInRect(&g_popup.items[i].rc, content)) return i;
     }
     return kHitNone;
+}
+
+void PopupUpdateHover(HWND hWnd) {
+    POINT pt;
+    GetCursorPos(&pt);
+    ScreenToClient(hWnd, &pt);
+    RECT rc;
+    GetClientRect(hWnd, &rc);
+    int hit = PtInRect(&rc, pt) ? PopupHitTest(pt) : kHitNone;
+    if (hit != g_popup.hover) {
+        g_popup.hover = hit;
+        InvalidateRect(hWnd, nullptr, FALSE);
+    }
 }
 
 void FillRound(HDC dc, RECT rc, COLORREF color, int radius) {
@@ -1548,16 +2010,26 @@ void PopupPaint(HWND hWnd) {
     COLORREF btnBg = light ? RGB(238, 238, 238) : RGB(45, 45, 45);
     COLORREF text = light ? RGB(25, 25, 25) : RGB(240, 240, 240);
     COLORREF dim = light ? RGB(95, 95, 95) : RGB(165, 165, 165);
+    COLORREF thumb = light ? RGB(190, 190, 190) : RGB(90, 90, 90);
 
     HBRUSH bgBrush = CreateSolidBrush(bg);
     FillRect(dc, &rc, bgBrush);
     DeleteObject(bgBrush);
     SetBkMode(dc, TRANSPARENT);
 
-    // Title.
+    // Back button (in a subfolder).
     SelectObject(dc, g_popup.fontTitle);
+    if (PopupInSubfolder()) {
+        FillRound(dc, g_popup.rcBack, g_popup.hover == kHitBack ? hoverBg : btnBg, Px(8));
+        SetTextColor(dc, text);
+        RECT r = g_popup.rcBack;
+        DrawTextW(dc, L"\u2190", -1, &r, DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
+    }
+
+    // Title.
     SetTextColor(dc, text);
-    RECT rt = {Px(16), 0, g_popup.rcAdd.left - Px(8), Px(44)};
+    int titleLeft = PopupInSubfolder() ? g_popup.rcBack.right + Px(10) : Px(16);
+    RECT rt = {titleLeft, 0, g_popup.rcAdd.left - Px(8), g_popup.viewTop};
     DrawTextW(dc, g_popup.title.c_str(), -1, &rt,
               DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
 
@@ -1575,36 +2047,57 @@ void PopupPaint(HWND hWnd) {
         DrawTextW(dc, b.label, -1, &r, DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
     }
 
-    // Items.
+    // Items, clipped to the item area.
+    int saved = SaveDC(dc);
+    IntersectClipRect(dc, 0, g_popup.viewTop, rc.right, g_popup.viewTop + g_popup.viewH);
+    int offsetY = g_popup.viewTop - g_popup.scrollY;
     HDC iconDc = CreateCompatibleDC(dc);
     for (int i = 0; i < (int)g_popup.items.size(); i++) {
         auto& it = g_popup.items[i];
+        RECT ir = it.rc;
+        OffsetRect(&ir, 0, offsetY);
+        if (ir.bottom < g_popup.viewTop || ir.top > g_popup.viewTop + g_popup.viewH) {
+            continue;
+        }
         if (g_popup.hover == i) {
-            RECT hr = it.rc;
+            RECT hr = ir;
             InflateRect(&hr, -Px(3), -Px(3));
             FillRound(dc, hr, hoverBg, Px(10));
         }
-        int iconTop = it.rc.top + Px(10);
+        int iconTop = ir.top + Px(10);
         if (it.bmp) {
             HGDIOBJ ob = SelectObject(iconDc, it.bmp);
-            int ix = (it.rc.left + it.rc.right - g_popup.iconPx) / 2;
+            int ix = (ir.left + ir.right - g_popup.iconPx) / 2;
             BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
             AlphaBlend(dc, ix, iconTop, g_popup.iconPx, g_popup.iconPx, iconDc, 0, 0, it.bw, it.bh, bf);
             SelectObject(iconDc, ob);
         }
         SetTextColor(dc, text);
-        RECT lr = {it.rc.left + Px(4), iconTop + g_popup.iconPx + Px(6), it.rc.right - Px(4),
-                   it.rc.bottom - Px(4)};
+        RECT lr = {ir.left + Px(4), iconTop + g_popup.iconPx + Px(6), ir.right - Px(4),
+                   ir.bottom - Px(4)};
         DrawTextW(dc, it.label.c_str(), -1, &lr,
                   DT_SINGLELINE | DT_CENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
     }
     DeleteDC(iconDc);
+    RestoreDC(dc, saved);
+
+    // Scroll bar.
+    if (g_popup.contentH > g_popup.viewH && g_popup.viewH > 0) {
+        int maxScroll = g_popup.contentH - g_popup.viewH;
+        int thumbH = std::max(Px(24), MulDiv(g_popup.viewH, g_popup.viewH, g_popup.contentH));
+        int thumbY = g_popup.viewTop + MulDiv(g_popup.viewH - thumbH, g_popup.scrollY, maxScroll);
+        RECT tr = {rc.right - Px(7), thumbY, rc.right - Px(3), thumbY + thumbH};
+        FillRound(dc, tr, thumb, Px(4));
+    }
 
     if (g_popup.items.empty()) {
         SetTextColor(dc, dim);
         RECT er = g_popup.rcEmpty;
-        DrawTextW(dc, L"Empty. Click \"+ Add...\" or \"Open folder\" and drop shortcuts there.", -1,
-                  &er, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+        PCWSTR msg = PopupInSubfolder()
+                         ? L"This folder is empty."
+                         : L"Empty. Click \"+ Add...\" or \"Open folder\" and drop shortcuts there.";
+        DrawTextW(dc, msg, -1, &er,
+                  DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
     }
 
     BitBlt(hdc, 0, 0, rc.right, rc.bottom, dc, 0, 0, SRCCOPY);
@@ -1693,7 +2186,21 @@ void PopupAddFiles() {
     }
 
     // PopupShow also refreshes the taskbar preview if the first items changed.
-    PopupShow(folder, anchor, true);
+    PopupShow(folder, anchor, true, true);
+}
+
+// path is a copy: ShellExecuteExW can handle window messages, and one of them
+// may free g_popup.items.
+void PopupOpenItem(std::wstring path) {
+    PopupHide();
+    SHELLEXECUTEINFOW sei{sizeof(sei)};
+    sei.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+    sei.lpFile = path.c_str();
+    sei.nShow = SW_SHOWNORMAL;
+    // No second try when the user cancelled (e.g. a UAC prompt).
+    if (!ShellExecuteExW(&sei) && GetLastError() != ERROR_CANCELLED) {
+        ShellExecuteW(nullptr, nullptr, path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    }
 }
 
 void PopupItemMenu(int index, POINT screenPt) {
@@ -1701,12 +2208,16 @@ void PopupItemMenu(int index, POINT screenPt) {
         return;
     }
     std::wstring path = g_popup.items[index].path;
+    bool isDir = g_popup.items[index].isDir;
     // A shortcut is only removed from the mini folder. Anything else is the
     // real file or folder, so the menu says what happens to it.
     bool shortcut = IsShortcutExt(path.c_str());
 
     HMENU menu = CreatePopupMenu();
     AppendMenuW(menu, MF_STRING, 1, L"Open");
+    if (isDir) {
+        AppendMenuW(menu, MF_STRING, 4, L"Open in Explorer");
+    }
     AppendMenuW(menu, MF_STRING, 2, L"Open file location");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, 3, shortcut ? L"Remove from this folder" : L"Delete");
@@ -1714,9 +2225,14 @@ void PopupItemMenu(int index, POINT screenPt) {
                              g_popupWnd, nullptr);
     DestroyMenu(menu);
 
-    if (cmd == 1) {
+    if (cmd == 1 && isDir) {
+        PopupNavigate(path);
+    } else if (cmd == 1) {
         PopupHide();
         ShellExecuteW(nullptr, nullptr, path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    } else if (cmd == 4) {
+        PopupHide();
+        ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
     } else if (cmd == 2) {
         PopupHide();
         // For shortcuts, show the target; otherwise the item itself.
@@ -1752,9 +2268,38 @@ void PopupItemMenu(int index, POINT screenPt) {
         op.fFlags = FOF_ALLOWUNDO | FOF_SILENT | FOF_WANTNUKEWARNING |
                     (shortcut ? FOF_NOCONFIRMATION : 0);
         SHFileOperationW(&op);
-        PopupShow(folder, anchor, true);
+        PopupShow(folder, anchor, true, true);
     }
 }
+
+// "Add every folder automatically": watches TaskbarFolders and the folders
+// in it for items that are added, removed or renamed, so a new folder, or an
+// empty one that gets its first item, shows up. Popup thread only.
+void PopupUpdateWatch() {
+    Settings s = GetSettings();
+    std::wstring want = s.autoAdd ? s.autoRoot : std::wstring();
+    if (want == g_popup.watchDir && (want.empty() || g_popup.watch != INVALID_HANDLE_VALUE)) {
+        return;
+    }
+    if (g_popup.watch != INVALID_HANDLE_VALUE) {
+        FindCloseChangeNotification(g_popup.watch);
+        g_popup.watch = INVALID_HANDLE_VALUE;
+    }
+    g_popup.watchDir = want;
+    if (!want.empty()) {
+        // The user asked for this folder to be used, so it may be created.
+        EnsureFolderExists(want);
+        g_popup.watch = FindFirstChangeNotificationW(
+            want.c_str(), TRUE, FILE_NOTIFY_CHANGE_DIR_NAME | FILE_NOTIFY_CHANGE_FILE_NAME);
+        if (g_popup.watch == INVALID_HANDLE_VALUE) {
+            Wh_Log(L"Can't watch %s: %u", want.c_str(), GetLastError());
+        }
+        // Folders added while nothing was watching.
+        SetTimer(g_popupWnd, kTimerAutoScan, 100, nullptr);
+    }
+}
+
+void ApplyFolderListChange();
 
 LRESULT CALLBACK PopupWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
@@ -1770,6 +2315,22 @@ LRESULT CALLBACK PopupWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             PopupHide();
             return 0;
 
+        case WM_APP_SETTINGS:
+            PopupHide();
+            PopupUpdateWatch();
+            return 0;
+
+        case WM_TIMER:
+            if (wParam == kTimerAutoScan) {
+                KillTimer(hWnd, kTimerAutoScan);
+                if (!g_unloading && UpdateAutoFolders()) {
+                    PopupHide();
+                    ApplyFolderListChange();
+                }
+                return 0;
+            }
+            break;
+
         case WM_ACTIVATE:
             if (LOWORD(wParam) == WA_INACTIVE) {
                 PopupHide();
@@ -1781,7 +2342,29 @@ LRESULT CALLBACK PopupWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 PopupHide();
                 return 0;
             }
+            if (wParam == VK_BACK) {
+                PopupBack();
+                return 0;
+            }
+            if (wParam == VK_PRIOR || wParam == VK_NEXT) {
+                PopupScrollBy(wParam == VK_PRIOR ? -g_popup.viewH : g_popup.viewH);
+                PopupUpdateHover(hWnd);
+                return 0;
+            }
             break;
+
+        case WM_MOUSEWHEEL:
+            // One wheel notch scrolls one row.
+            PopupScrollBy(-MulDiv(GET_WHEEL_DELTA_WPARAM(wParam), g_popup.cellH, WHEEL_DELTA));
+            PopupUpdateHover(hWnd);
+            return 0;
+
+        case WM_XBUTTONUP:
+            // The "back" button of the mouse.
+            if (GET_XBUTTON_WPARAM(wParam) == XBUTTON1) {
+                PopupBack();
+            }
+            return TRUE;
 
         case WM_MOUSEMOVE: {
             if (!g_popup.trackingLeave) {
@@ -1807,7 +2390,9 @@ LRESULT CALLBACK PopupWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
         case WM_LBUTTONUP: {
             int hit = PopupHitTest({GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)});
-            if (hit == kHitAdd) {
+            if (hit == kHitBack) {
+                PopupBack();
+            } else if (hit == kHitAdd) {
                 PopupAddFiles();
             } else if (hit == kHitOpen) {
                 std::wstring dir = g_popup.dir;
@@ -1815,15 +2400,10 @@ LRESULT CALLBACK PopupWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 EnsureFolderExists(dir);
                 ShellExecuteW(nullptr, L"open", dir.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
             } else if (hit >= 0 && hit < (int)g_popup.items.size()) {
-                std::wstring path = g_popup.items[hit].path;
-                PopupHide();
-                SHELLEXECUTEINFOW sei{sizeof(sei)};
-                sei.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
-                sei.lpFile = path.c_str();
-                sei.nShow = SW_SHOWNORMAL;
-                // No second try when the user cancelled (e.g. a UAC prompt).
-                if (!ShellExecuteExW(&sei) && GetLastError() != ERROR_CANCELLED) {
-                    ShellExecuteW(nullptr, nullptr, path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+                if (g_popup.items[hit].isDir) {
+                    PopupNavigate(g_popup.items[hit].path);
+                } else {
+                    PopupOpenItem(g_popup.items[hit].path);
                 }
             }
             return 0;
@@ -1849,6 +2429,7 @@ LRESULT CALLBACK PopupWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             return 0;
 
         case WM_DESTROY:
+            KillTimer(hWnd, kTimerAutoScan);
             PopupFreeItems();
             if (g_popup.font) DeleteObject(g_popup.font);
             if (g_popup.fontTitle) DeleteObject(g_popup.fontTitle);
@@ -1859,7 +2440,7 @@ LRESULT CALLBACK PopupWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     return DefWindowProcW(hWnd, msg, wParam, lParam);
 }
 
-DWORD WINAPI PopupThreadProc(LPVOID readyEvent) {
+DWORD WINAPI PopupThreadProc(LPVOID) {
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
@@ -1884,16 +2465,63 @@ DWORD WINAPI PopupThreadProc(LPVOID readyEvent) {
     } else {
         Wh_Log(L"Popup window class not registered: %u", GetLastError());
     }
-    SetEvent((HANDLE)readyEvent);
+
+    if (g_popupWnd && g_unloading) {
+        // The mod was unloaded before the window existed, so nobody will
+        // close it.
+        DestroyWindow(g_popupWnd);
+    } else if (g_popupWnd) {
+        PopupUpdateWatch();
+        QueuePreviewRefresh();
+    }
 
     if (g_popupWnd) {
-        MSG msg;
-        while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
+        // A message loop that also wakes up when the watched folder changes.
+        // Messages are handled on every turn, so the window always answers,
+        // also while the folder keeps changing.
+        bool quit = false;
+        while (!quit) {
+            MSG msg;
+            while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                if (msg.message == WM_QUIT) {
+                    quit = true;
+                    break;
+                }
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+            if (quit) {
+                break;
+            }
+
+            HANDLE watch = g_popup.watch;
+            DWORD count = watch != INVALID_HANDLE_VALUE ? 1 : 0;
+            DWORD r = MsgWaitForMultipleObjectsEx(count, &watch, INFINITE, QS_ALLINPUT,
+                                                  MWMO_INPUTAVAILABLE);
+            if (!count) {
+                continue;
+            }
+            if (r == WAIT_OBJECT_0 && FindNextChangeNotification(watch)) {
+                // Wait a moment: copying many files or creating and naming a
+                // folder are many changes, read once at the end.
+                SetTimer(g_popupWnd, kTimerAutoScan, 500, nullptr);
+            } else if (r == WAIT_OBJECT_0 || r == WAIT_FAILED) {
+                // The watched folder is gone (deleted, renamed, drive
+                // removed). Stop watching, or the loop would never rest. The
+                // watch starts again when the settings are saved.
+                Wh_Log(L"Stopped watching: %u", GetLastError());
+                FindCloseChangeNotification(watch);
+                g_popup.watch = INVALID_HANDLE_VALUE;
+                SetTimer(g_popupWnd, kTimerAutoScan, 500, nullptr);
+            }
         }
     }
 
+    if (g_popup.watch != INVALID_HANDLE_VALUE) {
+        FindCloseChangeNotification(g_popup.watch);
+        g_popup.watch = INVALID_HANDLE_VALUE;
+    }
+    g_popup.watchDir.clear();
     g_popupWnd = nullptr;
     if (registered) {
         UnregisterClassW(wc.lpszClassName, wc.hInstance);
@@ -1904,14 +2532,10 @@ DWORD WINAPI PopupThreadProc(LPVOID readyEvent) {
     return 0;
 }
 
+// Does not wait for the thread: this runs while Explorer starts. The thread
+// reads the previews by itself once its window exists.
 void StartPopupThread() {
-    HANDLE ready = CreateEvent(nullptr, TRUE, FALSE, nullptr);
-    g_popupThread = CreateThread(nullptr, 0, PopupThreadProc, ready, 0, nullptr);
-    if (g_popupThread) {
-        WaitForSingleObject(ready, 5000);
-    }
-    CloseHandle(ready);
-    QueuePreviewRefresh();
+    g_popupThread = CreateThread(nullptr, 0, PopupThreadProc, nullptr, 0, nullptr);
 }
 
 void StopPopupThread() {
@@ -1977,10 +2601,15 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
 }
 
 // Makes the taskbar lay itself out again, which calls MeasureOverride.
+// Only for a taskbar that already has its XAML content (the mod was turned on
+// while Explorer runs). A taskbar that is still being created lays itself out
+// anyway, and must not get messages in the middle of that.
 void TriggerTaskbarLayout() {
     HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
-    if (hTaskbarWnd) {
-        SendMessage(hTaskbarWnd, WM_SETTINGCHANGE, SPI_SETLOGICALDPIOVERRIDE, 0);
+    if (hTaskbarWnd && GetTaskbarUiWnd()) {
+        DWORD_PTR result = 0;
+        SendMessageTimeout(hTaskbarWnd, WM_SETTINGCHANGE, SPI_SETLOGICALDPIOVERRIDE, 0,
+                           SMTO_ABORTIFHUNG, 2000, &result);
     }
 }
 
@@ -1991,7 +2620,7 @@ void TriggerTaskbarLayout() {
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
-    LoadSettings();
+    LoadSettings(false);
 
     if (HMODULE module = GetTaskbarViewModuleHandle()) {
         g_taskbarViewHooked = true;
@@ -2030,10 +2659,6 @@ void Wh_ModUninit() {
 
     g_unloading = true;
 
-    if (HWND ui = GetTaskbarUiWnd()) {
-        RunFromWindowThread(ui, [](PVOID) { RemoveAllPanels(); }, nullptr);
-    }
-
     // No time limit: a callback that is still queued on the taskbar thread
     // points into this mod. The taskbar thread never waits for this thread.
     while (g_pendingDispatch > 0) {
@@ -2041,31 +2666,44 @@ void Wh_ModUninit() {
     }
 
     StopPopupThread();
+
+    // The popup thread may have queued one more callback just before it
+    // stopped.
+    while (g_pendingDispatch > 0) {
+        Sleep(20);
+    }
+
+    // Removes the panels. Also a fence: the taskbar thread handles this sent
+    // message only after it has left, and released, the last queued callback,
+    // so none of this mod's code is still running there when the mod unloads.
+    if (HWND ui = GetTaskbarUiWnd()) {
+        RunFromWindowThread(ui, [](PVOID) { RemoveAllPanels(); }, nullptr);
+    }
+
+    std::lock_guard<std::mutex> lock(g_uiQueueMutex);
+    g_uiQueue = nullptr;
+}
+
+// Shows a new list of mini folders (settings changed, or a folder was added
+// to or removed from TaskbarFolders). Any thread; it never waits.
+void ApplyFolderListChange() {
+    // Also covers a frame that had no folders before: see RebuildAllPanels.
+    RequestRebuild();
+
+    // The folder list may have changed: read the previews again.
+    QueuePreviewRefresh();
 }
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L">");
 
-    LoadSettings();
+    // Not Explorer's thread, so the disk may be read here.
+    LoadSettings(true);
 
     if (g_popupWnd) {
-        PostMessage(g_popupWnd, WM_APP_HIDE, 0, 0);
+        // Hides the panel and starts or stops watching TaskbarFolders.
+        PostMessage(g_popupWnd, WM_APP_SETTINGS, 0, 0);
     }
 
-    RequestRebuild();
-
-    // A frame that had no folders before (nothing injected) needs a new pass.
-    if (HWND ui = GetTaskbarUiWnd()) {
-        RunFromWindowThread(ui, [](PVOID) {
-            for (auto& s : g_frames) {
-                s.injected = false;
-                s.attempts = 0;
-            }
-            g_backupTriggerNeeded = true;
-        }, nullptr);
-    }
-    TriggerTaskbarLayout();
-
-    // The folder list may have changed: read the previews again.
-    QueuePreviewRefresh();
+    ApplyFolderListChange();
 }
