@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         1.0.0
+// @version         1.0.14
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -89,7 +89,7 @@ NetEase Cloud Music compatibility remains limited: the sessions exposed through 
 > and upward near the bottom. Tray left/right and overlay
 > left/right correspond to top/bottom on vertical taskbars.
 >
-> While the expanded player is open, glass and transparent materials use
+> While the expanded player is open, Acrylic, Liquid Glass, and transparent materials use
 > Windows Graphics Capture to blur the monitor content directly behind it.
 > By default, the expanded player is hidden from screenshots, recordings, and
 > screen sharing to prevent the blur from capturing itself. Enable **Expanded
@@ -128,6 +128,20 @@ NetEase Cloud Music compatibility remains limited: the sessions exposed through 
     - "taskbar_left_edge": "Taskbar - left overlay"
     - "taskbar_center_edge": "Taskbar - center overlay"
     - "taskbar_right_edge": "Taskbar - right overlay"
+  - AlbumWashBottomShade: 100
+    $name: Darken lower album wash
+    $description: Darken the lower album background in Fullsize and dark Compact when album colors are enabled.
+    #! $showIf: {Main.DisplayMode: [fullsize, compact]}
+    #! $min: 0
+    #! $max: 100
+    #! $format: slider
+  - AcrylicBlurStrength: 45
+    $name: Acrylic blur strength
+    $description: Adjust live desktop blur. The default matches the original Acrylic look. Static or fallback capture uses a fixed blur.
+    #! $showIf: {Main.Material: acrylic, Main.DisplayMode: [fullsize, compact]}
+    #! $min: 0
+    #! $max: 100
+    #! $format: slider
   - Material: "liquid_glass"
     $name: Material
     $description: Choose the surface style for the island and expanded player. Mica-like was reworked in 0.10; existing Mica-like users keep the Acrylic glass look until settings are saved. Select Mica-like and save to switch to the reworked style.
@@ -167,8 +181,9 @@ NetEase Cloud Music compatibility remains limited: the sessions exposed through 
     #! $hideIf: {Main.Material: [transparent, transparent_borderless]}
   - CompactAlbumBackground: true
     $name: Compact album-color background
-    $description: Add an album-color wash to the Compact Liquid Glass player.
-    #! $showIf: {Main.DisplayMode: compact, Main.Material: liquid_glass}
+    $description: Blend album color into the Compact outer background during expansion.
+    #! $showIf: {Main.DisplayMode: compact}
+    #! $hideIf: {Main.Material: [transparent, transparent_borderless]}
   - CompactIslandTint: false
     $name: Transparent island album-color tint
     $description: Add an album-color tint and side-reveal highlight to the compact main island. Transparent keeps the side tint for readability; Transparent borderless follows this switch for both islands.
@@ -228,7 +243,7 @@ NetEase Cloud Music compatibility remains limited: the sessions exposed through 
     #! $max: 80
   - AllowScreenCapture: false
     $name: Expanded player capturable blurred backdrop
-    $description: When off, the expanded player is hidden from screenshots, screen recording, and screen sharing. When on, Acrylic, Liquid Glass, Transparent, and Transparent borderless use a capturable static blurred backdrop without self-capture feedback.
+    $description: Hide the expanded player from screenshots, recordings, and screen sharing when off. When on, blurred materials use a static background sample.
     #! $showIf: {Main.DisplayMode: [fullsize, compact]}
   $name: Animation and behavior
 - Advanced:
@@ -493,6 +508,8 @@ struct Settings {
     std::wstring popupBackdropCoverEffect = L"dark_only";
     bool compactAlbumBackground = true;
     int micaUpperBackgroundOpacity = 100;
+    int albumWashBottomShade = 100;
+    int acrylicBlurStrength = 45;
     std::wstring artworkAbstractMode = L"browser_original";
     int height = 40;
     int marginLeft = 4;
@@ -552,10 +569,15 @@ struct PreparedArtwork {
     PreparedBitmap compactArtBitmap;
     PreparedBitmap transportWashBitmap;
     PreparedBitmap mainWashBitmap;
+    int fixedWashBlockStrength = 0;
+    bool compactWashLayout = false;
+    bool compactWashOpacityBaked = false;
+    std::vector<uint8_t> popupWashSourceBytes;
     PreparedBitmap popupArtBitmap;
     PreparedBitmap popupBackdropBitmap;
     PreparedBitmap popupBackdropTopBitmap;
-    PreparedBitmap popupPanelBitmap;
+    bool buttonWashRequested = false;
+    PreparedBitmap popupButtonWashBitmap;
     winrt::Windows::UI::Color accent{0xFF, 0x4F, 0x7D, 0xE8};
     bool accentValid = false;
     std::chrono::steady_clock::time_point transientHoldUntil{};
@@ -830,39 +852,12 @@ std::chrono::steady_clock::time_point g_glassBreathFrameTime{};
 int g_playerColumn = -1;
 bool g_playerUsesRow = false;
 [[clang::no_destroy]] controls::Canvas g_islandPlacementHost = nullptr;
-[[clang::no_destroy]] controls::Primitives::Popup g_islandPlacementPopup = nullptr;
-
-// Popup content has its own layout root. Native taskbar panels must never
-// measure the animated island, even when the island captures a pointer.
-constexpr double kIslandOverlayPadding = 4.0;
-double g_islandOverlayX = 0.0, g_islandOverlayY = 0.0;
-double g_islandOverlayWidth = 0.0, g_islandOverlayHeight = 0.0;
 bool g_islandEnvironmentSuppressed = false;
-bool g_islandOverlayReopenPending = false;
-void SyncIslandOverlayVisibility() {
-    if (!g_islandPlacementPopup || !g_playerGrid) return;
-    // Keep the landing animation visible while it is intentionally noninteractive.
-    bool visible = !g_islandEnvironmentSuppressed && !g_islandOverlayReopenPending &&
-        g_playerGrid.Visibility() == xaml::Visibility::Visible && g_playerGrid.Opacity() > 0.001;
-    if (g_islandPlacementPopup.IsHitTestVisible() != g_playerGrid.IsHitTestVisible())
-        g_islandPlacementPopup.IsHitTestVisible(g_playerGrid.IsHitTestVisible());
-    if (g_islandPlacementPopup.IsOpen() != visible) g_islandPlacementPopup.IsOpen(visible);
-}
-void SyncIslandOverlayBounds() {
-    if (!g_islandPlacementPopup || !g_islandPlacementHost || !g_injectionParent || !g_playerGrid) return;
-    auto origin = g_injectionParent.TransformToVisual(nullptr).TransformPoint({0, 0});
-    // A transparent full-taskbar Popup still owns a native input surface.
-    // Its layout root must be bounded to the island, not the taskbar.
-    double width = std::max(g_playerGrid.Width(), g_islandOverlayWidth) + kIslandOverlayPadding * 2;
-    double height = std::max(g_playerGrid.Height(), g_islandOverlayHeight) + kIslandOverlayPadding * 2;
-    if (!std::isfinite(width) || !std::isfinite(height) || width <= 0 || height <= 0) return;
-    if (g_islandPlacementHost.Width() != width) g_islandPlacementHost.Width(width);
-    if (g_islandPlacementHost.Height() != height) g_islandPlacementHost.Height(height);
-    double x = origin.X + g_islandOverlayX - kIslandOverlayPadding;
-    double y = origin.Y + g_islandOverlayY - kIslandOverlayPadding;
-    if (g_islandPlacementPopup.HorizontalOffset() != x) g_islandPlacementPopup.HorizontalOffset(x);
-    if (g_islandPlacementPopup.VerticalOffset() != y) g_islandPlacementPopup.VerticalOffset(y);
-    SyncIslandOverlayVisibility();
+void SyncIslandPlacementVisibility() {
+    if (!g_islandPlacementHost) return;
+    auto visibility = g_islandEnvironmentSuppressed ? xaml::Visibility::Collapsed : xaml::Visibility::Visible;
+    if (g_islandPlacementHost.Visibility() != visibility)
+        g_islandPlacementHost.Visibility(visibility);
 }
 [[clang::no_destroy]] FrameworkElement g_islandPlacementAnchor = nullptr;
 xaml::Thickness g_islandAnchorOriginalMargin{};
@@ -1160,10 +1155,6 @@ std::atomic<unsigned int> g_popupOverlayWgcCallbacksInFlight{0};
 // UI-owned artwork references become immutable snapshots under the WGC mutex.
 std::shared_ptr<PreparedArtwork const> g_popupLiquidWashCurrent;
 std::shared_ptr<PreparedArtwork const> g_popupLiquidWashPrevious;
-D2D1_RECT_F g_popupLiquidWashPanelRect{};
-float g_popupLiquidWashPanelOpacity = 0.0f;
-float g_popupLiquidWashPanelRadius = 0.0f;
-float g_popupLiquidWashPanelInset = 0.0f;
 std::atomic<bool> g_popupOverlayWgcWashPresented{false};
 struct PopupLiquidWashState {
     std::shared_ptr<PreparedArtwork const> current;
@@ -1172,18 +1163,11 @@ struct PopupLiquidWashState {
     float currentOpacity = 0.0f;
     float previousOpacity = 0.0f;
     float backdropOpacity = 0.0f;
-    float panelOpacity = 0.0f;
-    float panelRadius = 0.0f;
-    float panelInset = 0.0f;
-    D2D1_RECT_F panelRect{};
 };
 bool SamePopupLiquidWashState(PopupLiquidWashState const& a, PopupLiquidWashState const& b) {
     return a.current == b.current && a.previous == b.previous && a.fromTop == b.fromTop &&
            a.currentOpacity == b.currentOpacity && a.previousOpacity == b.previousOpacity &&
-           a.backdropOpacity == b.backdropOpacity && a.panelOpacity == b.panelOpacity &&
-           a.panelRadius == b.panelRadius && a.panelInset == b.panelInset &&
-           a.panelRect.left == b.panelRect.left && a.panelRect.top == b.panelRect.top &&
-           a.panelRect.right == b.panelRect.right && a.panelRect.bottom == b.panelRect.bottom;
+           a.backdropOpacity == b.backdropOpacity;
 }
 PopupLiquidWashState g_popupOverlayWgcLastRenderedWash;
 struct PopupOverlayWgcRenderParameters {
@@ -1247,11 +1231,8 @@ struct PopupLiquidWashCache {
     std::shared_ptr<PreparedArtwork const> artwork;
     bool fromTop = false;
     winrt::com_ptr<ID2D1Bitmap1> backdrop;
-    winrt::com_ptr<ID2D1Bitmap1> panel;
 };
 [[clang::no_destroy]] std::array<PopupLiquidWashCache, 2> g_popupOverlayWgcWashCache;
-[[clang::no_destroy]] winrt::com_ptr<ID2D1PathGeometry> g_popupOverlayWgcPanelWashGeometry;
-std::array<float, 4> g_popupOverlayWgcPanelWashGeometryKey{};
 [[clang::no_destroy]] winrt::com_ptr<ID2D1Effect> g_popupOverlayWgcBlurEffect;
 [[clang::no_destroy]] winrt::com_ptr<ID2D1Effect> g_popupBlurNoiseBorder,g_popupBlurDither;
 [[clang::no_destroy]] std::array<winrt::com_ptr<ID2D1Effect>, 3> g_popupOverlayWgcLensEffects;
@@ -1303,7 +1284,6 @@ bool g_popupXamlChildSubclassed = false;
 [[clang::no_destroy]] std::array<Border,3> g_popupMorphSourceLayers{nullptr,nullptr,nullptr};
 bool g_popupSharedMorphActive=false;
 int g_popupOpeningFramesPending=0;
-std::chrono::steady_clock::time_point g_popupOpeningAssetsDeadline{};
 
 double g_popupMainLandingOpacity=0.0;
 double g_popupWashNativeBlend=0.0;
@@ -1336,11 +1316,6 @@ struct PopupBackgroundRipple {
 [[clang::no_destroy]] std::vector<PopupBackgroundRipple> g_popupBackgroundRipples;
 [[clang::no_destroy]] Border g_popupXamlBackdropRimHighlight = nullptr;
 [[clang::no_destroy]] Border g_popupXamlBackdropFresnelRim = nullptr;
-[[clang::no_destroy]] Border g_popupXamlPanelCoverFrame = nullptr;
-[[clang::no_destroy]] ScaleTransform g_popupXamlPanelCoverScale = nullptr;
-[[clang::no_destroy]] TranslateTransform g_popupXamlPanelCoverTranslate = nullptr;
-[[clang::no_destroy]] shapes::Path g_popupXamlPanelCoverFade = nullptr;
-[[clang::no_destroy]] shapes::Path g_popupXamlPanelCover = nullptr;
 mediax::ImageSource PopupWashImageSource(shapes::Path const& path) {
     auto brush = path ? path.Fill().try_as<mediax::ImageBrush>() : nullptr;
     return brush ? brush.ImageSource() : nullptr;
@@ -3054,6 +3029,8 @@ Settings ReadSettings() {
     settings.popupBackdropCoverEffect =
         GetStringSetting(L"Main.PopupBackdropCoverEffect", L"dark_only");
     settings.compactAlbumBackground = Wh_GetIntSetting(L"Main.CompactAlbumBackground") != 0;
+    settings.albumWashBottomShade = Clamp(Wh_GetIntSetting(L"Main.AlbumWashBottomShade"),0,100);
+    settings.acrylicBlurStrength = Clamp(Wh_GetIntSetting(L"Main.AcrylicBlurStrength"), 0, 100);
     settings.micaUpperBackgroundOpacity =
         Clamp(Wh_GetIntSetting(L"Main.MicaUpperBackgroundOpacity"), 0, 130);
     if (settings.popupBackdropCoverEffect != L"off" &&
@@ -3397,9 +3374,9 @@ bool IsPreparedBitmapValid(PreparedBitmap const& bitmap) {
 }
 
 bool PopupAssetsReady(PreparedBitmap const& art,PreparedBitmap const& backdrop,
-                      PreparedBitmap const& top,PreparedBitmap const& panel) {
+                      PreparedBitmap const& top) {
     return IsPreparedBitmapValid(art)&&IsPreparedBitmapValid(backdrop)&&
-           IsPreparedBitmapValid(top)&&IsPreparedBitmapValid(panel);
+           IsPreparedBitmapValid(top);
 }
 
 bool KeepLastArtworkForGap(bool sameItem, bool sameSource, int64_t gapMilliseconds) {
@@ -4143,6 +4120,8 @@ BYTE QuantizeSurfaceChannel(double value,double noise,int alpha=255) {
     return static_cast<BYTE>(Clamp(std::lround(value+noise),0L,long(alpha)));
 }
 
+double FixedWashBlockCoverage(double u, double v);
+
 bool CreateLowDetailAlbumCover(std::vector<uint8_t> const& bytes,
                                bool edgeFadeToMiddle,
                                bool fadeFromTop,
@@ -4150,7 +4129,8 @@ bool CreateLowDetailAlbumCover(std::vector<uint8_t> const& bytes,
                                int blurPasses,
                                bool albumMicaGrade,
                                bool fadeFromLeft,
-                               PreparedBitmap& preparedBitmap) {
+                               PreparedBitmap& preparedBitmap,
+                               double shellOpacity = 1.0, int compactBlockStrength = 0) {
     if (bytes.empty()) {
         return false;
     }
@@ -4205,6 +4185,26 @@ bool CreateLowDetailAlbumCover(std::vector<uint8_t> const& bytes,
     }
 
     std::vector<float> working(pixels.begin(),pixels.end());
+    if (shellOpacity < 1.0) {
+        // Compose cover color and local coverage in premultiplied space. The
+        // same spatial blur softens both the silhouette and its transmission.
+        for (UINT y = 0; y < kLowDetailSize; ++y) for (UINT x = 0; x < kLowDetailSize; ++x) {
+            double coverage = 0;
+            for (int j = 0; j < 8; ++j) for (int i = 0; i < 8; ++i)
+                coverage += FixedWashBlockCoverage((x + (i + .5) / 8) / kLowDetailSize,
+                                                    (y + (j + .5) / 8) / kLowDetailSize + .24);
+            double block = coverage / 64 * compactBlockStrength / 100;
+            float* pixel = working.data() + (y * kLowDetailSize + x) * 4;
+            // The wide shell samples a centered horizontal band of this square.
+            // Fade the extra album color to zero before the visible perimeter.
+            double u = 2.0 * ((x + .5) / kLowDetailSize - .5);
+            double v = 4.5 * ((y + .5) / kLowDetailSize - .5);
+            double weight = Clamp(1.0 - u*u - v*v, 0.0, 1.0);
+            double localOpacity = shellOpacity + .36 * (1.0 - shellOpacity) * weight*weight*(3.0 - 2.0*weight);
+            for (int c = 0; c < 3; ++c) pixel[c] *= localOpacity * (1.0 - block);
+            pixel[3] *= localOpacity;
+        }
+    }
     auto boxBlurPass = [&] {
         std::vector<float> source = working;
         for (UINT y = 0; y < kLowDetailSize; ++y) {
@@ -5710,6 +5710,55 @@ void FeatherMainWashBitmap(PreparedBitmap& bitmap) {
     }
 }
 
+// Fixed cover-space silhouette based on the reference's lower black skyline.
+// Independent of album luminance. Original art is never overwritten.
+double FixedWashBlockCoverage(double u,double v) {
+    if(u<.085||u>.925||v>.955)return 0;
+    constexpr double tops[]{.665,.755,.775,.785,.740,.785,.805,.775,
+        .795,.770,.800,.780,.710,.790,.785,.805,.780,.745,.795,.775,
+        .785,.755,.785,.690};
+    int column=Clamp(int((u-.085)/.84*24),0,23);
+    return v>=tops[column]?1.0:0.0;
+}
+std::vector<uint8_t> FixedWashSource(std::vector<uint8_t> const& source,int strength, bool compactPanel = false) {
+    if(strength<=0)return source;
+    auto bitmap=DecodePreparedBitmap(source,320);
+    if(!IsPreparedBitmapValid(bitmap))return source;
+    for(UINT y=0;y<bitmap.height;++y)for(UINT x=0;x<bitmap.width;++x){
+        // The wide Compact panel samples the middle band of its square wash.
+        double v = (y + .5) / bitmap.height;
+        double coverage = FixedWashBlockCoverage((x + .5) / bitmap.width, v + (compactPanel ? .24 : 0.0));
+        double transmission=1-coverage*Clamp(strength,0,100)/100.0;
+        auto pixel=bitmap.pixels.data()+(size_t(y)*bitmap.width+x)*4;
+        // Black source-over on existing opaque cover: preserve alpha, attenuate
+        // RGB before any spatial blur. Already-black RGB remains exactly zero.
+        for(int c=0;c<3;++c)pixel[c]=BYTE(std::lround(pixel[c]*transmission));
+    }
+    auto encoded=EncodePbgraPngBytes(bitmap.width,bitmap.height,bitmap.pixels);
+    return encoded.empty()?source:encoded;
+}
+int EffectiveFixedWashStrength(Settings const& settings,bool dark) {
+    if(settings.sideExpand || (settings.compact&&!dark))return 0;
+    return Clamp(settings.albumWashBottomShade,0,100);
+}
+void BuildFixedPopupWashes(PreparedArtwork& artwork,int strength) {
+    artwork.fixedWashBlockStrength=strength;
+    auto source=FixedWashSource(artwork.popupWashSourceBytes,strength,artwork.compactWashLayout);
+    CreateResilientLowDetailAlbumCover(source,true,false,false,3,false,false,artwork.popupBackdropBitmap);
+    // Compact uses one full-face shell wash, with no directional alpha fade.
+    // Equivalent alpha of two 30% (dark) or 36% (light) color washes.
+    const double wash = artwork.darkMode ? .30 : .36;
+    artwork.compactWashOpacityBaked = artwork.compactWashLayout &&
+        CreateLowDetailAlbumCover(artwork.popupWashSourceBytes, false, false, false, 3,
+                                  false, false, artwork.popupBackdropTopBitmap,
+                                  1.0 - (1.0 - wash) * (1.0 - wash), strength);
+    if (!artwork.compactWashOpacityBaked)
+        CreateResilientLowDetailAlbumCover(source,!artwork.compactWashLayout,true,false,3,false,false,artwork.popupBackdropTopBitmap);
+    if (!artwork.buttonWashRequested) return;
+    auto const& buttonSource = artwork.compactWashLayout ? artwork.popupWashSourceBytes : source;
+    CreateResilientLowDetailAlbumCover(buttonSource,false,false,false,3,false,false,artwork.popupButtonWashBitmap);
+}
+
 void PrepareMediaArtwork(MediaState& state) {
     bool popupRequested =
         g_popupArtworkPreparationRequested.load(std::memory_order_acquire);
@@ -5728,9 +5777,12 @@ void PrepareMediaArtwork(MediaState& state) {
     // Prepare popup wash with the track, before the first user click.
     popupRequested = popupRequested || !artworkSettings.sideExpand;
     bool darkMode = IsDarkModeApprox();
+    int fixedBlockStrength=EffectiveFixedWashStrength(artworkSettings,darkMode);
     bool transparentMaterial =
         artworkSettings.material == L"transparent" ||
         artworkSettings.material == L"transparent_borderless";
+    bool buttonWashRequested = !artworkSettings.sideExpand &&
+        artworkSettings.popupButtonStyle == L"liquid_glass_experimental";
     bool needsTintAssets = artworkSettings.sideExpand || transparentMaterial;
     std::wstring identityKey = ArtworkIdentityKey(state);
     uint64_t rawHash = ThumbnailHash(state.thumbnailBytes);
@@ -5738,6 +5790,9 @@ void PrepareMediaArtwork(MediaState& state) {
         identityKey == previousPreparedArtwork->identityKey &&
         rawHash == previousPreparedArtwork->rawHash &&
         previousPreparedArtwork->darkMode == darkMode &&
+        previousPreparedArtwork->fixedWashBlockStrength == fixedBlockStrength &&
+        previousPreparedArtwork->buttonWashRequested == buttonWashRequested &&
+        previousPreparedArtwork->compactWashLayout == artworkSettings.compact &&
         previousPreparedArtwork->expandedCornerRadius ==
             artworkSettings.expandedCornerRadius &&
         previousPreparedArtwork->artworkMode ==
@@ -5757,6 +5812,9 @@ void PrepareMediaArtwork(MediaState& state) {
         IsPreparedBitmapValid(DecodePreparedBitmap(state.thumbnailBytes, 96));
     auto prepared = std::make_shared<PreparedArtwork>();
     prepared->darkMode = darkMode;
+    prepared->fixedWashBlockStrength = fixedBlockStrength;
+    prepared->buttonWashRequested = buttonWashRequested;
+    prepared->compactWashLayout = artworkSettings.compact;
     prepared->expandedCornerRadius = artworkSettings.expandedCornerRadius;
     prepared->artworkMode = artworkSettings.artworkAbstractMode;
     prepared->identityKey = identityKey;
@@ -5901,8 +5959,9 @@ void PrepareMediaArtwork(MediaState& state) {
             ApplyPopupCoverG2Mask(
                 prepared->popupArtBitmap.pixels, 320,
                 artworkSettings.expandedCornerRadius);
-            CreatePlaceholderAlbumCover(
-                20, false, false, false, prepared->popupPanelBitmap);
+            if (buttonWashRequested) {
+                CreatePlaceholderAlbumCover(20, false, false, false, prepared->popupButtonWashBitmap);
+            }
             CreatePlaceholderAlbumCover(
                 20, true, false, false, prepared->popupBackdropBitmap);
             CreatePlaceholderAlbumCover(
@@ -5922,18 +5981,11 @@ void PrepareMediaArtwork(MediaState& state) {
             std::vector<uint8_t> const& popupBlurSource =
                 useGeneratedBlurCover ? prepared->displayBytes
                                       : prepared->visualBytes;
-            CreateResilientLowDetailAlbumCover(
-                popupBlurSource, true, false, false, 3, false, false,
-                prepared->popupBackdropBitmap);
-            CreateResilientLowDetailAlbumCover(
-                popupBlurSource, true, true, false, 3, false, false,
-                prepared->popupBackdropTopBitmap);
-            CreateResilientLowDetailAlbumCover(
-                popupBlurSource, false, false, false, 3, false, false,
-                prepared->popupPanelBitmap);
+            prepared->popupWashSourceBytes=popupBlurSource;
+            BuildFixedPopupWashes(*prepared,fixedBlockStrength);
         }
         prepared->popupReady = PopupAssetsReady(prepared->popupArtBitmap,prepared->popupBackdropBitmap,
-            prepared->popupBackdropTopBitmap,prepared->popupPanelBitmap);
+            prepared->popupBackdropTopBitmap);
     }
 
     prepared->ready = true;
@@ -6951,6 +7003,7 @@ constexpr float PopupBackdropWgcBlurStdDev() {
     return 18.0f;
 }
 float PopupBackdropWgcEffectiveBlurStdDev() {
+    if (g_settings.material == L"acrylic") return .4f * g_settings.acrylicBlurStrength;
     float stdDev = PopupBackdropWgcBlurStdDev();
     if (IsLiquidGlassMaterial()) {
         return Clamp(stdDev * 0.28f, 3.5f, 5.2f);
@@ -6993,6 +7046,15 @@ double PopupG2CornerRadius(double width, double height) {
                  minSize * 0.5);
 }
 
+// Fullsize lays out a square cover with exactly the playback card's width.
+double PopupPlaybackCardRadius(double cardWidth) {
+    return PopupG2CornerRadius(cardWidth, cardWidth);
+}
+
+double PopupShellTargetRadius(double width, double height) {
+    return g_settings.compact ? PopupPlaybackCardRadius(width) : PopupG2CornerRadius(width, height);
+}
+
 void UpdatePopupG2ContinuousPath(shapes::Path const& path,
                                  double width,
                                  double height,
@@ -7017,7 +7079,6 @@ void UpdatePopupG2ContinuousPath(shapes::Path const& path,
     radius = Clamp(radius, 1.0,
                    std::min(right - left, bottom - top) * 0.5);
 
-    if(g_settings.compact)radius=std::max(0.0,radius-inset);
     mediax::PathGeometry geometry;
     mediax::PathFigure figure;
     figure.StartPoint({static_cast<float>(left + radius),
@@ -7034,13 +7095,6 @@ void UpdatePopupG2ContinuousPath(shapes::Path const& path,
     auto addContinuousCorner = [&](double startX, double startY,
                                    double outerX, double outerY,
                                    double endX, double endY) {
-        if(g_settings.compact) {
-            constexpr double k=0.5522847498307936;
-            mediax::BezierSegment arc;
-            arc.Point1({static_cast<float>(startX+(outerX-startX)*k),static_cast<float>(startY+(outerY-startY)*k)});
-            arc.Point2({static_cast<float>(endX+(outerX-endX)*k),static_cast<float>(endY+(outerY-endY)*k)});
-            arc.Point3({static_cast<float>(endX),static_cast<float>(endY)});segments.Append(arc);return;
-        }
         constexpr double kMid = kContinuousCornerMid;
         constexpr double kInnerControl = kContinuousCornerInner;
         constexpr double kOuterControl = kContinuousCornerOuter;
@@ -7136,10 +7190,6 @@ BYTE MicaUpperBackgroundAlpha(BYTE baseline) {
 }
 
 bool UseOverlayPopupBackdropMaterial() {
-    //          0.9.50 diagnostic: Acrylic uses a separate native overlay window behind
-    // the XAML popup, clipped to the animated rounded popup shell instead of
-    // the full transparent host rectangle. This keeps the visibility test from
-    // leaking outside the actual visual surface.
     return IsBlurredGlassMaterial();
 }
 
@@ -7156,9 +7206,8 @@ BYTE PopupBackdropOverlayMaxAlpha() {
 }
 
 bool PopupBackdropCoverEffectEnabled() {
-    if (g_settings.compact || IsTransparentMaterial()) {
-        return false;
-    }
+    if (IsTransparentMaterial()) return false;
+    if (g_settings.compact) return g_settings.compactAlbumBackground;
     if (g_settings.popupBackdropCoverEffect == L"off") {
         return false;
     }
@@ -7171,18 +7220,6 @@ bool PopupBackdropCoverEffectEnabled() {
         return true;
     }
     return IsDarkModeApprox();
-}
-
-bool PopupPanelCoverEffectEnabled() {
-    if (IsTransparentMaterial() || (g_settings.compact&&!IsLiquidGlassMaterial())) {
-        return false;
-    }
-    if (IsLiquidGlassMaterial()) {
-        if(g_settings.compact)return g_settings.compactAlbumBackground;
-        return PopupBackdropCoverEffectEnabled();
-    }
-
-    return true;
 }
 
 int PopupTargetArtSize(int width, int height) {
@@ -8601,14 +8638,10 @@ constexpr uint32_t kPopupButtonWhiteRimLayer = 11;
 constexpr uint32_t kPopupButtonTopRimLayer = 12;
 constexpr uint32_t kPopupButtonPointerLightLayer = 13;
 
-winrt::Windows::UI::Color PopupPanelProjectionTint(double u);
+winrt::Windows::UI::Color PopupPanelProjectionTint();
 
 void ApplyPopupButtonContactShadow(Border const& surface, Grid const& host) {
-    // Sample the same cover wash used by the main player's projection. Pale
-    // covers need more contact contrast; chromatic covers retain a muted tint.
-    std::wstring name(surface.Name());
-    auto cover = PopupPanelProjectionTint(name == L"Popup_Prev" ? 0.16 :
-                                         name == L"Popup_Next" ? 0.84 : 0.5);
+    auto cover = PopupPanelProjectionTint();
     double pale = Clamp((PerceivedLuma(cover) - 160.0) / 95.0, 0.0, 1.0);
     auto shade = LerpArtworkColor(LimitColorSaturation(cover, 0.25),
                                   Color(255, 57, 61, 73), 0.78);
@@ -8652,10 +8685,10 @@ mediax::Brush PopupSolidButtonBottomWashBrush(Border const& surface, bool hovere
     auto fallback = PopupAccentColor();
     auto sample = [&](std::shared_ptr<PreparedArtwork const> const& artwork,
                       double u, double v) -> std::array<double,4> {
-        if (!artwork || artwork->popupPanelBitmap.pixels.empty()) {
+        if (!artwork || artwork->popupButtonWashBitmap.pixels.empty()) {
             return {double(fallback.B), double(fallback.G), double(fallback.R), 255.0};
         }
-        auto const& b = artwork->popupPanelBitmap;
+        auto const& b = artwork->popupButtonWashBitmap;
         if (!b.width || !b.height || b.pixels.size() < size_t(b.width)*b.height*4) {
             return {0,0,0,0};
         }
@@ -8879,44 +8912,7 @@ void UpdatePopupButtonLens(Border const& surface, Grid const& host,
         }
     }
     if(pointerOnly)return;
-    // Sample the actual prepared cover wash in panel coordinates. Desktop blur
-    // remains native underneath; this pass refracts only the cover contribution.
-    winrt::Windows::Foundation::Point origin{};
-    double panelWidth=0, panelHeight=0;
-    if (g_popupXamlPanelCoverFrame && PopupPanelCoverEffectEnabled()) {
-        origin=host.TransformToVisual(g_popupXamlPanelCoverFrame).TransformPoint({0,0});
-        panelWidth=g_popupXamlPanelCoverFrame.ActualWidth();
-        panelHeight=g_popupXamlPanelCoverFrame.ActualHeight();
-    }
-    auto sampleCover = [&](std::shared_ptr<PreparedArtwork const> const& artwork,
-                           double px, double py) -> std::array<double,3> {
-        if (!artwork || panelWidth <= 0 || panelHeight <= 0) return {0,0,0};
-        auto const& b=artwork->popupPanelBitmap;
-        if (!b.width || !b.height || b.pixels.size()<size_t(b.width)*b.height*4) return {0,0,0};
-        double scale=std::max(panelWidth/b.width,panelHeight/b.height);
-        double sx=Clamp((px+(b.width*scale-panelWidth)*0.5)/scale,0.0,double(b.width-1));
-        double sy=Clamp((py+(b.height*scale-panelHeight)*0.5)/scale,0.0,double(b.height-1));
-        int x0=int(sx), y0=int(sy), x1=std::min(x0+1,int(b.width)-1), y1=std::min(y0+1,int(b.height)-1);
-        std::array<double,3> result{};
-        for (int j=0;j<2;++j) for(int i=0;i<2;++i) {
-            size_t p=(size_t(j?y1:y0)*b.width+(i?x1:x0))*4;
-            double weight=(i?sx-x0:1-(sx-x0))*(j?sy-y0:1-(sy-y0));
-            double alpha=b.pixels[p+3]/255.0;
-            for(int c=0;c<3;++c) result[c]+=weight*(alpha>0.001?b.pixels[p+2-c]/alpha:0);
-        }
-        return result;
-    };
-    auto sampleWash = [&](double x,double y) {
-        auto current=sampleCover(g_popupLiquidWashCurrent,x,y);
-        if (g_popupCoverTransitionActive && g_popupLiquidWashPrevious) {
-            auto old=sampleCover(g_popupLiquidWashPrevious,x,y);
-            double t=SmootherStep(Clamp(g_popupMediaTransitionProgress,0.0,1.0));
-            for(int c=0;c<3;++c) current[c]=old[c]+(current[c]-old[c])*t;
-        }
-        return current;
-    };
     auto highlight=LerpArtworkColor(PopupProgressBrightSoftColor(),Color(255,255,255,255),0.90);
-    auto tint=PopupControlCardColor();
     auto buffer=cache.bitmap.PixelBuffer();
     winrt::com_ptr<IBufferByteAccess> access;
     winrt::check_hresult(winrt::get_unknown(buffer)->QueryInterface(kIID_IBufferByteAccess,access.put_void()));
@@ -8926,21 +8922,12 @@ void UpdatePopupButtonLens(Border const& surface, Grid const& host,
         double edge=std::exp(-f.distance*f.distance/(0.85*0.85));
         double facing=std::max(0.0,f.nx*ux+f.ny*uy);
         double specular=edge*std::pow(facing,3.0)*0.78*strength;
-        double shift=0.95*edge;
-        auto base=sampleWash(origin.X+f.x,origin.Y+f.y);
-        auto bent=sampleWash(origin.X+f.x-f.nx*shift,origin.Y+f.y-f.ny*shift);
-        double change=std::max({std::abs(bent[0]-base[0]),std::abs(bent[1]-base[1]),std::abs(bent[2]-base[2])});
-        double refraction=edge*Clamp(change/24.0,0.0,0.35);
-        double a=specular+refraction*(1-specular);
-        double tintAlpha=tint.A/255.0;
-        double channels[3]={double(tint.R),double(tint.G),double(tint.B)};
         double highlights[3]={double(highlight.R),double(highlight.G),double(highlight.B)};
         for(int c=0;c<3;++c) {
-            double local=bent[c]*(1-tintAlpha)+channels[c]*tintAlpha;
             pixels[i*4+2-c]=static_cast<BYTE>(Clamp(std::lround(
-                highlights[c]*specular+local*refraction*(1-specular)),0L,255L));
+                highlights[c]*specular),0L,255L));
         }
-        pixels[i*4+3]=static_cast<BYTE>(std::lround(a*255));
+        pixels[i*4+3]=static_cast<BYTE>(std::lround(specular*255));
     }
     cache.bitmap.Invalidate();
     path.Fill(cache.brush);
@@ -9580,11 +9567,6 @@ void ApplyPopupXamlTheme(bool force = false) {
         g_popupXamlDropShadow.Offset({0.0f, 6.0f + static_cast<float>(PopupShadowDepth()) * 0.08f, 0.0f});
         g_popupXamlDropShadow.Color(Color(0xFF, 0x00, 0x00, 0x00));
     }
-    if (g_popupXamlPanelCoverFrame) {
-        g_popupXamlPanelCoverFrame.Background(Brush(Color(0x00, 0x00, 0x00, 0x00)));
-        g_popupXamlPanelCoverFrame.BorderThickness({0, 0, 0, 0});
-        g_popupXamlPanelCoverFrame.BorderBrush(Brush(Color(0x00, 0x00, 0x00, 0x00)));
-    }
     if (g_popupXamlArtFrame) {
         g_popupXamlArtFrame.BorderThickness(IsLiquidGlassMaterial()
                                                 ? Thickness{1.35, 1.35, 1.35, 1.35}
@@ -9742,7 +9724,6 @@ void UpdatePopupWashLayerOwnership() {
     g_popupWashNativeBlend=0.0;
     if (g_popupXamlBackdropCover) g_popupXamlBackdropCover.Visibility(Visibility::Visible);
     if (g_popupXamlBackdropCoverFade) g_popupXamlBackdropCoverFade.Visibility(Visibility::Visible);
-    if (g_popupXamlPanelCoverFrame) g_popupXamlPanelCoverFrame.Visibility(Visibility::Visible);
 }
 
 PopupLiquidWashState BuildPopupLiquidWashState() {
@@ -9854,34 +9835,6 @@ PopupSoftPixels BuildPopupEdgeReflection(PreparedBitmap const& cover,double widt
     for(int y=0;y<n;++y){for(int x=left-1;x>=0;--x)limit(x,y,x+1,y);for(int x=right+1;x<n;++x)limit(x,y,x-1,y);}
     return pixels;
 }
-std::array<double,4> PopupBottomCoverWash(std::shared_ptr<PreparedArtwork const> const& art,int surface,double x,double y,double width,double height) {
-    struct Cache {std::shared_ptr<PreparedArtwork const> art;double ratio=0;PopupSoftPixels pixels;};
-    static std::array<Cache,4> caches;auto& cache=caches[surface*2+(art==g_popupLiquidWashPrevious?1:0)];
-    if(!art)return {};auto const& bitmap=surface==0?art->popupBackdropBitmap:art->popupPanelBitmap;
-    if(!bitmap.width||!bitmap.height)return {};
-    double ratio=width/height;
-    bool settled=std::abs(g_popupAnimationTarget-g_popupAnimationProgress)<.003&&std::abs(g_popupAnimationVelocity)<.05;
-    if(cache.art!=art||cache.pixels.empty()||(settled&&std::abs(cache.ratio-ratio)>.001)){cache.art=art;cache.ratio=ratio;cache.pixels.resize(128*96);
-        double scale=std::max(width/bitmap.width,height/bitmap.height);
-        for(int yy=0;yy<96;++yy)for(int xx=0;xx<128;++xx){
-            double u=((xx+0.5)*width/128+(bitmap.width*scale-width)*.5)/(scale*bitmap.width);
-            double v=((yy+0.5)*height/96+(bitmap.height*scale-height)*.5)/(scale*bitmap.height);
-            cache.pixels[yy*128+xx]=SamplePopupSoftCover(bitmap,u,v);
-        }
-        BlurPopupSoftPixels(cache.pixels,128,96,12.0);
-    }
-    x=Clamp(x,0.0,127.0);y=Clamp(y,0.0,95.0);
-    int ix=static_cast<int>(x),iy=static_cast<int>(y);
-    int nx=std::min(ix+1,127),ny=std::min(iy+1,95);
-    std::array<double,4> result{};
-    for(int c=0;c<4;++c) {
-        double top=cache.pixels[iy*128+ix][c]*(1-x+ix)+cache.pixels[iy*128+nx][c]*(x-ix);
-        double bottom=cache.pixels[ny*128+ix][c]*(1-x+ix)+cache.pixels[ny*128+nx][c]*(x-ix);
-        result[c]=top*(1-y+iy)+bottom*(y-iy);
-    }
-    return result;
-}
-
 struct PopupArtBreathCache {
     std::shared_ptr<PreparedArtwork const> art;
     double width=0, height=0;
@@ -9899,9 +9852,6 @@ void UpdatePopupArtworkBreath() {
     bool changing=g_popupMediaTransitionActive||g_popupCoverTransitionActive;
     if(changing)g_popupArtBreathPending=true;
     if(g_popupArtBreathPending&&!changing&&g_popupArtBreathReveal<0.02){g_popupArtBreathColor=PopupAccentColor();g_popupArtBreathPending=false;}
-    double target=playing&&!changing&&!g_popupArtBreathPending?1.0:0.0;
-    g_popupArtBreathReveal+=(target-g_popupArtBreathReveal)*(1-std::exp(-dt/(target>0?0.24:(changing||g_popupArtBreathPending?0.07:0.30))));
-    if(std::abs(target-g_popupArtBreathReveal)<0.001)g_popupArtBreathReveal=target;
     if(!g_settings.compact){g_popupXamlArtBreath.Opacity(0);return;}
     try {
         AdvanceGlassBreathPhase();double breath=0.5+std::sin(g_dynamicMainGlowBreathPhase)*0.5;
@@ -9919,7 +9869,13 @@ void UpdatePopupArtworkBreath() {
         // existing texture, then regenerate once at the settled geometry.
         bool geometrySettled=std::abs(g_popupAnimationTarget-g_popupAnimationProgress)<.003 &&
                              std::abs(g_popupAnimationVelocity)<.05;
-        if(geometrySettled&&!g_popupArtBreathPending && (!cache.brush || cache.art!=g_popupLiquidWashCurrent ||
+        if (!g_popupClosing && (!geometrySettled || g_popupAnimationTarget < .99)) {
+            g_popupArtBreathReveal = 0;
+            g_popupXamlArtBreath.Opacity(0);
+            return;
+        }
+        bool regenerated = false;
+        if(!g_popupClosing&&geometrySettled&&!g_popupArtBreathPending && (!cache.brush || cache.art!=g_popupLiquidWashCurrent ||
             (geometrySettled&&(std::abs(cache.width-width)>.5||std::abs(cache.height-height)>.5)))){
             cache.art=g_popupLiquidWashCurrent;cache.width=width;cache.height=height;
             auto pixels=cache.art?BuildPopupEdgeReflection(cache.art->popupArtBitmap,width,height):PopupSoftPixels(96*96);
@@ -9931,8 +9887,13 @@ void UpdatePopupArtworkBreath() {
                 data[i*4+3]=QuantizeSurfaceChannel(pixels[i][3],noise);
                 for(int c=0;c<3;++c)data[i*4+c]=QuantizeSurfaceChannel(pixels[i][c],noise,data[i*4+3]);
             }
+            regenerated = true;
             bitmap.Invalidate();cache.brush=mediax::ImageBrush();cache.brush.ImageSource(bitmap);cache.brush.Stretch(mediax::Stretch::Fill);
         }
+        if (regenerated) { g_popupArtBreathReveal = 0; dt = 0; }
+        double target=!g_popupClosing && cache.brush && playing&&!changing&&!g_popupArtBreathPending?1.0:0.0;
+        g_popupArtBreathReveal+=(target-g_popupArtBreathReveal)*(1-std::exp(-dt/(target>0?0.24:(changing||g_popupArtBreathPending?0.07:0.30))));
+        if(std::abs(target-g_popupArtBreathReveal)<0.001)g_popupArtBreathReveal=target;
         g_popupXamlArtBreath.Background(cache.brush);
         g_popupXamlArtBreath.Opacity(g_popupArtBreathReveal*(0.62*breath*breath)*g_popupXamlArtFrame.Opacity());
     }catch(winrt::hresult_error const&){g_popupXamlArtBreath.Opacity(0);}
@@ -10001,9 +9962,8 @@ void UpdatePopupBackgroundPointerLights() {
             double brighten=!IsTransparentMaterial()&&index==2&&g_settings.compact?0.35:0.0;
             auto packed=[](winrt::Windows::UI::Color c){return double((unsigned(c.R)<<16)|(unsigned(c.G)<<8)|c.B);};
             std::array<double,9> key{width,height,point.X,point.Y,double(valid),packed(hoverTint),packed(rimTint),double(IsDarkModeApprox()),double(g_settings.compact)+2.0*double(IsTransparentMaterial())};
-            bool animatedWash=g_settings.compact&&!IsTransparentMaterial()&&index==1&&g_popupCoverTransitionActive;
             bool lightFullGlass=IsLiquidGlassMaterial()&&!g_settings.compact&&!IsDarkModeApprox();
-            bool repaint=!cache.valid||cache.key!=key||cache.art!=g_popupLiquidWashCurrent||hasRipples||animatedWash;
+            bool repaint=!cache.valid||cache.key!=key||cache.art!=g_popupLiquidWashCurrent||hasRipples;
             if(repaint) {
                 winrt::com_ptr<IBufferByteAccess> access;
                 winrt::check_hresult(winrt::get_unknown(cache.bitmap.PixelBuffer())->QueryInterface(kIID_IBufferByteAccess,access.put_void()));
@@ -10028,21 +9988,7 @@ void UpdatePopupBackgroundPointerLights() {
                     noiseKey=((noiseKey>>((noiseKey>>28u)+4u))^noiseKey)*277803737u;
                     double noise=((noiseKey>>22u)^noiseKey)%1024/1024.0-0.5;
                     double a=Clamp(alpha,0.0,120.0);
-                    std::array<double,4> wash{};
-                    if(g_settings.compact && !IsTransparentMaterial() && index==1) {
-                        wash=PopupBottomCoverWash(g_popupLiquidWashCurrent,index,x*.5-.25,y*.5-.25,width,height);
-                        if(g_popupCoverTransitionActive&&g_popupLiquidWashPrevious){
-                            auto old=PopupBottomCoverWash(g_popupLiquidWashPrevious,index,x*.5-.25,y*.5-.25,width,height);
-                            double t=SmootherStep(Clamp(g_popupMediaTransitionProgress,0.0,1.0));
-                            for(int c=0;c<4;++c)wash[c]=old[c]+(wash[c]-old[c])*t;
-                        }
-                        // A faint full-surface wash; both layouts share a broad lower-half fade.
-                        double weight=0.05+0.21*SmootherStep(Clamp(((y+0.5)/h-0.50)/0.50,0.0,1.0));
-                        for(auto& c:wash)c*=weight;
-                        // The same white light is composited OVER both wash and background.
-                        // Do not mask or amplify it at the bottom-wash boundary.
-                    }
-                    for(int c=0;c<4;++c)pixels[(y*w+x)*4+c]=static_cast<BYTE>(Clamp(std::lround(lightChannels[c]*a/255.0+wash[c]*(1-a/255.0)+noise),0L,255L));
+                    for(int c=0;c<4;++c)pixels[(y*w+x)*4+c]=static_cast<BYTE>(Clamp(std::lround(lightChannels[c]*a/255.0+noise),0L,255L));
                     double rimAlpha=(valid?(index==2&&IsTransparentMaterial()?(IsDarkModeApprox()?190.0:210.0):(IsDarkModeApprox()?140.0:175.0))*PopupBackgroundPointerFalloff(distance):0);
                     if(lightFullGlass)rimAlpha=std::min(255.0,rimAlpha*1.35);
                     rimPixels[(y*w+x)*4]=static_cast<BYTE>(Clamp(std::lround((rimTint.B+(255-rimTint.B)*brighten)*rimAlpha/255.0+noise),0L,255L));
@@ -10052,7 +9998,7 @@ void UpdatePopupBackgroundPointerLights() {
                 }
                 cache.bitmap.Invalidate();
                 cache.rimBitmap.Invalidate();
-                cache.key=key;cache.art=g_popupLiquidWashCurrent;cache.valid=!hasRipples&&!animatedWash;
+                cache.key=key;cache.art=g_popupLiquidWashCurrent;cache.valid=!hasRipples;
             }
             if(index==0) {
                 g_popupXamlBackdropPointerLight.Background(cache.brush);
@@ -10117,14 +10063,6 @@ void ApplyPopupMediaTransitionVisuals() {
         g_popupXamlBackdropCoverFade.Opacity(backdropCoverEnabled && coverTransitionActive
                                             ? (1.0 - fade) * backdropWashProgress * xamlWash
                                             : 0.0);
-    }
-    if (g_popupXamlPanelCover) {
-        g_popupXamlPanelCover.Opacity(PopupPanelCoverEffectEnabled() ? coverFade*xamlWash : 0.0);
-    }
-    if (g_popupXamlPanelCoverFade) {
-        g_popupXamlPanelCoverFade.Opacity(PopupPanelCoverEffectEnabled() && coverTransitionActive
-                                              ? (1.0 - fade)*xamlWash
-                                              : 0.0);
     }
 
     // Expanded-view text uses the same reversed direction as the compact island:
@@ -10208,10 +10146,6 @@ void TickPopupMediaTransition(double dt) {
         if (g_popupXamlBackdropCoverFade) {
             g_popupXamlBackdropCoverFade.Source(nullptr);
             g_popupXamlBackdropCoverFade.Opacity(0.0);
-        }
-        if (g_popupXamlPanelCoverFade) {
-            PopupWashImageSource(g_popupXamlPanelCoverFade, nullptr);
-            g_popupXamlPanelCoverFade.Opacity(0.0);
         }
         g_popupTextTransitionActive = false;
         if (g_popupXamlOutgoingTitle) {
@@ -10302,10 +10236,6 @@ void ResetPopupXamlElementState() {
     g_popupXamlBackdropCoverFade = nullptr;
     g_popupLiquidWashCurrent.reset();
     g_popupLiquidWashPrevious.reset();
-    g_popupLiquidWashPanelRect = {};
-    g_popupLiquidWashPanelOpacity = 0.0f;
-    g_popupLiquidWashPanelRadius = 0.0f;
-    g_popupLiquidWashPanelInset = 0.0f;
     g_popupXamlBackdropCover = nullptr;
     g_popupXamlBackdropTint = nullptr;
     g_popupXamlBackdropSurfaceHighlight = nullptr;
@@ -10316,11 +10246,6 @@ void ResetPopupXamlElementState() {
     g_popupBackgroundRipples.clear();
     g_popupXamlBackdropRimHighlight = nullptr;
     g_popupXamlBackdropFresnelRim = nullptr;
-    g_popupXamlPanelCoverFrame = nullptr;
-    g_popupXamlPanelCoverScale = nullptr;
-    g_popupXamlPanelCoverTranslate = nullptr;
-    g_popupXamlPanelCoverFade = nullptr;
-    g_popupXamlPanelCover = nullptr;
     g_popupXamlPanel = nullptr;
     g_popupXamlPanelProjection = nullptr;
     g_popupPanelProjectionBitmap = nullptr;
@@ -10543,24 +10468,6 @@ bool InitializePopupXamlHost(HWND hwnd) {
         playbackContent.RenderTransform(playbackContentScale);
         canvas.Children().Append(playbackContent);
 
-        Border panelCoverFrame;
-        panelCoverFrame.CornerRadius({PopupExpandedCornerRadius(), PopupExpandedCornerRadius(),
-                                      PopupExpandedCornerRadius(), PopupExpandedCornerRadius()});
-        panelCoverFrame.BorderThickness({0, 0, 0, 0});
-        panelCoverFrame.Opacity(0.0);
-        AttachGpuFriendlyTransform(panelCoverFrame, g_popupXamlPanelCoverScale, g_popupXamlPanelCoverTranslate);
-        panelCoverFrame.RenderTransformOrigin({0.5, 0.5});
-        Grid panelCoverHost;
-        shapes::Path panelCoverFade;
-        panelCoverFade.Stretch(mediax::Stretch::None);
-        panelCoverFade.Opacity(0.0);
-        shapes::Path panelCover;
-        panelCover.Stretch(mediax::Stretch::None);
-        panelCover.Opacity(1.0);
-        panelCoverHost.Children().Append(panelCoverFade);
-        panelCoverHost.Children().Append(panelCover);
-        panelCoverFrame.Child(panelCoverHost);
-        playbackContent.Children().Append(panelCoverFrame);
 
         Border panel;
         panel.CornerRadius({0, 0, 0, 0});
@@ -10598,6 +10505,7 @@ bool InitializePopupXamlHost(HWND hwnd) {
         controls::Canvas::SetZIndex(panelG2Outline,2);
         controls::Canvas::SetZIndex(panelOuterRim,2);
         panelG2Host.Children().Append(panelPointerLight);
+
         g_popupXamlPanelPointerLight=panelPointerLight;
         panel.Child(panelG2Host);
         panel.Opacity(0.0);
@@ -11042,9 +10950,6 @@ bool InitializePopupXamlHost(HWND hwnd) {
         g_popupXamlBackdropSurfaceHighlight = backdropSurfaceHighlight;
         g_popupXamlBackdropRimHighlight = backdropRimHighlight;
         g_popupXamlBackdropFresnelRim = backdropFresnelRim;
-        g_popupXamlPanelCoverFrame = panelCoverFrame;
-        g_popupXamlPanelCoverFade = panelCoverFade;
-        g_popupXamlPanelCover = panelCover;
         g_popupXamlPanel = panel;
         g_popupXamlArtFrame = artFrame;
         g_popupXamlArtFade = artFade;
@@ -11324,33 +11229,8 @@ std::array<BYTE, 4> PanelCausticPixel(double x, double y, double width,
             static_cast<BYTE>(std::lround(r)), static_cast<BYTE>(std::lround(a * 255.0))};
 }
 
-winrt::Windows::UI::Color PopupPanelProjectionTint(double u) {
-    if (!PopupPanelCoverEffectEnabled()) return Color(255, 186, 188, 194);
-    auto sample = [&](std::shared_ptr<PreparedArtwork const> const& artwork) {
-        if (!artwork) return PopupAccentColor();
-        auto const& bitmap = artwork->popupPanelBitmap;
-        if (!bitmap.width || !bitmap.height || bitmap.pixels.size() <
-            static_cast<size_t>(bitmap.width) * bitmap.height * 4) return PopupAccentColor();
-        // Average a patch in the wash's lower region, where light exits the card.
-        double r=0, g=0, b=0, weight=0;
-        for (double du : {-0.08, 0.0, 0.08}) for (double v : {0.72, 0.84, 0.94}) {
-            auto x = static_cast<UINT>(Clamp(u + du, 0.0, 1.0) * (bitmap.width - 1));
-            auto y = static_cast<UINT>(v * (bitmap.height - 1));
-            size_t p = (static_cast<size_t>(y) * bitmap.width + x) * 4;
-            double alpha = bitmap.pixels[p+3] / 255.0;
-            r += bitmap.pixels[p+2]; g += bitmap.pixels[p+1]; b += bitmap.pixels[p]; weight += alpha;
-        }
-        if (weight < 0.01) return PopupAccentColor();
-        return Color(255, static_cast<BYTE>(Clamp(r / weight, 0.0, 255.0)),
-                     static_cast<BYTE>(Clamp(g / weight, 0.0, 255.0)),
-                     static_cast<BYTE>(Clamp(b / weight, 0.0, 255.0)));
-    };
-    auto tint = sample(g_popupLiquidWashCurrent);
-    if (g_popupCoverTransitionActive && g_popupMediaTransitionActive && g_popupLiquidWashPrevious) {
-        tint = LerpArtworkColor(sample(g_popupLiquidWashPrevious), tint,
-            SmootherStep(Clamp(g_popupMediaTransitionProgress, 0.0, 1.0)));
-    }
-    return tint;
+winrt::Windows::UI::Color PopupPanelProjectionTint() {
+    return Color(255, 186, 188, 194);
 }
 
 
@@ -11380,7 +11260,7 @@ void UpdatePopupPanelProjection(RECT const& shell, RECT const& card,
             return;
         }
         std::array<winrt::Windows::UI::Color, 3> colors{
-            PopupPanelProjectionTint(0.15), PopupPanelProjectionTint(0.5), PopupPanelProjectionTint(0.85)};
+            PopupPanelProjectionTint(), PopupPanelProjectionTint(), PopupPanelProjectionTint()};
         std::array<int, 11> key{static_cast<int>(std::lround(w)), static_cast<int>(std::lround(h)),
             card.left-shell.left, card.top-shell.top, card.right-shell.left, card.bottom-shell.top,
             static_cast<int>(std::lround(cardRadius * 2.0)), 0, 0, 0, static_cast<int>(std::lround(shellRadius * 2.0))};
@@ -11506,7 +11386,21 @@ void SyncPopupShellPaths(double width, double height, double radius) {
     border(7, g_popupXamlBackdropFresnelRim);
     border(8, g_popupShellStyle, true);
     double material=PopupMorphMaterialProgress(PopupProgress());
-    for (auto const& path:g_popupShellPaths) path.Opacity(path.Opacity()*material);
+    // Album color is already prepared with the track. Follow the geometry even
+    // while the desktop texture for the glass material is still becoming ready.
+    double compactWash =
+        (g_popupSharedMorphActive ? SmootherStep(Clamp(PopupProgress() / .55, 0.0, 1.0)) : 1.0);
+    for (size_t i = 0; i < g_popupShellPaths.size(); ++i) {
+        bool albumLayer = g_settings.compact && (i == 1 || i == 2);
+        auto path = g_popupShellPaths[i];
+        if (albumLayer) {
+            if (auto brush = path.Fill().try_as<mediax::ImageBrush>())
+                brush.Stretch(mediax::Stretch::UniformToFill);
+        }
+        auto const& art = i == 1 ? g_popupLiquidWashPrevious : g_popupLiquidWashCurrent;
+        double washScale = art && art->compactWashOpacityBaked ? 1.0 : PopupPanelCoverOpacityFactor();
+        path.Opacity(path.Opacity() * (albumLayer ? compactWash * washScale : material));
+    }
     // For solid shells blend premultiplied color on ONE fill, not two fading
     // opaque fills (which would leave a 25% alpha trough at their midpoint).
     if (g_popupMorphSourceSolid && !UseOverlayPopupBackdropMaterial()) {
@@ -11595,7 +11489,7 @@ void UpdatePopupXamlVisuals() {
         try {
             g_playerGrid.Opacity(compactRevealOpacity);
             g_playerGrid.IsHitTestVisible(PopupMainCanInterrupt(compactRevealOpacity));
-            SyncIslandOverlayVisibility();
+            SyncIslandPlacementVisibility();
             if (g_settings.classicMorphScaleAnimation &&
                 g_islandPressScale) {
                 // Hand the final spring lobe from the disappearing popup to
@@ -11701,7 +11595,7 @@ void UpdatePopupXamlVisuals() {
         } catch (...) {
         }
         double targetShellRadius =
-            PopupG2CornerRadius(backdropWidth, backdropHeight);
+            PopupShellTargetRadius(backdropWidth, backdropHeight);
         double shellVisualRadius = LerpDouble(sourceShellRadius,
                                               targetShellRadius,
                                               morphProgress);
@@ -11847,7 +11741,7 @@ void UpdatePopupXamlVisuals() {
     }
     // Artwork and playback card share one absolute G2 target radius. Fill,
     // outline and cover clip all consume the same animated value below.
-    double panelTargetRadius = g_settings.compact ? PopupG2CornerRadius(backdropWidth,backdropHeight) : popupArtTargetRadius;
+    double panelTargetRadius = PopupPlaybackCardRadius(targetCard.right - targetCard.left);
     double panelVisualRadius = LerpDouble(sourceShellRadius,
                                           panelTargetRadius,
                                           morphProgress);
@@ -11856,35 +11750,10 @@ void UpdatePopupXamlVisuals() {
                                         cardScreen.bottom - cardScreen.top) * 0.5);
     double cardOpacity = visibilityProgress*PopupMorphMaterialProgress(morphProgress);
     double projectionShellRadius = Clamp(
-        LerpDouble(sourceShellRadius, PopupG2CornerRadius(backdropWidth, backdropHeight), morphProgress),
+        LerpDouble(sourceShellRadius, PopupShellTargetRadius(backdropWidth, backdropHeight), morphProgress),
         1.0, std::min(backdropScreen.right-backdropScreen.left, backdropScreen.bottom-backdropScreen.top)*0.5);
     UpdatePopupPanelProjection(backdropScreen, cardScreen, panelRadius,
                                projectionShellRadius, cardOpacity * SmootherStep(morphProgress));
-    double washWidth = std::max<double>(1.0, backdropScreen.right - backdropScreen.left);
-    double washHeight = std::max<double>(1.0, backdropScreen.bottom - backdropScreen.top);
-    g_popupLiquidWashPanelRect = D2D1::RectF(
-        static_cast<float>((cardScreen.left - backdropScreen.left) / washWidth),
-        static_cast<float>((cardScreen.top - backdropScreen.top) / washHeight),
-        static_cast<float>((cardScreen.right - backdropScreen.left) / washWidth),
-        static_cast<float>((cardScreen.bottom - backdropScreen.top) / washHeight));
-    g_popupLiquidWashPanelOpacity = static_cast<float>(cardOpacity * PopupPanelCoverOpacityFactor());
-    g_popupLiquidWashPanelRadius = static_cast<float>(panelRadius / washHeight);
-    g_popupLiquidWashPanelInset = static_cast<float>(0.65 / washHeight);
-    if (g_popupXamlPanelCoverFrame) {
-        g_popupXamlPanelCoverFrame.CornerRadius({0, 0, 0, 0});
-        g_popupXamlPanelCoverFrame.Opacity(
-            PopupPanelCoverEffectEnabled()
-                ? cardOpacity * PopupPanelCoverOpacityFactor()
-                : 0.0);
-        ApplyPopupSeekScaledLayout(g_popupXamlPanelCoverFrame,
-                                   g_popupXamlPanelCoverScale,
-                                   g_popupXamlPanelCoverTranslate,
-                                   cardScreen,
-                                   popupScreen,
-                                   1.0,
-                                   seekCenterX,
-                                   seekCenterY);
-    }
     g_popupXamlPanel.CornerRadius({0, 0, 0, 0});
     try {
         double panelWidth =
@@ -11912,15 +11781,6 @@ void UpdatePopupXamlVisuals() {
                                         panelRadius+0.5, 2);
             outerRim.Visibility(IsTransparentBorderlessMaterial()||(g_settings.compact&&!IsLiquidGlassMaterial())?Visibility::Collapsed:Visibility::Visible);
             outerRim.Stroke(LiquidGlassFresnelOuterRimBrush());
-        }
-        if (g_popupXamlPanelCoverFrame) {
-            // ImageBrush-filled paths use XAML's antialiased coverage. A
-            // CompositionGeometricClip on the images made the lower corners
-            // visibly step at fractional sizes during fullsize animations.
-            UpdatePopupG2ContinuousPath(g_popupXamlPanelCoverFade,
-                panelWidth, panelHeight, panelRadius);
-            UpdatePopupG2ContinuousPath(g_popupXamlPanelCover,
-                panelWidth, panelHeight, panelRadius);
         }
     } catch (winrt::hresult_error const& error) {
         Wh_Log(L"popup G2 visual update failed hr=0x%08X",
@@ -12435,10 +12295,10 @@ void UpdatePopupXamlVisuals() {
     double shellWidth=std::max<double>(1.0,backdropScreen.right-backdropScreen.left);
     double shellHeight=std::max<double>(1.0,backdropScreen.bottom-backdropScreen.top);
     SyncPopupShellPaths(shellWidth, shellHeight,
-        Clamp(LerpDouble(sourceShellRadius, PopupG2CornerRadius(backdropWidth, backdropHeight), morphProgress),
+        Clamp(LerpDouble(sourceShellRadius, PopupShellTargetRadius(backdropWidth, backdropHeight), morphProgress),
               1.0,std::min(shellWidth,shellHeight)*.5));
     if (g_popupMorphSourceSurface) {
-        double radius=Clamp(LerpDouble(sourceShellRadius,PopupG2CornerRadius(backdropWidth,backdropHeight),morphProgress),1.0,std::min(shellWidth,shellHeight)*.5);
+        double radius=Clamp(LerpDouble(sourceShellRadius,PopupShellTargetRadius(backdropWidth, backdropHeight),morphProgress),1.0,std::min(shellWidth,shellHeight)*.5);
         for (auto const& layer:g_popupMorphSourceLayers) layer.CornerRadius({radius,radius,radius,radius});
         SetElementSizeIfChanged(g_popupMorphSourceSurface,shellWidth,shellHeight,.001);
         SetCanvasPositionIfChanged(g_popupMorphSourceSurface,backdropScreen.left,backdropScreen.top,.001);
@@ -12461,7 +12321,7 @@ bool IsInsideRoundedPopupSample(double x, double y, int width, int height,
     double nearestY = Clamp(y, top + radius, bottom - radius);
     double dx = x - nearestX;
     double dy = y - nearestY;
-    if (!g_settings.compact && radius > 0.0) {
+    if (radius > 0.0) {
         double nx = dx / radius, ny = dy / radius;
         return ContinuousCornerContains(nx, ny);
     }
@@ -12519,7 +12379,7 @@ void RenderExpandedPopupLayer() {
         try {
             g_playerGrid.Opacity(g_popupXamlRoot ? 0.0 : PopupOpeningMainOpacity(PopupProgress()));
             g_playerGrid.IsHitTestVisible(false);
-            SyncIslandOverlayVisibility();
+            SyncIslandPlacementVisibility();
         } catch (...) {}
     }
     if (g_popupXamlRoot) {
@@ -12629,14 +12489,6 @@ bool GetElementScreenRect(FrameworkElement const& element, RECT& result) {
         auto bounds = transform.TransformBounds({0, 0,
             static_cast<float>(element.ActualWidth()),
             static_cast<float>(element.ActualHeight())});
-        if (g_islandPlacementPopup && g_islandPlacementHost && g_injectionParent) {
-            try {
-                auto local = element.TransformToVisual(g_islandPlacementHost).TransformBounds({0, 0,
-                    static_cast<float>(element.ActualWidth()), static_cast<float>(element.ActualHeight())});
-                bounds = {local.X + static_cast<float>(g_islandPlacementPopup.HorizontalOffset()),
-                          local.Y + static_cast<float>(g_islandPlacementPopup.VerticalOffset()), local.Width, local.Height};
-            } catch (...) {} // Native elements retain their native-root transform.
-        }
         double scale = static_cast<double>(GetDpiForWindow(g_taskbarWnd)) / 96.0;
         result.left = taskbar.left + static_cast<int>(std::lround(bounds.X * scale));
         result.top = taskbar.top + static_cast<int>(std::lround(bounds.Y * scale));
@@ -12681,6 +12533,10 @@ void ReleaseIslandAnchorSpace() {
         uint32_t index=0;
         if(g_islandReservationColumn&&grid.ColumnDefinitions().IndexOf(g_islandReservationColumn,index))grid.ColumnDefinitions().RemoveAt(index);
         if(g_islandReservationRow&&grid.RowDefinitions().IndexOf(g_islandReservationRow,index))grid.RowDefinitions().RemoveAt(index);
+        if (g_islandPlacementHost && grid == g_injectionParent) {
+            Grid::SetColumnSpan(g_islandPlacementHost, std::max(1, int(grid.ColumnDefinitions().Size())));
+            Grid::SetRowSpan(g_islandPlacementHost, std::max(1, int(grid.RowDefinitions().Size())));
+        }
     }
     g_islandReservedTracks.reset();g_islandReservationPanel=nullptr;g_islandReservationSpacer=nullptr;
     g_islandReservationColumn=nullptr;g_islandReservationRow=nullptr;
@@ -12729,6 +12585,7 @@ void ReserveIslandAnchorSpace() {
             position=std::clamp(position,0,count);
             g_islandReservationPanel=grid;g_islandReservationVertical=vertical;
             for(auto child:grid.Children())if(auto element=child.try_as<FrameworkElement>()) {
+                if (element == g_islandPlacementHost) continue;
                 int index=vertical?Grid::GetRow(element):Grid::GetColumn(element);
                 int span=vertical?Grid::GetRowSpan(element):Grid::GetColumnSpan(element);
                 int next=index>=position?index+1:index, nextSpan=index<position&&index+span>position?span+1:span;
@@ -12749,6 +12606,10 @@ void ReserveIslandAnchorSpace() {
             if(vertical){Grid::SetRow(g_islandReservationSpacer,position);Grid::SetColumnSpan(g_islandReservationSpacer,std::max(1,int(grid.ColumnDefinitions().Size())));}
             else {Grid::SetColumn(g_islandReservationSpacer,position);Grid::SetRowSpan(g_islandReservationSpacer,std::max(1,int(grid.RowDefinitions().Size())));}
             grid.Children().Append(g_islandReservationSpacer);
+            if (g_islandPlacementHost && grid == g_injectionParent) {
+                Grid::SetColumnSpan(g_islandPlacementHost, std::max(1, int(grid.ColumnDefinitions().Size())));
+                Grid::SetRowSpan(g_islandPlacementHost, std::max(1, int(grid.RowDefinitions().Size())));
+            }
             return;
         }
     }
@@ -12880,8 +12741,8 @@ void UpdateIslandPlacement(bool refreshAnchor) {
     bool vertical = IsVerticalTaskbar();
     double width = g_layout.compactWidth, height = g_layout.compactHeight;
     double x = 0.0, y = 0.0;
-    double hostWidth = g_islandPlacementPopup ? g_injectionParent.ActualWidth() : g_islandPlacementHost.ActualWidth();
-    double hostHeight = g_islandPlacementPopup ? g_injectionParent.ActualHeight() : g_islandPlacementHost.ActualHeight();
+    double hostWidth = g_islandPlacementHost.ActualWidth();
+    double hostHeight = g_islandPlacementHost.ActualHeight();
     if (hostWidth <= 0 || hostHeight <= 0) return;
     double gap = 4.0;
     bool animating = IsDynamicCompactMode() &&
@@ -12892,7 +12753,7 @@ void UpdateIslandPlacement(bool refreshAnchor) {
         x = g_islandBaseX;
         y = g_islandBaseY;
     } else if (g_islandReservationSpacer && g_islandReservationSpacer.ActualWidth()>0 && g_islandReservationSpacer.ActualHeight()>0) {
-        auto bounds=g_islandReservationSpacer.TransformToVisual(g_islandPlacementPopup?g_injectionParent:g_islandPlacementHost.as<FrameworkElement>()).TransformBounds(
+        auto bounds=g_islandReservationSpacer.TransformToVisual(g_islandPlacementHost.as<FrameworkElement>()).TransformBounds(
             {0,0,float(g_islandReservationSpacer.ActualWidth()),float(g_islandReservationSpacer.ActualHeight())});
         x=vertical?bounds.X+(bounds.Width-width)*.5:bounds.X+g_settings.marginLeft;
         y=vertical?bounds.Y+g_settings.marginLeft:bounds.Y+(bounds.Height-height)*.5;
@@ -12901,7 +12762,7 @@ void UpdateIslandPlacement(bool refreshAnchor) {
             else if (!vertical && !DynamicTransportExpandsRight()) x += std::max(0.0,g_playerGrid.Width()-width);
         }
     } else if (g_islandPlacementAnchor) {
-        auto bounds = g_islandPlacementAnchor.TransformToVisual(g_islandPlacementPopup ? g_injectionParent : g_islandPlacementHost.as<FrameworkElement>()).TransformBounds(
+        auto bounds = g_islandPlacementAnchor.TransformToVisual(g_islandPlacementHost.as<FrameworkElement>()).TransformBounds(
             {0, 0, static_cast<float>(g_islandPlacementAnchor.ActualWidth()),
                    static_cast<float>(g_islandPlacementAnchor.ActualHeight())});
         if (vertical) {
@@ -12927,20 +12788,7 @@ void UpdateIslandPlacement(bool refreshAnchor) {
     x = Clamp(x, 0.0, std::max(0.0, hostWidth - width));
     y = Clamp(y, 0.0, std::max(0.0, hostHeight - height));
     g_islandBaseX = x; g_islandBaseY = y; g_islandBasePositionValid = true;
-    // Reserve the spring's full travel once. Resizing/moving a native Popup
-    // every frame forces its main-island content onto a new raster origin,
-    // even when opposing XAML offsets nominally keep it at the same screen X/Y.
     double overlayWidth = g_playerGrid.Width(), overlayHeight = g_playerGrid.Height();
-    bool reserveSide = g_islandPlacementPopup && IsDynamicCompactMode();
-    if (reserveSide) {
-        double travel = (DynamicTransportVisibleWidth() + DynamicTransportButtonMotionPadding()) * 1.12;
-        if (vertical) overlayHeight = std::max(overlayHeight, height + travel);
-        else overlayWidth = std::max(overlayWidth, width + travel);
-        double dpi = PopupDpiScale(g_taskbarWnd);
-        overlayWidth = std::ceil(overlayWidth * dpi) / dpi;
-        overlayHeight = std::ceil(overlayHeight * dpi) / dpi;
-    }
-    double localX = kIslandOverlayPadding, localY = kIslandOverlayPadding;
     if (vertical && IsDynamicCompactMode()) {
         // Keep direction stable throughout a spring; choose once while closed.
         if (g_dynamicTransportReveal <= 0.001 && g_dynamicTransportTargetReveal <= 0.5)
@@ -12948,24 +12796,14 @@ void UpdateIslandPlacement(bool refreshAnchor) {
                 (y + height * 0.5 <= hostHeight * 0.5) != g_settings.sideReverseExpansion;
         if (!g_sideTransportOpensDown) {
             y -= std::max(0.0, overlayHeight - height);
-            localY += overlayHeight - g_playerGrid.Height();
         }
     } else if (IsDynamicCompactMode() && !DynamicTransportExpandsRight()) {
         x -= std::max(0.0, overlayWidth - width);
-        localX += overlayWidth - g_playerGrid.Width();
-    }
-    if (g_islandPlacementPopup) {
-        g_islandOverlayX = x; g_islandOverlayY = y;
-        g_islandOverlayWidth = overlayWidth; g_islandOverlayHeight = overlayHeight;
-        // Child coordinates are local to the bounded Popup. Moving its native
-        // origin preserves the same taskbar-space anchor during either direction.
-        x = localX; y = localY;
     }
     if (std::abs(controls::Canvas::GetLeft(g_playerGrid) - x) > 0.001 || std::isnan(controls::Canvas::GetLeft(g_playerGrid)))
         controls::Canvas::SetLeft(g_playerGrid, x);
     if (std::abs(controls::Canvas::GetTop(g_playerGrid) - y) > 0.001 || std::isnan(controls::Canvas::GetTop(g_playerGrid)))
         controls::Canvas::SetTop(g_playerGrid, y);
-    if (g_islandPlacementPopup) SyncIslandOverlayBounds();
 }
 
 // Inspect the actual painted capsule, not a particular Styler theme name.
@@ -14233,7 +14071,7 @@ void BeginCloseExpandedPopup() {
             g_playerGrid.UpdateLayout();
             g_playerGrid.Opacity(g_popupCloseMainOpacity);
             g_playerGrid.IsHitTestVisible(false);
-            SyncIslandOverlayVisibility();
+            SyncIslandPlacementVisibility();
         }
         // Keep in-flight text crossfades continuous while geometry reverses.
     } catch (...) {
@@ -14294,7 +14132,7 @@ void SetCompactIslandSuppressed(bool suppressed) {
 
     g_playerGrid.Opacity(suppressed ? (g_popupXamlRoot ? (g_popupOpeningFramesPending ? 1.0 : 0.0) : PopupOpeningMainOpacity(PopupProgress())) : 1.0);
     g_playerGrid.IsHitTestVisible(!suppressed);
-    SyncIslandOverlayVisibility();
+    SyncIslandPlacementVisibility();
 }
 
 void StopPopupXamlRenderLoop() {
@@ -14336,7 +14174,7 @@ void FinishCloseExpandedPopup(HWND hwnd) {
         if (g_playerGrid) {
             g_playerGrid.Opacity(1.0);
             g_playerGrid.IsHitTestVisible(true);
-            SyncIslandOverlayVisibility();
+            SyncIslandPlacementVisibility();
         }
     } catch (...) {
         Wh_Log(L"failed to restore compact island after closing popup");
@@ -14344,7 +14182,7 @@ void FinishCloseExpandedPopup(HWND hwnd) {
             if (g_playerGrid) {
                 g_playerGrid.Opacity(1.0);
                 g_playerGrid.IsHitTestVisible(true);
-                SyncIslandOverlayVisibility();
+                SyncIslandPlacementVisibility();
             }
         } catch (...) {
         }
@@ -14396,29 +14234,11 @@ void OnPopupXamlRendering(winrt::Windows::Foundation::IInspectable const&,
     // must not impersonate a compositor frame or consume this barrier.
     if (g_popupOpeningFramesPending>0) {
         if (g_popupXamlCanvas) g_popupXamlCanvas.Opacity(0.0);
-        // Keep the source visible until this track's wash is bound. Timer
-        // callbacks may prepare content but do not consume the frame barrier.
-        auto pendingState=SnapshotMediaForUi();
-        bool needWash=false;{std::lock_guard lock(g_mediaMutex);needWash=g_media.hasSession && !g_media.thumbnailBytes.empty();}
-        bool washReady=!needWash || (pendingState.preparedArtwork && pendingState.preparedArtwork->popupReady);
-        if (!washReady && std::chrono::steady_clock::now()<g_popupOpeningAssetsDeadline) {
-            g_lastPopupFrameTime=std::chrono::steady_clock::now();
-            return;
-        }
-        if (g_popupPendingContentRefresh && washReady && std::chrono::steady_clock::now()<g_popupOpeningAssetsDeadline) {
-            g_popupPendingContentRefresh=false;
-            UpdatePlayerContents();
-            // The newly bound bitmaps still need the complete submission barrier.
-            if (!g_popupPendingContentRefresh) g_popupOpeningFramesPending=2;
-        }
+        // Late artwork is bound by the existing pending-content refresh after the morph.
         PositionExpandedPopup();
         RenderExpandedPopupLayer();
         g_popupXamlRoot.UpdateLayout();
         g_lastPopupFrameTime=std::chrono::steady_clock::now();
-        // The same material phase gates the XAML wash and native glass. Let it
-        // warm up while the source is still visible, not halfway through morph.
-        bool glassReady=!UseOverlayPopupBackdropMaterial() || g_popupMorphMaterialAvailability>=.999;
-        if (!glassReady && std::chrono::steady_clock::now()<g_popupOpeningAssetsDeadline) return;
         if (AdvancePopupOpeningHandoff(bool(renderingArgs))) {
             if (g_popupXamlCanvas) g_popupXamlCanvas.Opacity(1.0);
             SetCompactIslandSuppressed(true);
@@ -14786,8 +14606,6 @@ void ClearPopupOverlayWgcRenderCache() {
     g_popupOverlayWgcCaptureBitmapValid = false;
     g_popupOverlayWgcLastRenderedWash = {};
     for (auto& cache : g_popupOverlayWgcWashCache) cache = {};
-    g_popupOverlayWgcPanelWashGeometry = nullptr;
-    g_popupOverlayWgcPanelWashGeometryKey = {};
     g_popupOverlayWgcBlurEffect = nullptr;
     g_popupBlurNoiseBorder=nullptr;g_popupBlurDither=nullptr;
     g_popupOverlayWgcLensComposite = nullptr;
@@ -14842,15 +14660,8 @@ ID2D1Geometry* EnsurePopupOverlayWgcRoundedGeometry(
 
     winrt::com_ptr<ID2D1Geometry> geometry;
     try {
-        if (g_settings.compact) {
-            winrt::com_ptr<ID2D1RoundedRectangleGeometry> circular;
-            winrt::check_hresult(g_popupOverlayWgcD2dFactory->CreateRoundedRectangleGeometry(
-                D2D1::RoundedRect(rect, static_cast<float>(radius), static_cast<float>(radius)), circular.put()));
-            geometry = circular.as<ID2D1Geometry>();
-        } else {
-            geometry = CreatePopupG2Geometry(g_popupOverlayWgcD2dFactory.get(),
-                rect.right-rect.left, rect.bottom-rect.top, radius, 0.0).as<ID2D1Geometry>();
-        }
+        geometry = CreatePopupG2Geometry(g_popupOverlayWgcD2dFactory.get(),
+            rect.right-rect.left, rect.bottom-rect.top, radius, 0.0).as<ID2D1Geometry>();
     } catch (winrt::hresult_error const& error) {
         g_popupOverlayWgcLastHr = error.code();
         return nullptr;
@@ -14881,8 +14692,7 @@ bool EnsurePopupLiquidWashCache(ID2D1DeviceContext* context, PopupLiquidWashCach
             return SUCCEEDED(context->CreateBitmap(D2D1::SizeU(source.width, source.height),
                 source.pixels.data(), source.width * 4, &props, output.put()));
         };
-        if (!upload(fromTop ? artwork->popupBackdropTopBitmap : artwork->popupBackdropBitmap, next.backdrop) ||
-            !upload(artwork->popupPanelBitmap, next.panel)) return false;
+        if (!upload(fromTop ? artwork->popupBackdropTopBitmap : artwork->popupBackdropBitmap, next.backdrop)) return false;
     }
     cache = std::move(next);
     return true;
@@ -14911,34 +14721,8 @@ void DrawPopupLiquidWash(ID2D1DeviceContext* context, PopupLiquidWashState const
         context->DrawBitmap(bitmap, &target, Clamp(opacity, 0.0f, 1.0f), D2D1_INTERPOLATION_MODE_LINEAR, &source);
     };
     auto backdrop = D2D1::RectF(0, 0, width, height);
-    auto panel = D2D1::RectF(state.panelRect.left * width, state.panelRect.top * height,
-                            state.panelRect.right * width, state.panelRect.bottom * height);
-    // Preserve source-over crossfade ordering, but composite both washes BEFORE the lens.
     draw(g_popupOverlayWgcWashCache[1].backdrop.get(), backdrop, state.previousOpacity * state.backdropOpacity);
     draw(g_popupOverlayWgcWashCache[0].backdrop.get(), backdrop, state.currentOpacity * state.backdropOpacity);
-    if (state.panelOpacity <= 0 || panel.right <= panel.left || panel.bottom <= panel.top) return;
-    std::array<float, 4> key{panel.right-panel.left, panel.bottom-panel.top,
-                             state.panelRadius*height, state.panelInset*height};
-    try {
-        if (!g_popupOverlayWgcPanelWashGeometry || key != g_popupOverlayWgcPanelWashGeometryKey) {
-            winrt::com_ptr<ID2D1Factory> factory;
-            context->GetFactory(factory.put());
-            auto geometry = CreatePopupG2Geometry(factory.get(), key[0], key[1], key[2], key[3]);
-            g_popupOverlayWgcPanelWashGeometry = std::move(geometry);
-            g_popupOverlayWgcPanelWashGeometryKey = key;
-        }
-    } catch (winrt::hresult_error const&) {
-        // Omit the panel wash if its mask fails; never substitute a rectangle.
-        return;
-    }
-    auto layer = D2D1::LayerParameters1();
-    layer.geometricMask = g_popupOverlayWgcPanelWashGeometry.get();
-    layer.maskAntialiasMode = D2D1_ANTIALIAS_MODE_PER_PRIMITIVE;
-    layer.maskTransform = D2D1::Matrix3x2F::Translation(panel.left, panel.top);
-    context->PushLayer(layer, nullptr);
-    draw(g_popupOverlayWgcWashCache[1].panel.get(), panel, state.previousOpacity * state.panelOpacity);
-    draw(g_popupOverlayWgcWashCache[0].panel.get(), panel, state.currentOpacity * state.panelOpacity);
-    context->PopLayer();
 }
 
 bool EnsurePopupOverlayWgcRenderCache(int width,
@@ -15047,8 +14831,7 @@ LiquidGlassLensField SampleLiquidGlassLensField(double x, double y,
             double h = Clamp(0.5 + 0.5 * (qx - qy) / k, 0.0, 1.0);
             inside = qx * h + qy * (1.0 - h) + k * h * (1.0 - h);
         }
-        double norm = g_settings.compact ? std::hypot(ox, oy)
-            : [&] {
+        double norm = [&] {
                 if (radius <= 0) return std::hypot(ox, oy);
                 double a = std::min(ox,oy)/radius, b = std::max(ox,oy)/radius;
                 return radius*(1.0 + b-ContinuousCornerBoundary(a));
@@ -15101,14 +14884,6 @@ LiquidGlassLensField SampleLiquidGlassLensField(double x, double y,
     return field;
 }
 
-void ConstrainCompactLensSample(double& sampleX,double& sampleY,int width,int height,int radius) {
-    double cx=Clamp(sampleX,double(radius),double(width-radius));
-    double cy=Clamp(sampleY,double(radius),double(height-radius));
-    double dx=sampleX-cx,dy=sampleY-cy,len=std::hypot(dx,dy);
-    double limit=std::max(0.0,radius-1.0);
-    if(len>limit&&len>0){sampleX=cx+dx*limit/len;sampleY=cy+dy*limit/len;}
-}
-
 bool EnsurePopupOverlayWgcLensDisplacementMap(int width, int height, int radius, double bandScale) {
     if (!g_popupOverlayWgcD2dContext || width <= 2 || height <= 2) return false;
     radius = Clamp(radius, 1, std::max(1, std::min(width, height) / 2));
@@ -15131,7 +14906,6 @@ bool EnsurePopupOverlayWgcLensDisplacementMap(int width, int height, int radius,
                 // the cropped desktop (especially around tight corner arcs).
                 double sampleX=Clamp(x+.5+field.offsetX+field.chromaX*dispersion,.5,width-.5);
                 double sampleY=Clamp(y+.5+field.offsetY+field.chromaY*dispersion,.5,height-.5);
-                if(g_settings.compact)ConstrainCompactLensSample(sampleX,sampleY,width,height,radius);
                 double offsetX=sampleX-(x+.5),offsetY=sampleY-(y+.5);
                 // Float maps represent neutral 0.5 exactly (8-bit 128 does not).
                 maps[channel][i] = {
@@ -16708,11 +16482,7 @@ BYTE PopupRoundedRectAlpha(int x, int y, int width, int height, int radius) {
         double cy = Clamp(py, top + r, bottom - r);
         double dx = px - cx;
         double dy = py - cy;
-        if (!g_settings.compact) {
-            double nx = dx / r, ny = dy / r;
-            return ContinuousCornerContains(nx, ny);
-        }
-        return dx * dx + dy * dy <= r * r;
+        return r <= 0 || ContinuousCornerContains(dx / r, dy / r);
     };
 
     double px = static_cast<double>(x) + 0.5;
@@ -17415,7 +17185,7 @@ bool CalculatePopupBackdropOverlayRect(RECT& overlayRect, int& cornerRadiusPx, P
 
     double targetRadiusDip = std::max(
         1.0,
-        PopupG2CornerRadius(targetBackdrop.right - targetBackdrop.left,
+        PopupShellTargetRadius(targetBackdrop.right - targetBackdrop.left,
                             targetBackdrop.bottom - targetBackdrop.top) +
             kPopupOverlayRadiusAdjustDip);
     double sourceRadiusDip = SourceScaledRadius(g_layout.cornerRadius,
@@ -17476,7 +17246,7 @@ bool CalculatePopupBackdropOverlayTargetSize(int& targetWidthPx,
 
     double targetRadiusDip = std::max(
         1.0,
-        PopupG2CornerRadius(targetBackdrop.right - targetBackdrop.left,
+        PopupShellTargetRadius(targetBackdrop.right - targetBackdrop.left,
                             targetBackdrop.bottom - targetBackdrop.top) +
             kPopupOverlayRadiusAdjustDip);
     targetRadiusPx = Clamp(
@@ -17502,11 +17272,7 @@ void ApplyPopupBackdropOverlayRegion(int width, int height, int cornerRadiusPx) 
         if (regionChanged) {
             // HRGN is binary coverage. Leave the antialiased fringe to D2D
             // instead of cutting it off with a second, integer-pixel curve.
-            constexpr int guard = 2;
-            HRGN region = !g_settings.compact ? CreateRectRgn(0, 0, width + 1, height + 1) : CreateRoundRectRgn(-guard, -guard,
-                                             width + guard + 1, height + guard + 1,
-                                             (cornerRadiusPx + guard) * 2,
-                                             (cornerRadiusPx + guard) * 2);
+            HRGN region = CreateRectRgn(0, 0, width + 1, height + 1);
             if (region) {
                 if (!SetWindowRgn(g_popupBackdropOverlay, region, FALSE)) {
                     DeleteObject(region);
@@ -17861,7 +17627,6 @@ void ShowExpandedPopup() {
     g_expanded = true;
     g_popupSharedMorphActive=bool(g_popupXamlRoot);
     g_popupOpeningFramesPending=g_popupXamlRoot ? 2 : 0;
-    g_popupOpeningAssetsDeadline=std::chrono::steady_clock::now()+std::chrono::milliseconds(1200);
     g_popupClosing = false;
     g_popupClosePoseCaptured=false;
     g_popupArtworkPreparationRequested.store(
@@ -17910,7 +17675,7 @@ void ShowExpandedPopup() {
     if (!g_popupOpeningFramesPending) SuspendDockEdgeReservation();
 
     if (!g_settings.allowScreenCapture) {
-        if (SetExpandedPopupCaptureExclusion(true)) {
+        if (SetExpandedPopupCaptureExclusion(true) && UseOverlayPopupBackdropMaterial()) {
             DwmFlush();
         }
     }
@@ -17976,10 +17741,6 @@ void DestroyExpandedPopup() {
     g_popupXamlBackdropCoverFade = nullptr;
     g_popupLiquidWashCurrent.reset();
     g_popupLiquidWashPrevious.reset();
-    g_popupLiquidWashPanelRect = {};
-    g_popupLiquidWashPanelOpacity = 0.0f;
-    g_popupLiquidWashPanelRadius = 0.0f;
-    g_popupLiquidWashPanelInset = 0.0f;
     g_popupXamlBackdropCover = nullptr;
     g_popupXamlBackdropTint = nullptr;
     g_popupXamlBackdropSurfaceHighlight = nullptr;
@@ -17990,11 +17751,6 @@ void DestroyExpandedPopup() {
     g_popupBackgroundRipples.clear();
     g_popupXamlBackdropRimHighlight = nullptr;
     g_popupXamlBackdropFresnelRim = nullptr;
-    g_popupXamlPanelCoverFrame = nullptr;
-    g_popupXamlPanelCoverScale = nullptr;
-    g_popupXamlPanelCoverTranslate = nullptr;
-    g_popupXamlPanelCoverFade = nullptr;
-    g_popupXamlPanelCover = nullptr;
     g_popupXamlPanel = nullptr;
     g_popupXamlPanelProjection = nullptr;
     g_popupPanelProjectionBitmap = nullptr;
@@ -20144,7 +19900,7 @@ void EnsureCompactIslandInteractive() {
         }
         g_playerGrid.Opacity(1.0);
         g_playerGrid.IsHitTestVisible(true);
-        SyncIslandOverlayVisibility();
+        SyncIslandPlacementVisibility();
     } catch (...) {
     }
 }
@@ -20170,7 +19926,7 @@ void RepairExpandedPopupStateIfHidden() {
         if (g_playerGrid) {
             g_playerGrid.Opacity(1.0);
             g_playerGrid.IsHitTestVisible(true);
-            SyncIslandOverlayVisibility();
+            SyncIslandPlacementVisibility();
             ApplyExpandedState();
             UpdatePlayerContents();
         }
@@ -21566,7 +21322,7 @@ Grid BuildIslandGrid() {
     wrapper.HorizontalAlignment(HorizontalAlignment::Left);
     wrapper.Margin({static_cast<double>(g_settings.marginLeft), 0,
                     static_cast<double>(g_settings.marginRight), 0});
-    wrapper.Background(Brush(Color(0x01, 0, 0, 0)));
+    wrapper.Background(nullptr);
     wrapper.RenderTransformOrigin({0.5, 1.0});
 
     TransformGroup hoverTransform;
@@ -21591,6 +21347,7 @@ Grid BuildIslandGrid() {
     Grid mainIsland;
     mainIsland.UseLayoutRounding(false);
     mainIsland.Name(L"Island_MainSurface");
+    mainIsland.Background(Brush(Color(0, 0, 0, 0)));
     mainIsland.Width(initialMainWidth);
     mainIsland.Height(g_layout.compactHeight);
     mainIsland.HorizontalAlignment(
@@ -22391,7 +22148,39 @@ Grid BuildIslandGrid() {
 }
 
 HWINEVENTHOOK g_taskbarForegroundHook = nullptr;
+HWINEVENTHOOK g_fullscreenLocationHook = nullptr;
+DWORD g_fullscreenWatchThread = 0;
+
+void StopFullscreenLocationWatch() {
+    if (g_fullscreenLocationHook) {
+        UnhookWinEvent(g_fullscreenLocationHook);
+        g_fullscreenLocationHook = nullptr;
+    }
+    g_fullscreenWatchThread = 0;
+}
+void RefreshIslandEnvironmentVisibility();
+
+void CALLBACK OnForegroundLocationChanged(HWINEVENTHOOK, DWORD, HWND window,
+                                         LONG object, LONG child, DWORD, DWORD) {
+    if (g_unloading || object != OBJID_WINDOW || child != CHILDID_SELF ||
+        window != GetForegroundWindow() || !g_playerGrid) return;
+    try { RefreshIslandEnvironmentVisibility(); } catch (...) {}
+}
+
+void WatchFullscreenLocation(HWND foreground) {
+    DWORD pid = 0;
+    DWORD thread = foreground ? GetWindowThreadProcessId(foreground, &pid) : 0;
+    if (thread == g_fullscreenWatchThread) return;
+    StopFullscreenLocationWatch();
+    if (!thread) return;
+    g_fullscreenLocationHook = SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE,
+        EVENT_OBJECT_LOCATIONCHANGE, nullptr, OnForegroundLocationChanged, pid, thread,
+        WINEVENT_OUTOFCONTEXT);
+    if (g_fullscreenLocationHook) g_fullscreenWatchThread = thread;
+}
+
 void StopTaskbarLayoutMonitor() {
+    StopFullscreenLocationWatch();
     if (g_taskbarForegroundHook) {
         UnhookWinEvent(g_taskbarForegroundHook);
         g_taskbarForegroundHook = nullptr;
@@ -22438,28 +22227,8 @@ bool WindowCoversTaskbarMonitor(HWND window, HWND taskbar) {
 void RefreshIslandEnvironmentVisibility() {
     HWND taskbar = g_taskbarWnd.load();
     if (!taskbar) return;
-    g_islandOverlayReopenPending = false;
     HWND foreground = GetForegroundWindow();
-    static HWND previousForeground = nullptr;
-    static bool captureForeground = false;
-    bool wasCaptureForeground = captureForeground;
-    if (foreground != previousForeground) {
-        previousForeground = foreground;
-        captureForeground = false;
-        DWORD processId = 0;
-        GetWindowThreadProcessId(foreground, &processId);
-        if (HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId)) {
-            wchar_t path[MAX_PATH]{};
-            DWORD length = ARRAYSIZE(path);
-            if (QueryFullProcessImageNameW(process, 0, path, &length)) {
-                const wchar_t* name = wcsrchr(path, L'\\');
-                name = name ? name + 1 : path;
-                captureForeground = !_wcsicmp(name, L"ScreenClippingHost.exe") ||
-                    !_wcsicmp(name, L"SnippingTool.exe");
-            }
-            CloseHandle(process);
-        }
-    }
+    WatchFullscreenLocation(foreground);
     bool suppressed = !IsWindowVisible(taskbar) ||
         WindowCoversTaskbarMonitor(foreground, taskbar);
     bool wasSuppressed = g_islandEnvironmentSuppressed;
@@ -22474,17 +22243,7 @@ void RefreshIslandEnvironmentVisibility() {
     if (suppressed && !wasSuppressed && g_expandedPopup && (g_expanded || g_popupClosing)) {
         FinishCloseExpandedPopup(g_expandedPopup);
     }
-    // Screenshot overlays can dismiss the native Popup independently of the
-    // island state. Close it while covered and reopen from the timer after
-    // coverage ends; no activation, Windows key or media update is required.
-    if (!suppressed && (wasSuppressed || (wasCaptureForeground && !captureForeground)) &&
-        g_islandPlacementPopup) {
-        g_islandPlacementPopup.IsOpen(false);
-        // If capture occurred on another monitor, let XAML process the close
-        // before reopening. Same-turn false/true writes can be coalesced.
-        g_islandOverlayReopenPending = !wasSuppressed;
-    }
-    SyncIslandOverlayVisibility();
+    SyncIslandPlacementVisibility();
 }
 
 void CALLBACK OnTaskbarForegroundChanged(HWINEVENTHOOK, DWORD, HWND,
@@ -22507,6 +22266,9 @@ void CALLBACK OnTaskbarLayoutTimer(HWND, UINT, UINT_PTR timerId, DWORD) {
         RefreshIslandEnvironmentVisibility();
         RepairExpandedPopupStateIfHidden();
         auto playback = SnapshotMediaProgress();
+        // Create the hidden XAML host before the first click.
+        if (playback.hasSession && !g_islandEnvironmentSuppressed && !g_settings.sideExpand && !g_expandedPopup)
+            EnsureExpandedPopup();
         SetDiscPlaying(playback.hasSession && playback.isPlaying);
         SetCompactProjectionPlaying(playback.hasSession && playback.isPlaying);
         PaintPlaybackGlyph(g_playbackGlyphTransition.Resolve(playback.isPlaying, std::chrono::steady_clock::now()));
@@ -23058,8 +22820,7 @@ void UpdatePlayerContents() {
                         auto nextArt=makeBitmap(preparedArtwork->popupArtBitmap);
                         auto nextBackdrop=makeBitmap(g_settings.compact||g_taskbarAtTop?
                             preparedArtwork->popupBackdropTopBitmap:preparedArtwork->popupBackdropBitmap);
-                        auto nextPanel=makeBitmap(preparedArtwork->popupPanelBitmap);
-                        if(!nextArt||!nextBackdrop||!nextPanel)throw winrt::hresult_error(E_FAIL);
+                        if(!nextArt||!nextBackdrop)throw winrt::hresult_error(E_FAIL);
 
                         if (canAnimateCover) {
                             if (g_popupXamlArtFade && g_popupXamlArt) {
@@ -23077,13 +22838,6 @@ void UpdatePlayerContents() {
                                 g_popupXamlBackdropCoverFade.Opacity(
                                     oldSource != nullptr ? 1.0 : 0.0);
                             }
-                            if (g_popupXamlPanelCoverFade &&
-                                g_popupXamlPanelCover) {
-                                auto oldSource = PopupWashImageSource(g_popupXamlPanelCover);
-                                PopupWashImageSource(g_popupXamlPanelCoverFade, oldSource);
-                                g_popupXamlPanelCoverFade.Opacity(
-                                    oldSource != nullptr ? 1.0 : 0.0);
-                            }
                         }
                         if (g_popupXamlArt) {
                             g_popupXamlArt.Source(nextArt);
@@ -23092,10 +22846,6 @@ void UpdatePlayerContents() {
                             g_popupXamlBackdropCover.Source(
                                 useBackdropCover ? nextBackdrop
                                     : nullptr);
-                        }
-                        if (g_popupXamlPanelCover) {
-                            PopupWashImageSource(g_popupXamlPanelCover,
-                                nextPanel);
                         }
 
                         g_popupLiquidWashPrevious = canAnimateCover ? g_popupLiquidWashCurrent : nullptr;
@@ -23120,12 +22870,6 @@ void UpdatePlayerContents() {
                             }
                             if (g_popupXamlBackdropCoverFade) {
                                 g_popupXamlBackdropCoverFade.Opacity(0.0);
-                            }
-                            if (g_popupXamlPanelCover) {
-                                g_popupXamlPanelCover.Opacity(1.0);
-                            }
-                            if (g_popupXamlPanelCoverFade) {
-                                g_popupXamlPanelCoverFade.Opacity(0.0);
                             }
                         }
                         g_popupXamlThumbnailHash = popupHash;
@@ -23171,6 +22915,7 @@ void UpdatePlayerContents() {
 }
 
 void RemoveIslandOsResourcesNoexcept() noexcept {
+    StopFullscreenLocationWatch();
     if (g_taskbarForegroundHook) {
         UnhookWinEvent(g_taskbarForegroundHook);
         g_taskbarForegroundHook = nullptr;
@@ -23241,10 +22986,6 @@ void RemoveIslandGridImpl() {
     // Remove only our owned spacer/track and restore changes still owned by us.
     try { ReleaseIslandAnchorSpace(); } catch (...) {}
     g_islandPlacementAnchor = nullptr;
-    if (g_islandPlacementPopup) {
-        try { g_islandPlacementPopup.IsOpen(false); g_islandPlacementPopup.Child(nullptr); } catch (...) {}
-    }
-    g_islandPlacementPopup = nullptr;
     g_islandPlacementHost = nullptr;
     g_islandBasePositionValid = false;
 
@@ -23445,6 +23186,22 @@ void RemoveIslandGrid() noexcept {
     RemoveIslandOsResourcesNoexcept();
 }
 
+controls::Canvas AttachIslandPlacement(Grid const& parent, Grid const& island) {
+    controls::Canvas placement;
+    placement.UseLayoutRounding(false);
+    placement.Name(L"IslandMedia_PlacementHost");
+    placement.Background(nullptr);
+    controls::Grid::SetColumnSpan(placement, std::max(1, static_cast<int>(parent.ColumnDefinitions().Size())));
+    controls::Grid::SetRowSpan(placement, std::max(1, static_cast<int>(parent.RowDefinitions().Size())));
+    controls::Canvas::SetZIndex(placement, 1000);
+    island.HorizontalAlignment(HorizontalAlignment::Left);
+    island.VerticalAlignment(VerticalAlignment::Top);
+    island.Margin({0, 0, 0, 0});
+    placement.Children().Append(island);
+    parent.Children().Append(placement);
+    return placement;
+}
+
 bool InjectIslandGrid() {
     HWND hwnd = g_taskbarWnd ? g_taskbarWnd.load() : FindCurrentProcessTaskbarWnd();
     if (!hwnd) {
@@ -23480,27 +23237,8 @@ bool InjectIslandGrid() {
         UpdateRuntimeLayout(hwnd, root, target.grid);
         Grid island = BuildIslandGrid();
 
-        controls::Canvas placement;
-        placement.UseLayoutRounding(false);
-        placement.Name(L"IslandMedia_PlacementHost");
-        placement.Background(nullptr);
-        controls::Grid::SetColumnSpan(placement, std::max(1, static_cast<int>(target.grid.ColumnDefinitions().Size())));
-        controls::Grid::SetRowSpan(placement, std::max(1, static_cast<int>(target.grid.RowDefinitions().Size())));
-        controls::Canvas::SetZIndex(placement, 1000);
-        island.HorizontalAlignment(HorizontalAlignment::Left);
-        island.VerticalAlignment(VerticalAlignment::Top);
-        island.Margin({0, 0, 0, 0});
-        placement.Children().Append(island);
-        controls::Primitives::Popup overlay;
-        overlay.Name(L"IslandMedia_OverlayPopup");
-        overlay.XamlRoot(xamlRoot);
-        overlay.IsLightDismissEnabled(false);
-        overlay.ShouldConstrainToRootBounds(false);
-        overlay.Child(placement);
-        g_islandPlacementPopup = overlay;
-        g_islandPlacementHost = placement;
+        g_islandPlacementHost = AttachIslandPlacement(target.grid, island);
         g_injectionParent = target.grid;
-        // Open only after the island has a valid local size and taskbar anchor.
         g_islandPlacementAnchor = target.anchor;
         g_islandPlacementBefore = target.before;
         g_islandAnchorMarginReserved = false;
