@@ -1,9 +1,10 @@
 // ==WindhawkMod==
 // @id              win10vd-in-win11vd
-// @name            Windows 10 Virtual Desktop animations
+// @name            Windows 10 virtual desktop animations
 // @description     Restores native Windows 10 virtual desktop switch animations on Windows 11
-// @version         1.0
+// @version         1.2
 // @author          iamfromreallife
+// @github          https://github.com/iamfromreallife
 // @include         explorer.exe
 // @architecture    amd64
 // @compilerOptions -luser32
@@ -276,11 +277,12 @@ HRESULT WINAPI IndicatorTextHook(void* self, void* text, bool flag) {
 void InstallIndicatorTextHook() {
     HMODULE indicator = SystemModule(L"Windows.Internal.HardwareConfirmator.dll");
     if (!indicator) return;
-    WindhawkUtils::SYMBOL_HOOK symbols[] = {
+    // Windows.Internal.HardwareConfirmator.dll
+    WindhawkUtils::SYMBOL_HOOK hardwareConfirmatorHooks[] = {
         {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost,struct winrt::Windows::Internal::HardwareConfirmator::IHardwareConfirmatorHost>::ShowText(void *,bool)"},
          reinterpret_cast<void**>(&g_indicatorText), reinterpret_cast<void*>(IndicatorTextHook), true},
     };
-    WindhawkUtils::HookSymbols(indicator, symbols, ARRAYSIZE(symbols));
+    WindhawkUtils::HookSymbols(indicator, hardwareConfirmatorHooks, ARRAYSIZE(hardwareConfirmatorHooks));
 }
 
 bool SuppressNativeSlide() { return g_enabled.load() && g_legacyDepth != 0; }
@@ -398,12 +400,12 @@ bool ResolveDwm(HMODULE dwm) {
         if (reinterpret_cast<uintptr_t>(begin)!=base+0xb460 || reinterpret_cast<uintptr_t>(window)!=base+0x9e50 || reinterpret_cast<uintptr_t>(end)!=base+0xa9a0) return false;
     } else {
         void *namedBegin=nullptr,*namedWindow=nullptr,*namedEnd=nullptr;
-        WindhawkUtils::SYMBOL_HOOK symbols[] = {
+        WindhawkUtils::SYMBOL_HOOK dwmapiDllHooks[] = {
             {{L"DwmpBeginTransitionRequestWithGUID"}, &namedBegin, nullptr},
             {{L"DwmpTransitionWindow"}, &namedWindow, nullptr},
             {{L"DwmpEndTransitionRequest"}, &namedEnd, nullptr},
         };
-        if (!WindhawkUtils::HookSymbols(dwm,symbols,ARRAYSIZE(symbols)) ||
+        if (!WindhawkUtils::HookSymbols(dwm,dwmapiDllHooks,ARRAYSIZE(dwmapiDllHooks)) ||
             namedBegin!=reinterpret_cast<void*>(begin) || namedWindow!=reinterpret_cast<void*>(window) || namedEnd!=reinterpret_cast<void*>(end)) return false;
     }
     g_begin=reinterpret_cast<BeginFn>(begin);
@@ -433,7 +435,8 @@ bool ResolveShell(HMODULE shell, void*& cycle, void*& animated, void*& animatedM
         layout.adjacent=reinterpret_cast<AdjacentFn>(base+0x5b63b0);
         layout.special=reinterpret_cast<SpecialRouteFn>(base+0x5bd740);
     } else {
-        WindhawkUtils::SYMBOL_HOOK symbols[] = {
+        // twinui.pcshell.dll
+        WindhawkUtils::SYMBOL_HOOK twinuiPcshellHooks[] = {
             {{L"private: long __cdecl CVirtualDesktopHotkeyHandler::_CycleInDirection(enum VirtualDesktopSwitchDirection)"}, &cycle, nullptr},
             {{L"public: virtual long __cdecl CVirtualDesktopManager::SwitchDesktopWithAnimation(struct IVirtualDesktop *)"}, &animated, nullptr, true},
             {{L"public: virtual long __cdecl CVirtualDesktopManager::SwitchDesktop(struct IVirtualDesktop *)"}, reinterpret_cast<void**>(&g_switch), nullptr, true},
@@ -442,7 +445,7 @@ bool ResolveShell(HMODULE shell, void*& cycle, void*& animated, void*& animatedM
             {{L"public: virtual long __cdecl CVirtualDesktopManager::GetCurrentDesktopInternal(struct IVirtualDesktop * *)", L"public: virtual long __cdecl CVirtualDesktopManager::GetCurrentDesktop(struct IVirtualDesktop * *)"}, reinterpret_cast<void**>(&layout.current), nullptr, true},
             {{L"public: virtual long __cdecl CVirtualDesktopManager::GetAdjacentDesktopInternal(struct IVirtualDesktop *,unsigned int,struct IVirtualDesktop * *)", L"public: virtual long __cdecl CVirtualDesktopManager::GetAdjacentDesktop(struct IVirtualDesktop *,unsigned int,struct IVirtualDesktop * *)"}, reinterpret_cast<void**>(&layout.adjacent), nullptr, true},
         };
-        if (!WindhawkUtils::HookSymbols(shell,symbols,ARRAYSIZE(symbols)) || !cycle) return false;
+        if (!WindhawkUtils::HookSymbols(shell,twinuiPcshellHooks,ARRAYSIZE(twinuiPcshellHooks)) || !cycle) return false;
         if (!animated || !g_switch) { animated=nullptr; g_switch=nullptr; }
         if (!animatedMonitor || !g_switchMonitor) { animatedMonitor=nullptr; g_switchMonitor=nullptr; }
         if (!animated && !animatedMonitor) return false;
@@ -480,19 +483,19 @@ void InstallOptionalHooks() {
             Wh_SetFunctionHook(reinterpret_cast<void*>(base+0x1c2820),reinterpret_cast<void*>(PreferenceHook),reinterpret_cast<void**>(&g_preference));
         if (g_popup && g_preference) return;
         if (!g_popup) {
-            WindhawkUtils::SYMBOL_HOOK popupSymbols[] = {
+            WindhawkUtils::SYMBOL_HOOK twinuiDllHook[] = {
                 {{L"public: virtual long __cdecl CAudioFlyoutController::VirtualDesktopSwitched(struct IVirtualDesktop *,enum VirtualDesktopSwitchType)"}, reinterpret_cast<void**>(&g_popup), reinterpret_cast<void*>(PopupHook), true},
             };
-            WindhawkUtils::HookSymbols(twin,popupSymbols,ARRAYSIZE(popupSymbols));
+            WindhawkUtils::HookSymbols(twin,twinuiDllHook,ARRAYSIZE(twinuiDllHook));
         }
         return;
     }
-    WindhawkUtils::SYMBOL_HOOK symbols[] = {
+    WindhawkUtils::SYMBOL_HOOK twinuiDllHooks[] = {
         {{L"public: virtual long __cdecl CAudioFlyoutController::VirtualDesktopSwitched(struct IVirtualDesktop *)"}, reinterpret_cast<void**>(&g_popupOld), reinterpret_cast<void*>(PopupOldHook), true},
         {{L"public: virtual long __cdecl CAudioFlyoutController::VirtualDesktopSwitched(struct IVirtualDesktop *,enum VirtualDesktopSwitchType)"}, reinterpret_cast<void**>(&g_popup), reinterpret_cast<void*>(PopupHook), true},
         {{L"public: virtual bool __cdecl CSwitchThumbnailDeviceManager::AnimationsEnabled(void)"}, reinterpret_cast<void**>(&g_preference), reinterpret_cast<void*>(PreferenceHook), true},
     };
-    WindhawkUtils::HookSymbols(twin,symbols,ARRAYSIZE(symbols));
+    WindhawkUtils::HookSymbols(twin,twinuiDllHooks,ARRAYSIZE(twinuiDllHooks));
 }
 } 
 
