@@ -1,535 +1,574 @@
 // ==WindhawkMod==
 // @id              control-panel-revival
 // @name            Control Panel Revival
-// @description     Prevents Control Panel applets from redirecting to the modern Settings app on Windows 11 23H2+ by unhiding legacy elements safely
-// @version         1.0.0
+// @description     Stops Windows 11 from redirecting Control Panel pages (System, Troubleshooting, Fonts, ...) to the Settings app
+// @version         4.0.0
 // @author          AdmXP8
 // @github          https://github.com/AdmXP8
 // @include         explorer.exe
-// @include         control.exe
+// @include         rundll32.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32
+// @compilerOptions -lshlwapi -lntdll
 // ==/WindhawkMod==
+
 // ==WindhawkModReadme==
 /*
 # Control Panel Revival
 
-### What does this mod do?
+Windows redirects several classic Control Panel pages to the Settings app.
+This mod lets the classic pages open again.
 
-This mod restores Control Panel applets - Troubleshooting, Installed Updates,
-Default Programs, Devices and Printers, Fonts, and System - that Windows 11
-(23H2 and later) redirects to the Settings app instead of opening directly,
-even when launched via a shell command. You can also add your own applet IDs
-to protect them from being redirected. Each of the six built-in applets can
-also be individually toggled off in the settings if you don't want this mod
-to affect it.
+## What it restores
 
-**Note:** This mod does not reveal hidden Control Panel applets. It only
-restores applets that are already present in Control Panel but currently
-redirect to Settings(e.g troubleshooting,default programs,installed updates and more).
+* System, including the This PC > Properties link
+* Troubleshooting, Installed Updates, Default Programs, Fonts, Devices and Printers
+* Network and Sharing Center > advanced sharing settings
+* Control Panel task links that lead to those pages
 
-### Example CustomApplets configuration:
-```yaml
-- "{BB06C0E4-D293-4f75-8A90-CB05B6477EEE}"  # System
-- "Microsoft.Troubleshooting"              # Troubleshooting
-- "BB06C0E4-D293-4f75-8A90-CB05B6477EEE"    # System (bare GUID, no braces)
-```
+Everything else is left alone: a comparison is only changed when Control
+Panel's own UI code makes it, so unrelated shell behaviour keeps working.
 
-**Before:**
-![Before](https://raw.githubusercontent.com/AdmXP8/assets/main/Screen%20Recording%202026-08-27%20124304.gif)
+## What it does not do
 
-**After:**
-![After](https://raw.githubusercontent.com/AdmXP8/assets/main/Screen%20Recording%202026-08-27%20124458.gif)
+It does not unhide Control Panel items that Windows hides on purpose. For
+those there is the **Applet GUIDs to try to unhide** setting below, plus the
+separate `restore-classic-cpls` mod, which covers some of them.
 
-**Difference from other mods** Other mods hook this same function but within a new window, so they cannot intercept new applet redirects—such as those for troubleshooting, installed updates, default programs, and so on.
+### Tested on:
 
-**Relationship to `settings-to-control-panel` ("Redirect Settings to Control Panel"):** that mod also hooks the same private `COpenControlPanel::_MapLegacyName` function, but opens its targeted applets in a **new, separate window** rather than preventing the redirect entirely. This mod loads the applet **in-place, inside the existing Control Panel window**, which is what allows it to also cover Troubleshooting, Installed Updates, and Default Programs - three applets that, on 23H2+, can no longer be launched in a new window at all (not even via `shell:::`), so `settings-to-control-panel`'s mechanism cannot restore them. Both mods hooking the same private symbol is expected; if you run both together, only one mod's outcome will apply for any applet targeted by both.
-
-**Known limitations**  Clicking on task links that lead to applets currently in the mod results in no action being taken. This issue will be fixed in future versions.
-
-**If there are any bugs in the mod, please report them to me**
+* Windows 11 25h2 , 24h2
+* Windows 10 1709
 
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- EnableSystem: true
-  $name: System
+- extraGuids: [""]
+  $name: Extra GUIDs to un redirect
   $description: >-
-    Prevent the System applet (::{BB06C0E4-D293-4f75-8A90-CB05B6477EEE}) from
-    redirecting to Settings.
-- EnableDevicesAndPrinters: true
-  $name: Devices and Printers
+    One entry per row. GUIDs can be written with or without braces and with or
+    without the "::" prefix; canonical names (Microsoft.Something) also work.
+    An empty row ends the list.
+- unhideGuids: [""]
+  $name: Applet GUIDs to try to unhide (experimental)
   $description: >-
-    Prevent the Devices and Printers applet
-    (::{A8A91A66-3A7D-4424-8D24-04E180695C7A}) from redirecting to Settings.
-- EnableInstalledUpdates: true
-  $name: Installed Updates
+    Same format as above. Items listed here have the comparison that marks
+    them hidden blocked, including when shell32 asks for it. Best effort only.
+- passThroughNames: [""]
+  $name: Applets to leave redirected
   $description: >-
-    Prevent the Installed Updates applet
-    (::{D450A8A1-9568-45C7-9C0E-B4F9FB4537BD}) from redirecting to Settings.
-- EnableDefaultPrograms: true
-  $name: Default Programs
+    Canonical names (for example Microsoft.WindowsUpdate) whose redirect to
+    Settings should be kept, so the click does not end up doing nothing.
+- discoveryMode: false
+  $name: Discovery mode (diagnostics)
   $description: >-
-    Prevent the Default Programs applet
-    (::{17CD9488-1228-4B2F-88CE-4298E93E0966}) from redirecting to Settings.
-- EnableTroubleshooting: true
-  $name: Troubleshooting
-  $description: >-
-    Prevent the Troubleshooting applet
-    (::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}) from redirecting to Settings.
-- EnableFonts: true
-  $name: Fonts
-  $description: >-
-    Prevent the Fonts applet (::{BD84B380-8CA2-1069-AB1D-08000948F534}) from
-    redirecting to Settings.
-- CustomApplets: [""]
-  $name: Custom applet IDs
-  $description: >-
-    Add extra Control Panel applets to unhide, in addition to the built-in
-    ones. For GUID-based applets you can enter just the GUID, with or without
-    braces (e.g. BB06C0E4-D293-4f75-8A90-CB05B6477EEE or
-    {BB06C0E4-D293-4f75-8A90-CB05B6477EEE}) — the "::" prefix is added
-    automatically. Canonical names (e.g. Microsoft.SomeApplet) or bare
-    legacy keywords (e.g. system) can be entered as-is. One entry per row.
-    IMPORTANT: an empty row ends the list — any rows after a blank one are
-    ignored, so don't leave gaps in the middle. The mod reloads
-    automatically after saving.
+    Logs every equal comparison that involves a "::{GUID}"-looking string,
+    with the module and offset of the caller. Verbose.
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <shlwapi.h>
+#include <stdio.h>
+#include <wchar.h>
 #include <windhawk_utils.h>
 
-#include <string>
-#include <string_view>
-#include <vector>
-#include <cwctype>
-#include <exception>
+#if defined(__GNUC__) || defined(__clang__)
+#define CPR_NOINLINE __attribute__((noinline))
+#else
+#define CPR_NOINLINE __declspec(noinline)
+#endif
 
-// Each built-in applet this mod can unhide, bundled with an `enabled` flag
-// loaded from its own on/off setting (see LoadAppletToggleSettings below).
-// Not constexpr anymore since `enabled` is only known at runtime, but the
-// three identifier forms (GUID, canonical name, bare legacy keyword) are
-// still fixed string literals.
-struct BuiltInApplet {
-    std::wstring_view guid;
-    std::wstring_view canonicalName;
-    std::wstring_view bareName;
-    bool enabled;
+//targets
+static const WCHAR* kRedirectGuids[] = {
+    L"::{BB06C0E4-D293-4F75-8A90-CB05B6477EEE}",  //System
+    L"::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}",  //Troubleshooting
+    L"::{D450A8A1-9568-45C7-9C0E-B4F9FB4537BD}",  //Installed Updates
+    L"::{17CD9488-1228-4B2F-88CE-4298E93E0966}",  //Default Programs
+    L"::{BD84B380-8CA2-1069-AB1D-08000948F534}",  //Fonts
+    L"::{A8A91A66-3A7D-4424-8D24-04E180695C7A}",  //Devices and Printers
 };
 
-BuiltInApplet g_builtInApplets[] = {
-    { L"::{BB06C0E4-D293-4f75-8A90-CB05B6477EEE}", L"Microsoft.System",             L"system",             true }, // System
-    { L"::{A8A91A66-3A7D-4424-8D24-04E180695C7A}", L"Microsoft.DevicesAndPrinters", L"devicesandprinters", true }, // Devices and Printers
-    { L"::{D450A8A1-9568-45C7-9C0E-B4F9FB4537BD}", L"Microsoft.InstalledUpdates",   L"installedupdates",   true }, // Installed Updates
-    { L"::{17CD9488-1228-4B2F-88CE-4298E93E0966}", L"Microsoft.DefaultPrograms",    L"defaultprograms",    true }, // Default Programs
-    { L"::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}", L"Microsoft.Troubleshooting",    L"troubleshooting",    true }, // Troubleshooting
-    { L"::{BD84B380-8CA2-1069-AB1D-08000948F534}", L"Microsoft.Fonts",              L"fonts",              true }, // Fonts
-};
+//target...
+static const WCHAR kDevicesAndPrinters[] =
+    L"::{A8A91A66-3A7D-4424-8D24-04E180695C7A}";  //devices and printers
 
-// Reads the six EnableXxx toggle settings and updates g_builtInApplets in
-// place. A disabled applet is skipped entirely by both hooks below, exactly
-// as if it had never been in the built-in list to begin with.
-void LoadAppletToggleSettings() {
-    g_builtInApplets[0].enabled = Wh_GetIntSetting(L"EnableSystem") != 0;
-    g_builtInApplets[1].enabled = Wh_GetIntSetting(L"EnableDevicesAndPrinters") != 0;
-    g_builtInApplets[2].enabled = Wh_GetIntSetting(L"EnableInstalledUpdates") != 0;
-    g_builtInApplets[3].enabled = Wh_GetIntSetting(L"EnableDefaultPrograms") != 0;
-    g_builtInApplets[4].enabled = Wh_GetIntSetting(L"EnableTroubleshooting") != 0;
-    g_builtInApplets[5].enabled = Wh_GetIntSetting(L"EnableFonts") != 0;
+//another target
+static const WCHAR kNetAdvancedSuffix[] =
+    L"\\::{8E908FC9-BECC-40F6-915B-F4CA0E70D03D}\\Advanced";  //advance sharing settings (it's important for homegroup if u can port it)
 
-    Wh_Log(L"Applet toggles: System=%d DevicesAndPrinters=%d InstalledUpdates=%d DefaultPrograms=%d Troubleshooting=%d Fonts=%d",
-           g_builtInApplets[0].enabled, g_builtInApplets[1].enabled, g_builtInApplets[2].enabled,
-           g_builtInApplets[3].enabled, g_builtInApplets[4].enabled, g_builtInApplets[5].enabled);
+#define SCOPE_EF       0x1u
+#define SCOPE_SHELL32  0x2u
+
+static const int kMaxExtra = 32;
+static const int kMaxIdLen = 64;
+
+static WCHAR g_extraGuids[kMaxExtra][kMaxIdLen];
+static volatile LONG g_extraGuidCount = 0;
+static WCHAR g_unhideGuids[kMaxExtra][kMaxIdLen];
+static volatile LONG g_unhideGuidCount = 0;
+static WCHAR g_passNames[kMaxExtra][kMaxIdLen];
+static volatile LONG g_passNameCount = 0;
+static volatile LONG g_discoveryMode = 0;
+
+static size_t BoundedLen(const WCHAR* s, size_t maxLen) {
+    size_t n = 0;
+    while (n < maxLen && s[n]) n++;
+    return n;
 }
 
-// User-provided applet GUIDs / canonical names / bare keywords, loaded from
-// the "CustomApplets" array setting. Only ever checked against
-// _MapLegacyName's legacy-name parameter (see COpenControlPanel__MapLegacyName_hook)
-// - deliberately NEVER checked in CompareStringOrdinal_hook. A non-matching
-// _MapLegacyName call is harmless (it just falls through to the real
-// implementation), but arbitrary user input feeding a process-wide string
-// comparison override has no such safety net, so that path is restricted to
-// the small, vetted built-in list only.
-std::vector<std::wstring> g_customApplets;
-
-static std::wstring Trim(const std::wstring& s) {
-    size_t start = s.find_first_not_of(L" \t\r\n");
-    if (start == std::wstring::npos) return L"";
-    size_t end = s.find_last_not_of(L" \t\r\n");
-    return s.substr(start, end - start + 1);
+static bool IsHexW(WCHAR c) {
+    return (c >= L'0' && c <= L'9') || (c >= L'a' && c <= L'f') ||
+           (c >= L'A' && c <= L'F');
 }
 
-// A "bare" GUID with no braces, e.g. BB06C0E4-D293-4f75-8A90-CB05B6477EEE
-// (8-4-4-4-12 hex digits separated by dashes).
-static bool LooksLikeBareGuid(const std::wstring& s) {
-    if (s.size() != 36) return false;
-    for (size_t i = 0; i < s.size(); i++) {
+static bool LooksLikeBareGuid(const WCHAR* s, size_t len) {
+    if (len != 36) return false;
+    for (size_t i = 0; i < 36; i++) {
         if (i == 8 || i == 13 || i == 18 || i == 23) {
             if (s[i] != L'-') return false;
-        } else if (!iswxdigit(s[i])) {
+        } else if (!IsHexW(s[i])) {
             return false;
         }
     }
     return true;
 }
 
-// Lets the user type just the GUID (with or without braces), instead of
-// requiring the "::{...}" CLSID-path syntax Explorer actually expects.
-// Canonical names (e.g. "Microsoft.System") and bare legacy keywords (e.g.
-// "system") are left untouched, since neither uses the "::" prefix.
-static std::wstring NormalizeAppletId(const std::wstring& rawInput) {
-    std::wstring raw = Trim(rawInput);
-    if (raw.empty()) return raw;
+static bool NormalizeAppletId(const WCHAR* raw, WCHAR* dst, size_t cchDst) {
+    if (!raw || !dst || cchDst < 8) return false;
 
-    if (raw.rfind(L"::", 0) == 0) {
-        return raw; // already has the "::" prefix, use as-is
+    const WCHAR* begin = raw;
+    while (*begin == L' ' || *begin == L'\t') begin++;
+    const WCHAR* end = begin + wcslen(begin);
+    while (end > begin && (end[-1] == L' ' || end[-1] == L'\t' ||
+                           end[-1] == L'\r' || end[-1] == L'\n')) {
+        end--;
     }
-    if (raw.front() == L'{' && raw.back() == L'}') {
-        return L"::" + raw; // bare "{GUID}" -> add the "::" prefix
+    size_t len = (size_t)(end - begin);
+    if (len == 0 || len >= cchDst) return false;
+
+    WCHAR tmp[128];
+    if (len >= ARRAYSIZE(tmp)) return false;
+    wmemcpy(tmp, begin, len);
+    tmp[len] = 0;
+
+    if (wcsncmp(tmp, L"::", 2) == 0) {
+        wcscpy(dst, tmp);
+        return true;
     }
-    if (LooksLikeBareGuid(raw)) {
-        return L"::{" + raw + L"}"; // bare GUID, no braces -> add both
+    if (tmp[0] == L'{' && tmp[len - 1] == L'}') {
+        _snwprintf(dst, cchDst, L"::%s", tmp);
+        dst[cchDst - 1] = 0;
+        return true;
     }
-    return raw; // assume canonical name or bare legacy keyword
+    if (LooksLikeBareGuid(tmp, len)) {
+        _snwprintf(dst, cchDst, L"::{%s}", tmp);
+        dst[cchDst - 1] = 0;
+        return true;
+    }
+    wcscpy(dst, tmp);
+    return true;
 }
 
-constexpr size_t kMaxAppletIdLength = 128;
-
-static bool IsPlausibleAppletId(const std::wstring& id) {
-    return !id.empty() && id.size() <= kMaxAppletIdLength;
-}
-
-// Reads the CustomApplets[i] setting entries until an empty one is hit.
-// NOTE: Wh_GetStringSetting returns "" (never NULL) past the end of a
-// configured array, and there is no other way to ask the API "how many
-// entries are there" - so an empty row is unavoidably treated as the end of
-// the list rather than a skippable gap (this is stated in the setting's
-// $description above).
-void LoadCustomAppletSettings() {
-    g_customApplets.clear();
-
-    for (int i = 0; ; i++) {
-        PCWSTR value = Wh_GetStringSetting(L"CustomApplets[%d]", i);
-        bool hasValue = *value != L'\0';
-        if (hasValue) {
-            std::wstring normalized = NormalizeAppletId(value);
-            if (!normalized.empty()) {
-                if (IsPlausibleAppletId(normalized)) {
-                    Wh_Log(L"Custom applet entry #%d: \"%s\" -> \"%s\"", i, value, normalized.c_str());
-                    g_customApplets.push_back(std::move(normalized));
+static void LoadList(const WCHAR* key, WCHAR (*dst)[kMaxIdLen],
+                     volatile LONG* count, bool normalize) {
+    InterlockedExchange(count, 0);
+    LONG n = 0;
+    for (int i = 0; i < kMaxExtra; i++) {
+        PCWSTR s = Wh_GetStringSetting(L"%s[%d]", key, i);
+        bool has = s && *s;
+        if (has) {
+            WCHAR norm[kMaxIdLen];
+            const WCHAR* value = s;
+            if (normalize) {
+                if (NormalizeAppletId(s, norm, kMaxIdLen)) {
+                    value = norm;
+                    if (_wcsicmp(norm, s) != 0) {
+                        Wh_Log(L"%s[%d]: \"%s\" -> \"%s\"", key, i, s, norm);
+                    }
                 } else {
-                    Wh_Log(L"Ignoring custom applet entry #%d (\"%s\"): too long", i, value);
-                }
-            } else {
-                Wh_Log(L"Ignoring empty custom applet entry #%d", i);
-            }
-        }
-        Wh_FreeStringSetting(value);
-        if (!hasValue) break;
-    }
-
-    Wh_Log(L"Loaded %zu custom applet ID(s) from settings", g_customApplets.size());
-}
-
-// Ensures the mod only runs on Windows 11 23H2 (build 22631) or newer,
-// matching @description.
-bool IsSupportedWindowsVersion() {
-    HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
-    if (!hNtdll) return false;
-
-    typedef NTSTATUS(WINAPI* RtlGetVersionPtr)(PRTL_OSVERSIONINFOW);
-    auto pRtlGetVersion = (RtlGetVersionPtr)GetProcAddress(hNtdll, "RtlGetVersion");
-    if (!pRtlGetVersion) return false;
-
-    RTL_OSVERSIONINFOW osvi = { sizeof(osvi) };
-    if (pRtlGetVersion(&osvi) == 0) {
-        if (osvi.dwMajorVersion == 10 && osvi.dwMinorVersion == 0 && osvi.dwBuildNumber >= 22631) {
-            return true;
-        }
-    }
-    return false;
-}
-
-// Hooks
-bool (*COpenControlPanel__MapLegacyName_orig)(void *, LPCWSTR, LPWSTR, UINT, bool *) = nullptr;
-
-static bool NameMatches(const std::wstring_view& candidate, LPCWSTR name, size_t nameLen) {
-    return candidate.size() == nameLen && _wcsnicmp(candidate.data(), name, candidate.size()) == 0;
-}
-
-// Only suppresses the mapping for names actually in our target list;
-// everything else falls through to the real implementation. This keeps
-// legacy->canonical name resolution intact for every Control Panel item
-// this mod doesn't care about, and avoids clobbering whatever
-// settings-to-control-panel's own whitelist is doing if both mods are
-// enabled together. All comparisons are case-insensitive.
-//
-// Each built-in applet is skipped entirely if its EnableXxx setting is off
-// (see g_builtInApplets/LoadAppletToggleSettings) - a disabled applet's
-// GUID/canonical-name/bare-keyword forms are treated as if they weren't in
-// the list at all, so its real (redirecting) behavior is left untouched.
-bool COpenControlPanel__MapLegacyName_hook(void *pThis, LPCWSTR pszLegacyName, LPWSTR pszNewName, UINT uUnused, bool *nameChanged) {
-    try {
-        bool isTargeted = false;
-
-        if (pszLegacyName) {
-            size_t legacyLen = wcslen(pszLegacyName);
-
-            for (const auto& applet : g_builtInApplets) {
-                if (!applet.enabled) continue;
-                if (NameMatches(applet.guid, pszLegacyName, legacyLen) ||
-                    NameMatches(applet.canonicalName, pszLegacyName, legacyLen) ||
-                    NameMatches(applet.bareName, pszLegacyName, legacyLen)) {
-                    isTargeted = true;
-                    break;
+                    Wh_Log(L"%s[%d]: ignoring unusable entry (\"%s\")", key, i, s);
+                    value = nullptr;
                 }
             }
-            if (!isTargeted) {
-                for (const auto& entry : g_customApplets) {
-                    if (entry.size() == legacyLen && _wcsnicmp(entry.c_str(), pszLegacyName, entry.size()) == 0) { isTargeted = true; break; }
+            if (value) {
+                size_t len = wcslen(value);
+                if (len >= (size_t)kMaxIdLen) {
+                    Wh_Log(L"%s[%d]: ignoring entry, too long (%u chars)",
+                           key, i, (unsigned)len);
+                } else if (n < kMaxExtra) {
+                    wcscpy(dst[n], value);
+                    n++;
+                } else {
+                    Wh_Log(L"%s: more than %d entries, ignoring the rest",
+                           key, kMaxExtra);
                 }
             }
         }
+        Wh_FreeStringSetting(s);
+        if (!has) break;
+    }
+    InterlockedExchange(count, n);
+}
 
-        if (isTargeted) {
-            if (nameChanged) *nameChanged = false;
-            if (pszNewName && uUnused > 0) *pszNewName = L'\0';
-            return false;
+static void LoadSettings() {
+    LoadList(L"extraGuids", g_extraGuids, &g_extraGuidCount, true);
+    LoadList(L"unhideGuids", g_unhideGuids, &g_unhideGuidCount, true);
+    LoadList(L"passThroughNames", g_passNames, &g_passNameCount, false);
+    InterlockedExchange(&g_discoveryMode,
+                        Wh_GetIntSetting(L"discoveryMode") ? 1 : 0);
+    Wh_Log(L"settings: extra=%d unhide=%d passthrough=%d discovery=%d",
+           (int)g_extraGuidCount, (int)g_unhideGuidCount,
+           (int)g_passNameCount, (int)g_discoveryMode);
+}
+
+void Wh_ModSettingsChanged() {
+    LoadSettings();
+}
+
+static thread_local bool g_inLog = false;
+static volatile LONG g_skipLogged = 0;
+static volatile LONG g_discLogged = 0;
+static volatile LONG g_mapLogged = 0;
+
+static HMODULE g_selfModule = nullptr;
+static HMODULE g_modExplorerFrame = nullptr;
+static HMODULE g_modShell32 = nullptr;
+
+static HMODULE ModuleOf(void* addr) {
+    HMODULE h = nullptr;
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            (LPCWSTR)addr, &h)) {
+        return nullptr;
+    }
+    return h;
+}
+
+static DWORD ModuleScopeOf(HMODULE h) {
+    if (!h) return 0;
+    if (!g_modExplorerFrame) g_modExplorerFrame = GetModuleHandleW(L"explorerframe.dll");
+    if (!g_modShell32) g_modShell32 = GetModuleHandleW(L"shell32.dll");
+    if (h == g_modExplorerFrame) return SCOPE_EF;
+    if (h == g_modShell32) return SCOPE_SHELL32;
+    return 0;
+}
+
+static void FormatAddr(void* addr, WCHAR* out, size_t cch) {
+    HMODULE h = ModuleOf(addr);
+    WCHAR path[MAX_PATH] = L"?";
+    if (h) GetModuleFileNameW(h, path, MAX_PATH);
+    const WCHAR* name = wcsrchr(path, L'\\');
+    name = name ? name + 1 : path;
+    _snwprintf(out, cch, L"%ls+0x%llX", name,
+               h ? (unsigned long long)((BYTE*)addr - (BYTE*)h) : 0ULL);
+    out[cch - 1] = 0;
+}
+
+static bool IsHookLayerModule(HMODULE h) {
+    WCHAR path[MAX_PATH];
+    if (!GetModuleFileNameW(h, path, MAX_PATH)) return false;
+    WCHAR win[MAX_PATH];
+    UINT n = GetWindowsDirectoryW(win, MAX_PATH);
+    if (n && _wcsnicmp(path, win, n) == 0) {
+        return _wcsicmp(path + n, L"\\dxgi.dll") == 0;  //EP
+    }
+    return true;
+}
+
+CPR_NOINLINE static DWORD WalkCallerScope(bool log) {
+    void* frames[16];
+    USHORT n = RtlCaptureStackBackTrace(0, 16, frames, nullptr);
+    DWORD result = 0;
+    bool decided = false;
+    USHORT shown = 0;
+    for (USHORT i = 0; i < n; i++) {
+        HMODULE h = ModuleOf(frames[i]);
+        if (h == g_selfModule) continue;
+        if (log && shown < 6) {
+            WCHAR where[96];
+            FormatAddr(frames[i], where, 96);
+            Wh_Log(L"SKIPBT #%u %s", (unsigned)shown, where);
+            shown++;
         }
-    } catch (...) {
-        Wh_Log(L"COpenControlPanel__MapLegacyName_hook: caught an exception, falling back to the original implementation");
-    }
-
-    if (COpenControlPanel__MapLegacyName_orig) {
-        return COpenControlPanel__MapLegacyName_orig(pThis, pszLegacyName, pszNewName, uUnused, nameChanged);
-    }
-    return false;
-}
-
-using CompareStringOrdinal_t = decltype(&CompareStringOrdinal);
-CompareStringOrdinal_t CompareStringOrdinal_orig = nullptr;
-
-static int GetEffectiveLength(LPCWCH str, int cch) {
-    return (cch == -1) ? (int)wcslen(str) : cch;
-}
-
-// Checks ONLY the built-in, vetted list (GUIDs + canonical names + bare
-// keywords), skipping any applet whose EnableXxx setting is off - and
-// deliberately excludes g_customApplets, same as before. This is the list
-// CompareStringOrdinal_hook is allowed to influence; user-supplied strings
-// are only ever matched against _MapLegacyName's legacy-name parameter,
-// never against this process-wide comparison primitive.
-static bool MatchesBuiltInList(LPCWCH str, int cch) {
-    if (!str) return false;
-    int len = GetEffectiveLength(str, cch);
-    if (len <= 0) return false;
-
-    auto matchesOne = [&](const std::wstring_view& candidate) -> bool {
-        return (size_t)len == candidate.size() && _wcsnicmp(str, candidate.data(), candidate.size()) == 0;
-    };
-
-    for (const auto& applet : g_builtInApplets) {
-        if (!applet.enabled) continue;
-        if (matchesOne(applet.guid) || matchesOne(applet.canonicalName) || matchesOne(applet.bareName)) {
-            return true;
+        if (decided) continue;
+        if (!h) continue;
+        DWORD scope = ModuleScopeOf(h);
+        if (scope) {
+            result = scope;
+            decided = true;
+            continue;
         }
+        if (IsHookLayerModule(h)) continue;
+        decided = true;
     }
-    return false;
-}
-
-// FIX: only ever overrides a result that was genuinely CSTR_EQUAL for one
-// of the built-in target strings - every non-equal comparison anywhere in
-// the process keeps its true result. CustomApplets entries are deliberately
-// excluded here (see g_customApplets above) - only the built-in, vetted
-// list can trigger this override.
-//
-// This is intentionally NOT scoped to a specific caller. Four separate
-// scoping attempts were made and each broke the mod's actual functionality
-// in testing: (1) return-address matching against shell32.dll, (2) the
-// same against shell32.dll-or-windows.storage.dll, (3) a multi-frame stack
-// walk that empirically added explorerframe.dll to the accepted set, and
-// (4) a thread-local flag armed for the duration of the
-// COpenControlPanel::_MapLegacyName call on the same thread. That the
-// temporal approach (4) also failed is itself informative: it suggests the
-// actual redirect-decision comparison doesn't happen synchronously nested
-// inside _MapLegacyName's call on the same thread at all - it may be
-// deferred (a posted message handled later), happen on a different thread,
-// or go through a call path that doesn't involve _MapLegacyName in the
-// first place. Given that, the hook is left unscoped for now. We're open
-// to a properly-scoped fix if the actual call site can be identified (e.g.
-// via a debugger breakpoint on the unhooked CompareStringOrdinal, rather
-// than detection from inside the hook).
-int WINAPI CompareStringOrdinal_hook(LPCWCH lpString1, int cchCount1, LPCWCH lpString2, int cchCount2, BOOL bIgnoreCase) {
-    if (!CompareStringOrdinal_orig) return 0;
-
-    try {
-        int result = CompareStringOrdinal_orig(lpString1, cchCount1, lpString2, cchCount2, bIgnoreCase);
-
-        if (result == CSTR_EQUAL && lpString1 && lpString2 &&
-            (MatchesBuiltInList(lpString1, cchCount1) || MatchesBuiltInList(lpString2, cchCount2))) {
-            return CSTR_LESS_THAN; // Force "not equal" to prevent redirect
-        }
-
-        return result;
-    } catch (...) {
-        Wh_Log(L"CompareStringOrdinal_hook: caught an exception, falling back to the real comparison result");
-        return CompareStringOrdinal_orig(lpString1, cchCount1, lpString2, cchCount2, bIgnoreCase);
-    }
-}
-
-// Resolved against shell32.dll - see ApplyShell32Hooks below. Marked
-// non-optional (the last field): this is the only hook this mod installs,
-// so if the symbol can't be resolved on some future Windows build, the mod
-// is entirely non-functional and that must be a reported failure, not a
-// silently-accepted no-op.
-const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
-    {
-        { L"private: bool __cdecl COpenControlPanel::_MapLegacyName(unsigned short const *,unsigned short *,unsigned int,bool *)" },
-        (void**)&COpenControlPanel__MapLegacyName_orig,
-        (void*)COpenControlPanel__MapLegacyName_hook,
-        false
-    }
-};
-
-// control.exe/explorer.exe aren't guaranteed to have shell32.dll loaded yet
-// at Wh_ModInit time in every scenario. Fix: hook LoadLibraryExW in
-// kernelbase.dll and install the shell32 hook the moment shell32.dll
-// actually gets loaded, whenever that happens - at Wh_ModInit time or later.
-volatile LONG g_shell32HookApplied = 0;
-
-// FIX (regressed from an earlier round, restored here): checks whether
-// shell32.dll is actually loaded BEFORE claiming the flag, not after. The
-// previous ordering (claim first, then check, then reset on failure) had a
-// real race: thread A could claim the flag during an unrelated DLL load,
-// find shell32 not loaded yet, and reset the flag back to 0 - while thread
-// B, which loaded shell32.dll concurrently, had already failed the
-// compare-exchange (because A's claim was still in effect at that instant)
-// and returned early. Neither thread would end up installing the hook, and
-// nothing would retry until some other DLL happened to load afterward.
-// Checking first and only claiming once shell32 is confirmed loaded closes
-// that window.
-void ApplyShell32Hooks(bool isLateLoad) {
-    HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
-    if (!hShell32) {
-        return; // not loaded yet; a later LoadLibraryExW call will retry
-    }
-
-    if (InterlockedCompareExchange(&g_shell32HookApplied, 1, 0) != 0) {
-        return; // already applied, or another call already claimed this
-    }
-
-    if (!WindhawkUtils::HookSymbols(hShell32, shell32DllHooks, ARRAYSIZE(shell32DllHooks))) {
-        Wh_Log(L"Failed to resolve/hook COpenControlPanel::_MapLegacyName - "
-               L"this function's signature may have changed in this Windows build. "
-               L"The mod will not be able to unhide any applets in this process.");
-    }
-
-    if (isLateLoad) {
-        // Required here because this hook was installed outside
-        // Wh_ModInit's normal batch. Must NOT be called from the direct
-        // (Wh_ModInit) path - Windhawk applies that batch itself when
-        // Wh_ModInit returns.
-        Wh_ApplyHookOperations();
-    }
-}
-
-using LoadLibraryExW_t = decltype(&LoadLibraryExW);
-LoadLibraryExW_t LoadLibraryExW_orig = nullptr;
-
-// FIX (regressed from an earlier round, restored here): no longer compares
-// the returned HMODULE against GetModuleHandleW(L"shell32.dll"). That
-// comparison misses exactly the case it was meant to catch: if shell32.dll
-// arrives as a static dependency of some OTHER DLL loaded through this same
-// API, `result` is that other DLL's handle, not shell32's, so the
-// comparison is always false and the retry never fires. ApplyShell32Hooks()
-// already does its own GetModuleHandleW(L"shell32.dll") check internally
-// and safely no-ops if it isn't loaded yet, so it's simplest and correct to
-// just call it after any successful, non-resource-only load and let it
-// decide.
-HMODULE WINAPI LoadLibraryExW_hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags) {
-    HMODULE result = LoadLibraryExW_orig(lpLibFileName, hFile, dwFlags);
-
-    try {
-        if (result && !g_shell32HookApplied) {
-            constexpr DWORD kResourceOnlyFlags = LOAD_LIBRARY_AS_DATAFILE |
-                                                  LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE |
-                                                  LOAD_LIBRARY_AS_IMAGE_RESOURCE;
-            if ((dwFlags & kResourceOnlyFlags) == 0) {
-                ApplyShell32Hooks(/*isLateLoad=*/true);
-            }
-        }
-    } catch (...) {
-        Wh_Log(L"LoadLibraryExW_hook: caught an exception while checking for shell32.dll");
-    }
-
     return result;
 }
 
-BOOL Wh_ModInit(void) {
-    if (!IsSupportedWindowsVersion()) {
-        Wh_Log(L"Control Panel Revival: Unsupported Windows build. Mod bypassed.");
-        return FALSE;
-    }
-
-    try {
-        Wh_Log(L"Initializing v%s", WH_MOD_VERSION);
-
-        LoadAppletToggleSettings();
-        LoadCustomAppletSettings();
-
-        HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
-        if (hKernelBase) {
-            auto pCompareStringOrdinal = (CompareStringOrdinal_t)GetProcAddress(hKernelBase, "CompareStringOrdinal");
-            if (pCompareStringOrdinal) {
-                if (!WindhawkUtils::SetFunctionHook(
-                        (void *)pCompareStringOrdinal,
-                        (void *)CompareStringOrdinal_hook,
-                        (void **)&CompareStringOrdinal_orig)) {
-                    Wh_Log(L"Failed to hook CompareStringOrdinal; the configured applets may not be unhidden in this process");
-                } else {
-                    Wh_Log(L"Successfully hooked CompareStringOrdinal");
-                }
-            } else {
-                Wh_Log(L"CompareStringOrdinal not found in kernelbase.dll");
-            }
-
-            auto pLoadLibraryExW = (LoadLibraryExW_t)GetProcAddress(hKernelBase, "LoadLibraryExW");
-            if (pLoadLibraryExW) {
-                if (!WindhawkUtils::SetFunctionHook(
-                        (void *)pLoadLibraryExW,
-                        (void *)LoadLibraryExW_hook,
-                        (void **)&LoadLibraryExW_orig)) {
-                    Wh_Log(L"Failed to hook LoadLibraryExW; a late-loaded shell32.dll in this process won't be patched");
-                } else {
-                    Wh_Log(L"Successfully hooked LoadLibraryExW");
-                }
-            } else {
-                Wh_Log(L"LoadLibraryExW not found in kernelbase.dll");
-            }
+static DWORD ResolveCallerScope(void* ret, const WCHAR** viaOut) {
+    HMODULE h = ModuleOf(ret);
+    if (h && h != g_selfModule) {
+        DWORD scope = ModuleScopeOf(h);
+        if (scope) {
+            if (viaOut) *viaOut = L"direct";
+            return scope;
         }
+        if (!IsHookLayerModule(h)) {
+            if (viaOut) *viaOut = L"foreign";
+            return 0;
+        }
+    }
+    DWORD scope = WalkCallerScope(false);
+    if (viaOut) *viaOut = scope ? L"relayed" : L"foreign";
+    return scope;
+}
 
-        ApplyShell32Hooks(/*isLateLoad=*/false);
+static bool MatchTarget(const WCHAR* s, int cch, DWORD* scopeOut) {
+    if (!s) return false;
 
-        return TRUE;
-    } catch (const std::exception& e) {
-        Wh_Log(L"Wh_ModInit: caught an exception during initialization: %S", e.what());
-        return FALSE;
-    } catch (...) {
-        Wh_Log(L"Wh_ModInit: caught an unknown exception during initialization");
-        return FALSE;
+    size_t len;
+    if (cch < 0) {
+        len = BoundedLen(s, kMaxIdLen - 1);
+        if (len == 0) return false;
+    } else {
+        len = (size_t)cch;
+        if (len == 0 || len >= (size_t)kMaxIdLen) return false;
+    }
+
+    WCHAR buf[kMaxIdLen];
+    wmemcpy(buf, s, len);
+    buf[len] = 0;
+    len = BoundedLen(buf, len);
+    while (len > 0 && (buf[len - 1] == L' ' || buf[len - 1] == L'\t')) {
+        buf[--len] = 0;
+    }
+    if (len < 8) return false;
+
+    for (auto g : kRedirectGuids) {
+        if (_wcsicmp(buf, g) == 0) {
+            DWORD scope = SCOPE_EF;
+            if (_wcsicmp(buf, kDevicesAndPrinters) == 0) scope |= SCOPE_SHELL32;
+            *scopeOut = scope;
+            return true;
+        }
+    }
+
+    LONG n = g_extraGuidCount;
+    for (LONG i = 0; i < n; i++) {
+        if (_wcsicmp(buf, g_extraGuids[i]) == 0) {
+            *scopeOut = SCOPE_EF;
+            return true;
+        }
+    }
+
+    n = g_unhideGuidCount;
+    for (LONG i = 0; i < n; i++) {
+        if (_wcsicmp(buf, g_unhideGuids[i]) == 0) {
+            *scopeOut = SCOPE_EF | SCOPE_SHELL32;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static bool IsPassThroughName(const WCHAR* name) {
+    if (!name) return false;
+    LONG n = g_passNameCount;
+    for (LONG i = 0; i < n; i++) {
+        if (_wcsicmp(name, g_passNames[i]) == 0) return true;
+    }
+    return false;
+}
+
+static void CopyForLog(const WCHAR* s, int cch, WCHAR* dst, size_t cchDst) {
+    if (!s || cchDst == 0) {
+        if (cchDst) dst[0] = 0;
+        return;
+    }
+    size_t len = (cch < 0) ? BoundedLen(s, cchDst - 1)
+                           : (cch < (int)cchDst ? (size_t)cch : cchDst - 1);
+    wmemcpy(dst, s, len);
+    dst[len] = 0;
+}
+
+using CompareStringOrdinal_t = decltype(&CompareStringOrdinal);
+CompareStringOrdinal_t CompareStringOrdinal_orig;
+
+int WINAPI CompareStringOrdinal_hook(LPCWCH a, int ca, LPCWCH b, int cb,
+                                     BOOL ignoreCase) {
+    int r = CompareStringOrdinal_orig(a, ca, b, cb, ignoreCase);
+    if (r != CSTR_EQUAL || g_inLog) return r;
+
+    void* ret = __builtin_return_address(0);
+
+    if (g_discoveryMode) {
+        const WCHAR* cand = nullptr;
+        int candCch = 0;
+        if (b && cb != 0 && b[0] == L':' && b[1] == L':' && b[2] == L'{') {
+            cand = b; candCch = cb;
+        } else if (a && ca != 0 && a[0] == L':' && a[1] == L':' && a[2] == L'{') {
+            cand = a; candCch = ca;
+        }
+        if (cand && InterlockedIncrement(&g_discLogged) <= 500) {
+            WCHAR outBuf[80], where[96];
+            CopyForLog(cand == b ? a : b, cand == b ? ca : cb, outBuf,
+                       ARRAYSIZE(outBuf));
+            FormatAddr(ret, where, 96);
+            const WCHAR* via = nullptr;
+            DWORD scope = ResolveCallerScope(ret, &via);
+            g_inLog = true;
+            Wh_Log(L"DISC %s == \"%s\" caller=%s scope=%u via=%s", cand, outBuf,
+                   where, (unsigned)scope, via ? via : L"?");
+            g_inLog = false;
+        }
+    }
+
+    DWORD needScope = 0;
+    const WCHAR* hit = nullptr;
+    if (b && MatchTarget(b, cb, &needScope)) hit = b;
+    else if (a && MatchTarget(a, ca, &needScope)) hit = a;
+    if (!hit) return r;
+
+    const WCHAR* via = nullptr;
+    DWORD callerScope = ResolveCallerScope(ret, &via);
+    if (callerScope & needScope) {
+        WCHAR where[96];
+        FormatAddr(ret, where, 96);
+        if (InterlockedIncrement(&g_skipLogged) <= 200) {
+            g_inLog = true;
+            Wh_Log(L"BLOCK CSO %s via=%s caller=%s", hit,
+                   via ? via : L"?", where);
+            g_inLog = false;
+        }
+        return CSTR_GREATER_THAN;
+    }
+
+    if (InterlockedIncrement(&g_skipLogged) <= 8) {
+        WCHAR where[96];
+        FormatAddr(ret, where, 96);
+        g_inLog = true;
+        Wh_Log(L"SKIP CSO %s (caller scope %u not in %u) caller=%s", hit,
+               (unsigned)callerScope, (unsigned)needScope, where);
+        WalkCallerScope(true);
+        g_inLog = false;
+    }
+    return r;
+}
+
+using FindStringOrdinal_t = decltype(&FindStringOrdinal);
+FindStringOrdinal_t FindStringOrdinal_orig;
+
+int WINAPI FindStringOrdinal_hook(DWORD flags, LPCWSTR src, int cchSrc,
+                                  LPCWSTR val, int cchVal, BOOL ignoreCase) {
+    int r = FindStringOrdinal_orig(flags, src, cchSrc, val, cchVal, ignoreCase);
+    if (r >= 0 && val && cchVal < 0 && val[0] == L'\\' && !g_inLog &&
+        _wcsicmp(val, kNetAdvancedSuffix) == 0) {
+        const WCHAR* via = nullptr;
+        DWORD scope = ResolveCallerScope(__builtin_return_address(0), &via);
+        if (scope & SCOPE_EF) {
+            g_inLog = true;
+            Wh_Log(L"BLOCK FSO %s via=%s", val, via);
+            g_inLog = false;
+            return -1;
+        }
+    }
+    return r;
+}
+
+bool (*MapLegacyName_orig)(void*, LPCWSTR, LPWSTR, UINT, bool*);
+
+static bool ContainsMsSettings(const WCHAR* s, size_t maxLen) {
+    static const WCHAR kUri[] = L"ms-settings:";
+    const size_t kUriLen = ARRAYSIZE(kUri) - 1;
+    size_t len = BoundedLen(s, maxLen);
+    if (len < kUriLen) return false;
+    for (size_t i = 0; i + kUriLen <= len; i++) {
+        if (_wcsnicmp(s + i, kUri, kUriLen) == 0) return true;
+    }
+    return false;
+}
+
+bool MapLegacyName_hook(void* pThis, LPCWSTR legacy, LPWSTR out, UINT u, bool* changed) {
+    bool r = MapLegacyName_orig(pThis, legacy, out, u, changed);
+    bool ch = changed ? *changed : false;
+
+    bool toSettings = (r && out && ch) ? ContainsMsSettings(out, 512) : false;
+
+    if (!g_inLog && InterlockedIncrement(&g_mapLogged) <= 150) {
+        WCHAR outBuf[128];
+        CopyForLog(out, (r && out) ? (int)ARRAYSIZE(outBuf) : 0, outBuf,
+                   ARRAYSIZE(outBuf));
+        g_inLog = true;
+        Wh_Log(L"MAPLEGACY name=%s result=%d changed=%d new=%s %s",
+               legacy ? legacy : L"(null)", (int)r, (int)ch, outBuf,
+               toSettings ? L"-> SUPPRESSED" : L"-> passed");
+        g_inLog = false;
+    }
+
+    //redirect break
+    if (toSettings && !IsPassThroughName(legacy)) {
+        if (changed) *changed = false;
+        if (out) *out = L'\0';//by bye
+        return false;
+    }
+    return r;
+}
+
+const WindhawkUtils::SYMBOL_HOOK user32DllHooks[] = {
+    {
+        {L"private: bool __cdecl COpenControlPanel::_MapLegacyName(unsigned short const *,unsigned short *,unsigned int,bool *)"},
+        &MapLegacyName_orig,
+        MapLegacyName_hook,
+        true,
+    },
+};
+
+static void LogOsBuild() {
+    typedef LONG(WINAPI* RtlGetVersionPtr)(PRTL_OSVERSIONINFOW);
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    auto pRtlGetVersion = ntdll
+        ? (RtlGetVersionPtr)GetProcAddress(ntdll, "RtlGetVersion")
+        : nullptr;
+    if (!pRtlGetVersion) return;
+    RTL_OSVERSIONINFOW osvi = {};
+    osvi.dwOSVersionInfoSize = sizeof(osvi);
+    if (pRtlGetVersion(&osvi) == 0) {
+        Wh_Log(L"OS %lu.%lu build %lu", osvi.dwMajorVersion,
+               osvi.dwMinorVersion, osvi.dwBuildNumber);
     }
 }
 
-void Wh_ModUninit(void) {
-    Wh_Log(L"Uninitializing Control Panel Revival");
-    InterlockedExchange(&g_shell32HookApplied, 0);
-}
+BOOL Wh_ModInit() {
+    g_selfModule = ModuleOf((void*)&Wh_ModInit);
+    LogOsBuild();
+    LoadSettings();
 
-BOOL Wh_ModSettingsChanged(BOOL* bReload) {
-    Wh_Log(L"Settings changed, reloading to re-apply applet targeting");
-    *bReload = TRUE;
+    HMODULE kb = GetModuleHandleW(L"kernelbase.dll");
+
+    void* csoKb = kb ? (void*)GetProcAddress(kb, "CompareStringOrdinal") : nullptr;
+    void* cso = csoKb ? csoKb : (void*)CompareStringOrdinal;
+    bool csoOk = Wh_SetFunctionHook(cso, (void*)CompareStringOrdinal_hook,
+                                    (void**)&CompareStringOrdinal_orig);
+    Wh_Log(L"CompareStringOrdinal hook: %d at %p (%s)", (int)csoOk, cso,
+           csoKb ? L"kernelbase" : L"import");
+
+    void* fsoKb = kb ? (void*)GetProcAddress(kb, "FindStringOrdinal") : nullptr;
+    void* fso = fsoKb ? fsoKb : (void*)FindStringOrdinal;
+    bool fsoOk = Wh_SetFunctionHook(fso, (void*)FindStringOrdinal_hook,
+                                    (void**)&FindStringOrdinal_orig);
+    Wh_Log(L"FindStringOrdinal hook: %d at %p (%s)", (int)fsoOk, fso,
+           fsoKb ? L"kernelbase" : L"import");
+
+    HMODULE shell32 = GetModuleHandleW(L"shell32.dll");
+    bool okSym = shell32 && WindhawkUtils::HookSymbols(shell32, user32DllHooks,
+                                                      ARRAYSIZE(user32DllHooks));
+    Wh_Log(L"cpr loaded correct (_MapLegacyName hook: %d)", (int)okSym);
+
+    if (!csoOk && !fsoOk && !okSym) {
+        Wh_Log(L"All hooks failed disabling the mod in this process");
+        return FALSE;
+    }
     return TRUE;
 }
