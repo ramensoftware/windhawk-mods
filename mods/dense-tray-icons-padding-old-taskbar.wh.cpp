@@ -497,7 +497,6 @@ int WINAPI GetSystemMetricsForDpi_Hook(int nIndex, UINT dpi) {
 // Hidden icons popup
 // ---------------------------------------------------------------------------
 
-HWND g_overflowWindow = nullptr;
 HWND g_overflowToolbar = nullptr;
 // Read by the image-list hooks on every thread that edits any image list, so
 // it is atomic; it is only written on the popup toolbar's thread and by the
@@ -567,7 +566,12 @@ void ScheduleOverflowRescale() {
     HWND hToolbar = g_overflowToolbar;
     if (hToolbar && IsWindow(hToolbar) &&
         !g_overflowRescalePending.exchange(true)) {
-        PostMessageW(hToolbar, g_overflowRefreshMsg, kOverflowRefreshReapply, 0);
+        // A failed post would leave the flag set and block every later
+        // fallback rebuild.
+        if (!PostMessageW(hToolbar, g_overflowRefreshMsg,
+                          kOverflowRefreshReapply, 0)) {
+            g_overflowRescalePending = false;
+        }
     }
 }
 
@@ -795,53 +799,6 @@ HWND FindOverflowNotifyForToolbar(HWND hToolbar) {
     return nullptr;
 }
 
-// The image-list hooks keep the scaled copy in step with the shell's list. The
-// popup window is subclassed as well, so that an open which does arrive as
-// WM_SHOWWINDOW also starts from a fresh copy; the copy never depends on it,
-// because the shell's usual show path sends no such message.
-LRESULT CALLBACK OverflowWindowSubclassProc(HWND hWnd,
-                                            UINT uMsg,
-                                            WPARAM wParam,
-                                            LPARAM lParam,
-                                            DWORD_PTR dwRefData) {
-    if (uMsg == WM_SHOWWINDOW && wParam && !g_unloading &&
-        g_settings.overflowIconSize != kOverflowIconSizeOff) {
-        HWND hToolbar = g_overflowToolbar;
-        if (hToolbar && IsWindow(hToolbar)) {
-            Wh_Log(L"Popup opening");
-            SendMessageW(hToolbar, g_overflowRefreshMsg,
-                         kOverflowRefreshReapply, 0);
-        }
-    } else if (uMsg == WM_NCDESTROY && hWnd == g_overflowWindow) {
-        g_overflowWindow = nullptr;
-    }
-
-    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
-}
-
-void SubclassOverflowWindow(HWND hOverflow) {
-    if (!hOverflow || !IsWindow(hOverflow) || hOverflow == g_overflowWindow) {
-        return;
-    }
-
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hOverflow, &pid);
-    if (pid != GetCurrentProcessId()) {
-        return;
-    }
-
-    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
-            hOverflow, OverflowWindowSubclassProc, 0)) {
-        Wh_Log(L"Failed to subclass overflow window 0x%08X",
-               static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(hOverflow)));
-        return;
-    }
-
-    g_overflowWindow = hOverflow;
-    Wh_Log(L"Overflow window 0x%08X",
-           static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(hOverflow)));
-}
-
 // Builds a copy of an image list with all icons scaled to the given size. The
 // image list belongs to the toolbar, which sizes its cells from the images.
 HIMAGELIST ScaleImageList(HIMAGELIST source, int iconSize) {
@@ -1025,6 +982,8 @@ LRESULT CALLBACK OverflowToolbarSubclassProc(HWND hWnd,
                 g_overflowToolbar = nullptr;
                 g_overflowOriginalImageList = nullptr;
                 g_overflowAppliedSize = 0;
+                // A queued rebuild dies with the window's message queue.
+                g_overflowRescalePending = false;
                 DestroyScaledImageList();
             }
             break;
@@ -1168,7 +1127,6 @@ BOOL CALLBACK FindOverflowToolbarProc(HWND hWnd, LPARAM lParam) {
 void DiscoverOverflowToolbar() {
     HWND hOverflow = FindWindowW(L"NotifyIconOverflowWindow", nullptr);
     if (hOverflow) {
-        SubclassOverflowWindow(hOverflow);
         HWND hOverflowToolbar = nullptr;
         EnumChildWindows(hOverflow, FindOverflowToolbarProc,
                          reinterpret_cast<LPARAM>(&hOverflowToolbar));
@@ -1289,9 +1247,7 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
         return hWnd;
     }
 
-    if (_wcsicmp(className, L"NotifyIconOverflowWindow") == 0) {
-        SubclassOverflowWindow(hWnd);
-    } else if (_wcsicmp(className, L"ToolbarWindow32") == 0) {
+    if (_wcsicmp(className, L"ToolbarWindow32") == 0) {
         if (FindTrayNotifyForToolbar(hWnd)) {
             SubclassTrayToolbar(hWnd);
         } else if (FindOverflowNotifyForToolbar(hWnd)) {
@@ -1492,13 +1448,6 @@ void Wh_ModUninit() {
     Wh_Log(L">");
 
     RemoveTraySubclasses();
-
-    HWND hOverflowWindow = g_overflowWindow;
-    if (hOverflowWindow && IsWindow(hOverflowWindow)) {
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
-            hOverflowWindow, OverflowWindowSubclassProc);
-    }
-    g_overflowWindow = nullptr;
 
     HWND hOverflowToolbar = g_overflowToolbar;
     if (hOverflowToolbar && IsWindow(hOverflowToolbar)) {
