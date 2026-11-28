@@ -2,7 +2,7 @@
 // @id              micrographics-taskbar-clock
 // @name            Micrographics Taskbar Clock
 // @description     Replaces the Windows 11 taskbar clock with a Nothing OS 5 "Micrographics" style clock: pill badges, a block cursor and a weather line
-// @version         1.0
+// @version         1.1
 // @author          SAM2WOW
 // @github          https://github.com/SAM2WOW
 // @homepage        https://github.com/SAM2WOW/micrographics-taskbar-clock
@@ -23,9 +23,12 @@ Replaces the Windows 11 taskbar clock with a clock face inspired by the
 
 * Weekday, day of month in a filled pill, month in an outlined pill, the time
   and a block cursor.
-* Temperature, a weather icon and the current conditions in a speech bubble.
+* Temperature with its unit, a weather icon and the current conditions in a
+  speech bubble.
 * Follows the taskbar's light/dark text color automatically, on every monitor.
 * Clicking the clock still opens the notification center and calendar.
+* Each element can be hidden in the settings under **Visible elements**, e.g.
+  to keep a single row short.
 
 ## Weather
 
@@ -80,8 +83,30 @@ while it's enabled.
 - fontSize: 13
   $name: Font size
   $description: >-
-    The clock shrinks automatically if the two rows don't fit the taskbar
+    The clock shrinks automatically if the rows don't fit the taskbar
     height.
+- elements:
+  - weekday: true
+    $name: Weekday
+  - day: true
+    $name: Day of month
+  - month: true
+    $name: Month
+  - time: true
+    $name: Time
+  - temperature: true
+    $name: Temperature
+  - unit: true
+    $name: Temperature unit
+  - icon: true
+    $name: Weather icon
+  - condition: true
+    $name: Weather conditions
+  $name: Visible elements
+  $description: >-
+    Hide individual parts of the clock face, e.g. to keep a single row short.
+    The weather elements also need the weather to be turned on below. If
+    nothing else would be shown, the time is shown.
 - use24Hour: true
   $name: 24-hour time
 - showSeconds: false
@@ -175,6 +200,14 @@ struct Settings {
     bool use24Hour = true;
     bool showSeconds = false;
     CursorMode cursor = CursorMode::Blink;
+    bool showWeekday = true;
+    bool showDay = true;
+    bool showMonth = true;
+    bool showTime = true;
+    bool showTemperature = true;
+    bool showUnit = true;
+    bool showWeatherIcon = true;
+    bool showCondition = true;
     std::optional<winrt::Windows::UI::Color> textColor;
     std::optional<winrt::Windows::UI::Color> accentColor;
     bool weatherEnabled = false;
@@ -183,11 +216,17 @@ struct Settings {
     bool weatherFahrenheit = false;
     int weatherUpdateMinutes = 15;
 
+    bool AnyWeatherElementVisible() const {
+        return showTemperature || showUnit || showWeatherIcon || showCondition;
+    }
+
     // Whether the weather can be fetched at all: it's opt-in, and the location
-    // is only detected from the IP address if that's explicitly enabled.
+    // is only detected from the IP address if that's explicitly enabled. It's
+    // also not fetched if none of the weather elements are shown.
     bool ShouldFetchWeather() const {
         return weatherEnabled &&
-               (!weatherLocation.empty() || weatherDetectLocation);
+               (!weatherLocation.empty() || weatherDetectLocation) &&
+               AnyWeatherElementVisible();
     }
 };
 
@@ -272,6 +311,15 @@ Settings LoadSettings() {
     s.cursor = cursor == L"solid"    ? CursorMode::Solid
                : cursor == L"hidden" ? CursorMode::Hidden
                                      : CursorMode::Blink;
+
+    s.showWeekday = Wh_GetIntSetting(L"elements.weekday");
+    s.showDay = Wh_GetIntSetting(L"elements.day");
+    s.showMonth = Wh_GetIntSetting(L"elements.month");
+    s.showTime = Wh_GetIntSetting(L"elements.time");
+    s.showTemperature = Wh_GetIntSetting(L"elements.temperature");
+    s.showUnit = Wh_GetIntSetting(L"elements.unit");
+    s.showWeatherIcon = Wh_GetIntSetting(L"elements.icon");
+    s.showCondition = Wh_GetIntSetting(L"elements.condition");
 
     s.textColor = ParseColor(str(L"textColor"));
     s.accentColor = ParseColor(str(L"accentColor"));
@@ -1293,10 +1341,10 @@ Metrics GetMetrics(double fontSize) {
     return m;
 }
 
-Metrics GetFittingMetrics(double availableHeight) {
+Metrics GetFittingMetrics(double availableHeight, bool twoRowsShown) {
     double fontSize = g_settings.fontSize;
     Metrics m = GetMetrics(fontSize);
-    if (g_settings.layout == ClockLayout::TwoRows) {
+    if (twoRowsShown) {
         while (fontSize > 8 && m.pillHeight * 2 + m.rowGap > availableHeight) {
             fontSize -= 0.5;
             m = GetMetrics(fontSize);
@@ -1448,8 +1496,18 @@ void BuildClockFace(ClockInstance& instance,
                     const DisplayState& state,
                     const Palette& palette,
                     double availableHeight) {
+    // Shrink the font to fit two rows only if both are configured to show,
+    // so that hiding a whole row lets the other one keep its size. This
+    // doesn't depend on whether weather data has arrived yet, to keep the
+    // size stable.
+    bool oneRow = g_settings.layout == ClockLayout::OneRow;
+    bool dateRowShown = g_settings.showWeekday || g_settings.showDay ||
+                        g_settings.showMonth || g_settings.showTime;
+    bool twoRowsShown =
+        !oneRow && dateRowShown && g_settings.ShouldFetchWeather();
+
     BuildContext context;
-    context.metrics = GetFittingMetrics(availableHeight);
+    context.metrics = GetFittingMetrics(availableHeight, twoRowsShown);
     context.fontFamily = Media::FontFamily(g_settings.fontFamily);
     context.textBrush = Media::SolidColorBrush(palette.text);
     context.pillBrush = Media::SolidColorBrush(palette.pill);
@@ -1465,27 +1523,25 @@ void BuildClockFace(ClockInstance& instance,
     auto rows = root.Children();
     rows.Clear();
 
-    bool oneRow = g_settings.layout == ClockLayout::OneRow;
     root.Orientation(oneRow ? Controls::Orientation::Horizontal
                             : Controls::Orientation::Vertical);
     root.Spacing(oneRow ? std::round(f * 0.9) : m.rowGap);
 
-    // Date and time: FRI (11)(SEP) 17:13 []
-    {
-        auto row = MakeRow(context);
+    // Appends an element to a row, with a gap before it unless it's the first
+    // element of the row. Elements can be hidden individually, so the gap
+    // depends on which element comes before.
+    auto append = [](Controls::StackPanel const& row,
+                     FrameworkElement const& element, double gap) {
         auto items = row.Children();
+        Thickness margin = element.Margin();
+        margin.Left = items.Size() ? margin.Left + gap : 0;
+        element.Margin(margin);
+        items.Append(element);
+    };
 
-        auto weekday = MakeText(context, state.weekday, context.textBrush);
-        weekday.Margin({0, 0, f * 0.38, 0});
-        items.Append(weekday);
-
-        // The two pills touch at their tips.
-        items.Append(MakeFilledPill(context, state.day));
-        items.Append(MakeOutlinedPill(context, state.month));
-
+    auto appendTime = [&](Controls::StackPanel const& row) {
         auto time = MakeText(context, state.time, context.textBrush);
-        time.Margin({f * 0.5, 0, 0, 0});
-        items.Append(time);
+        append(row, time, f * 0.5);
         instance.timeText = time;
 
         if (g_settings.cursor != CursorMode::Hidden) {
@@ -1493,33 +1549,80 @@ void BuildClockFace(ClockInstance& instance,
             cursor.Width(std::round(f * 0.42));
             cursor.Height(std::round(f * 0.92));
             cursor.Fill(context.textBrush);
-            cursor.Margin({f * 0.3, 0, 0, 0});
             cursor.VerticalAlignment(VerticalAlignment::Center);
-            items.Append(cursor);
+            append(row, cursor, f * 0.3);
             instance.cursor = cursor;
         }
+    };
 
-        rows.Append(row);
+    // Date and time: FRI (11)(SEP) 17:13 []
+    {
+        auto row = MakeRow(context);
+
+        if (g_settings.showWeekday) {
+            append(row, MakeText(context, state.weekday, context.textBrush),
+                   0);
+        }
+
+        if (g_settings.showDay) {
+            append(row, MakeFilledPill(context, state.day), f * 0.38);
+        }
+
+        if (g_settings.showMonth) {
+            // The two pills touch at their tips.
+            append(row, MakeOutlinedPill(context, state.month),
+                   g_settings.showDay ? 0 : f * 0.38);
+        }
+
+        if (g_settings.showTime) {
+            appendTime(row);
+        }
+
+        if (row.Children().Size()) {
+            rows.Append(row);
+        }
     }
 
     // Weather: 24 (C) * (SUNNY)
     if (state.hasWeather) {
         auto row = MakeRow(context);
-        auto items = row.Children();
+        bool afterIcon = false;
 
-        items.Append(MakeText(context, state.temperature, context.textBrush));
-        items.Append(MakeUnitBadge(context, state.unit));
-
-        try {
-            auto icon = MakeWeatherIcon(context, state.icon);
-            icon.Margin({f * 0.7, 0, f * 0.2, 0});
-            items.Append(icon);
-        } catch (winrt::hresult_error const& e) {
-            Wh_Log(L"Failed to create the weather icon: %08X", e.code().value);
+        if (g_settings.showTemperature) {
+            append(row, MakeText(context, state.temperature, context.textBrush),
+                   0);
         }
 
-        items.Append(MakeBubble(context, state.condition));
+        if (g_settings.showUnit) {
+            append(row, MakeUnitBadge(context, state.unit), 0);
+        }
 
+        if (g_settings.showWeatherIcon) {
+            try {
+                append(row, MakeWeatherIcon(context, state.icon), f * 0.7);
+                afterIcon = true;
+            } catch (winrt::hresult_error const& e) {
+                Wh_Log(L"Failed to create the weather icon: %08X",
+                       e.code().value);
+            }
+        }
+
+        if (g_settings.showCondition) {
+            append(row, MakeBubble(context, state.condition),
+                   afterIcon ? f * 0.2 : f * 0.5);
+        }
+
+        if (row.Children().Size()) {
+            rows.Append(row);
+        }
+    }
+
+    // Show the time if nothing else would be shown, e.g. if only weather
+    // elements are enabled and there's no weather yet. Otherwise the clock
+    // would shrink to a few pixels and become hard to click.
+    if (!rows.Size()) {
+        auto row = MakeRow(context);
+        appendTime(row);
         rows.Append(row);
     }
 }
@@ -2111,7 +2214,8 @@ void Wh_ModSettingsChanged() {
         settings.weatherLocation != g_settings.weatherLocation ||
         settings.weatherDetectLocation != g_settings.weatherDetectLocation ||
         settings.weatherFahrenheit != g_settings.weatherFahrenheit ||
-        settings.weatherUpdateMinutes != g_settings.weatherUpdateMinutes;
+        settings.weatherUpdateMinutes != g_settings.weatherUpdateMinutes ||
+        settings.ShouldFetchWeather() != g_settings.ShouldFetchWeather();
 
     auto apply = [](void* param) {
         g_settings = *static_cast<Settings*>(param);
