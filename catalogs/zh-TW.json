@@ -9590,7 +9590,7 @@
         "ratingUsers": 9,
         "reviews": 0,
         "trendingSorting": 4.356594213936038,
-        "updated": 1795331048000,
+        "updated": 1795874551000,
         "users": 119
       },
       "metadata": {
@@ -9607,7 +9607,7 @@
           "ShellExperienceHost.exe"
         ],
         "name": "悬浮任务栏",
-        "version": "2.1.15"
+        "version": "2.1.16"
       },
       "metadataEnglish": {
         "description": "Turns the Windows 11 taskbar into a floating rounded bar with configurable width, height, spacing, corners, colors and gradients. Blank areas click through; tray menus and Quick Settings follow the bar.",
@@ -21729,20 +21729,20 @@
         "ratingUsers": 4,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1795280554000,
+        "updated": 1795874541000,
         "users": 24
       },
       "metadata": {
         "author": "rockinggreninja-bot",
-        "compilerOptions": "-lole32 -loleaut32 -lgdi32 -luser32 -luiautomationcore -lshcore",
-        "description": "Change selected text with five case modes and customizable keyboard shortcuts.",
+        "compilerOptions": "-lgdi32 -luser32 -ladvapi32 -lshell32",
+        "description": "Change the case of selected text in any app: Title Case, Sentence case, UPPERCASE, lowercase, tOGGLE cASE",
         "github": "https://github.com/rockinggreninja-bot",
         "include": [
           "windhawk.exe"
         ],
         "license": "MIT",
         "name": "Text Capitalization",
-        "version": "0.3.1"
+        "version": "0.3.13"
       }
     },
     "text-replace": {
@@ -22830,7 +22830,7 @@
         "ratingUsers": 40,
         "reviews": 0,
         "trendingSorting": -0.33141613810220055,
-        "updated": 1790193767000,
+        "updated": 1795874546000,
         "users": 666
       },
       "metadata": {
@@ -22844,7 +22844,7 @@
           "windhawk-mod-uiaccess.exe"
         ],
         "name": "Virtual Desktop Helper",
-        "version": "2.5.0"
+        "version": "2.6.0"
       }
     },
     "virtual-desktop-hotkey-cycle": {

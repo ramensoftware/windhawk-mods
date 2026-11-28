@@ -4,7 +4,7 @@
 // @name:zh-CN      悬浮任务栏
 // @description     Turns the Windows 11 taskbar into a floating rounded bar with configurable width, height, spacing, corners, colors and gradients. Blank areas click through; tray menus and Quick Settings follow the bar.
 // @description:zh-CN 将 Windows 11 任务栏变为独立的悬浮圆角条，可调整长度、区域高度、悬浮间距、圆角与背景颜色/渐变；空白区域点击穿透，托盘菜单和快速设置面板对齐悬浮条右端。
-// @version         2.1.15
+// @version         2.1.16
 // @author          chaochenzhudian
 // @github          https://github.com/chaochenzhudian
 // @include         explorer.exe
@@ -400,6 +400,8 @@ struct AppliedTaskbarState {
     winrt::weak_ref<muxc::ItemsRepeater> taskButtonRepeater;
     muxc::ItemsRepeater::ElementPrepared_revoker
         taskButtonRepeaterRevoker;
+    FrameworkElement::SizeChanged_revoker rootGridSizeChangedRevoker;
+    FrameworkElement::SizeChanged_revoker traySizeChangedRevoker;
     DWORD lastApplyTick = 0;
     HWND taskbarWnd = nullptr;
     HWND islandHwnd = nullptr;
@@ -424,7 +426,11 @@ std::atomic<double> g_lastPillWidthPx{0.0};
 constexpr double kControlCenterRightInsetDip = 12.8;
 std::mutex g_layoutCalibrationMutex;
 HANDLE g_layoutCalibrationTimerQueue = nullptr;
+HANDLE g_layoutCalibrationTimer = nullptr;
 bool g_layoutCalibrationScheduled = false;
+size_t g_layoutCalibrationStep = 0;
+HANDLE g_regionSyncTimer = nullptr;
+bool g_regionSyncScheduled = false;
 
 thread_local HMONITOR g_cachedTaskbarMonitor = nullptr;
 thread_local HWND g_cachedTaskbarMonitorWnd = nullptr;
@@ -571,8 +577,11 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd,
                 (uFlags & SWP_NOSIZE) ? currentWidth : cx;
             int requestedHeight =
                 (uFlags & SWP_NOSIZE) ? currentHeight : cy;
+            const bool hasExplicitPosAndSize =
+                !(uFlags & SWP_NOSIZE) && !(uFlags & SWP_NOMOVE);
 
-            if (currentWidth > 0 && currentHeight > 0 &&
+            if ((hasExplicitPosAndSize ||
+                 (currentWidth > 0 && currentHeight > 0)) &&
                 requestedWidth > 0 && requestedHeight > 0 &&
                 requestedHeight < areaHeightPx) {
                 int newX = X;
@@ -584,23 +593,30 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd,
                     newY = rect.top;
                 }
 
+                bool anchoredToBottom = false;
                 MONITORINFO monitorInfo{};
                 monitorInfo.cbSize = sizeof(monitorInfo);
+                RECT requestedRect{newX, newY, newX + requestedWidth,
+                                   newY + requestedHeight};
                 HMONITOR monitor =
-                    MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+                    MonitorFromRect(&requestedRect, MONITOR_DEFAULTTONEAREST);
                 if (monitor && GetMonitorInfoW(monitor, &monitorInfo)) {
                     int monitorBottom = monitorInfo.rcMonitor.bottom;
                     int originalBottom = newY + requestedHeight;
                     if (originalBottom >= monitorBottom - 2 &&
                         originalBottom <= monitorBottom + 2) {
                         newY = monitorBottom - areaHeightPx;
+                        anchoredToBottom = true;
                     }
                 }
 
-                uFlags &= ~(SWP_NOSIZE | SWP_NOMOVE);
-                return SetWindowPos_Original(
-                    hWnd, hWndInsertAfter, newX, newY, requestedWidth,
-                    areaHeightPx, uFlags);
+                if (anchoredToBottom ||
+                    (currentWidth > 0 && currentHeight > 0)) {
+                    uFlags &= ~(SWP_NOSIZE | SWP_NOMOVE);
+                    return SetWindowPos_Original(
+                        hWnd, hWndInsertAfter, newX, newY, requestedWidth,
+                        areaHeightPx, uFlags);
+                }
             }
         }
 
@@ -693,8 +709,9 @@ BOOL WINAPI MoveWindow_Hook(HWND hWnd,
             int newY = Y;
             MONITORINFO monitorInfo{};
             monitorInfo.cbSize = sizeof(monitorInfo);
+            RECT requestedRect{X, Y, X + nWidth, Y + nHeight};
             HMONITOR monitor =
-                MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+                MonitorFromRect(&requestedRect, MONITOR_DEFAULTTONEAREST);
             if (monitor && GetMonitorInfoW(monitor, &monitorInfo)) {
                 int monitorBottom = monitorInfo.rcMonitor.bottom;
                 if (Y + nHeight >= monitorBottom - 2 &&
@@ -2784,44 +2801,17 @@ bool TryGetElementRectInContent(
     return false;
 }
 
-void UpdateTaskbarClickThroughRegion(
-    FrameworkElement const& rootGrid,
-    FrameworkElement const& trayElement,
-    AppliedTaskbarState& record,
-    HWND taskbarWnd) {
-    if (g_unloading || !taskbarWnd || !IsWindow(taskbarWnd)) {
-        return;
-    }
+void ScheduleRegionSyncAfterLayout();
 
-    if (record.taskbarWnd != taskbarWnd) {
-        record.taskbarWnd = taskbarWnd;
-        record.islandHwnd = nullptr;
-        record.topLevelWnd = nullptr;
-        record.hasAppliedRegion = false;
-    }
-
-    HWND islandHwnd = record.islandHwnd;
-    if (!islandHwnd || !IsWindow(islandHwnd)) {
-        islandHwnd = FindIslandWindow(taskbarWnd);
-        if (!islandHwnd) {
-            if (!g_loggedMissingIsland.exchange(true)) {
-                Wh_Log(L"Taskbar XAML island window not found");
-            }
-            return;
-        }
-        record.islandHwnd = islandHwnd;
-    }
-
-    g_loggedMissingIsland = false;
-
-    HWND topLevelWnd = GetAncestor(islandHwnd, GA_ROOT);
-    if (!topLevelWnd) {
-        return;
-    }
-
-    auto frame = record.frame.get();
-    if (!frame) {
-        return;
+bool TryComputeClickThroughRegionRect(FrameworkElement const& frame,
+                                      FrameworkElement const& rootGrid,
+                                      FrameworkElement const& trayElement,
+                                      HWND islandHwnd,
+                                      HWND topLevelWnd,
+                                      RECT& regionRect) {
+    if (!frame || !rootGrid || !islandHwnd || !IsWindow(islandHwnd) ||
+        !topLevelWnd || !IsWindow(topLevelWnd)) {
+        return false;
     }
 
     UIElement contentElement = nullptr;
@@ -2832,12 +2822,12 @@ void UpdateTaskbarClickThroughRegion(
     } catch (...) {
     }
     if (!contentElement) {
-        return;
+        return false;
     }
 
     winrt::Windows::Foundation::Rect pillDip{};
     if (!TryGetElementRectInContent(rootGrid, contentElement, pillDip)) {
-        return;
+        return false;
     }
 
     winrt::Windows::Foundation::Rect trayDip{};
@@ -2853,17 +2843,17 @@ void UpdateTaskbarClickThroughRegion(
         scale = GetTaskbarScale(frame);
     }
     if (scale <= 0) {
-        return;
+        return false;
     }
 
     RECT topLevelRect{};
     if (!GetWindowRect(topLevelWnd, &topLevelRect)) {
-        return;
+        return false;
     }
 
     POINT islandOrigin{0, 0};
     if (!ClientToScreen(islandHwnd, &islandOrigin)) {
-        return;
+        return false;
     }
 
     int topLevelWidth = topLevelRect.right - topLevelRect.left;
@@ -2884,26 +2874,77 @@ void UpdateTaskbarClickThroughRegion(
         return rect;
     };
 
-    RECT regionRect = toWindowRect(pillDip);
+    regionRect = toWindowRect(pillDip);
 
     if (hasTrayRect) {
         RECT trayRect = toWindowRect(trayDip);
         UnionRect(&regionRect, &regionRect, &trayRect);
     }
 
-    if (regionRect.right <= regionRect.left ||
-        regionRect.bottom <= regionRect.top) {
+    return regionRect.right > regionRect.left &&
+           regionRect.bottom > regionRect.top;
+}
+
+void UpdateTaskbarClickThroughRegion(
+    FrameworkElement const& frame,
+    FrameworkElement const& rootGrid,
+    FrameworkElement const& trayElement,
+    HWND taskbarWnd,
+    HWND& recordedTaskbarWnd,
+    HWND& recordedIslandHwnd,
+    HWND& recordedTopLevelWnd,
+    RECT& recordedAppliedRegion,
+    bool& recordedHasAppliedRegion) {
+    if (g_unloading || !taskbarWnd || !IsWindow(taskbarWnd) || !frame) {
+        return;
+    }
+
+    if (recordedTaskbarWnd != taskbarWnd) {
+        recordedTaskbarWnd = taskbarWnd;
+        recordedIslandHwnd = nullptr;
+        recordedTopLevelWnd = nullptr;
+        recordedHasAppliedRegion = false;
+    }
+
+    HWND islandHwnd = recordedIslandHwnd;
+    if (!islandHwnd || !IsWindow(islandHwnd)) {
+        islandHwnd = FindIslandWindow(taskbarWnd);
+        if (!islandHwnd) {
+            if (!g_loggedMissingIsland.exchange(true)) {
+                Wh_Log(L"Taskbar XAML island window not found");
+            }
+            return;
+        }
+        recordedIslandHwnd = islandHwnd;
+    }
+
+    g_loggedMissingIsland = false;
+
+    HWND topLevelWnd = GetAncestor(islandHwnd, GA_ROOT);
+    if (!topLevelWnd) {
+        return;
+    }
+
+    RECT regionRect{};
+    if (!TryComputeClickThroughRegionRect(frame, rootGrid, trayElement,
+                                          islandHwnd, topLevelWnd,
+                                          regionRect)) {
         return;
     }
 
     RECT currentRegionBox{};
     bool hasRegion = GetWindowRgnBox(topLevelWnd, &currentRegionBox) != ERROR;
     bool regionIsOurs =
-        hasRegion && record.hasAppliedRegion &&
-        EqualRect(&currentRegionBox, &record.appliedRegion);
+        hasRegion && recordedHasAppliedRegion &&
+        EqualRect(&currentRegionBox, &recordedAppliedRegion);
 
     if (hasRegion && !regionIsOurs) {
-        RECT fullRegionBox{0, 0, topLevelWidth, topLevelHeight};
+        RECT topLevelRect{};
+        if (!GetWindowRect(topLevelWnd, &topLevelRect)) {
+            return;
+        }
+        RECT fullRegionBox{0, 0, topLevelRect.right - topLevelRect.left,
+                           topLevelRect.bottom - topLevelRect.top};
         if (!EqualRect(&currentRegionBox, &fullRegionBox)) {
             if (!g_loggedRegionBusy.exchange(true)) {
                 Wh_Log(L"Taskbar window region is owned by Explorer");
@@ -2912,7 +2953,7 @@ void UpdateTaskbarClickThroughRegion(
         }
     }
 
-    if (regionIsOurs && EqualRect(&record.appliedRegion, &regionRect)) {
+    if (regionIsOurs && EqualRect(&recordedAppliedRegion, &regionRect)) {
         return;
     }
 
@@ -2931,11 +2972,178 @@ void UpdateTaskbarClickThroughRegion(
     }
 
     if (SetWindowRgn(topLevelWnd, region, TRUE)) {
-        record.topLevelWnd = topLevelWnd;
-        record.appliedRegion = regionRect;
-        record.hasAppliedRegion = true;
+        recordedTopLevelWnd = topLevelWnd;
+        recordedAppliedRegion = regionRect;
+        recordedHasAppliedRegion = true;
     } else {
         DeleteObject(region);
+    }
+}
+
+void UpdateTaskbarClickThroughRegion(
+    FrameworkElement const& rootGrid,
+    FrameworkElement const& trayElement,
+    AppliedTaskbarState& record,
+    HWND taskbarWnd) {
+    UpdateTaskbarClickThroughRegion(
+        record.frame.get(), rootGrid, trayElement, taskbarWnd,
+        record.taskbarWnd, record.islandHwnd, record.topLevelWnd,
+        record.appliedRegion, record.hasAppliedRegion);
+}
+
+thread_local bool g_regionRefreshInProgress = false;
+
+void RefreshClickThroughRegionForFrame(FrameworkElement const& targetFrame) {
+    if (g_unloading || !targetFrame || g_regionRefreshInProgress) {
+        return;
+    }
+
+    struct RegionRefreshScope {
+        bool& flag;
+        ~RegionRefreshScope() {
+            flag = false;
+        }
+    };
+    g_regionRefreshInProgress = true;
+    RegionRefreshScope scope{g_regionRefreshInProgress};
+
+    struct RegionRefreshTarget {
+        winrt::weak_ref<Grid> rootGrid;
+        winrt::weak_ref<FrameworkElement> tray;
+        bool trayArranged = false;
+        HWND taskbarWnd = nullptr;
+        HWND islandHwnd = nullptr;
+        HWND topLevelWnd = nullptr;
+        RECT appliedRegion{};
+        bool hasAppliedRegion = false;
+        bool found = false;
+    };
+
+    const DWORD threadId = GetCurrentThreadId();
+    RegionRefreshTarget target{};
+    {
+        std::lock_guard<std::mutex> lock(g_appliedMutex);
+        if (!g_appliedTaskbarStates) {
+            return;
+        }
+        for (auto const& applied : *g_appliedTaskbarStates) {
+            if (applied.threadId != threadId) {
+                continue;
+            }
+            if (applied.frame.get() == targetFrame) {
+                target.rootGrid = applied.rootGrid;
+                target.tray = applied.tray;
+                target.trayArranged = applied.trayArranged;
+                target.taskbarWnd = applied.taskbarWnd;
+                target.islandHwnd = applied.islandHwnd;
+                target.topLevelWnd = applied.topLevelWnd;
+                target.appliedRegion = applied.appliedRegion;
+                target.hasAppliedRegion = applied.hasAppliedRegion;
+                target.found = true;
+                break;
+            }
+        }
+    }
+
+    if (!target.found) {
+        return;
+    }
+
+    Grid rootGrid = target.rootGrid.get();
+    if (!rootGrid) {
+        return;
+    }
+
+    HWND taskbarWnd = target.taskbarWnd;
+    if (!taskbarWnd || !IsWindow(taskbarWnd)) {
+        taskbarWnd = FindTaskbarWindowForFrame(targetFrame);
+    }
+    if (!taskbarWnd || !IsWindow(taskbarWnd)) {
+        return;
+    }
+
+    FrameworkElement trayElement = target.tray.get();
+    if (!trayElement) {
+        trayElement = FindSiblingTray(targetFrame);
+    }
+
+    try {
+        const int taskbarWidthSetting = g_settingTaskbarWidth.load();
+        double scale = GetEffectiveScale(targetFrame, taskbarWnd);
+
+        if (trayElement && target.trayArranged && scale > 0) {
+            double gapDip = GetTrayGapDip(taskbarWidthSetting, targetFrame,
+                                          trayElement, taskbarWnd, scale);
+            Thickness trayMargin = trayElement.Margin();
+            if (std::abs(trayMargin.Left) > 0.05 ||
+                std::abs(trayMargin.Right - gapDip) > 0.05) {
+                trayMargin.Left = 0;
+                trayMargin.Right = gapDip;
+                trayElement.Margin(trayMargin);
+            }
+        }
+
+        if (taskbarWidthSetting == 0 && scale > 0) {
+            double pillWidthPx = rootGrid.ActualWidth() * scale;
+            if (pillWidthPx > 0) {
+                g_lastPillWidthPx.store(pillWidthPx);
+            }
+        }
+    } catch (...) {
+    }
+
+    UpdateTaskbarClickThroughRegion(
+        targetFrame, rootGrid, trayElement, taskbarWnd, target.taskbarWnd,
+        target.islandHwnd, target.topLevelWnd, target.appliedRegion,
+        target.hasAppliedRegion);
+
+    {
+        std::lock_guard<std::mutex> lock(g_appliedMutex);
+        if (!g_appliedTaskbarStates) {
+            return;
+        }
+        for (auto& applied : *g_appliedTaskbarStates) {
+            if (applied.threadId != threadId) {
+                continue;
+            }
+            if (applied.frame.get() == targetFrame) {
+                applied.taskbarWnd = target.taskbarWnd;
+                applied.islandHwnd = target.islandHwnd;
+                applied.topLevelWnd = target.topLevelWnd;
+                applied.appliedRegion = target.appliedRegion;
+                applied.hasAppliedRegion = target.hasAppliedRegion;
+                if (target.hasAppliedRegion) {
+                    applied.regionRetries = 0;
+                }
+                break;
+            }
+        }
+    }
+}
+
+void RefreshClickThroughRegionsOnCurrentThread(PVOID) {
+    if (g_unloading) {
+        return;
+    }
+
+    const DWORD threadId = GetCurrentThreadId();
+    std::vector<winrt::weak_ref<FrameworkElement>> frames;
+    {
+        std::lock_guard<std::mutex> lock(g_appliedMutex);
+        if (!g_appliedTaskbarStates) {
+            return;
+        }
+        for (auto const& applied : *g_appliedTaskbarStates) {
+            if (applied.threadId == threadId) {
+                frames.push_back(applied.frame);
+            }
+        }
+    }
+
+    for (auto const& weakFrame : frames) {
+        if (auto frame = weakFrame.get()) {
+            RefreshClickThroughRegionForFrame(frame);
+        }
     }
 }
 
@@ -2977,6 +3185,8 @@ void DetachAppliedTaskbarCallbacks(AppliedTaskbarState& record) {
     RestoreVerticalLayouts(record.savedVerticalLayouts);
     RestoreHoverShapes(record.savedHoverShapes);
     record.taskButtonRepeaterRevoker.revoke();
+    record.rootGridSizeChangedRevoker.revoke();
+    record.traySizeChangedRevoker.revoke();
     record.taskButtonRepeater = {};
     record.savedTaskButtonNameCallbacks.clear();
     record.savedMultiWindowHighlights.clear();
@@ -3450,6 +3660,38 @@ bool ApplyToFrame(FrameworkElement const& frame, HWND knownTaskbarWnd = nullptr)
     if (!record.hasAppliedRegion) {
         record.regionRetries++;
     }
+
+    record.rootGridSizeChangedRevoker.revoke();
+    record.traySizeChangedRevoker.revoke();
+    try {
+        auto weakFrame = record.frame;
+        record.rootGridSizeChangedRevoker = rootGrid.SizeChanged(
+            winrt::auto_revoke,
+            [weakFrame](auto const&, SizeChangedEventArgs const&) {
+                HookScope hookScope;
+                if (g_unloading) {
+                    return;
+                }
+                if (auto currentFrame = weakFrame.get()) {
+                    RefreshClickThroughRegionForFrame(currentFrame);
+                }
+            });
+        if (trayElement) {
+            record.traySizeChangedRevoker = trayElement.SizeChanged(
+                winrt::auto_revoke,
+                [weakFrame](auto const&, SizeChangedEventArgs const&) {
+                    HookScope hookScope;
+                    if (g_unloading) {
+                        return;
+                    }
+                    if (auto currentFrame = weakFrame.get()) {
+                        RefreshClickThroughRegionForFrame(currentFrame);
+                    }
+                });
+        }
+    } catch (...) {
+    }
+
     {
         std::lock_guard<std::mutex> lock(g_appliedMutex);
         g_appliedTaskbarStates->push_back(std::move(record));
@@ -3464,6 +3706,8 @@ bool ApplyToFrame(FrameworkElement const& frame, HWND knownTaskbarWnd = nullptr)
         }
     } catch (...) {
     }
+
+    ScheduleRegionSyncAfterLayout();
 
     if (GetTickCount() - g_lastControlCenterFixTick.load() > 500) {
         RepositionControlCenterWindows();
@@ -3608,6 +3852,22 @@ bool NeedsTaskbarReapply(FrameworkElement const& appliedFrame,
         }
     }
 
+    if (!needsApply && taskbarAreaHeightSetting > 0 && taskbarWnd &&
+        IsWindow(taskbarWnd)) {
+        RECT taskbarRect{};
+        if (GetWindowRect(taskbarWnd, &taskbarRect)) {
+            int currentTaskbarHeight = taskbarRect.bottom - taskbarRect.top;
+            if (currentTaskbarHeight > 0 &&
+                currentTaskbarHeight < taskbarAreaHeightSetting) {
+                needsApply = true;
+            }
+        }
+    }
+
+    if (!needsApply && !applied.trayArranged && FindSiblingTray(appliedFrame)) {
+        needsApply = true;
+    }
+
     if (!needsApply && applied.trayArranged) {
         FrameworkElement currentTray = FindSiblingTray(appliedFrame);
         if (currentTray) {
@@ -3671,6 +3931,19 @@ bool NeedsTaskbarReapply(FrameworkElement const& appliedFrame,
                         needsApply = true;
                     }
                 }
+            } else if (auto appliedRootGrid = applied.rootGrid.get()) {
+                FrameworkElement trayElement = applied.tray.get();
+                if (!trayElement) {
+                    trayElement = FindSiblingTray(appliedFrame);
+                }
+                RECT desiredRegionRect{};
+                if (TryComputeClickThroughRegionRect(
+                        appliedFrame, appliedRootGrid, trayElement,
+                        applied.islandHwnd, applied.topLevelWnd,
+                        desiredRegionRect) &&
+                    !EqualRect(&applied.appliedRegion, &desiredRegionRect)) {
+                    needsApply = true;
+                }
             }
         }
     }
@@ -3699,7 +3972,8 @@ void ApplyToFrameWhenNeeded(void* taskbarFrameThis) {
 
         // Skip frames that aren't in the visual tree yet. Right after Explorer
         // starts, MeasureOverride and OnApplyTemplate run before the frame is
-        // loaded. OnLoaded and the 600 ms calibration apply the layout later.
+        // loaded. OnLoaded and the multi-stage calibration apply the layout
+        // later.
         if (!frame.IsLoaded() || !frame.XamlRoot()) {
             return;
         }
@@ -4005,7 +4279,98 @@ void ApplyNowOnTaskbarThread(PVOID taskbarWindowParam) {
     }
 }
 
+using RunFromWindowThreadProc_t = void (*)(PVOID);
+bool RunFromWindowThread(HWND hWnd,
+                         RunFromWindowThreadProc_t proc,
+                         PVOID procParam);
+void ForEachTaskbarWindow(void (*proc)(HWND));
+
 void ApplyToAllTaskbarsNow();
+void KickTaskbarHeightUpdate();
+
+bool HasUndersizedTaskbarWindow(int areaHeightPx) {
+    if (areaHeightPx <= 0) {
+        return false;
+    }
+
+    struct SearchContext {
+        int areaHeightPx;
+        DWORD processId;
+        bool undersized;
+    };
+
+    SearchContext context{areaHeightPx, GetCurrentProcessId(), false};
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            auto* ctx = reinterpret_cast<SearchContext*>(lParam);
+            DWORD pid = 0;
+            if (!GetWindowThreadProcessId(hWnd, &pid) ||
+                pid != ctx->processId || !IsTaskbarWindowClass(hWnd)) {
+                return TRUE;
+            }
+
+            RECT rect{};
+            if (GetWindowRect(hWnd, &rect)) {
+                int height = rect.bottom - rect.top;
+                if (height > 0 && height < ctx->areaHeightPx) {
+                    ctx->undersized = true;
+                    return FALSE;
+                }
+            }
+
+            if (HWND islandHwnd = FindIslandWindow(hWnd)) {
+                RECT islandRect{};
+                if (GetWindowRect(islandHwnd, &islandRect)) {
+                    int islandHeight = islandRect.bottom - islandRect.top;
+                    if (islandHeight > 0 && islandHeight < ctx->areaHeightPx) {
+                        ctx->undersized = true;
+                        return FALSE;
+                    }
+                }
+            }
+
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&context));
+
+    return context.undersized;
+}
+
+void RefreshAllClickThroughRegionsNow() {
+    struct SearchContext {
+        DWORD processId;
+        std::vector<DWORD> seenThreads;
+        std::vector<HWND> windows;
+    };
+
+    SearchContext context{GetCurrentProcessId(), {}, {}};
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            auto* ctx = reinterpret_cast<SearchContext*>(lParam);
+            DWORD pid = 0;
+            DWORD threadId = GetWindowThreadProcessId(hWnd, &pid);
+            if (!threadId || pid != ctx->processId ||
+                !IsTaskbarWindowClass(hWnd)) {
+                return TRUE;
+            }
+
+            if (std::find(ctx->seenThreads.begin(), ctx->seenThreads.end(),
+                          threadId) == ctx->seenThreads.end()) {
+                ctx->seenThreads.push_back(threadId);
+                ctx->windows.push_back(hWnd);
+            }
+
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&context));
+
+    for (HWND hWnd : context.windows) {
+        RunFromWindowThread(hWnd, RefreshClickThroughRegionsOnCurrentThread,
+                            nullptr);
+    }
+}
+
+constexpr DWORD kLayoutCalibrationDelaysMs[] = {300, 600, 900};
 
 VOID CALLBACK LayoutCalibrationTimerProc(PVOID, BOOLEAN) {
     HookScope hookScope;
@@ -4013,24 +4378,101 @@ VOID CALLBACK LayoutCalibrationTimerProc(PVOID, BOOLEAN) {
     bool shouldApply = false;
     {
         std::lock_guard<std::mutex> lock(g_layoutCalibrationMutex);
+        HANDLE completedTimer = g_layoutCalibrationTimer;
+        g_layoutCalibrationTimer = nullptr;
+        HANDLE queue = g_layoutCalibrationTimerQueue;
         shouldApply = g_layoutCalibrationScheduled;
         g_layoutCalibrationScheduled = false;
+
+        if (shouldApply && !g_unloading && queue) {
+            ++g_layoutCalibrationStep;
+            if (g_layoutCalibrationStep <
+                ARRAYSIZE(kLayoutCalibrationDelaysMs)) {
+                HANDLE nextTimer = nullptr;
+                if (CreateTimerQueueTimer(
+                        &nextTimer, queue, LayoutCalibrationTimerProc, nullptr,
+                        kLayoutCalibrationDelaysMs[g_layoutCalibrationStep], 0,
+                        WT_EXECUTEONLYONCE)) {
+                    g_layoutCalibrationTimer = nextTimer;
+                    g_layoutCalibrationScheduled = true;
+                }
+            }
+        }
+
+        if (completedTimer && queue) {
+            DeleteTimerQueueTimer(queue, completedTimer, nullptr);
+        }
     }
 
     if (shouldApply && !g_unloading) {
         ApplyToAllTaskbarsNow();
+        const int areaHeightPx = g_settingTaskbarAreaHeight.load();
+        if (areaHeightPx > 0 && HasUndersizedTaskbarWindow(areaHeightPx)) {
+            KickTaskbarHeightUpdate();
+            ApplyToAllTaskbarsNow();
+        }
+    }
+}
+
+VOID CALLBACK RegionSyncTimerProc(PVOID, BOOLEAN) {
+    HookScope hookScope;
+
+    bool shouldSync = false;
+    {
+        std::lock_guard<std::mutex> lock(g_layoutCalibrationMutex);
+        HANDLE completedTimer = g_regionSyncTimer;
+        g_regionSyncTimer = nullptr;
+        HANDLE queue = g_layoutCalibrationTimerQueue;
+        shouldSync = g_regionSyncScheduled;
+        g_regionSyncScheduled = false;
+
+        if (completedTimer && queue) {
+            DeleteTimerQueueTimer(queue, completedTimer, nullptr);
+        }
+    }
+
+    if (shouldSync && !g_unloading) {
+        RefreshAllClickThroughRegionsNow();
+    }
+}
+
+void ScheduleRegionSyncAfterLayout() {
+    if (g_unloading) {
+        return;
+    }
+
+    constexpr DWORD kRegionSyncDelayMs = 50;
+    std::lock_guard<std::mutex> lock(g_layoutCalibrationMutex);
+    if (g_regionSyncScheduled || g_unloading) {
+        return;
+    }
+
+    if (!g_layoutCalibrationTimerQueue) {
+        g_layoutCalibrationTimerQueue = CreateTimerQueue();
+    }
+    if (!g_layoutCalibrationTimerQueue) {
+        return;
+    }
+
+    g_regionSyncScheduled = true;
+    HANDLE timer = nullptr;
+    if (!CreateTimerQueueTimer(&timer, g_layoutCalibrationTimerQueue,
+                               RegionSyncTimerProc, nullptr,
+                               kRegionSyncDelayMs, 0, WT_EXECUTEONLYONCE)) {
+        g_regionSyncScheduled = false;
+    } else {
+        g_regionSyncTimer = timer;
     }
 }
 
 // A freshly loaded taskbar can finish Explorer's initial layout after
 // OnLoaded has already called ApplyToFrameWhenNeeded. Coalesce those loads
-// into one calibration callback instead of polling in a worker thread.
+// into bounded calibration callbacks instead of polling in a worker thread.
 void ScheduleTaskbarLayoutCalibrationAfterCreate() {
     if (g_unloading) {
         return;
     }
 
-    constexpr DWORD kLayoutCalibrationDelayMs = 600;
     std::lock_guard<std::mutex> lock(g_layoutCalibrationMutex);
     if (g_layoutCalibrationScheduled || g_unloading) {
         return;
@@ -4043,13 +4485,16 @@ void ScheduleTaskbarLayoutCalibrationAfterCreate() {
         return;
     }
 
+    g_layoutCalibrationStep = 0;
     g_layoutCalibrationScheduled = true;
     HANDLE timer = nullptr;
     if (!CreateTimerQueueTimer(&timer, g_layoutCalibrationTimerQueue,
                                LayoutCalibrationTimerProc, nullptr,
-                               kLayoutCalibrationDelayMs, 0,
+                               kLayoutCalibrationDelaysMs[0], 0,
                                WT_EXECUTEONLYONCE)) {
         g_layoutCalibrationScheduled = false;
+    } else {
+        g_layoutCalibrationTimer = timer;
     }
 }
 
@@ -4058,6 +4503,10 @@ void StopLayoutCalibrationTimer() {
     {
         std::lock_guard<std::mutex> lock(g_layoutCalibrationMutex);
         g_layoutCalibrationScheduled = false;
+        g_layoutCalibrationTimer = nullptr;
+        g_layoutCalibrationStep = 0;
+        g_regionSyncScheduled = false;
+        g_regionSyncTimer = nullptr;
         timerQueue = g_layoutCalibrationTimerQueue;
         g_layoutCalibrationTimerQueue = nullptr;
     }
@@ -4238,6 +4687,8 @@ void ReassertFramePropertiesOnCurrentThread() {
         }
     }
 
+    bool needsRegionSync = false;
+
     for (auto const& target : targets) {
         auto frame = target.frame.get();
         if (!frame) {
@@ -4254,14 +4705,34 @@ void ReassertFramePropertiesOnCurrentThread() {
             if (!taskbarWnd || !IsWindow(taskbarWnd)) {
                 taskbarWnd = FindTaskbarWindowForFrame(frame);
             }
+            if (taskbarAreaHeightSetting > 0) {
+                EnsureTaskbarWindowHeight(taskbarWnd, taskbarAreaHeightSetting);
+            }
+
             double scale = GetEffectiveScale(frame, taskbarWnd);
             double areaHeight = GetTaskbarAreaHeightDip(
                 taskbarAreaHeightSetting, frame, taskbarWnd, scale);
             double floatMargin = GetFloatMarginDip(floatMarginSetting, scale);
+            double windowHeight = GetWindowHeightDip(taskbarWnd, scale);
             double barHeight =
-                GetBarHeightDip(areaHeight,
-                                GetWindowHeightDip(taskbarWnd, scale),
-                                floatMargin);
+                GetBarHeightDip(areaHeight, windowHeight, floatMargin);
+
+            auto tray = target.tray.get();
+            bool needFullApply = !tray && FindSiblingTray(frame) != nullptr;
+            if (!needFullApply && tray && areaHeight > 0 && barHeight > 0) {
+                for (auto const& saved : target.savedVerticalLayouts) {
+                    if (saved.element.get() == tray &&
+                        !std::isnan(saved.targetHeight) &&
+                        !NearlyEqual(saved.targetHeight, barHeight, 0.5)) {
+                        needFullApply = true;
+                        break;
+                    }
+                }
+            }
+            if (needFullApply) {
+                ApplyToFrame(frame, taskbarWnd);
+                continue;
+            }
 
             if (taskbarWidthSetting > 0) {
                 double pillWidth = GetTaskbarWidthDip(
@@ -4301,7 +4772,7 @@ void ReassertFramePropertiesOnCurrentThread() {
                     rootGrid.Margin(Thickness{0, 0, 0, floatMargin});
                 }
 
-                if (auto tray = target.tray.get()) {
+                if (tray) {
                     double gapDip = GetTrayGapDip(taskbarWidthSetting, frame,
                                                   tray, taskbarWnd, scale);
                     tray.Height(barHeight);
@@ -4313,8 +4784,14 @@ void ReassertFramePropertiesOnCurrentThread() {
                     ApplyVerticalLayoutTarget(saved);
                 }
             }
+
+            needsRegionSync = true;
         } catch (...) {
         }
+    }
+
+    if (needsRegionSync) {
+        ScheduleRegionSyncAfterLayout();
     }
 }
 
@@ -4409,6 +4886,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
         if (!g_taskbarViewDllLoaded.exchange(true)) {
             if (HookTaskbarViewDllSymbols(module)) {
                 Wh_ApplyHookOperations();
+                ScheduleTaskbarLayoutCalibrationAfterCreate();
             }
         }
     }
@@ -4417,6 +4895,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
         if (!g_systemTrayDllLoaded.exchange(true)) {
             if (HookSystemTrayDllSymbols(module)) {
                 Wh_ApplyHookOperations();
+                ScheduleTaskbarLayoutCalibrationAfterCreate();
             }
         }
     }
@@ -4486,8 +4965,6 @@ void KickTaskbarRelayout() {
                             0, SMTO_ABORTIFHUNG | SMTO_NORMAL, 1000, nullptr);
     });
 }
-
-using RunFromWindowThreadProc_t = void (*)(PVOID);
 
 bool RunFromWindowThread(HWND hWnd,
                          RunFromWindowThreadProc_t proc,
@@ -4845,6 +5322,11 @@ void Wh_ModSettingsChanged() {
     ForEachTaskbarWindow([](HWND hWnd) {
         RunFromWindowThread(hWnd, ReapplyOnCurrentThread, nullptr);
     });
+
+    const int areaHeightPx = g_settingTaskbarAreaHeight.load();
+    if (areaHeightPx > 0 && HasUndersizedTaskbarWindow(areaHeightPx)) {
+        ScheduleTaskbarLayoutCalibrationAfterCreate();
+    }
 
     RepositionControlCenterWindows();
 }

@@ -2,12 +2,66 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-27T23:04:05.000Z</updated>
+    <updated>2026-11-28T14:02:31.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Floating Taskbar 2.1.16]]></title>
+        <id>https://windhawk.net/mods/floating-taskbar#3c8f043569ef635470b94b8c7be3ea34b767d6f1</id>
+        <link href="https://windhawk.net/mods/floating-taskbar"/>
+        <updated>2026-11-28T14:02:31.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix partial or clipped taskbar rendering after restarting Windows Explorer by synchronizing click-through regions after XAML layout and handling initial bottom-anchored taskbar sizing.</li>
+<li>Fix taskbar area height adjustments not taking effect by restoring the taskbar window height when Explorer recalculates the taskbar frame height, and by re-running height calibration while the taskbar window or its XAML island is still shorter than the configured height.</li>
+</ul>
+]]></content>
+        <author>
+            <name>chaochenzhudian</name>
+            <uri>https://github.com/chaochenzhudian</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Virtual Desktop Helper 2.6.0]]></title>
+        <id>https://windhawk.net/mods/virtual-desktop-helper#83e88597e526b16fe12f18d0b553726550070ad1</id>
+        <link href="https://windhawk.net/mods/virtual-desktop-helper"/>
+        <updated>2026-11-28T14:02:26.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Move window to previous/next desktop:</strong> new hotkeys with wrap-around, sharing the Move Window modifier and the Maximum Desktops limit. If the current desktop is beyond that limit, Next goes to desktop 1 and Previous goes to the last desktop in range. Follow Moved Window is respected; the keys are unassigned by default.</li>
+<li><strong>Separate pin/unpin:</strong> new optional Unpin key. When set, Pin only pins and Unpin only unpins; when blank, Pin keeps the existing toggle behavior. If the unpin hotkey cannot be registered, Pin keeps toggling.</li>
+<li><strong>Explorer restart recovery:</strong> pin and move operations reconnect to the shell after Explorer restarts.</li>
+<li><strong>Windows 11 23H2 .3085+ support:</strong> added the new interface entry; desktop switching stays instant on this build.</li>
+<li><strong>Desktop switch animation:</strong> new &quot;Animate Desktop Switch&quot; setting (on by default) for Windows 11 24H2/25H2, ignored when Windows animation effects are off. Focus and tracking are restored after the slide finishes.</li>
+<li><strong>Windows version check:</strong> the mod logs a warning when the selected version entry does not match the detected build.</li>
+</ul>
+]]></content>
+        <author>
+            <name>u2x1</name>
+            <uri>https://github.com/u2x1</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Text Capitalization 0.3.13]]></title>
+        <id>https://windhawk.net/mods/text-capitalization#99a0b0a78541f096b8e192e843447571e8fe4cb7</id>
+        <link href="https://windhawk.net/mods/text-capitalization"/>
+        <updated>2026-11-28T14:02:21.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Shortcuts now accept a letter (A-Z), a digit, F1-F24, or a numeric VK code (decimal or hex).</li>
+<li>Improved Title Case (minor words) and Sentence Case.</li>
+<li>Picker is now more reliable (reused window, no stuck state).</li>
+<li>AltGr no longer triggers shortcuts; missed key-ups no longer leave modifiers stuck.</li>
+<li>Full clipboard snapshot and restore; the pasted text is kept out of clipboard history.</li>
+<li>Console/terminal windows are ignored.</li>
+<li>The four picker-key settings (PreviousModeHotkey, NextModeHotkey, ConfirmModeHotkey, CancelPickerHotkey) were removed; picker keys are now fixed to Up/Down/Enter/Esc.</li>
+</ul>
+]]></content>
+        <author>
+            <name>rockinggreninja-bot</name>
+            <uri>https://github.com/rockinggreninja-bot</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Zones 1.0.3]]></title>
         <id>https://windhawk.net/mods/taskbar-zones#00422e32d01f864fef912325685e5a880c5f3455</id>
@@ -969,214 +1023,6 @@ because it stays fully hidden until you hover the top edge, then drops down.</li
         <author>
             <name>loliri</name>
             <uri>https://github.com/loliri</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7 User Account Page Restorer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win7-user-account-page-restorer#27f3cc72c9457d7de135a22489efb2eac28d5b79</id>
-        <link href="https://windhawk.net/mods/win7-user-account-page-restorer"/>
-        <updated>2026-11-27T02:03:43.000Z</updated>
-        <content type="html"><![CDATA[<h1>Windows 7 User Account Page Restorer</h1>
-<h2>About</h2>
-<p>This mod restores the <strong>User Accounts</strong> page of Control Panel as it was in Windows 7: the user tile with its glass
-frame, &quot;Create a password for your account&quot;, &quot;Change your picture&quot;, &quot;Manage another account&quot;, &quot;Create a new
-account&quot;, the guest account pages, and the classic task list on the left.</p>
-<p>Windows 10 and 11 still have a User Accounts page, but it is a reduced one that sends most tasks to the Settings
-app. This mod puts the original Windows 7 page (NT 6.1) back in its place. The page is the real one, not a
-recreation: it is Microsoft's <code>usercpl.dll</code> 6.1.7600.16385 running on its own Windows 7 DirectUI engine.</p>
-<p>No system file is replaced or modified, and nothing is written to the registry. Disable the mod and the Windows
-10/11 page is back.</p>
-<h2>Screenshots</h2>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/accountpage1.PNG" alt="User Accounts page, main view"></p>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/accountpage2.PNG" alt="User Accounts page, account view"></p>
-<h2>What is downloaded, from where, and when</h2>
-<p>The mod contains no Microsoft binaries and never asks you for a file. The first time it runs it downloads four
-files, 2 MB in total, from Microsoft's public symbol server (<code>https://msdl.microsoft.com/download/symbols/</code>):</p>
-<table>
-<thead>
-<tr>
-<th>File</th>
-<th>Version</th>
-<th>Used for</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>usercpl.dll</code></td>
-<td>6.1.7600.16385 (Windows 7)</td>
-<td>the page</td>
-</tr>
-<tr>
-<td><code>dui70.dll</code></td>
-<td>6.1.7601.23403 (Windows 7 SP1)</td>
-<td>the DirectUI engine the page was built for</td>
-</tr>
-<tr>
-<td><code>shacct.dll</code></td>
-<td>10.0.10240.16384 (Windows 10 1507)</td>
-<td>only the picture frame bitmap; never loaded as code</td>
-</tr>
-<tr>
-<td><code>duser.dll</code></td>
-<td>6.1.7600.16385 (Windows 7)</td>
-<td>only the text of the &quot;common&quot; style sheet; never loaded as code</td>
-</tr>
-</tbody>
-</table>
-<p>The size and the SHA-256 of each file are checked against values pinned in the mod; a file that does not match is
-discarded. The originals are kept in the mod's storage folder (<code>dl</code>). From them the mod builds, in <code>bin</code>, a private
-copy of the page for the selected language (see <em>How it works</em>). Nothing is downloaded again while <code>dl</code> is present,
-so after the first run the mod works offline.</p>
-<p>The download cannot be turned off, and the mod cannot work without it. With <em>Keep downloaded files when the mod is
-disabled</em> off, the files are deleted at every unload, so the download is repeated after every disable or update. The
-only thing sent is the HTTPS request for the four fixed URLs, with the user agent <code>Microsoft-Symbol-Server/10.0.0.0</code>.</p>
-<p><strong>Offline at first run:</strong> the Windows 10/11 page simply stays, and the reason is written to the mod's log. Connect
-to the internet and restart <code>explorer.exe</code> (or toggle the mod).</p>
-<h2>How it works</h2>
-<ul>
-<li><strong>The page.</strong> Control Panel is told to read the page definition and the layouts from the mod's private copy
-instead of <code>System32\usercpl.dll</code> (one documented function, <code>PSPropertyBag_ReadStr</code>, answers differently for that
-one value). The private copy is Microsoft's file with <strong>no code byte changed</strong>; only its resources are extended:
-the strings (the symbol server has no <code>.mui</code> files, so the strings are embedded in the mod, in English, Italian,
-French, Spanish, Portuguese and German), the picture frame, and the page definition.</li>
-<li><strong>The &quot;modified page&quot;.</strong> The original Windows 7 layouts cannot load on Windows 10/11 as they are, for two reasons,
-and both are solved inside the private copy, with nothing in <code>System32</code> involved:
-<ul>
-<li>they take the picture frame from <code>shacct.dll</code>, which no longer contains it since Windows 10 1607 (this is why
-the manual method needs a patched <code>shacct.dll</code>): the frame is put into the private copy and the layouts are
-pointed to it;</li>
-<li>they use the &quot;Common&quot; style sheet, which DirectUI reads from the system's <code>DUser.dll</code>; since Windows 8 that
-sheet is stored in a binary format the Windows 7 DirectUI cannot read: the Windows 7 text of the sheet is put
-into each layout.</li>
-</ul>
-</li>
-<li><strong>The accounts.</strong> The Windows 7 page talks to the system's account objects through interfaces that changed in
-Windows 10. The mod translates between the two layouts, so the page works on the Windows 10/11 implementation
-(with the system's own elevation prompt) instead of on old code. Creating a local account also runs
-<code>net.exe user &quot;&lt;name&gt;&quot; /add</code> elevated, which can show a second UAC prompt. It creates an account without a
-password; the page then performs any further changes through its account object. If the command times out or
-the account cannot be read back, creation may already have succeeded: check the account list before retrying.</li>
-<li><strong>Scope.</strong> The mod runs only in <code>explorer.exe</code>. Until the page is opened for the first time it loads nothing.</li>
-</ul>
-<h2>Settings</h2>
-<ul>
-<li><strong>Page language</strong>: <em>Automatic</em> follows the Windows display language (English, Italian, French, Spanish, Portuguese or German;
-English if Windows uses another language). Applies to windows opened after the change; if the page was already used in this session, restart
-<code>explorer.exe</code>.</li>
-<li><strong>Show a generic user name</strong>: off by default. When on, the name of the signed-in user is shown as a generic one
-(&quot;User&quot;, &quot;Utente&quot;, &quot;Benutzer&quot;, ...) on this page only; Windows and the account keep the real name. Saving the generic name
-unchanged in &quot;Change the account name&quot; does nothing, so the account is never renamed by mistake.</li>
-<li><strong>Show legacy online ID and fingerprint links</strong>: off by default. When enabled, the page's original visibility
-checks apply; fingerprint hardware may be required. Close and reopen the page after changing the setting. These
-links can remain unavailable or nonfunctional because their Windows 7 targets are normally absent on Windows 10/11.</li>
-<li><strong>Keep downloaded files when the mod is disabled</strong>: on by default, so that enabling the mod again needs no
-download.</li>
-</ul>
-<h2>Notes and limitations</h2>
-<ul>
-<li><strong>Best effort.</strong> This mod is provided on a best-effort basis. It runs a Windows 7 page on top of Windows 10/11
-components that Microsoft can change at any time, so some features may not work, or may stop working after a
-Windows update. The translations of the page (French, Spanish, Portuguese and German in particular) were also written
-without the original Microsoft files and may differ from the official wording.</li>
-<li><strong>Account removal is disabled.</strong> Because of a limitation of the legacy provider, removing an account from the classic
-page does nothing: the page shows a localized message and opens Settings &gt; Accounts &gt; Other users, where the account
-can be removed. Back up important files first: Settings can also delete the account data. The reason is that the
-provider's remove method runs inside the elevated account server, which for about 20 seconds blocks every other call
-to it, and with it the window of the page; its profile/file handling is also unverified.</li>
-<li><strong>The Guest account is an edge case and is not supported by modern Windows.</strong>
-The Windows 7 page can turn the Guest account on and off, but the Guest account is
-not supported by Windows 10/11, and it has been reported to work correctly only
-with a custom shell such as Explorer7/Windows7ExplorerRestorer (or equivalent software). For normal
-(non-Guest) profiles the page is expected to work.</li>
-<li>The mod has been created for Windows 10 1607 or later or Windows 11; 64-bit (x64).</li>
-<li>The mod has been tested on Windows 10 21H2 and Windows 11 24H2. Other versions from Windows 10 1607 on may work, but have not been tested.</li>
-<li>This is the Windows 7 page: it does not know Microsoft accounts as such (they appear as the local accounts they
-are bound to).</li>
-<li><strong>Legacy online ID and fingerprint links are best effort.</strong> &quot;Link online IDs&quot; and &quot;Manage your fingerprint data&quot;
-are suppressed by default and can be allowed by a setting. Their original availability checks still apply, and
-functionality depends on specific legacy components or separate restorations that this mod does not provide or
-verify. The Windows 7 targets are normally absent on Windows 10/11, and even a restored component or provider may
-not be compatible or operational. In particular, this mod removes the online IDs page definition from its private
-copy: enabling the link does not restore that page, and a test produced a file-not-found error when it was clicked.
-No working restoration is guaranteed. &quot;Parental Controls&quot; remains conditional on a Family Safety applet being present.</li>
-<li>&quot;Change your picture&quot; lists the pictures of <code>ProgramData\Microsoft\User Account Pictures\Default Pictures</code>,
-which Windows 10/11 do not ship; &quot;Browse for more pictures...&quot; works.</li>
-<li>When the mod is disabled or updated, it closes the Explorer windows that currently show the User Accounts page and waits
-until they are gone (a window that has moved on to another folder is left alone). The <strong>whole window closes, including
-any other tabs in it</strong>, and so do the dialogs the page has open; save your work in those tabs first. The close request
-is repeated every second and the wait is logged every few seconds. A pending UAC prompt cannot be closed by the mod:
-answer it. The three links of the page that the mod hides come back. The page and its DirectUI file (private copies in the
-mod's storage folder) stay loaded in <code>explorer.exe</code> until it restarts, but nothing in them points into the mod.</li>
-<li>If the Windows 7 page cannot be loaded for any reason, the Windows 10/11 User Accounts page is used.</li>
-<li>After changing a setting, close open User Accounts windows.</li>
-</ul>
-<h2>Credits</h2>
-<ul>
-<li><strong>RandomGuy5747</strong> (WinClassic) for the German translation of the page.</li>
-<li><strong>RandomGuy5747</strong> (WinClassic) for pointing out that the Windows 7 page can run on Windows 10 with the Windows 7
-DirectUI, in the thread &quot;Secure restoration of Control Panel applets in Windows 10/11&quot;.</li>
-<li><strong>Brawllux</strong> (CPL Restoration Pack) for the finding that the page needs the picture frame of <code>shacct.dll</code>.</li>
-<li><strong>AdmXP8</strong> for the technique of running an older Control Panel page from Microsoft's symbol server
-(Language Applet Restorer, Family Safety Applet Restorer).</li>
-</ul>
-]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Uninstall Here 1.0.0]]></title>
-        <id>https://windhawk.net/mods/uninstall-here#44e2f253e00c07eeba6ec5de7c111d1600850018</id>
-        <link href="https://windhawk.net/mods/uninstall-here"/>
-        <updated>2026-11-26T22:02:28.000Z</updated>
-        <content type="html"><![CDATA[<h1>Uninstall Here</h1>
-<p>Open a desktop app's own uninstaller from the Windows 11 Start menu. Uninstall Here saves you a trip through <strong>Installed apps</strong> when it can identify the app's uninstaller.</p>
-<h2>How to use</h2>
-<p><strong>Start → All apps → right-click the app → Uninstall</strong></p>
-<p>Confirm the product name before its uninstaller opens. MSI products open Windows Installer in uninstall mode. Follow any subsequent prompts from the uninstaller or Windows.</p>
-<p>This mod targets 64-bit Windows 11. The <strong>All apps</strong> flow was tested on x64 build <code>26300.10075</code>.</p>
-<h2>If Installed apps still opens</h2>
-<p>Windows handles packaged apps and desktop apps without one identifiable registered installation.</p>
-<p>If you expected the app to work, enable logging for <strong>Uninstall Here</strong> in Windhawk and repeat the click. Include the app version, Windows build, and the mod's log entries in your report. <a href="https://github.com/luizbizzio/uninstall-here/issues">Report an issue</a></p>
-<h2>Screenshot</h2>
-<p><img src="https://raw.githubusercontent.com/luizbizzio/uninstall-here/main/assets/uninstall-here-cover.png" alt="The Uninstall command highlighted in the Windows 11 Start menu"></p>
-<p><a href="https://github.com/luizbizzio/uninstall-here">Project on GitHub</a></p>
-]]></content>
-        <author>
-            <name>Luiz Bizzio</name>
-            <uri>https://github.com/luizbizzio</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Remove UWP titlebars 2.1.0]]></title>
-        <id>https://windhawk.net/mods/native-titlebars-uwp-lite#a4f6f237f3826e0cfe1bf568ba89aa7905c88727</id>
-        <link href="https://windhawk.net/mods/native-titlebars-uwp-lite"/>
-        <updated>2026-11-26T20:03:23.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><a href="https://github.com/ramensoftware/windhawk-mods/pull/7682">Merge changes by user o12r</a> (show maximize and minimize buttons when the theme is active):</li>
-</ul>
-<p>Fixes missing caption buttons when using this mod (only tested on Windows 11 25H2, build 26200). With 2.0.1 the native titlebar shows title and icon but no minimize/maximize/close.</p>
-<h3>Root cause</h3>
-<ol>
-<li><strong>All buttons hidden:</strong> ApplicationFrameHost calls <code>SetWindowThemeAttribute(WTA_NONCLIENT)</code> on the frame with flags <code>0x10007</code> / mask <code>0x1000F</code>. The undocumented bit <code>0x10000</code> makes DWM drop all caption buttons (stock UWP frames draw their own). Logged in AFH: DWM caption-button width goes from 49 → 0 on exactly that call.</li>
-<li><strong>Only close returns after fixing (1):</strong> frames are created with <code>CreateWindowInBandEx</code> type flags <code>0x3</code>. Bit <code>0x1</code> makes the window &quot;immersive&quot;, and uDWM's <code>CTopLevelWindow::GetCurrentStyle</code> adds close but skips minimize/maximize when <code>CWindowData::IsImmersiveWindow()</code> is true. Changing the type flags in AFH is not an option: clearing either bit stops the app's <code>CoreWindow</code> from being hosted in the frame (tested all combinations).</li>
-</ol>
-<h3>Changes (v2.1.0)</h3>
-<ul>
-<li><strong>AFH:</strong> hook <code>SetWindowThemeAttribute</code> and strip <code>0x10000</code> for <code>ApplicationFrameWindow</code>; on load, clear it on frames this mod already converted.</li>
-<li><strong>AFH:</strong> <code>WM_NCHITTEST</code> / NC button messages for <code>HTMINBUTTON</code>/<code>HTMAXBUTTON</code>/<code>HTCLOSE</code> go to <code>DefWindowProc</code>, so hit-testing, hover and clicks follow DWM's actual button rects instead of the UWP layout.</li>
-<li><strong>dwm.exe</strong> (new <code>@include</code>): hook <code>CTopLevelWindow::GetCurrentStyle</code> and add the min/max <code>NCAREA_FLAGS</code> bits (<code>0x100|0x200</code> + enabled <code>0x1000</code>/<code>0x2000</code>, same as the non-immersive path) only when the window already has a close button, is immersive, and has <code>WS_CAPTION|WS_SYSMENU</code> + min/max boxes. Stock UWP frames keep <code>0x10000</code>, never get the close bit, and are unaffected.</li>
-</ul>
-<h3>Notes</h3>
-<ul>
-<li>The dwm.exe part reads the style from <code>CWindowData+0x74</code> (as <code>GetCurrentStyle</code> does on uDWM 10.0.26100). It is sanity-checked, so on other builds it should be a no-op (close button only) rather than misbehave.</li>
-<li>Tested with OpenGlass (Win7 theme) and with OpenGlass stopped: Calculator and Settings show all three buttons, content is hosted normally, buttons respond.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>

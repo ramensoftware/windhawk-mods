@@ -29,6 +29,34 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/4b120b2bf65bbe07e66560d0a408bd5e2ef67540/mods/acrylic-media-pill.wh.cpp"
       }
     },
+    "alembiq-weather-desktop-overlay": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795874809603,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795874809603,
+        "users": 0
+      },
+      "metadata": {
+        "author": "alembiq",
+        "compilerOptions": "-ld2d1 -ldwrite -lwininet -luser32 -lgdi32 -lshell32",
+        "description": "Atmospheric effects and live weather forecast visualization for the Windows desktop (Direct2D overlay)",
+        "github": "https://github.com/alembiqspace",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Desktop Weather & Particles Overlay",
+        "version": "3.2.9"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7933",
+      "source": {
+        "sha256": "97c66a24fb1beccbc6d8155b257f2400e698688be74bb45864f23749190357d9",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/8c7953cecc75504c9328a447b118df7ac7a8527e/mods/alembiq-weather-desktop-overlay.wh.cpp"
+      }
+    },
     "alt-tab-no-repeat": {
       "details": {
         "defaultSorting": 0,
@@ -403,6 +431,34 @@
       "source": {
         "sha256": "08016e6bfebd86e4ff0bd16150a1798677bc6ffca509cb4eb17e7fdca5d44b43",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/b5ff8c1c5e3932db133fce85e2a99b34db5602f3/mods/disable-usb-scan-fix.wh.cpp"
+      }
+    },
+    "drag-n-drop-enhanced": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795874809603,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795874809603,
+        "users": 0
+      },
+      "metadata": {
+        "author": "caotu2005",
+        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -ld2d1 -ldwrite -ldwmapi -lgdi32 -luser32 -lshell32 -lshlwapi -lole32 -loleaut32 -lwindowscodecs -luuid -lwinmm -ladvapi32",
+        "description": "Dual macOS & Windows Fluent Drag & Drop Shelf for Files, Images, Text & URLs — with Taskbar Minimized Status Pill, Shake-to-Summon, Edge-Bump & optional Win+V Clipboard History Replacement for Windows 10 & 11.",
+        "github": "https://github.com/caotu2005",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Drag n Drop Enhanced for Windows 10 and 11",
+        "version": "2.0.1.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/8057",
+      "source": {
+        "sha256": "bc7de73e76927d4bebe9bb3e0f4839dd4ec43c68d84f053bb627f88b6da7b612",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/d4f968eff01bae998eafc9340a40e63d6136327f/mods/drag-n-drop-enhanced.wh.cpp"
       }
     },
     "dynamic-island-xshelt": {

@@ -2,7 +2,7 @@
 // @id              virtual-desktop-helper
 // @name            Virtual Desktop Helper
 // @description     Switch virtual desktops, move windows between desktops, and pin windows with customizable hotkeys
-// @version         2.5.0
+// @version         2.6.0
 // @author          u2x1
 // @github          https://github.com/u2x1
 // @include         windhawk.exe
@@ -24,10 +24,11 @@ Based on VD.ahk by FuPeiJiang.
 ### Virtual Desktop Management
 - **Quick Switch**: Jump directly to any desktop (1-9) with a single hotkey
 - **Move Windows**: Send the active window to any desktop instantly
-- **Previous Desktop**: Switch to the previous desktop by index (wraps around)
-- **Next Desktop**: Switch to the next desktop by index (wraps around)
+- **Move Window to Previous/Next Desktop**: Send the active window one desktop left or right, cycling within Maximum Desktops
+- **Previous Desktop**: Switch to the previous desktop by index, cycling within Maximum Desktops
+- **Next Desktop**: Switch to the next desktop by index, cycling within Maximum Desktops
 - **Last-used Desktop**: Return to the desktop you were using immediately before the current one
-- **Pin Windows**: Pin/unpin windows to appear on all desktops
+- **Pin Windows**: Pin/unpin windows to appear on all desktops, with optional separate pin and unpin hotkeys
 
 ## Default Hotkeys
 
@@ -35,12 +36,13 @@ Based on VD.ahk by FuPeiJiang.
 |--------|----------------|
 | Switch to desktop 1-9 | `Alt + 1-9` |
 | Move window to desktop 1-9 | `Alt + Shift + 1-9` |
+| Move window to previous/next desktop | (unassigned by default) |
 | Switch to previous desktop by index | `Alt + Z` (configurable modifier) |
 | Switch to next desktop by index | `Alt + X` (configurable modifier) |
 | Switch to last-used desktop | `Alt + Q` (configurable modifier) |
-| Pin/unpin window | `Alt + P` (configurable modifier) |
+| Pin/unpin window (pin only when an unpin key is set) | `Alt + P` (configurable modifier) |
 
-Note: The modifier for all hotkey groups can be freely configured using any combination of Alt, Ctrl, Shift, and Win keys. Previous/next desktop cycling is limited by the "Maximum Desktops" setting.
+Note: The modifier for all hotkey groups can be freely configured using any combination of Alt, Ctrl, Shift, and Win keys. Previous/next desktop switching and window-move cycling are limited by the "Maximum Desktops" setting. If the current desktop is beyond that limit, Next goes to desktop 1 and Previous goes to the last desktop in the configured range.
 
 **⚠️ Win key note:** Win+number combinations are used by the Windows taskbar and may conflict with numbered desktop hotkeys. Choose another modifier if needed.
 
@@ -51,12 +53,13 @@ Settings are organized by feature. Each feature has an **Enable** toggle and its
 ### Hotkey Groups
 
 - **[Switch Desktop]** - Alt+1-9 to switch desktops
-- **[Move Window]** - Alt+Shift+1-9 to move windows between desktops
+- **[Move Window]** - Alt+Shift+1-9 to move windows between desktops; optional previous/next move keys (unassigned by default)
 - **[Previous/Next/Last-used Desktop]** - Previous/next by index and last-used desktop toggle (Alt+Z, Alt+X, Alt+Q by default)
-- **[Pin Window]** - Pin/unpin windows to all desktops (Alt+P by default)
+- **[Pin Window]** - Pin/unpin windows to all desktops (Alt+P by default); set an unpin key to split the toggle into separate pin and unpin keys
+
 ### Key Binding Format
 
-The Previous, Next, Last-used, and Pin key fields accept a single character or a supported special key. **Leave an individual key field blank to disable only that hotkey.**
+The Previous, Next, Last-used, Pin, Unpin, and window-move key fields accept a single character or a supported special key. **Leave an individual key field blank to disable only that hotkey.**
 
 **Letters & Numbers:** A-Z, 0-9  
 **Special Characters:**
@@ -67,7 +70,7 @@ The Previous, Next, Last-used, and Pin key fields accept a single character or a
 - `,` (comma), `.` (period), `/` (slash)
 - **Shifted-symbol aliases:** `!@#$%^&*()_+{}|:"<>?` are accepted as aliases for their underlying physical keys; they do not add Shift automatically.
 
-**Special Keys:** Type the name: `Tab`, `Space`, `Enter`
+**Special Keys:** Type the name: `Tab`, `Space`, `Enter`, `Left`, `Right`, `Up`, `Down`
 
 **Examples:**
 - Enter `F` → binds to Alt+F
@@ -76,16 +79,29 @@ The Previous, Next, Last-used, and Pin key fields accept a single character or a
 - Enter `Tab` → binds to Alt+Tab
 - Leave `Last-used Desktop Key` blank → disables Alt+Q while keeping Previous/Next enabled
 
+### Pin and Unpin
+
+By default `Alt+P` toggles the active window between pinned and unpinned. If you set **Unpin Key**, the two keys stop toggling: **Pin Key** only pins and **Unpin Key** only unpins, so pressing a key twice has no additional effect. Leave **Unpin Key** blank to keep the toggle behavior. If the unpin hotkey cannot be registered (for example, because it is the same key as Pin or another program already uses that combination), **Pin Key** keeps toggling so windows can still be unpinned.
+
+### Desktop Switching Animation
+
+On Windows 11 24H2/25H2, desktop switches made by this mod use the slide animation when **Animate Desktop Switch** is enabled (the default). The mod follows the Windows **Animation effects** setting: when animation effects are turned off in Settings, switching is instant. On other Windows versions, switching is always instant.
+
 ## Windows Version Support
 
 Select your Windows version in settings for correct functionality:
 - Windows 10 (Build < 20348)
 - Windows 10 (Build 20348 - 21999)
 - Windows 11 (Build 22000 - 22482)
-- Windows 11 (Build 22621/22631/23H2)
-- Windows 11 (Build 26100+ / 24H2)
+- Windows 11 (Build 22621/22631 before .3085)
+- Windows 11 (Build 22621/22631 from .3085 / current 23H2)
+- Windows 11 (Build 26100+ / 24H2/25H2)
+
+The mod reads the real Windows build and logs a warning when the selected entry does not match it. The setting is not changed automatically.
 
 ## Credits
+
+Changes in v2.6.0 contributed by [Anqarium](https://github.com/Anqarium) (Desktop Window Keys).
 
 Changes in v2.5.0 contributed by [Meteoni](https://github.com/meteoni).
 
@@ -100,13 +116,14 @@ Changes in v2.5.0 contributed by [Meteoni](https://github.com/meteoni).
 /*
 - WindowsVersion: win11_26100
   $name: Windows Version
-  $description: Select your Windows version for correct COM interface IDs. Run "winver" to check your build number.
+  $description: Select your Windows version for correct COM interface IDs. Run "winver" to check your build number. The mod logs a warning if this does not match the detected build.
   $options:
     - win10_old: Windows 10 (Build < 20348)
     - win10_20348: Windows 10 (Build 20348 - 21999)
     - win11_22000: Windows 11 (Build 22000 - 22482)
-    - win11_22621: Windows 11 (Build 22621/22631/23H2)
-    - win11_26100: Windows 11 (Build 26100+ / 24H2)
+    - win11_22621: Windows 11 (Build 22621/22631 before .3085)
+    - win11_22631_3085: Windows 11 (Build 22621/22631 from .3085 / current 23H2)
+    - win11_26100: Windows 11 (Build 26100+ / 24H2/25H2)
 
 - EnableSwitchDesktop: true
   $name: '[Switch Desktop] Enable'
@@ -118,11 +135,19 @@ Changes in v2.5.0 contributed by [Meteoni](https://github.com/meteoni).
 
 - EnableMoveWindow: true
   $name: '[Move Window] Enable'
-  $description: Enable Alt+Shift+1-9 (or chosen modifier) to move windows between desktops
+  $description: Enable Alt+Shift+1-9 (or chosen modifier) to move windows between desktops, plus the Move to Previous/Next Desktop keys
 
 - MoveWindowModifier: alt+shift
   $name: '[Move Window] Modifier'
-  $description: 'Modifier keys for moving active window to desktop (combined with number keys 1-9). Combine with +: alt, ctrl, shift, win. Examples: alt+shift, ctrl+alt, win+shift'
+  $description: 'Modifier keys for moving the active window to a desktop by number (1-9) and for the Move to Previous/Next Desktop keys. Combine with +: alt, ctrl, shift, win. Examples: alt+shift, ctrl+alt, win+shift'
+
+- MovePrevDesktopKey: ""
+  $name: '[Move Window] Move to Previous Desktop Key'
+  $description: 'Key to move the active window to the previous desktop by index, wrapping around. Combined with the Move Window modifier. Leave blank to disable this hotkey. Examples: Left, [, Z'
+
+- MoveNextDesktopKey: ""
+  $name: '[Move Window] Move to Next Desktop Key'
+  $description: 'Key to move the active window to the next desktop by index, wrapping around. Combined with the Move Window modifier. Leave blank to disable this hotkey. Examples: Right, ], X'
 
 - FollowMovedWindow: false
   $name: Follow Moved Window
@@ -130,7 +155,11 @@ Changes in v2.5.0 contributed by [Meteoni](https://github.com/meteoni).
 
 - MaxDesktops: 9
   $name: Maximum Desktops
-  $description: Maximum number of desktops used by numbered hotkeys and previous/next cycling (1-9).
+  $description: Maximum number of desktops used by numbered hotkeys and previous/next desktop switching or window-move cycling (1-9). If the current desktop is beyond this range, Next goes to desktop 1 and Previous to the last desktop in the range.
+
+- AnimateDesktopSwitch: true
+  $name: Animate Desktop Switch
+  $description: 'Use the slide animation when switching desktops (Windows 11 24H2/25H2). Ignored when Windows animation effects are turned off.'
 
 - EnablePrevNextDesktop: true
   $name: '[Previous/Next/Last-used Desktop] Enable'
@@ -158,7 +187,11 @@ Changes in v2.5.0 contributed by [Meteoni](https://github.com/meteoni).
 
 - PinKey: "P"
   $name: '[Pin Window] Key'
-  $description: 'Key to pin/unpin the active window to all desktops. Leave blank to disable this hotkey. Examples: P, W, #, ;, \'
+  $description: 'Key to pin/unpin the active window to all desktops, using the Previous/Next/Last-used Desktop modifier. When Unpin Key is set, this key only pins; if that unpin hotkey cannot be registered, this key keeps toggling. Leave blank to disable this hotkey. Examples: P, W, #, ;, \'
+
+- UnpinKey: ""
+  $name: '[Pin Window] Unpin Key'
+  $description: 'Key to unpin the active window from all desktops, using the Previous/Next/Last-used Desktop modifier. Leave blank to keep the Pin key as a pin/unpin toggle. When set, the Pin key only pins and this key only unpins. Examples: O, U, Down'
 
 */
 // ==/WindhawkModSettings==
@@ -218,11 +251,17 @@ static const IID IID_IVirtualDesktopPinnedApps = {
 // Windows Version-Specific Interface IDs
 // Microsoft changes these IIDs between Windows builds, requiring version detection.
 // usesHMonitor: Some versions require HMONITOR parameter for multi-monitor support.
+// switchWithAnimationIndex: VTable index of SwitchDesktopWithAnimation, or -1 when
+// unknown/unverified for that build. A wrong slot calls an unrelated method with
+// mismatched arguments and can corrupt memory, so unknown builds use plain
+// SwitchDesktop. Slot 22 is valid on build 26100-26999 (24H2/25H2) only; on 23H2
+// the same slot is GetLastActiveDesktop.
 //=============================================================================
 struct VersionIIDs {
   IID managerInternal;  // IID for IVirtualDesktopManagerInternal
   IID virtualDesktop;   // IID for IVirtualDesktop
   bool usesHMonitor;    // Whether API methods require HMONITOR parameter
+  int switchWithAnimationIndex;  // VTable index of SwitchDesktopWithAnimation, or -1
 };
 
 static const VersionIIDs g_versionIIDs[] = {
@@ -231,35 +270,42 @@ static const VersionIIDs g_versionIIDs[] = {
     // IVirtualDesktop: {FF72FFDD-BE7E-43FC-9C03-AD81681E88E4}
     {{0xF31574D6, 0xB682, 0x4CDC, {0xBD, 0x56, 0x18, 0x27, 0x86, 0x0A, 0xBE, 0xC6}},
      {0xFF72FFDD, 0xBE7E, 0x43FC, {0x9C, 0x03, 0xAD, 0x81, 0x68, 0x1E, 0x88, 0xE4}},
-     false},
+     false, -1},
 
     // [1] Windows 10 (Build 20348 - 21999)
     // IVirtualDesktopManagerInternal: {094AFE11-44F2-4BA0-976F-29A97E263EE0}
     // IVirtualDesktop: {62FDF88B-11CA-4AFB-8BD8-2296DFAE49E2}
     {{0x094AFE11, 0x44F2, 0x4BA0, {0x97, 0x6F, 0x29, 0xA9, 0x7E, 0x26, 0x3E, 0xE0}},
      {0x62FDF88B, 0x11CA, 0x4AFB, {0x8B, 0xD8, 0x22, 0x96, 0xDF, 0xAE, 0x49, 0xE2}},
-     true},
+     true, -1},
 
     // [2] Windows 11 (Build 22000 - 22482)
     // IVirtualDesktopManagerInternal: {B2F925B9-5A0F-4D2E-9F4D-2B1507593C10}
     // IVirtualDesktop: {536D3495-B208-4CC9-AE26-DE8111275BF8}
     {{0xB2F925B9, 0x5A0F, 0x4D2E, {0x9F, 0x4D, 0x2B, 0x15, 0x07, 0x59, 0x3C, 0x10}},
      {0x536D3495, 0xB208, 0x4CC9, {0xAE, 0x26, 0xDE, 0x81, 0x11, 0x27, 0x5B, 0xF8}},
-     true},
+     true, -1},
 
-    // [3] Windows 11 (Build 22621/22631/23H2)
+    // [3] Windows 11 (Build 22621/22631 before .3085)
     // IVirtualDesktopManagerInternal: {A3175F2D-239C-4BD2-8AA0-EEBA8B0B138E}
     // IVirtualDesktop: {3F07F4BE-B107-441A-AF0F-39D82529072C}
     {{0xA3175F2D, 0x239C, 0x4BD2, {0x8A, 0xA0, 0xEE, 0xBA, 0x8B, 0x0B, 0x13, 0x8E}},
      {0x3F07F4BE, 0xB107, 0x441A, {0xAF, 0x0F, 0x39, 0xD8, 0x25, 0x29, 0x07, 0x2C}},
-     false},
+     false, -1},
 
-    // [4] Windows 11 (Build 26100+ / 24H2)
+    // [4] Windows 11 (Build 26100+ / 24H2/25H2)
     // IVirtualDesktopManagerInternal: {53F5CA0B-158F-4124-900C-057158060B27}
     // IVirtualDesktop: {3F07F4BE-B107-441A-AF0F-39D82529072C} (same as 22621)
     {{0x53F5CA0B, 0x158F, 0x4124, {0x90, 0x0C, 0x05, 0x71, 0x58, 0x06, 0x0B, 0x27}},
      {0x3F07F4BE, 0xB107, 0x441A, {0xAF, 0x0F, 0x39, 0xD8, 0x25, 0x29, 0x07, 0x2C}},
-     false},
+     false, 22},
+
+    // [5] Windows 11 (Build 22621/22631 from .3085 / current 23H2)
+    // Shares the 24H2 IIDs. The animated switch would be slot 21, but that was
+    // never verified on a real 23H2 machine, so plain SwitchDesktop is used.
+    {{0x53F5CA0B, 0x158F, 0x4124, {0x90, 0x0C, 0x05, 0x71, 0x58, 0x06, 0x0B, 0x27}},
+     {0x3F07F4BE, 0xB107, 0x441A, {0xAF, 0x0F, 0x39, 0xD8, 0x25, 0x29, 0x07, 0x2C}},
+     false, -1},
 };
 
 // Default to Windows 11 24H2 (index 4)
@@ -305,6 +351,9 @@ static IApplicationViewCollection* g_pViewCollection = nullptr;
 static IVirtualDesktopManager* g_pDesktopManager = nullptr;
 static IVirtualDesktopPinnedApps* g_pPinnedApps = nullptr;
 static bool g_bInitialized = false;
+// Incremented whenever the COM objects are dropped, so callers can tell that
+// objects obtained before a reconnect belong to the old Explorer.
+static unsigned g_apiGeneration = 0;
 
 static HANDLE g_hThread = nullptr;
 static std::atomic<HWND> g_hMsgWnd = nullptr;
@@ -318,6 +367,7 @@ static UINT g_moveModifiers = MOD_ALT | MOD_SHIFT;
 static UINT g_switchModifiers = MOD_ALT;
 static UINT g_utilityModifiers = MOD_ALT;
 static bool g_followMovedWindow = false;
+static bool g_animateDesktopSwitch = true;
 static int g_maxDesktops = 9;
 
 static GUID g_previousDesktopId = {};
@@ -329,22 +379,32 @@ static bool g_hasCurrentDesktop = false;
 // HK_MOVE_BASE (1-9): Move window to desktop 1-9
 // HK_SWITCH_BASE (10-18): Switch to desktop 1-9
 // HK_LAST (19): Toggle to last-used desktop
-// HK_PIN (20): Pin/unpin current window
+// HK_PIN (20): Pin/unpin current window (pin only when an unpin key is set)
 // HK_NEXT (21): Switch to next desktop (wrap around)
 // HK_PREV (22): Switch to previous desktop by index (wrap around)
+// HK_MOVE_PREV (23): Move window to previous desktop (wrap around)
+// HK_MOVE_NEXT (24): Move window to next desktop (wrap around)
+// HK_UNPIN (25): Unpin current window
 enum HotkeyIds {
   HK_MOVE_BASE = 1,
   HK_SWITCH_BASE = 10,
   HK_LAST = 19,
   HK_PIN = 20,
   HK_NEXT = 21,
-  HK_PREV = 22
+  HK_PREV = 22,
+  HK_MOVE_PREV = 23,
+  HK_MOVE_NEXT = 24,
+  HK_UNPIN = 25
 };
 
 static UINT g_prevDesktopKey = 'Z';
 static UINT g_nextDesktopKey = 'X';
 static UINT g_lastDesktopKey = 'Q';
 static UINT g_pinKey = 'P';
+static UINT g_unpinKey = 0;
+static bool g_splitPinKeys = false;
+static UINT g_movePrevDesktopKey = 0;
+static UINT g_moveNextDesktopKey = 0;
 
 static bool g_enableSwitchDesktop = true;
 static bool g_enableMoveWindow = true;
@@ -383,6 +443,7 @@ T GetVTableFunction(void* pInterface, int index) {
 }
 
 bool InitializeVirtualDesktopAPI();
+DWORD GetWindowsBuild();
 
 bool UsesHMonitorParameter() { return g_versionIIDs[g_windowsVersionIndex].usesHMonitor; }
 
@@ -450,8 +511,36 @@ T LookupTable(PCWSTR str, const std::pair<PCWSTR, T>* table, size_t count, T def
 
 int ParseWindowsVersion(PCWSTR str) {
   static const std::pair<PCWSTR, int> kVersionMap[] = {
-      {L"win10_old", 0}, {L"win10_20348", 1}, {L"win11_22000", 2}, {L"win11_22621", 3}, {L"win11_26100", 4}};
+      {L"win10_old", 0},       {L"win10_20348", 1},     {L"win11_22000", 2},
+      {L"win11_22621", 3},     {L"win11_22631_3085", 5}, {L"win11_26100", 4}};
   return LookupTable(str, kVersionMap, _countof(kVersionMap), 4);
+}
+
+DWORD GetWindowsUpdateBuildRevision() {
+  DWORD ubr = 0;
+  DWORD size = sizeof(ubr);
+  // Windhawk 1.7.3's tool-mod host is 32-bit, so HKLM\SOFTWARE is redirected
+  // to WOW6432Node by default. Ask for the native 64-bit view first; fall back
+  // to the default view on 32-bit Windows, where the flag is not applicable.
+  LSTATUS status =
+      RegGetValueW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion", L"UBR",
+                   RRF_RT_REG_DWORD | RRF_SUBKEY_WOW6464KEY, nullptr, &ubr, &size);
+  if (status != ERROR_SUCCESS) {
+    size = sizeof(ubr);
+    status = RegGetValueW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion", L"UBR",
+                          RRF_RT_REG_DWORD, nullptr, &ubr, &size);
+  }
+  return status == ERROR_SUCCESS ? ubr : 0;
+}
+
+// Best-effort mapping from the real build to the version entry. The 22621/22631
+// entries are distinguished by the .3085 update, which is the UBR value.
+int GetRecommendedWindowsVersionIndex(DWORD build) {
+  if (build < 20348) return 0;
+  if (build < 22000) return 1;
+  if (build < 22621) return 2;
+  if (build < 26100) return GetWindowsUpdateBuildRevision() >= 3085 ? 5 : 3;
+  return 4;
 }
 UINT ReadModifierSetting(PCWSTR name, UINT defaultVal) {
   std::wstring value = ReadTrimmedStringSetting(name);
@@ -469,6 +558,10 @@ UINT ParseHotkeyKey(PCWSTR str) {
       {L"Tab", VK_TAB},
       {L"Space", VK_SPACE},
       {L"Enter", VK_RETURN},
+      {L"Left", VK_LEFT},
+      {L"Right", VK_RIGHT},
+      {L"Up", VK_UP},
+      {L"Down", VK_DOWN},
   };
   for (const auto& [name, key] : kNamedKeys) {
     if (_wcsicmp(str, name) == 0) return key;
@@ -537,6 +630,19 @@ void LoadSettings() {
   g_windowsVersionIndex = ParseWindowsVersion(version);
   Wh_FreeStringSetting(version);
 
+  DWORD build = GetWindowsBuild();
+  int recommendedVersionIndex = GetRecommendedWindowsVersionIndex(build);
+  Wh_Log(L"LoadSettings: windowsBuild=%lu, selectedVersionIndex=%d, recommendedVersionIndex=%d", build,
+         g_windowsVersionIndex, recommendedVersionIndex);
+  if (build && recommendedVersionIndex != g_windowsVersionIndex) {
+    Wh_Log(L"Windows version setting index %d does not match build %lu; recommended index is %d",
+           g_windowsVersionIndex, build, recommendedVersionIndex);
+  }
+  if (build >= 27000) {
+    Wh_Log(L"Build %lu is newer than the verified 26100-26999 range; the selected interface set may be outdated",
+           build);
+  }
+
   // Modifier keys
   g_moveModifiers = ReadModifierSetting(L"MoveWindowModifier", MOD_ALT | MOD_SHIFT);
   g_switchModifiers = ReadModifierSetting(L"SwitchDesktopModifier", MOD_ALT);
@@ -546,6 +652,10 @@ void LoadSettings() {
          g_moveModifiers, g_switchModifiers, g_utilityModifiers);
 
   g_followMovedWindow = Wh_GetIntSetting(L"FollowMovedWindow") != 0;
+  // New in 2.6.0. A value missing from an older configuration means the
+  // default (on); Wh_GetIntSetting cannot distinguish that from an explicit 0.
+  WindhawkUtils::StringSetting animateSetting(Wh_GetStringSetting(L"AnimateDesktopSwitch"));
+  g_animateDesktopSwitch = !animateSetting.get()[0] || wcscmp(animateSetting, L"0") != 0;
   g_maxDesktops = Wh_GetIntSetting(L"MaxDesktops");
   if (g_maxDesktops < 1 || g_maxDesktops > 9) g_maxDesktops = 9;
 
@@ -555,10 +665,18 @@ void LoadSettings() {
   g_enablePrevNextDesktop = Wh_GetIntSetting(L"EnablePrevNextDesktop") != 0;
   g_enablePinWindow = Wh_GetIntSetting(L"EnablePinWindow") != 0;
   // A blank individual key disables that hotkey without disabling the whole group.
+  g_movePrevDesktopKey = ReadHotkeySetting(L"MovePrevDesktopKey");
+  g_moveNextDesktopKey = ReadHotkeySetting(L"MoveNextDesktopKey");
   g_prevDesktopKey = ReadHotkeySetting(L"PrevDesktopKey");
   g_nextDesktopKey = ReadHotkeySetting(L"NextDesktopKey");
   g_lastDesktopKey = ReadHotkeySetting(L"LastDesktopKey");
   g_pinKey = ReadHotkeySetting(L"PinKey");
+  g_unpinKey = ReadHotkeySetting(L"UnpinKey");
+  // Requested split mode; RegisterHotkeys confirms that the unpin hotkey was
+  // actually registered and falls back to toggle behavior otherwise.
+  g_splitPinKeys = g_unpinKey != 0;
+
+  Wh_Log(L"LoadSettings: animateDesktopSwitch=%d, splitPinKeys=%d", g_animateDesktopSwitch, g_splitPinKeys);
 }
 
 //=============================================================================
@@ -631,6 +749,8 @@ bool ReinitializeVirtualDesktopAPI() {
 }
 
 void CleanupVirtualDesktopAPI() {
+  ++g_apiGeneration;
+
   // Check if Explorer is still running - if not, skip Release calls to avoid hangs
   HWND hShell = GetShellWindow();
   if (!hShell || !IsWindow(hShell)) {
@@ -650,6 +770,25 @@ void CleanupVirtualDesktopAPI() {
   SAFE_RELEASE(g_pDesktopManagerInternal);
   SAFE_RELEASE(g_pServiceProvider);
   g_bInitialized = false;
+}
+
+// The COM proxies point at the old explorer.exe after it restarts.
+bool IsServerGone(HRESULT hr) {
+  return hr == RPC_E_DISCONNECTED || hr == HRESULT_FROM_WIN32(RPC_S_SERVER_UNAVAILABLE) ||
+         hr == HRESULT_FROM_WIN32(RPC_S_CALL_FAILED);
+}
+
+// Direct proxy calls (view collection, pinned apps) do not go through
+// CallManagerInternal, so they reconnect on their own: retry once after the
+// server was gone. Callers must re-check g_pPinnedApps afterwards, since a
+// reconnect replaces it.
+HRESULT GetViewForHwnd(HWND hwnd, IApplicationView** view) {
+  if (!g_pViewCollection) return E_POINTER;
+  HRESULT hr = g_pViewCollection->GetViewForHwnd(hwnd, view);
+  if (IsServerGone(hr) && ReinitializeVirtualDesktopAPI() && g_pViewCollection) {
+    hr = g_pViewCollection->GetViewForHwnd(hwnd, view);
+  }
+  return hr;
 }
 
 // Unified VTable call for methods with optional HMONITOR parameter (varies by Windows version)
@@ -709,6 +848,65 @@ static const int VTABLE_MOVE_VIEW_TO_DESKTOP = 4;
 static const int VTABLE_GET_CURRENT_DESKTOP = 6;
 static const int VTABLE_GET_DESKTOPS = 7;
 static const int VTABLE_SWITCH_DESKTOP = 9;
+static const int VTABLE_SWITCH_DESKTOP_WITH_ANIMATION_24H2 = 22;
+static const int VTABLE_WAIT_FOR_ANIMATION_TO_COMPLETE_24H2 = 24;
+
+// The real Windows build number. RtlGetVersion is not affected by the
+// compatibility manifest.
+DWORD GetWindowsBuild() {
+  using RtlGetVersion_t = LONG(WINAPI*)(PRTL_OSVERSIONINFOW);
+  HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+  auto pRtlGetVersion =
+      ntdll ? reinterpret_cast<RtlGetVersion_t>(GetProcAddress(ntdll, "RtlGetVersion")) : nullptr;
+  RTL_OSVERSIONINFOW info = {sizeof(info)};
+  return pRtlGetVersion && pRtlGetVersion(&info) == 0 ? info.dwBuildNumber : 0;
+}
+
+// Windows "Animation effects" (Settings > Accessibility > Visual effects).
+// This toggle is exposed as SPI_GETCLIENTAREAANIMATION; SPI_GETANIMATION is the
+// separate legacy minimize/restore animation setting.
+bool IsSystemAnimationEnabled() {
+  BOOL enabled = TRUE;
+  if (!SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &enabled, 0)) return true;
+  return enabled != FALSE;
+}
+
+// The animated slot forces a slide even when Windows animations are disabled,
+// so the system setting is checked here as well.
+int GetSwitchDesktopVTableIndex() {
+  if (!g_animateDesktopSwitch) return VTABLE_SWITCH_DESKTOP;
+
+  int index = g_versionIIDs[g_windowsVersionIndex].switchWithAnimationIndex;
+  if (index < 0) return VTABLE_SWITCH_DESKTOP;
+
+  // Slot 22 is only valid on 26100-26999. On other builds it is a different
+  // method, and calling it with these arguments can corrupt memory.
+  if (index == VTABLE_SWITCH_DESKTOP_WITH_ANIMATION_24H2) {
+    DWORD build = GetWindowsBuild();
+    if (build < 26100 || build >= 27000) {
+      Wh_Log(L"Animated switch slot is for build 26100-26999 but this is %lu; using plain switch", build);
+      return VTABLE_SWITCH_DESKTOP;
+    }
+  }
+
+  if (!IsSystemAnimationEnabled()) return VTABLE_SWITCH_DESKTOP;
+
+  return index;
+}
+
+// SwitchDesktopWithAnimation returns before the slide finishes. Waiting here
+// keeps focus changes and desktop tracking out of the transition, which would
+// otherwise cut the animation short or record the old desktop as current.
+void WaitForSwitchAnimationToComplete() {
+  if (!g_pDesktopManagerInternal) return;
+
+  auto pfn = GetVTableFunction<HRESULT(STDMETHODCALLTYPE*)(void*)>(
+      g_pDesktopManagerInternal, VTABLE_WAIT_FOR_ANIMATION_TO_COMPLETE_24H2);
+  HRESULT hr = pfn(g_pDesktopManagerInternal);
+  if (FAILED(hr)) {
+    Wh_Log(L"WaitForAnimationToComplete failed: 0x%08X", hr);
+  }
+}
 
 IObjectArray* GetDesktops() {
   if (!g_pDesktopManagerInternal) return nullptr;
@@ -748,13 +946,7 @@ bool GetCurrentDesktopId(GUID* outGuid) {
   return SUCCEEDED(hr);
 }
 
-int GetDesktopIndexById(const GUID& desktopId) {
-  IObjectArray* desktops = GetDesktops();
-  if (!desktops) return -1;
-
-  UINT count = 0;
-  desktops->GetCount(&count);
-
+int FindDesktopIndexInArray(IObjectArray* desktops, UINT count, const GUID& desktopId) {
   for (UINT i = 0; i < count; ++i) {
     IVirtualDesktop* desktop = nullptr;
     if (SUCCEEDED(desktops->GetAt(i, g_versionIIDs[g_windowsVersionIndex].virtualDesktop, (void**)&desktop)) &&
@@ -762,33 +954,85 @@ int GetDesktopIndexById(const GUID& desktopId) {
       GUID guid;
       bool match = SUCCEEDED(desktop->GetId(&guid)) && IsEqualGUID(guid, desktopId);
       desktop->Release();
-      if (match) {
-        desktops->Release();
-        return i;
-      }
+      if (match) return static_cast<int>(i);
     }
   }
-  desktops->Release();
   return -1;
+}
+
+int GetDesktopIndexById(const GUID& desktopId) {
+  IObjectArray* desktops = GetDesktops();
+  if (!desktops) return -1;
+
+  UINT count = 0;
+  desktops->GetCount(&count);
+  int index = FindDesktopIndexInArray(desktops, count, desktopId);
+  desktops->Release();
+  return index;
+}
+
+// Pure index math for previous/next navigation. Returns the desktop index
+// |direction| steps from |currentIndex|, cycling within |cycleCount|. When the
+// current desktop is beyond that range, "next" goes to the first desktop and
+// "previous" to the last one in the range.
+int ComputeAdjacentDesktopIndex(int currentIndex, int cycleCount, int direction) {
+  if (currentIndex < 0 || cycleCount <= 0 || direction == 0) return -1;
+  if (currentIndex >= cycleCount) {
+    return direction > 0 ? 0 : cycleCount - 1;
+  }
+  return (currentIndex + direction + cycleCount) % cycleCount;
+}
+
+// Index of the desktop |direction| steps from the current one, cycling within
+// Maximum Desktops. The number of desktops in the cycle is returned through
+// |cycleCountOut|.
+int GetAdjacentDesktopIndex(int direction, int* cycleCountOut = nullptr) {
+  if (cycleCountOut) *cycleCountOut = 0;
+  if (direction == 0) return -1;
+
+  GUID currentDesktopId = {};
+  if (!GetCurrentDesktopId(&currentDesktopId)) return -1;
+
+  IObjectArray* desktops = GetDesktops();
+  if (!desktops) return -1;
+
+  UINT desktopCount = 0;
+  desktops->GetCount(&desktopCount);
+  int currentIndex = FindDesktopIndexInArray(desktops, desktopCount, currentDesktopId);
+  desktops->Release();
+
+  int cycleCount = static_cast<int>(desktopCount);
+  if (cycleCount > g_maxDesktops) cycleCount = g_maxDesktops;
+  if (cycleCountOut) *cycleCountOut = cycleCount;
+
+  return ComputeAdjacentDesktopIndex(currentIndex, cycleCount, direction);
 }
 
 bool SwitchToDesktop(IVirtualDesktop* desktop) {
   if (!g_pDesktopManagerInternal || !desktop) return false;
 
-  HRESULT hr = CallManagerInternalWithArg(VTABLE_SWITCH_DESKTOP, desktop);
-  if (FAILED(hr)) Wh_Log(L"SwitchToDesktop failed: 0x%08X", hr);
-  return SUCCEEDED(hr);
+  int switchIndex = GetSwitchDesktopVTableIndex();
+  HRESULT hr = CallManagerInternalWithArg(switchIndex, desktop);
+  if (FAILED(hr)) {
+    Wh_Log(L"SwitchToDesktop failed: 0x%08X", hr);
+    return false;
+  }
+
+  if (switchIndex == VTABLE_SWITCH_DESKTOP_WITH_ANIMATION_24H2) {
+    WaitForSwitchAnimationToComplete();
+  }
+  return true;
 }
 
-bool MoveViewToDesktop(IApplicationView* view, IVirtualDesktop* desktop) {
-  if (!g_pDesktopManagerInternal || !view || !desktop) return false;
+HRESULT MoveViewToDesktop(IApplicationView* view, IVirtualDesktop* desktop) {
+  if (!g_pDesktopManagerInternal || !view || !desktop) return E_POINTER;
 
   auto pfn = GetVTableFunction<HRESULT(STDMETHODCALLTYPE*)(void*, IApplicationView*, IVirtualDesktop*)>(
       g_pDesktopManagerInternal, VTABLE_MOVE_VIEW_TO_DESKTOP);
   HRESULT hr = pfn(g_pDesktopManagerInternal, view, desktop);
 
   if (FAILED(hr)) Wh_Log(L"MoveViewToDesktop failed: 0x%08X", hr);
-  return SUCCEEDED(hr);
+  return hr;
 }
 
 // Check if a window is eligible for virtual desktop operations
@@ -806,17 +1050,25 @@ bool TryGetWindowDesktopId(HWND hwnd, GUID* outDesktopId) {
 }
 
 bool IsWindowPinned(HWND hwnd) {
-  if (!hwnd || !g_pViewCollection || !g_pPinnedApps) return false;
+  if (!hwnd) return false;
 
-  IApplicationView* view = nullptr;
-  if (FAILED(g_pViewCollection->GetViewForHwnd(hwnd, &view)) || !view) {
-    return false;
+  for (int attempt = 0; attempt < 2; ++attempt) {
+    if (!g_pViewCollection || !g_pPinnedApps) return false;
+
+    IApplicationView* view = nullptr;
+    if (FAILED(GetViewForHwnd(hwnd, &view)) || !view) return false;
+    if (!g_pPinnedApps) {  // GetViewForHwnd reconnected and the pin service is gone
+      view->Release();
+      return false;
+    }
+
+    BOOL isPinned = FALSE;
+    HRESULT hr = g_pPinnedApps->IsViewPinned(view, &isPinned);
+    view->Release();
+    if (SUCCEEDED(hr)) return isPinned != FALSE;
+    if (!IsServerGone(hr) || !ReinitializeVirtualDesktopAPI()) return false;
   }
-
-  BOOL isPinned = FALSE;
-  HRESULT hr = g_pPinnedApps->IsViewPinned(view, &isPinned);
-  view->Release();
-  return SUCCEEDED(hr) && isPinned;
+  return false;
 }
 
 // Find the topmost window on a specific virtual desktop
@@ -960,13 +1212,11 @@ bool GoToDesktopNum(int desktopNum, HWND preferredFocusHwnd = nullptr) {
   // Find window to focus on target desktop
   HWND windowToFocus = nullptr;
   if (hasTargetId) {
-    // If requested, prefer focusing a specific window (e.g. the one that was just moved).
-    if (preferredFocusHwnd && IsEligibleWindow(preferredFocusHwnd) && g_pDesktopManager) {
-      GUID preferredDesktopId;
-      if (SUCCEEDED(g_pDesktopManager->GetWindowDesktopId(preferredFocusHwnd, &preferredDesktopId)) &&
-          IsEqualGUID(preferredDesktopId, targetDesktopId)) {
-        windowToFocus = preferredFocusHwnd;
-      }
+    // If requested, prefer focusing a specific window (e.g. the one that was
+    // just moved). The shell may not have updated its desktop ID yet, so trust
+    // the caller instead of re-querying it here.
+    if (preferredFocusHwnd && IsEligibleWindow(preferredFocusHwnd)) {
+      windowToFocus = preferredFocusHwnd;
     }
 
     if (!windowToFocus) {
@@ -1059,37 +1309,15 @@ bool SwitchToPreviousDesktop() {
     return false;
   }
 
-  GUID currentDesktopId = {};
-  if (!GetCurrentDesktopId(&currentDesktopId)) {
-    Wh_Log(L"SwitchToPreviousDesktop: Failed to get current desktop ID");
+  int cycleCount = 0;
+  int prevIndex = GetAdjacentDesktopIndex(-1, &cycleCount);
+  if (prevIndex < 0) {
+    Wh_Log(L"SwitchToPreviousDesktop: Could not determine the previous desktop");
     return false;
   }
 
-  int currentIndex = GetDesktopIndexById(currentDesktopId);
-  if (currentIndex < 0) {
-    Wh_Log(L"SwitchToPreviousDesktop: Invalid current index");
-    return false;
-  }
-
-  IObjectArray* desktops = GetDesktops();
-  if (!desktops) {
-    Wh_Log(L"SwitchToPreviousDesktop: Failed to get desktops");
-    return false;
-  }
-
-  UINT desktopCount = 0;
-  desktops->GetCount(&desktopCount);
-  desktops->Release();
-
-  Wh_Log(L"SwitchToPreviousDesktop: currentIndex=%d, desktopCount=%u, maxDesktops=%d", currentIndex,
-         desktopCount, g_maxDesktops);
-
-  int cycleCount = (int)desktopCount;
-  if (cycleCount > g_maxDesktops) cycleCount = g_maxDesktops;
-  if (cycleCount <= 0) return false;
-
-  int prevIndex = (currentIndex - 1 + cycleCount) % cycleCount;
-  Wh_Log(L"SwitchToPreviousDesktop: Switching to desktop %d", prevIndex + 1);
+  Wh_Log(L"SwitchToPreviousDesktop: Switching to desktop %d (cycleCount=%d, maxDesktops=%d)", prevIndex + 1,
+         cycleCount, g_maxDesktops);
   return GoToDesktopNum(prevIndex + 1);
 }
 
@@ -1100,100 +1328,162 @@ bool SwitchToNextDesktop() {
     return false;
   }
 
-  GUID currentDesktopId = {};
-  if (!GetCurrentDesktopId(&currentDesktopId)) {
-    Wh_Log(L"SwitchToNextDesktop: Failed to get current desktop ID");
+  int cycleCount = 0;
+  int nextIndex = GetAdjacentDesktopIndex(1, &cycleCount);
+  if (nextIndex < 0) {
+    Wh_Log(L"SwitchToNextDesktop: Could not determine the next desktop");
     return false;
   }
 
-  int currentIndex = GetDesktopIndexById(currentDesktopId);
-  if (currentIndex < 0) {
-    Wh_Log(L"SwitchToNextDesktop: Invalid current index");
-    return false;
-  }
-
-  IObjectArray* desktops = GetDesktops();
-  if (!desktops) {
-    Wh_Log(L"SwitchToNextDesktop: Failed to get desktops");
-    return false;
-  }
-
-  UINT desktopCount = 0;
-  desktops->GetCount(&desktopCount);
-  desktops->Release();
-
-  Wh_Log(L"SwitchToNextDesktop: currentIndex=%d, desktopCount=%u, maxDesktops=%d", currentIndex, desktopCount,
-         g_maxDesktops);
-
-  int cycleCount = (int)desktopCount;
-  if (cycleCount > g_maxDesktops) cycleCount = g_maxDesktops;
-  if (cycleCount <= 0) return false;
-
-  int nextIndex = (currentIndex + 1) % cycleCount;
-  Wh_Log(L"SwitchToNextDesktop: Switching to desktop %d", nextIndex + 1);
+  Wh_Log(L"SwitchToNextDesktop: Switching to desktop %d (cycleCount=%d, maxDesktops=%d)", nextIndex + 1,
+         cycleCount, g_maxDesktops);
   return GoToDesktopNum(nextIndex + 1);
 }
 
-bool MoveActiveWindowToDesktopNum(int desktopNum) {
+// Moves |hwnd| to the desktop at |desktopIndex|, reconnecting once if Explorer
+// restarted in the middle of the operation.
+bool MoveWindowToDesktopIndex(HWND hwnd, int desktopIndex) {
+  if (!InitializeVirtualDesktopAPI() || !hwnd || desktopIndex < 0) return false;
+
+  for (int attempt = 0; attempt < 2; ++attempt) {
+    unsigned generation = g_apiGeneration;
+
+    IVirtualDesktop* targetDesktop = GetDesktopByIndex(desktopIndex);
+    if (!targetDesktop) {
+      Wh_Log(L"Target desktop index %d not found", desktopIndex);
+      return false;
+    }
+
+    IApplicationView* view = nullptr;
+    HRESULT hr = GetViewForHwnd(hwnd, &view);
+
+    // Either getter may have reconnected to a restarted Explorer and replaced
+    // the manager. In that case the other object belongs to the old server, so
+    // drop both and retry with a consistent pair.
+    if (g_apiGeneration != generation) {
+      SAFE_RELEASE(view);
+      targetDesktop->Release();
+      if (attempt == 0) continue;
+      return false;
+    }
+
+    bool moved = false;
+    if (SUCCEEDED(hr) && view) {
+      hr = MoveViewToDesktop(view, targetDesktop);
+      moved = SUCCEEDED(hr);
+    }
+
+    SAFE_RELEASE(view);
+    targetDesktop->Release();
+
+    if (moved) return true;
+    if (!IsServerGone(hr) || !ReinitializeVirtualDesktopAPI()) return false;
+  }
+  return false;
+}
+
+bool MoveActiveWindowToDesktopNum(int desktopNum, HWND hwnd = nullptr) {
   if (!InitializeVirtualDesktopAPI()) return false;
 
-  HWND hwnd = GetForegroundWindow();
+  if (!hwnd) hwnd = GetForegroundWindow();
   if (!hwnd) {
     Wh_Log(L"No active window to move");
     return false;
   }
 
-  IVirtualDesktop* targetDesktop = GetDesktopByIndex(desktopNum - 1);
-  if (!targetDesktop) {
-    Wh_Log(L"Target desktop %d not found", desktopNum);
+  if (!MoveWindowToDesktopIndex(hwnd, desktopNum - 1)) return false;
+
+  RaiseWindowToFrontOfNormalBand(hwnd);
+  Wh_Log(L"Moved window to desktop %d", desktopNum);
+  return true;
+}
+
+// Move the active window to the previous (direction = -1) or next (+1) desktop,
+// cycling within Maximum Desktops. |targetDesktopNumOut| receives the 1-based
+// target desktop number on success so the caller can apply Follow Moved Window.
+bool MoveActiveWindowByOffset(int direction, int* targetDesktopNumOut = nullptr, HWND hwnd = nullptr) {
+  if (targetDesktopNumOut) *targetDesktopNumOut = 0;
+  if (!InitializeVirtualDesktopAPI()) return false;
+
+  if (!hwnd) hwnd = GetForegroundWindow();
+  if (!hwnd) {
+    Wh_Log(L"No active window to move");
     return false;
   }
 
-  IApplicationView* view = nullptr;
-  g_pViewCollection->GetViewForHwnd(hwnd, &view);
-
-  bool success = view && MoveViewToDesktop(view, targetDesktop);
-
-  SAFE_RELEASE(view);
-  targetDesktop->Release();
-
-  if (success) {
-    RaiseWindowToFrontOfNormalBand(hwnd);
-    Wh_Log(L"Moved window to desktop %d", desktopNum);
+  int cycleCount = 0;
+  int targetIndex = GetAdjacentDesktopIndex(direction, &cycleCount);
+  if (targetIndex < 0) {
+    Wh_Log(L"Could not determine the target desktop");
+    return false;
   }
-  return success;
+  if (cycleCount < 2) {
+    Wh_Log(L"Not enough desktops to move the window");
+    return false;
+  }
+
+  if (!MoveWindowToDesktopIndex(hwnd, targetIndex)) {
+    Wh_Log(L"Could not move the active window");
+    return false;
+  }
+
+  RaiseWindowToFrontOfNormalBand(hwnd);
+  Wh_Log(L"Moved window to desktop %d (cycleCount=%d, maxDesktops=%d)", targetIndex + 1, cycleCount,
+         g_maxDesktops);
+
+  if (targetDesktopNumOut) *targetDesktopNumOut = targetIndex + 1;
+  return true;
 }
 
-bool TogglePinWindow() {
+// pinState: 1 = pin, 0 = unpin, -1 = toggle. The optional hwnd is used by the
+// test harness; mod callers leave it null to act on the foreground window.
+bool SetActiveWindowPinned(int pinState, HWND hwnd = nullptr) {
   if (!InitializeVirtualDesktopAPI() || !g_pPinnedApps) {
     Wh_Log(L"Pin feature not available");
     return false;
   }
 
-  HWND hwnd = GetForegroundWindow();
+  if (!hwnd) hwnd = GetForegroundWindow();
   if (!hwnd) {
     Wh_Log(L"No active window to pin/unpin");
     return false;
   }
 
-  IApplicationView* view = nullptr;
-  if (FAILED(g_pViewCollection->GetViewForHwnd(hwnd, &view)) || !view) {
-    Wh_Log(L"Failed to get view for window");
+  HRESULT hr = E_FAIL;
+  bool finalPinned = false;
+  for (int attempt = 0; attempt < 2; ++attempt) {
+    IApplicationView* view = nullptr;
+    if (FAILED(GetViewForHwnd(hwnd, &view)) || !view) {
+      Wh_Log(L"Failed to get view for window");
+      return false;
+    }
+    if (!g_pPinnedApps) {  // GetViewForHwnd reconnected and the pin service is gone
+      view->Release();
+      Wh_Log(L"Pin feature not available");
+      return false;
+    }
+
+    BOOL isPinned = FALSE;
+    hr = g_pPinnedApps->IsViewPinned(view, &isPinned);
+    if (SUCCEEDED(hr)) {
+      bool wantPinned = pinState < 0 ? isPinned == FALSE : pinState > 0;
+      if ((isPinned != FALSE) != wantPinned) {
+        hr = wantPinned ? g_pPinnedApps->PinView(view) : g_pPinnedApps->UnpinView(view);
+      }
+      finalPinned = wantPinned;
+    }
+    view->Release();
+
+    if (!IsServerGone(hr) || !ReinitializeVirtualDesktopAPI()) break;
+  }
+
+  if (FAILED(hr)) {
+    Wh_Log(L"Failed to pin/unpin window: 0x%08X", hr);
     return false;
   }
 
-  BOOL isPinned = FALSE;
-  g_pPinnedApps->IsViewPinned(view, &isPinned);
-
-  HRESULT hr = isPinned ? g_pPinnedApps->UnpinView(view) : g_pPinnedApps->PinView(view);
-  view->Release();
-
-  if (SUCCEEDED(hr)) {
-    Wh_Log(L"Window %s", isPinned ? L"unpinned" : L"pinned");
-  } else {
-    Wh_Log(L"Failed to %s window: 0x%08X", isPinned ? L"unpin" : L"pin", hr);
-  }
-  return SUCCEEDED(hr);
+  Wh_Log(L"Window %s", finalPinned ? L"pinned" : L"unpinned");
+  return true;
 }
 
 
@@ -1207,6 +1497,22 @@ void RegisterHotkeys(HWND hwnd) {
       BOOL ok = RegisterHotKey(hwnd, HK_MOVE_BASE + i - 1, g_moveModifiers | MOD_NOREPEAT, '0' + i);
       Wh_Log(L"RegisterHotKey MOVE_%d: modifiers=0x%X, vk=0x%X, result=%d, error=%lu",
              i, g_moveModifiers, '0' + i, ok, ok ? 0 : GetLastError());
+    }
+
+    if (g_movePrevDesktopKey) {
+      BOOL ok = RegisterHotKey(hwnd, HK_MOVE_PREV, g_moveModifiers | MOD_NOREPEAT, g_movePrevDesktopKey);
+      Wh_Log(L"RegisterHotKey MOVE_PREV: modifiers=0x%X, vk=0x%X, result=%d, error=%lu",
+             g_moveModifiers, g_movePrevDesktopKey, ok, ok ? 0 : GetLastError());
+    } else {
+      Wh_Log(L"RegisterHotKey MOVE_PREV: disabled by blank key setting");
+    }
+
+    if (g_moveNextDesktopKey) {
+      BOOL ok = RegisterHotKey(hwnd, HK_MOVE_NEXT, g_moveModifiers | MOD_NOREPEAT, g_moveNextDesktopKey);
+      Wh_Log(L"RegisterHotKey MOVE_NEXT: modifiers=0x%X, vk=0x%X, result=%d, error=%lu",
+             g_moveModifiers, g_moveNextDesktopKey, ok, ok ? 0 : GetLastError());
+    } else {
+      Wh_Log(L"RegisterHotKey MOVE_NEXT: disabled by blank key setting");
     }
   }
 
@@ -1252,6 +1558,21 @@ void RegisterHotkeys(HWND hwnd) {
     } else {
       Wh_Log(L"RegisterHotKey PIN: disabled by blank key setting");
     }
+
+    // Only split pin/unpin when the unpin hotkey is actually registered. If it
+    // is blank, or registration fails (same key as pin, or the combination is
+    // taken by another program), keep the pin key as a toggle so windows can
+    // still be unpinned.
+    g_splitPinKeys = false;
+    if (g_unpinKey) {
+      BOOL ok = RegisterHotKey(hwnd, HK_UNPIN, g_utilityModifiers | MOD_NOREPEAT, g_unpinKey);
+      Wh_Log(L"RegisterHotKey UNPIN: modifiers=0x%X, vk=0x%X, result=%d, error=%lu",
+             g_utilityModifiers, g_unpinKey, ok, ok ? 0 : GetLastError());
+      g_splitPinKeys = ok != FALSE;
+      if (!ok) {
+        Wh_Log(L"RegisterHotKey UNPIN failed; PIN keeps toggle behavior");
+      }
+    }
   }
 }
 
@@ -1264,6 +1585,9 @@ void UnregisterHotkeys(HWND hwnd) {
   UnregisterHotKey(hwnd, HK_NEXT);
   UnregisterHotKey(hwnd, HK_LAST);
   UnregisterHotKey(hwnd, HK_PIN);
+  UnregisterHotKey(hwnd, HK_UNPIN);
+  UnregisterHotKey(hwnd, HK_MOVE_PREV);
+  UnregisterHotKey(hwnd, HK_MOVE_NEXT);
 }
 
 void HandleHotkey(UINT hotkeyId) {
@@ -1275,12 +1599,19 @@ void HandleHotkey(UINT hotkeyId) {
   if (hotkeyId >= HK_MOVE_BASE && hotkeyId < HK_MOVE_BASE + 9) {
     int desktopNum = hotkeyId - HK_MOVE_BASE + 1;
     HWND movedHwnd = GetForegroundWindow();
-    bool moved = MoveActiveWindowToDesktopNum(desktopNum);
+    bool moved = MoveActiveWindowToDesktopNum(desktopNum, movedHwnd);
     if (moved && g_followMovedWindow) {
       GoToDesktopNum(desktopNum, movedHwnd);
     }
   } else if (hotkeyId >= HK_SWITCH_BASE && hotkeyId < HK_SWITCH_BASE + 9) {
     GoToDesktopNum(hotkeyId - HK_SWITCH_BASE + 1);
+  } else if (hotkeyId == HK_MOVE_PREV || hotkeyId == HK_MOVE_NEXT) {
+    HWND movedHwnd = GetForegroundWindow();
+    int targetDesktopNum = 0;
+    bool moved = MoveActiveWindowByOffset(hotkeyId == HK_MOVE_PREV ? -1 : 1, &targetDesktopNum, movedHwnd);
+    if (moved && g_followMovedWindow && targetDesktopNum > 0) {
+      GoToDesktopNum(targetDesktopNum, movedHwnd);
+    }
   } else if (hotkeyId == HK_PREV) {
     SwitchToPreviousDesktop();
   } else if (hotkeyId == HK_NEXT) {
@@ -1288,7 +1619,9 @@ void HandleHotkey(UINT hotkeyId) {
   } else if (hotkeyId == HK_LAST) {
     SwitchToLastDesktop();
   } else if (hotkeyId == HK_PIN) {
-    TogglePinWindow();
+    SetActiveWindowPinned(g_splitPinKeys ? 1 : -1);
+  } else if (hotkeyId == HK_UNPIN) {
+    SetActiveWindowPinned(0);
   }
 }
 

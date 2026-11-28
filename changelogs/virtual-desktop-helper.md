@@ -1,3 +1,12 @@
+## 2.6.0 ([Nov 28, 2026](https://github.com/ramensoftware/windhawk-mods/blob/83e88597e526b16fe12f18d0b553726550070ad1/mods/virtual-desktop-helper.wh.cpp))
+
+* **Move window to previous/next desktop:** new hotkeys with wrap-around, sharing the Move Window modifier and the Maximum Desktops limit. If the current desktop is beyond that limit, Next goes to desktop 1 and Previous goes to the last desktop in range. Follow Moved Window is respected; the keys are unassigned by default.
+* **Separate pin/unpin:** new optional Unpin key. When set, Pin only pins and Unpin only unpins; when blank, Pin keeps the existing toggle behavior. If the unpin hotkey cannot be registered, Pin keeps toggling.
+* **Explorer restart recovery:** pin and move operations reconnect to the shell after Explorer restarts.
+* **Windows 11 23H2 .3085+ support:** added the new interface entry; desktop switching stays instant on this build.
+* **Desktop switch animation:** new "Animate Desktop Switch" setting (on by default) for Windows 11 24H2/25H2, ignored when Windows animation effects are off. Focus and tracking are restored after the slide finishes.
+* **Windows version check:** the mod logs a warning when the selected version entry does not match the detected build.
+
 ## 2.5.0 ([Sep 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/dc9cd28419f63d2d86396bcb845cf8e307186d5e/mods/virtual-desktop-helper.wh.cpp))
 
 * Per-key disable: Leaving PrevDesktopKey, NextDesktopKey, LastDesktopKey, or PinKey blank now disables only that hotkey instead of falling back to the default key. Invalid key values are logged and disabled.

@@ -1,3 +1,8 @@
+## 2.1.16 ([Nov 28, 2026](https://github.com/ramensoftware/windhawk-mods/blob/3c8f043569ef635470b94b8c7be3ea34b767d6f1/mods/floating-taskbar.wh.cpp))
+
+* Fix partial or clipped taskbar rendering after restarting Windows Explorer by synchronizing click-through regions after XAML layout and handling initial bottom-anchored taskbar sizing.
+* Fix taskbar area height adjustments not taking effect by restoring the taskbar window height when Explorer recalculates the taskbar frame height, and by re-running height calibration while the taskbar window or its XAML island is still shorter than the configured height.
+
 ## 2.1.15 ([Nov 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/cb956cc0a64236fa2498a8ea08c095855b986434/mods/floating-taskbar.wh.cpp))
 
 - Pass a valid timer handle to `CreateTimerQueueTimer` during the initial taskbar layout calibration.
