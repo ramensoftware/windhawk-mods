@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              taskbar-left-click-cycle
 // @name            Cycle through taskbar windows on click
-// @description     Makes clicking on combined taskbar items cycle through windows instead of opening thumbnail previews
-// @version         1.1.4
+// @description     Makes clicking on combined taskbar items cycle through windows instead of opening thumbnail previews, and double-clicking minimizes all windows of the app
+// @version         1.2.0
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -28,6 +28,8 @@ Makes clicking on combined taskbar items cycle through windows instead of
 opening thumbnail previews. It's still possible to open thumbnail previews by
 holding the Ctrl key while clicking.
 
+Double-clicking a combined taskbar group minimizes all of its windows.
+
 In addition, makes Win+# hotkeys (Win+1, Win+2, etc.) cycle through taskbar
 windows.
 
@@ -48,6 +50,15 @@ or a similar tool), enable the relevant option in the mod's settings.
   $description: >-
     Enable this option to customize the old taskbar on Windows 11 (if using
     ExplorerPatcher or a similar tool).
+- doubleClickMinimize: true
+  $name: Double-click to minimize all windows
+  $description: >-
+    Double-clicking a combined taskbar group minimizes all of its windows.
+- doubleClickTime: 0
+  $name: Double-click time (ms)
+  $description: >-
+    Maximum time in milliseconds between two clicks to count as a double-click.
+    Set to 0 to use the Windows system double-click time (usually 500 ms).
 */
 // ==/WindhawkModSettings==
 
@@ -59,6 +70,8 @@ or a similar tool), enable the relevant option in the mod's settings.
 
 struct {
     bool oldTaskbarOnWin11;
+    bool doubleClickMinimize;
+    int doubleClickTime;
 } g_settings;
 
 enum class WinVersion {
@@ -77,6 +90,10 @@ std::atomic<bool> g_explorerPatcherInitialized;
 bool g_shouldCycleWindowsHandled;
 bool g_inHandleWinNumHotKey;
 
+// Double-click tracking for the minimize-all feature.
+PVOID g_lastClickedGroup;
+ULONGLONG g_lastClickTime;
+
 using ShouldCycleWindows_t = bool(WINAPI*)();
 ShouldCycleWindows_t ShouldCycleWindows_Original;
 bool WINAPI ShouldCycleWindows_Hook() {
@@ -89,6 +106,51 @@ bool WINAPI ShouldCycleWindows_Hook() {
 
 using CTaskBtnGroup_GetGroupType_t = int(WINAPI*)(PVOID pThis);
 CTaskBtnGroup_GetGroupType_t CTaskBtnGroup_GetGroupType_Original;
+
+// Used for the double-click minimize feature.
+using CTaskBtnGroup_GetNumItems_t = int(WINAPI*)(PVOID pThis);
+CTaskBtnGroup_GetNumItems_t CTaskBtnGroup_GetNumItems_Original;
+
+using CTaskBtnGroup_GetTaskItem_t = void*(WINAPI*)(PVOID pThis, int index);
+CTaskBtnGroup_GetTaskItem_t CTaskBtnGroup_GetTaskItem_Original;
+
+using CWindowTaskItem_GetWindow_t = HWND(WINAPI*)(PVOID pThis);
+CWindowTaskItem_GetWindow_t CWindowTaskItem_GetWindow_Original;
+
+using CImmersiveTaskItem_GetWindow_t = HWND(WINAPI*)(PVOID pThis);
+CImmersiveTaskItem_GetWindow_t CImmersiveTaskItem_GetWindow_Original;
+
+void* CImmersiveTaskItem_vftable;
+
+// Returns the HWND for a task item, handling both regular and immersive (UWP)
+// window types.
+HWND GetTaskItemHwnd(void* taskItem) {
+    if (!taskItem) {
+        return nullptr;
+    }
+    if (CImmersiveTaskItem_vftable && CImmersiveTaskItem_GetWindow_Original &&
+        *(void**)taskItem == CImmersiveTaskItem_vftable) {
+        return CImmersiveTaskItem_GetWindow_Original(taskItem);
+    }
+    return CWindowTaskItem_GetWindow_Original
+               ? CWindowTaskItem_GetWindow_Original(taskItem)
+               : nullptr;
+}
+
+// Minimizes every non-minimized window belonging to a combined taskbar group.
+void MinimizeAllGroupWindows(PVOID taskBtnGroup) {
+    if (!CTaskBtnGroup_GetNumItems_Original || !CTaskBtnGroup_GetTaskItem_Original) {
+        return;
+    }
+    int count = CTaskBtnGroup_GetNumItems_Original(taskBtnGroup);
+    for (int i = 0; i < count; i++) {
+        void* taskItem = CTaskBtnGroup_GetTaskItem_Original(taskBtnGroup, i);
+        HWND hwnd = GetTaskItemHwnd(taskItem);
+        if (hwnd && IsWindowVisible(hwnd) && !IsIconic(hwnd)) {
+            ShowWindow(hwnd, SW_MINIMIZE);
+        }
+    }
+}
 
 using CTaskListWnd__HandleClick_t = void(WINAPI*)(PVOID pThis,
                                                   PVOID taskBtnGroup,
@@ -124,6 +186,26 @@ void WINAPI CTaskListWnd__HandleClick_Hook(PVOID pThis,
     constexpr int kForward = 1;
     constexpr int kBack = 2;
     constexpr int kCtrlClick = 4;
+
+    // Double-click on a combined group: minimize all its windows.
+    if (g_settings.doubleClickMinimize && !g_inHandleWinNumHotKey &&
+        clickAction == kClick) {
+        ULONGLONG now = GetTickCount64();
+        // Use the user-configured threshold, or fall back to the system value.
+        UINT threshold = g_settings.doubleClickTime > 0
+                             ? (UINT)g_settings.doubleClickTime
+                             : GetDoubleClickTime();
+        bool isDoubleClick = (taskBtnGroup == g_lastClickedGroup) &&
+                             (now - g_lastClickTime <= threshold);
+        // Reset after double-click so a triple-click doesn't trigger again.
+        g_lastClickedGroup = isDoubleClick ? nullptr : taskBtnGroup;
+        g_lastClickTime = isDoubleClick ? 0 : now;
+        if (isDoubleClick) {
+            Wh_Log(L"Double-click: minimizing all group windows");
+            MinimizeAllGroupWindows(taskBtnGroup);
+            return;
+        }
+    }
 
     int newClickAction = clickAction;
     if (g_inHandleWinNumHotKey) {
@@ -236,6 +318,37 @@ bool HookTaskbarSymbols() {
             &CTaskListWnd_HandleWinNumHotKey_Original,
             CTaskListWnd_HandleWinNumHotKey_Hook,
         },
+        // Optional symbols used for the double-click minimize feature.
+        {
+            {LR"(public: virtual int __cdecl CTaskBtnGroup::GetNumItems(void))"},
+            &CTaskBtnGroup_GetNumItems_Original,
+            nullptr,
+            true,
+        },
+        {
+            {LR"(public: virtual struct ITaskItem * __cdecl CTaskBtnGroup::GetTaskItem(int))"},
+            &CTaskBtnGroup_GetTaskItem_Original,
+            nullptr,
+            true,
+        },
+        {
+            {LR"(public: virtual struct HWND__ * __cdecl CWindowTaskItem::GetWindow(void))"},
+            &CWindowTaskItem_GetWindow_Original,
+            nullptr,
+            true,
+        },
+        {
+            {LR"(public: virtual struct HWND__ * __cdecl CImmersiveTaskItem::GetWindow(void))"},
+            &CImmersiveTaskItem_GetWindow_Original,
+            nullptr,
+            true,
+        },
+        {
+            {LR"(const CImmersiveTaskItem::`vftable'{for `ITaskItem'})"},
+            &CImmersiveTaskItem_vftable,
+            nullptr,
+            true,
+        },
     };
 
     if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
@@ -336,6 +449,17 @@ bool HookExplorerPatcherSymbols(HMODULE explorerPatcherModule) {
         {R"(?HandleWinNumHotKey@CTaskListWnd@@UEAAJFG@Z)",
          &CTaskListWnd_HandleWinNumHotKey_Original,
          CTaskListWnd_HandleWinNumHotKey_Hook},
+        // Optional symbols used for the double-click minimize feature.
+        {R"(?GetNumItems@CTaskBtnGroup@@UEAAHXZ)",
+         &CTaskBtnGroup_GetNumItems_Original, nullptr, true},
+        {R"(?GetTaskItem@CTaskBtnGroup@@UEAAPEAUITaskItem@@H@Z)",
+         &CTaskBtnGroup_GetTaskItem_Original, nullptr, true},
+        {R"(?GetWindow@CWindowTaskItem@@UEAAPEAUHWND__@@XZ)",
+         &CWindowTaskItem_GetWindow_Original, nullptr, true},
+        {R"(?GetWindow@CImmersiveTaskItem@@UEAAPEAUHWND__@@XZ)",
+         &CImmersiveTaskItem_GetWindow_Original, nullptr, true},
+        {R"(??_7CImmersiveTaskItem@@6BITaskItem@@@)",
+         &CImmersiveTaskItem_vftable, nullptr, true},
     };
 
     bool succeeded = true;
@@ -431,6 +555,8 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 
 void LoadSettings() {
     g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
+    g_settings.doubleClickMinimize = Wh_GetIntSetting(L"doubleClickMinimize");
+    g_settings.doubleClickTime = Wh_GetIntSetting(L"doubleClickTime");
 }
 
 BOOL Wh_ModInit() {
