@@ -362,6 +362,14 @@ constexpr bool IsFullStyle(int style) {
 std::atomic<bool> g_unloading{false};
 std::atomic<int> g_threads{0};  // every worker thread of the mod
 std::atomic<int> g_busy{0};     // transitions running
+// Set when a new wallpaper was requested while a transition is still in its
+// "hold" phase: the running one ends its hold early.
+std::atomic<bool> g_skipHold{false};
+// A picker choice made while a transition was running (main thread only): it
+// runs as soon as that transition ends instead of being dropped.
+std::wstring g_pendingApplyPath;
+std::wstring g_pendingApplySubject;
+bool g_applyPending = false;
 std::atomic<unsigned> g_carouselGeneration{0};
 // Ink look (percent), read by the transition threads.
 std::atomic<int> g_inkLine{60};
@@ -407,6 +415,17 @@ HANDLE StartTrackedThread(LPSECURITY_ATTRIBUTES attributes,
         ReleaseSRWLockExclusive(&g_workersLock);
     }
     return thread;
+}
+
+// Untracked thread for short helpers that are joined inside the same function.
+inline HANDLE RawCreateThread(LPSECURITY_ATTRIBUTES attributes,
+                              SIZE_T stackSize,
+                              LPTHREAD_START_ROUTINE start,
+                              LPVOID parameter,
+                              DWORD flags,
+                              LPDWORD threadId) {
+    return CreateThread(attributes, stackSize, start, parameter, flags,
+                        threadId);
 }
 
 // Every CreateThread below goes through the tracker.
@@ -2432,7 +2451,7 @@ struct WhipAnim {
                 }
                 jobs[i] = {this, y0, y1, &fr};
                 HANDLE th =
-                    CreateThread(nullptr, 0, WhipWorker, &jobs[i], 0, nullptr);
+                    RawCreateThread(nullptr, 0, WhipWorker, &jobs[i], 0, nullptr);
                 if (th) {
                     threads[started++] = th;
                 } else {
@@ -2824,7 +2843,7 @@ struct WarpAnim {
                         break;
                     }
                     jobs[i] = {this, y0, y1, &p};
-                    HANDLE th = CreateThread(nullptr, 0, WarpWorker, &jobs[i],
+                    HANDLE th = RawCreateThread(nullptr, 0, WarpWorker, &jobs[i],
                                              0, nullptr);
                     if (th) {
                         threads[started++] = th;
@@ -3788,7 +3807,7 @@ struct FreezeAnim {
                         continue;
                     }
                     jobs[i] = {this, cut[i], cut[i + 1] - 1, P, tick};
-                    HANDLE th = CreateThread(nullptr, 0, FreezeWorker, &jobs[i],
+                    HANDLE th = RawCreateThread(nullptr, 0, FreezeWorker, &jobs[i],
                                              0, nullptr);
                     if (th) {
                         threads[started++] = th;
@@ -4411,6 +4430,8 @@ static void PlaceTransitionWindow(HWND window, bool coverWidgets = true) {
 
 DWORD WINAPI WallpaperChangeThreadProc(LPVOID parameter) {
     std::unique_ptr<WallpaperChange> change((WallpaperChange*)parameter);
+    const double tThreadStart = NowSeconds();
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
     // (In the monitor's real pixels.)
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     const HRESULT com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
@@ -4676,6 +4697,8 @@ DWORD WINAPI WallpaperChangeThreadProc(LPVOID parameter) {
     if (change->transition == Transition::Warp && !warpReady) {
         change->transition = Transition::Circle;  // (it couldn't start)
     }
+    Wh_Log(L"Transition %d ready %.0f ms after the thread started",
+           (int)change->transition, (NowSeconds() - tThreadStart) * 1000.0);
     const POINT position{change->monitor.left, change->monitor.top};
     // Placed above the desktop, the clock widget and the YASB bar, but still
     // under normal app windows (see PlaceTransitionWindow).
@@ -4699,6 +4722,8 @@ DWORD WINAPI WallpaperChangeThreadProc(LPVOID parameter) {
         const double start = NowSeconds();
         bool shown = false;
         int frameCount = 0;
+        int totalFrames = 0;
+        double lastFrameAt = start, worstFrame = 0, firstFrame = 0;
         for (;;) {
             const double t =
                 std::clamp((NowSeconds() - start) / length, 0.0, 1.0);
@@ -4787,6 +4812,16 @@ DWORD WINAPI WallpaperChangeThreadProc(LPVOID parameter) {
                     break;
             }
             canvas.End(window, position, 255);
+            {
+                const double nowF = NowSeconds();
+                if (totalFrames == 0) {
+                    firstFrame = nowF - start;
+                } else {
+                    worstFrame = std::max(worstFrame, nowF - lastFrameAt);
+                }
+                lastFrameAt = nowF;
+                totalFrames++;
+            }
             if (!shown) {
                 ShowWindow(window, SW_SHOWNOACTIVATE);
                 placeOverDesktop();
@@ -4795,6 +4830,11 @@ DWORD WINAPI WallpaperChangeThreadProc(LPVOID parameter) {
                 placeOverDesktop();  // the bar may have re-raised itself
             }
             if (t >= 1 || g_unloading) {
+                Wh_Log(L"Transition %d: %d frames in %.2f s (avg %.1f ms), "
+                       L"first frame %.0f ms, worst frame %.0f ms",
+                       (int)change->transition, totalFrames, length,
+                       length * 1000.0 / std::max(1, totalFrames),
+                       firstFrame * 1000.0, worstFrame * 1000.0);
                 break;
             }
             WaitForFrame();
@@ -4834,7 +4874,7 @@ DWORD WINAPI WallpaperChangeThreadProc(LPVOID parameter) {
     // showing the new wallpaper, so the picture must stay up longer.
     {
         const double probeStart = NowSeconds();
-        for (int i = 0; i < 6 && !g_unloading; i++) {
+        for (int i = 0; i < 6 && !g_unloading && !g_skipHold; i++) {
             WaitForFrame();
         }
         const double perFrame = (NowSeconds() - probeStart) / 6.0;
@@ -4887,7 +4927,7 @@ DWORD WINAPI WallpaperChangeThreadProc(LPVOID parameter) {
             // Waits in short slices (ends at once on unload) and keeps the
             // still picture under the widgets.
             const double holdEnd = NowSeconds() + holdSeconds;
-            while (!g_unloading) {
+            while (!g_unloading && !g_skipHold) {
                 const double left = holdEnd - NowSeconds();
                 if (left <= 0) {
                     break;
@@ -5014,6 +5054,7 @@ void ApplyWallpaper(const std::wstring& path,
     if (g_busy > 0 || g_unloading) {
         return;
     }
+    g_skipHold = false;
     const double seconds =
         g_cfg.durationMs <= 0 ? 0.0
         : g_cfg.transition == (int)Transition::Ink
@@ -5062,6 +5103,20 @@ void ApplyWallpaper(const std::wstring& path,
     Wh_SetStringValue(L"lastPath", path.c_str());
 }
 
+// Like ApplyWallpaper, but a request made while a transition is still running
+// is queued (and that transition's hold is cut short) instead of being lost.
+void RequestWallpaper(const std::wstring& path,
+                      const std::wstring& subject = L"") {
+    if (g_busy > 0 && !g_unloading) {
+        g_pendingApplyPath = path;
+        g_pendingApplySubject = subject;
+        g_applyPending = true;
+        g_skipHold = true;
+        return;
+    }
+    ApplyWallpaper(path, true, subject);
+}
+
 int IndexOfPath(const std::vector<std::wstring>& paths,
                 const std::wstring& path) {
     if (path.empty()) {
@@ -5084,6 +5139,7 @@ void StepWallpaper(int step) {
         // wins) and do it when that transition ends.
         g_pendingStep = step;
         g_stepPending = true;
+        g_skipHold = true;
         return;
     }
     g_stepPending = false;
@@ -9397,9 +9453,6 @@ void CarMove(int delta) {
 // uses the subject remembered for it, or asks for one (`chooseSubject`: asks
 // even if there is one).
 void CarApply(bool chooseSubject = false) {
-    if (g_busy > 0) {
-        return;
-    }
     const std::wstring path = g_car.paths[CarIndex(g_car.target)];
     std::wstring subject;
     if (UsesSubject(g_cfg.transition)) {
@@ -9417,7 +9470,7 @@ void CarApply(bool chooseSubject = false) {
         }
     }
     ClosePanel();
-    ApplyWallpaper(path, true, subject);
+    RequestWallpaper(path, subject);
 }
 
 // The last non-hexagon style, so H / S can come back to it from the grid
@@ -9888,6 +9941,21 @@ void BringToFront(HWND hwnd) {
     INPUT input{};
     SendInput(1, &input, sizeof(INPUT));
     SetForegroundWindow(hwnd);
+    if (GetForegroundWindow() != hwnd) {
+        // Fallback, only when the cheap way failed: join the front window's
+        // input for the duration of one call.
+        HWND front = GetForegroundWindow();
+        const DWORD frontThread =
+            front ? GetWindowThreadProcessId(front, nullptr) : 0;
+        const DWORD thisThread = GetCurrentThreadId();
+        const bool attached =
+            frontThread && frontThread != thisThread &&
+            AttachThreadInput(thisThread, frontThread, TRUE);
+        SetForegroundWindow(hwnd);
+        if (attached) {
+            AttachThreadInput(thisThread, frontThread, FALSE);
+        }
+    }
     SetFocus(hwnd);
 }
 
@@ -10204,9 +10272,16 @@ LRESULT CALLBACK MessageProc(HWND hwnd,
             RegisterHotkeys();
             return 0;
         case WM_APP_STEPDONE:
-            if (g_stepPending && g_busy == 0 && !g_unloading) {
-                g_stepPending = false;
-                StepWallpaper(g_pendingStep);
+            if (g_busy == 0 && !g_unloading) {
+                if (g_applyPending) {
+                    g_applyPending = false;
+                    g_stepPending = false;
+                    ApplyWallpaper(g_pendingApplyPath, true,
+                                   g_pendingApplySubject);
+                } else if (g_stepPending) {
+                    g_stepPending = false;
+                    StepWallpaper(g_pendingStep);
+                }
             }
             return 0;
         case WM_TIMER:
@@ -10241,7 +10316,7 @@ LRESULT CALLBACK MessageProc(HWND hwnd,
                 Wh_SetStringValue(InkSubjectKey(wallpaper).c_str(),
                                   subject.c_str());
             }
-            ApplyWallpaper(wallpaper, true, subject);
+            RequestWallpaper(wallpaper, subject);
             return 0;
         }
         case WM_APP_CLOSEDIALOG:
@@ -10326,6 +10401,7 @@ DWORD WINAPI MainThreadProc(LPVOID) {
 
 BOOL WhTool_ModInit() {
     g_unloading = false;
+    SetPriorityClass(GetCurrentProcess(), ABOVE_NORMAL_PRIORITY_CLASS);
     // Keep this background process off the efficiency cores and the coarse
     // timers Windows gives to throttled processes.
     for (ULONG flag : {PROCESS_POWER_THROTTLING_EXECUTION_SPEED,
