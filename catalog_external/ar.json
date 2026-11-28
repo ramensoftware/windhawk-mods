@@ -495,6 +495,36 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/d773c379780967b3cda18da5a2f6c996f5b054dd/mods/explorer-mouse-actions-plus.wh.cpp"
       }
     },
+    "fast-wallpaper-switcher": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795856026879,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795856026879,
+        "users": 0
+      },
+      "metadata": {
+        "author": "sarthakaksh",
+        "compilerOptions": "-ld2d1 -ldwrite -lwindowscodecs -lole32 -lshell32 -lshlwapi -ldwmapi -lgdi32 -luser32 -luuid -loleaut32 -lmfplat -lmfreadwrite -lmfuuid",
+        "description": "Browse your wallpapers in an animated carousel and switch with 12 stunning transitions like Ink, Burn, Freeze and Dust. Hotkeys and per-wallpaper subject cutouts.",
+        "github": "https://github.com/sarthakaksh",
+        "homepage": "https://github.com/sarthakaksh/windhawk-wallpaper-adaptive-widgets",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Fast Wallpaper Switcher",
+        "version": "1.1.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/8055",
+      "source": {
+        "sha256": "656304ade6cc7953b048a9fe7ad7161743a8325f6cecd8f76992df9d1165828a",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/ecb17907a145ea0888dd9b3a8ea300e0417b6ecd/mods/fast-wallpaper-switcher.wh.cpp"
+      }
+    },
     "google-drive-icon-refresh-fix": {
       "details": {
         "defaultSorting": 0,
@@ -766,6 +796,36 @@
       "source": {
         "sha256": "b7de54c92f8676fca8ff0bbe93c978bdd357c969d3406c7551774e6c8fe150df",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/6dbedd5cbee58eb9afcc1bd2b9bb671fd1aa6fb2/mods/native-audio-router.wh.cpp"
+      }
+    },
+    "new-menu": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795856026879,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795856026879,
+        "users": 0
+      },
+      "metadata": {
+        "author": "isousluer",
+        "compilerOptions": "-ladvapi32 -lshlwapi -lshell32",
+        "description": "Show, hide and add items in the \"New\" submenu of the Explorer context menu",
+        "github": "https://github.com/isousluer",
+        "homepage": "https://github.com/isousluer/new-menu",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "New Menu",
+        "version": "1.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/8044",
+      "source": {
+        "sha256": "6e2e7a0b30b8b2c42f7854a3e262169397812e7dc9eafbe39a20ebfdcde6753f",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/edf77445e10b8bf406a53f4e0fa8bec4402c9289/mods/new-menu.wh.cpp"
       }
     },
     "start-orb": {

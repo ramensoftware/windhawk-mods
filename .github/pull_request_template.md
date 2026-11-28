@@ -2,7 +2,7 @@
 
 ## Changelog
 
-If this pull request updates an existing mod, describe the changes inside the changelog markers:
+If this pull request updates an existing mod, describe the changes inside the changelog markers. Don't include the version number:
 
 <!-- changelog:start -->
 
