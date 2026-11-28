@@ -3072,7 +3072,7 @@ struct FolderPanel : FolderPalette {
     wstring hoverFolder;
     POINT dragPoint{};
     HBRUSH searchBrush{};
-    RECT rest{}, morphFrom{}, searchRect{};
+    RECT rest{}, morphFrom{}, searchRect{}, bodyClip{};
     int heldRevealShift = 0;
     SIZE childLayout{};
     bool motion = false, frame = false, layered = false, closing = false;
@@ -4836,6 +4836,24 @@ static int panelGridTop() {
 static int panelFooter() {
     return px(panel->choosing || pageCount() > 1 ? 36 : 10);
 }
+static void clipPanelBody(int width, int height, int hiddenTop) {
+    RECT clip{};
+    if (hiddenTop > 0)
+        clip = {0, std::min(hiddenTop, height), width, height};
+    if (EqualRect(&panel->bodyClip, &clip))
+        return;
+    bool applied = true;
+    for (HWND child : {panel->list, panel->empty}) {
+        HRGN region = hiddenTop > 0 ? CreateRectRgnIndirect(&clip) : nullptr;
+        if ((hiddenTop > 0 && !region) || !SetWindowRgn(child, region, FALSE)) {
+            if (region)
+                DeleteObject(region);
+            applied = false;
+        }
+    }
+    if (applied)
+        panel->bodyClip = clip;
+}
 static void layoutPanelChildren(int w, int h) {
     panel->childLayout = {w, h};
     const int pad = px(12), side = px(28), gap = px(4);
@@ -4853,11 +4871,17 @@ static void layoutPanelChildren(int w, int h) {
                    FALSE);
     }
     const int top = panelGridTop();
-    const int gridHeight = std::max(1, h - top - panelFooter());
+    // Lay out the new page once at its final distance from the taskbar.
+    // As the header rises, uncover the body in place, including its empty text.
+    const bool anchored = panel->morph.duration && panel->rest.bottom <= panel->anchor.top;
+    const int bodyHeight = anchored ? panel->rest.bottom - panel->rest.top : h;
+    const int bodyY = top + h - bodyHeight;
+    const int gridHeight = std::max(1, bodyHeight - top - panelFooter());
     const int listWidth =
         std::max(1, std::min(w, panel->columns * panel->cellWidth));
-    MoveWindow(panel->empty, pad, top, std::max(1, w - 2 * pad), gridHeight, FALSE);
-    MoveWindow(panel->list, (w - listWidth) / 2, top, listWidth, gridHeight, FALSE);
+    clipPanelBody(w, gridHeight, top - bodyY);
+    MoveWindow(panel->empty, pad, bodyY, std::max(1, w - 2 * pad), gridHeight, FALSE);
+    MoveWindow(panel->list, (w - listWidth) / 2, bodyY, listWidth, gridHeight, FALSE);
     if (pageCount() > 1 && panel->pager) {
         const int y = h - px(32), ind = px(76), btn = px(26);
         MoveWindow(panel->prev, (w - ind) / 2 - btn, y, btn, btn, FALSE);
@@ -4889,11 +4913,13 @@ static void panelPosition(double now, bool layout = false) {
     const int w = r.right - r.left, h = r.bottom - r.top;
     const bool resized = panel->childLayout.cx != w || panel->childLayout.cy != h;
     SetWindowPos(panel->window, nullptr, r.left, r.top + panelRevealShift(now), w, h,
-                 SWP_NOZORDER | SWP_NOACTIVATE | (resized ? SWP_NOCOPYBITS : 0));
+                 SWP_NOZORDER | SWP_NOACTIVATE |
+                 (resized && layout && !panel->morph.duration ? SWP_NOCOPYBITS : 0));
     if (layout || resized)
         layoutPanelChildren(w, h);
     if (resized && !layout)
-        RedrawWindow(panel->window, nullptr, nullptr, RDW_INVALIDATE | RDW_ALLCHILDREN);
+        RedrawWindow(panel->window, nullptr, nullptr,
+                     RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
     if (panel->layered && (panel->reveal.duration || layout || !panel->morph.duration))
         SetLayeredWindowAttributes(panel->window, 0,
             (BYTE)std::lround(255 * std::clamp(panel->reveal.value(now), 0.0, 1.0)),
@@ -6929,7 +6955,8 @@ static void refreshPanel() {
     populatePage();
     ShowWindow(panel->empty, rows ? SW_HIDE : SW_SHOWNA);
     panel->rendered = revision;
-    RedrawWindow(panel->window, nullptr, nullptr, RDW_INVALIDATE | RDW_ALLCHILDREN);
+    RedrawWindow(panel->window, nullptr, nullptr, RDW_INVALIDATE | RDW_ALLCHILDREN |
+                 (modeChanged ? RDW_UPDATENOW : 0));
 }
 static void syncPanel() {
     if (panel->window && panel->rendered != revision)
@@ -7694,6 +7721,24 @@ static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
                 break;
             case WM_DISPLAYCHANGE:
                 panel->timingReadAt = 0;
+                break;
+            case WM_NCCALCSIZE:
+                if (wp && lp && w == panel->window) {
+                    auto& rects = reinterpret_cast<NCCALCSIZE_PARAMS*>(lp)->rgrc;
+                    const RECT old = rects[2];
+                    auto result = DefWindowProcW(w, msg, wp, lp);
+                    const RECT next = rects[0];
+                    RECT kept{};
+                    if (next.left == old.left && next.right == old.right &&
+                        next.bottom == old.bottom && next.top != old.top &&
+                        IntersectRect(&kept, &next, &old)) {
+                        // Preserve the already visible background at the same screen
+                        // coordinates while the resize exposes pixels above it.
+                        rects[1] = rects[2] = kept;
+                        return WVR_VALIDRECTS;
+                    }
+                    return result;
+                }
                 break;
             case WM_WINDOWPOSCHANGED:
                 if (w == panel->window && lp && panel->frameMonitor &&
