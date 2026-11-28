@@ -375,7 +375,7 @@ IFileDialog* g_openDialog = nullptr;  // (main thread only) while a dialog shows
 
 // Duplicate handles of every thread the mod starts, so unloading can wait
 // until each one has really exited.
-[[clang::no_destroy]] std::vector<HANDLE> g_workers;
+std::vector<HANDLE> g_workers;
 SRWLOCK g_workersLock = SRWLOCK_INIT;
 
 HANDLE StartTrackedThread(LPSECURITY_ATTRIBUTES attributes,
@@ -10328,13 +10328,15 @@ BOOL WhTool_ModInit() {
     g_unloading = false;
     // Keep this background process off the efficiency cores and the coarse
     // timers Windows gives to throttled processes.
-    PROCESS_POWER_THROTTLING_STATE throttle{};
-    throttle.Version = PROCESS_POWER_THROTTLING_CURRENT_VERSION;
-    throttle.ControlMask = PROCESS_POWER_THROTTLING_EXECUTION_SPEED |
-                           PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION;
-    throttle.StateMask = 0;
-    SetProcessInformation(GetCurrentProcess(), ProcessPowerThrottling,
-                          &throttle, sizeof(throttle));
+    for (ULONG flag : {PROCESS_POWER_THROTTLING_EXECUTION_SPEED,
+                       PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION}) {
+        PROCESS_POWER_THROTTLING_STATE throttle{};
+        throttle.Version = PROCESS_POWER_THROTTLING_CURRENT_VERSION;
+        throttle.ControlMask = flag;
+        throttle.StateMask = 0;
+        SetProcessInformation(GetCurrentProcess(), ProcessPowerThrottling,
+                              &throttle, sizeof(throttle));
+    }
     g_stop = CreateEvent(nullptr, TRUE, FALSE, nullptr);
     g_events[ActionPicker] =
         CreateEvent(nullptr, FALSE, FALSE, L"Local\\FastWallpaper.Picker");
@@ -10344,6 +10346,10 @@ BOOL WhTool_ModInit() {
         CreateEvent(nullptr, FALSE, FALSE, L"Local\\FastWallpaper.Prev");
     g_events[ActionRandom] =
         CreateEvent(nullptr, FALSE, FALSE, L"Local\\FastWallpaper.Random");
+    if (!g_stop || !g_events[0] || !g_events[1] || !g_events[2] ||
+        !g_events[3]) {
+        return FALSE;
+    }
     g_thread = CreateThread(nullptr, 0, MainThreadProc, nullptr, 0, nullptr);
     return TRUE;
 }
