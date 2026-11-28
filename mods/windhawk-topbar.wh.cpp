@@ -16082,14 +16082,22 @@ bool Available() {
     bool found = false;
 #if TOPBAR_HAS_RADIOS
     try {
-        using namespace winrt::Windows::Devices::Radios;
-        auto radios = Radio::GetRadiosAsync().get();
-        for (auto&& r : radios) {
-            if (r.Kind() == RadioKind::Bluetooth) {
-                found = true;
-                break;
-            }
-        }
+        std::atomic<bool> hasBt{false};
+        std::thread([&hasBt]() {
+            HRESULT hrCo = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+            try {
+                using namespace winrt::Windows::Devices::Radios;
+                auto radios = Radio::GetRadiosAsync().get();
+                for (auto&& r : radios) {
+                    if (r.Kind() == RadioKind::Bluetooth) {
+                        hasBt.store(true);
+                        break;
+                    }
+                }
+            } catch (...) {}
+            if (SUCCEEDED(hrCo)) CoUninitialize();
+        }).join();
+        found = hasBt.load();
     } catch (...) {}
 #endif
     s_btRadioHwCache.store(found ? 1 : 0);
@@ -26527,7 +26535,11 @@ void PopulateEthernetPanel() {
                     if (ptr) {
                         memcpy(ptr, ipToCopy.c_str(), bytes);
                         GlobalUnlock(hMem);
-                        SetClipboardData(CF_UNICODETEXT, hMem);
+                        if (!SetClipboardData(CF_UNICODETEXT, hMem)) {
+                            GlobalFree(hMem);
+                        }
+                    } else {
+                        GlobalFree(hMem);
                     }
                 }
                 CloseClipboard();
@@ -68157,7 +68169,11 @@ static DWORD WINAPI StatusPollWorkerProc(LPVOID) {
                 weather::EnsureFresh();
             }
         } catch (...) {}
-        if (g_ethernetButton && g_ethernetEventPending.exchange(false)) {
+        static ULONGLONG s_lastEthEventTick = 0;
+        ULONGLONG ethNowTick = GetTickCount64();
+        if (g_ethernetButton && g_ethernetEventPending.load() && (ethNowTick - s_lastEthEventTick >= 1500)) {
+            g_ethernetEventPending.store(false);
+            s_lastEthEventTick = ethNowTick;
             bool ethNow = ethernet::IsConnected(true);
             if (ethNow != g_ethernetConnected.load()) {
                 g_ethernetConnected.store(ethNow);
@@ -68249,7 +68265,8 @@ static DWORD WINAPI StatusPollWorkerProc(LPVOID) {
                 });
             }
         }
-        bool btDeviceEvent = btOn && g_btDeviceEventPending.exchange(false);
+        bool btDeviceEvent = btOn && g_btDeviceEventPending.load() && (now - lastBgBtPreloadTick >= 1500);
+        if (btDeviceEvent) g_btDeviceEventPending.store(false);
         bool btPeriodicRefresh = btOn && (now - lastBgBtPreloadTick >= 60000);
         if (wantBt && (g_btLastEnumTick.load() == 0 || btChanged || btDeviceEvent || btPeriodicRefresh)) {
             if (!g_bluetoothScanning.load() && !g_bluetoothSyncing.load() &&
@@ -71302,7 +71319,7 @@ void WhTool_ModSettingsChanged() {
 }
 
 void WhTool_ModUninit() {
-    InterlockedExchange(&g_shuttingDown, 1);
+    if (InterlockedExchange(&g_shuttingDown, 1) != 0) return;
     g_allowHide = true;
 
     if (!IsSecondaryMonitorInstance()) {
