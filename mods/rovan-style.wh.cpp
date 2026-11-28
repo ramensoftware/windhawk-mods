@@ -1,14 +1,14 @@
 // ==WindhawkMod==
 // @id              rovan-style
 // @name            Rovan Style
-// @description     Roey's private customized utility that automatically positions and resizes application windows.
+// @description     Moves and resizes the windows of selected programs to a set position and size when they open.
 // @version         1.0
 // @author          Roey Qian
 // @github          https://github.com/roeyqian
 // @include         *
 // @architecture    x86-64
 // @architecture    x86
-// @compilerOptions -luser32 -ldwmapi
+// @compilerOptions -luser32 -ldwmapi -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -25,8 +25,8 @@ The settings below apply to every program the mod is loaded into. Changes are ap
 
 1. **Delay after opening (ms):** How long to wait after a window appears before adjusting it, so the program can finish initializing. The default is `300`, and the range is 0–30000.
 2. **Startup correction period (ms):** How long after the first adjustment the mod keeps correcting any layout the program restores by itself. The default is `1000`, the range is 0–30000, and `0` adjusts only once.
-3. **Apply to already open windows:** Also adjusts matching windows that are already open when the mod is enabled or the settings are saved.
-4. **Compatibility with programs' position/size saving:** Sends paired move/size begin and end notifications around each adjustment, so programs that save their layout at the end of a manual drag update their own records.
+3. **Apply to already open windows:** Also adjusts matching windows that are already open when the mod is enabled or when the program's own rules change.
+4. **Compatibility with programs' position/size saving:** Sends paired move/size begin and end notifications around each adjustment, so programs that save their layout at the end of a manual drag update their own records. Such programs keep opening at that layout even after the mod is disabled.
 5. **Program rules:** Gives specific programs their own window layout. Each rule consists of:
    - **Program:** The program to match, as a process name (`notepad.exe`) or a full executable path (`C:\Program Files\Example\Example.exe`). An empty value skips the rule.
    - **Window position (X,Y):** The top-left corner of the window, as two integers, e.g. `100,100` or `-1920,100`.
@@ -38,13 +38,13 @@ The settings below apply to every program the mod is loaded into. Changes are ap
 
 A rule matches a program by its process name or full executable path, case-insensitively, and environment variables such as `%ProgramFiles%` are expanded. For example, a rule for `Example.exe` matches that program in any folder, while a rule for `%ProgramFiles%\Example\Example.exe` matches only that executable. Folders and wildcards are not supported. Rules are checked in order and the first valid matching rule wins, so put more specific rules above broader ones.
 
-Positions and sizes are in physical pixels on the whole virtual desktop, where the top-left corner of the primary monitor is `(0, 0)`, and the size is the full window rectangle including the frame and the title bar. Only ordinary top-level windows are handled unless *Include dialogs and tool windows* is turned on, and IME windows are always excluded. The rule is applied after *Delay after opening* and corrected during *Startup correction period*. After that, the window can be moved and resized freely.
+Positions and sizes are in physical pixels on the whole virtual desktop, where the top-left corner of the primary monitor is `(0, 0)`, and the size is the full window rectangle including the frame and the title bar. Only ordinary top-level windows are handled unless *Include dialogs and tool windows* is turned on, and IME windows are always excluded. The rule is applied after *Delay after opening* and corrected during *Startup correction period*. After that, the window can be moved and resized freely. A window that is hidden and shown again, for example a program that hides to the tray instead of closing, is treated as a new window and adjusted again.
 
-The mod is loaded into every process through Windhawk's default `*` target process scope, but only programs with a valid matching rule start window monitoring, and each program adjusts only its own windows. Elevated programs therefore adjust their windows in their own privilege context, without being added to the target process list.
+The mod is injected through Windhawk's default `*` target process scope, but it unloads right away from programs without a valid matching rule, and each program adjusts only its own windows. Elevated programs therefore adjust their windows in their own privilege context, without being added to the target process list.
 
 With *Vertical maximize* turned on, Windows controls the top and bottom edges of the window, while X and the width still follow the rule, and Y and the height are kept as the restore position. It uses native Windows vertical maximization, which requires Windows 10, version 1903 or later. When that isn't possible, the normal layout is kept.
 
-## Reminding
+## Notes
 
 - Keep Windhawk's default `*` target process scope, and make sure Windhawk can load into the program. Regular installations use a service, while portable mode may require administrator rights for elevated programs.
 - A rule with an invalid position or size format is skipped, so windows are never moved by mistake.
@@ -72,7 +72,7 @@ With *Vertical maximize* turned on, Windows controls the top and bottom edges of
 - ApplyToExistingWindows: true
   $name: 🔷 Apply to already open windows
   $description: >-
-    Also adjust matching windows that are already open when the mod is enabled or the settings are saved.
+    Also adjust matching windows that are already open when the mod is enabled or the program's own rules change.
 - NotifySizeMove: true
   $name: 🔷 Compatibility with programs' position/size saving
   $description: >-
@@ -148,6 +148,13 @@ struct Rule {
     int height;
     bool includeDialogs;
     bool verticalMaximize = false;
+
+    bool operator==(const Rule& other) const {
+        return program == other.program && fullPath == other.fullPath && x == other.x &&
+               y == other.y && width == other.width && height == other.height &&
+               includeDialogs == other.includeDialogs &&
+               verticalMaximize == other.verticalMaximize;
+    }
 };
 
 struct Settings {
@@ -159,17 +166,9 @@ struct Settings {
 };
 
 struct NativeVerticalTask {
-    HWND hwnd;
-    DWORD processId;
-    DWORD threadId;
-    LPARAM point;
+    WPARAM id;
     std::atomic<bool> completed{false};
     std::atomic<bool> cancelled{false};
-};
-
-struct NativeVerticalTaskContext {
-    std::shared_ptr<NativeVerticalTask> task;
-    HMODULE modulePin;
 };
 
 struct WindowState {
@@ -223,6 +222,15 @@ std::atomic<bool> g_stopping{false};
 std::wstring g_processPath;
 std::wstring g_processName;
 
+// Native vertical maximization runs on each window's own thread through a
+// subclass. The controller posts a request; the window thread completes it.
+UINT g_nativeVerticalMessage = 0;
+std::mutex g_nativeMutex;
+std::unordered_map<HWND, std::shared_ptr<NativeVerticalTask>> g_nativeTasks;
+std::vector<HWND> g_subclassedWindows;
+WPARAM g_nextNativeTaskId = 0;
+std::atomic<int> g_nativeCallsInProgress{0};
+
 std::wstring NormalizeProgram(std::wstring value) {
     const size_t first = value.find_first_not_of(L" \t\r\n");
     if (first == std::wstring::npos) {
@@ -257,9 +265,6 @@ bool EqualProgram(const std::wstring& a, const std::wstring& b) {
 }
 
 bool ParseIntegerPair(PCWSTR text, int& first, int& second) {
-    if (!text) {
-        return false;
-    }
     long long values[2]{};
     const wchar_t* cursor = text;
     for (int i = 0; i < 2; ++i) {
@@ -299,11 +304,16 @@ std::shared_ptr<const Settings> ReadSettings() {
     settings->notifySizeMove = Wh_GetIntSetting(L"NotifySizeMove") != 0;
 
     // The settings API returns an empty string for both missing and blank values.
-    // Inspect all supported slots so an empty row doesn't hide later rules.
+    // Rows added in the settings UI start with a default position, so a slot
+    // with both an empty program and an empty position is the end of the list.
     for (int i = 0; i < kMaxRules; ++i) {
         auto text = WindhawkUtils::StringSetting::make(L"Rules[%d].Program", i);
-        std::wstring program = NormalizeProgram(text.get() ? text.get() : L"");
+        std::wstring program = NormalizeProgram(text.get());
         if (program.empty()) {
+            auto position = WindhawkUtils::StringSetting::make(L"Rules[%d].Position", i);
+            if (!*position.get()) {
+                break;
+            }
             continue;
         }
 
@@ -376,28 +386,9 @@ void LogMatch(HWND hwnd, const Rule& rule) {
            GetWindow(hwnd, GW_OWNER));
 }
 
-std::wstring ProcessPath(DWORD processId) {
-    if (processId == GetCurrentProcessId() && !g_processPath.empty()) {
-        return g_processPath;
-    }
-    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
-    if (!process) {
-        return {};
-    }
-    std::vector<wchar_t> path(32768);
-    DWORD length = static_cast<DWORD>(path.size());
-    bool success = QueryFullProcessImageNameW(process, 0, path.data(), &length) != FALSE;
-    CloseHandle(process);
-    return success ? NormalizeProgram(std::wstring(path.data(), length)) : std::wstring{};
-}
-
-int MatchRule(HWND hwnd, DWORD processId, const Settings& settings) {
-    std::wstring path = ProcessPath(processId);
-    if (path.empty()) {
-        return -1;
-    }
-    size_t slash = path.find_last_of(L'\\');
-    std::wstring name = path.substr(slash == std::wstring::npos ? 0 : slash + 1);
+// ReadSettings keeps only this process's rules, and only this process's
+// windows are observed, so matching reduces to the dialog/tool window check.
+int MatchRule(HWND hwnd, const Settings& settings) {
     // Borderless popups (no title bar and no resizable frame), such as IME
     // panels, are treated like tool windows and need "include dialogs".
     const LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
@@ -406,9 +397,7 @@ int MatchRule(HWND hwnd, DWORD processId, const Settings& settings) {
         GetWindow(hwnd, GW_OWNER) != nullptr || !hasFrame ||
         (GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE));
     for (size_t i = 0; i < settings.rules.size(); ++i) {
-        const Rule& rule = settings.rules[i];
-        if ((!isDialogOrTool || rule.includeDialogs) &&
-            EqualProgram(rule.program, rule.fullPath ? path : name)) {
+        if (!isDialogOrTool || settings.rules[i].includeDialogs) {
             return static_cast<int>(i);
         }
     }
@@ -444,16 +433,21 @@ void EndSizeMove(HWND hwnd, WindowState& state) {
     }
 }
 
-void CancelNativeVerticalTask(WindowState& state) {
+void CancelNativeVerticalTask(HWND hwnd, WindowState& state) {
     if (state.nativeVerticalTask) {
         state.nativeVerticalTask->cancelled.store(true, std::memory_order_release);
+        std::lock_guard<std::mutex> lock(g_nativeMutex);
+        auto found = g_nativeTasks.find(hwnd);
+        if (found != g_nativeTasks.end() && found->second == state.nativeVerticalTask) {
+            g_nativeTasks.erase(found);
+        }
         state.nativeVerticalTask.reset();
     }
 }
 
 void ClearWindowStates() {
     for (auto& [hwnd, state] : g_controller->windows) {
-        CancelNativeVerticalTask(state);
+        CancelNativeVerticalTask(hwnd, state);
         EndSizeMove(hwnd, state);
     }
     g_controller->windows.clear();
@@ -480,7 +474,7 @@ void RetryWindowRule(HWND hwnd, WindowState& state, const Settings& settings, bo
         return;
     }
     state.nextRuleRetry = now + kRetryIntervalMs;
-    state.ruleIndex = MatchRule(hwnd, state.processId, settings);
+    state.ruleIndex = MatchRule(hwnd, settings);
     if (state.ruleIndex >= 0) {
         LogMatch(hwnd, settings.rules[state.ruleIndex]);
         ScheduleWindow(state, settings);
@@ -503,12 +497,12 @@ void ObserveWindow(HWND hwnd, bool schedule) {
             RetryWindowRule(hwnd, found->second, *controller.settings, schedule);
             return;
         }
-        CancelNativeVerticalTask(found->second);
+        CancelNativeVerticalTask(hwnd, found->second);
         controller.windows.erase(found);
     }
     WindowState state{processId, threadId};
     if (schedule) {
-        state.ruleIndex = MatchRule(hwnd, processId, *controller.settings);
+        state.ruleIndex = MatchRule(hwnd, *controller.settings);
         if (state.ruleIndex >= 0) {
             LogMatch(hwnd, controller.settings->rules[state.ruleIndex]);
             ScheduleWindow(state, *controller.settings);
@@ -548,7 +542,7 @@ WindowEvent(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG objectId, LONG childId, 
     if (event == EVENT_OBJECT_DESTROY || event == EVENT_OBJECT_HIDE) {
         auto found = g_controller->windows.find(hwnd);
         if (found != g_controller->windows.end()) {
-            CancelNativeVerticalTask(found->second);
+            CancelNativeVerticalTask(hwnd, found->second);
             EndSizeMove(hwnd, found->second);
             g_controller->windows.erase(found);
         }
@@ -627,30 +621,86 @@ bool NativeVerticalMatchesRule(HWND hwnd, const WindowState& state, const Rule& 
            actual.left == normal.left && actual.right - actual.left == normal.right - normal.left;
 }
 
-DWORD WINAPI NativeVerticalThread(void* parameter) {
-    HMODULE modulePin;
-    {
-        std::unique_ptr<NativeVerticalTaskContext> context(
-            static_cast<NativeVerticalTaskContext*>(parameter));
-        modulePin = context->modulePin;
-        const auto& task = context->task;
-        DWORD processId = 0;
-        DWORD threadId = GetWindowThreadProcessId(task->hwnd, &processId);
-        if (processId == task->processId && threadId == task->threadId &&
-            IsWindowVisible(task->hwnd) && !IsIconic(task->hwnd) &&
-            !task->cancelled.load(std::memory_order_acquire)) {
-            SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-            // WinUI/Windows App SDK can swallow this message sent to the app.
-            // The default handler performs native arrangement and preserves the
-            // normal rectangle. It can wait on app handlers, so use a separate
-            // thread that never accesses Windhawk state or API functions.
-            DefWindowProcW(task->hwnd, WM_NCLBUTTONDBLCLK, HTTOP, task->point);
+// Runs on the window's own thread, before the application's window procedure.
+LRESULT CALLBACK NativeVerticalSubclassProc(HWND hwnd,
+                                            UINT message,
+                                            WPARAM wParam,
+                                            LPARAM lParam,
+                                            DWORD_PTR) {
+    if (message == WM_NCDESTROY) {
+        // The subclass wrapper removes itself on WM_NCDESTROY.
+        std::lock_guard<std::mutex> lock(g_nativeMutex);
+        g_nativeTasks.erase(hwnd);
+        g_subclassedWindows.erase(
+            std::remove(g_subclassedWindows.begin(), g_subclassedWindows.end(), hwnd),
+            g_subclassedWindows.end());
+    } else if (message == g_nativeVerticalMessage && g_nativeVerticalMessage) {
+        std::shared_ptr<NativeVerticalTask> task;
+        {
+            std::lock_guard<std::mutex> lock(g_nativeMutex);
+            auto found = g_nativeTasks.find(hwnd);
+            if (found != g_nativeTasks.end() && found->second->id == wParam) {
+                task = std::move(found->second);
+                g_nativeTasks.erase(found);
+            }
         }
-        task->completed.store(true, std::memory_order_release);
+        if (task) {
+            g_nativeCallsInProgress.fetch_add(1);
+            RECT rect{};
+            if (!task->cancelled.load(std::memory_order_acquire) && IsWindowVisible(hwnd) &&
+                !IsIconic(hwnd) && GetWindowRect(hwnd, &rect)) {
+                // WinUI/Windows App SDK can swallow this message sent to the app.
+                // The default handler performs native arrangement and preserves
+                // the normal rectangle. The point is computed here, in the
+                // window's own DPI context.
+                DefWindowProcW(
+                    hwnd, WM_NCLBUTTONDBLCLK, HTTOP,
+                    MAKELPARAM(static_cast<SHORT>(rect.left + (rect.right - rect.left) / 2),
+                               static_cast<SHORT>(rect.top)));
+            }
+            task->completed.store(true, std::memory_order_release);
+            g_nativeCallsInProgress.fetch_sub(1);
+        }
+        return 0;
     }
-    // Keep code resident if an application hangs inside its native sizing
-    // handlers. Unloading the mod never has to wait for this helper thread.
-    FreeLibraryAndExitThread(modulePin, 0);
+    return DefSubclassProc(hwnd, message, wParam, lParam);
+}
+
+bool EnsureNativeVerticalSubclass(HWND hwnd) {
+    {
+        std::lock_guard<std::mutex> lock(g_nativeMutex);
+        if (std::find(g_subclassedWindows.begin(), g_subclassedWindows.end(), hwnd) !=
+            g_subclassedWindows.end()) {
+            return true;
+        }
+    }
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, NativeVerticalSubclassProc, 0)) {
+        return false;
+    }
+    std::lock_guard<std::mutex> lock(g_nativeMutex);
+    g_subclassedWindows.push_back(hwnd);
+    return true;
+}
+
+// Called on the controller thread before it exits, so Wh_ModUninit covers it.
+void RemoveNativeVerticalSubclasses() {
+    std::vector<HWND> windows;
+    {
+        std::lock_guard<std::mutex> lock(g_nativeMutex);
+        windows.swap(g_subclassedWindows);
+        g_nativeTasks.clear();
+    }
+    for (HWND hwnd : windows) {
+        DWORD processId = 0;
+        if (GetWindowThreadProcessId(hwnd, &processId) && processId == GetCurrentProcessId()) {
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, NativeVerticalSubclassProc);
+        }
+    }
+    // The default handler can process sent messages, so the removal above may
+    // run nested inside it. Don't let the mod unload while it's still running.
+    while (g_nativeCallsInProgress.load() > 0) {
+        Sleep(10);
+    }
 }
 
 bool ApplyNativeVerticalMaximize(HWND hwnd, WindowState& state) {
@@ -674,31 +724,25 @@ bool ApplyNativeVerticalMaximize(HWND hwnd, WindowState& state) {
                              kNotificationTimeoutMs, &result)) {
         return false;
     }
-    RECT rect{};
-    if (!GetWindowRect(hwnd, &rect)) {
+    if (!g_nativeVerticalMessage || !EnsureNativeVerticalSubclass(hwnd)) {
+        if (!state.verticalErrorReported) {
+            Wh_Log(L"Failed to prepare native vertical maximization for %p", hwnd);
+            state.verticalErrorReported = true;
+        }
         return true;
     }
     auto task = std::make_shared<NativeVerticalTask>();
-    task->hwnd = hwnd;
-    task->processId = state.processId;
-    task->threadId = state.threadId;
-    task->point = MAKELPARAM(static_cast<SHORT>(rect.left + (rect.right - rect.left) / 2),
-                             static_cast<SHORT>(rect.top));
-    HMODULE modulePin = nullptr;
-    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                            reinterpret_cast<PCWSTR>(&NativeVerticalThread), &modulePin)) {
+    {
+        std::lock_guard<std::mutex> lock(g_nativeMutex);
+        task->id = ++g_nextNativeTaskId;
+        g_nativeTasks[hwnd] = task;
+    }
+    // Posting never blocks the controller; the window thread handles it.
+    if (!PostMessageW(hwnd, g_nativeVerticalMessage, task->id, 0)) {
+        std::lock_guard<std::mutex> lock(g_nativeMutex);
+        g_nativeTasks.erase(hwnd);
         return true;
     }
-    auto context = std::make_unique<NativeVerticalTaskContext>();
-    context->task = task;
-    context->modulePin = modulePin;
-    HANDLE thread = CreateThread(nullptr, 0, NativeVerticalThread, context.get(), 0, nullptr);
-    if (!thread) {
-        FreeLibrary(modulePin);
-        return true;
-    }
-    context.release();
-    CloseHandle(thread);
     state.nativeVerticalTask = std::move(task);
     state.nativeVerticalAttempted = true;
     return false;
@@ -792,7 +836,7 @@ void ProcessPendingWindows() {
         DWORD processId = 0;
         DWORD threadId = GetWindowThreadProcessId(hwnd, &processId);
         if (threadId != state.threadId || processId != state.processId || !IsWindowVisible(hwnd)) {
-            CancelNativeVerticalTask(state);
+            CancelNativeVerticalTask(hwnd, state);
             EndSizeMove(hwnd, state);
             it = controller.windows.erase(it);
             continue;
@@ -834,7 +878,7 @@ void ProcessPendingWindows() {
         // panels (e.g. the IME candidate window in explorer.exe) can start as
         // ordinary frames, then stay cloaked for a long time before being used.
         // Re-validate the match right before every adjustment.
-        int currentRule = MatchRule(hwnd, state.processId, *controller.settings);
+        int currentRule = MatchRule(hwnd, *controller.settings);
         if (currentRule != state.ruleIndex) {
             wchar_t className[128]{};
             GetClassNameW(hwnd, className, ARRAYSIZE(className));
@@ -845,7 +889,7 @@ void ProcessPendingWindows() {
                 static_cast<unsigned long>(GetWindowLongPtrW(hwnd, GWL_EXSTYLE)));
             state.ruleIndex = currentRule;
             if (currentRule < 0) {
-                CancelNativeVerticalTask(state);
+                CancelNativeVerticalTask(hwnd, state);
                 EndSizeMove(hwnd, state);
                 state.pending = false;
                 state.placementPending = false;
@@ -875,23 +919,19 @@ void ProcessPendingWindows() {
     }
 }
 
-DWORD WINAPI ControllerThread(void*) {
-    // Each selected process owns its controller and only its own windows.
-    std::wstring mutexName =
-        L"Local\\Windhawk.RovanStyle.Controller.v2." + std::to_wstring(GetCurrentProcessId());
-    HANDLE singleton = CreateMutexW(nullptr, FALSE, mutexName.c_str());
-    if (!singleton) {
-        Wh_Log(L"CreateMutex failed: %lu", GetLastError());
-        return 0;
+// Poll only while a window still needs work. Window events and the stop and
+// reload events wake the loop otherwise.
+bool HasPendingWork(const Controller& controller) {
+    for (const auto& [hwnd, state] : controller.windows) {
+        if (state.pending || state.placementPending || state.ruleRetryDeadline) {
+            return true;
+        }
     }
-    // Suppress duplicate copies of the same mod in this process.
-    HANDLE waitHandles[] = {g_stopEvent, singleton};
-    DWORD waitResult = WaitForMultipleObjects(ARRAYSIZE(waitHandles), waitHandles, FALSE, INFINITE);
-    if (waitResult != WAIT_OBJECT_0 + 1 && waitResult != WAIT_ABANDONED_0 + 1) {
-        CloseHandle(singleton);
-        return 0;
-    }
+    return false;
+}
 
+// Each selected process owns its controller and only its own windows.
+DWORD WINAPI ControllerThread(void*) {
     DPI_AWARENESS_CONTEXT oldDpi =
         SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     Controller controller{SettingsSnapshot(), {}};
@@ -912,15 +952,23 @@ DWORD WINAPI ControllerThread(void*) {
         EnumWindows(EnumerateWindow, controller.settings->applyToExisting);
         HANDLE events[] = {g_stopEvent, g_reloadEvent};
         while (!g_stopping.load()) {
-            DWORD result = MsgWaitForMultipleObjectsEx(ARRAYSIZE(events), events, 100, QS_ALLINPUT,
-                                                       MWMO_INPUTAVAILABLE);
+            DWORD timeout =
+                HasPendingWork(controller) ? static_cast<DWORD>(kRetryIntervalMs) : INFINITE;
+            DWORD result = MsgWaitForMultipleObjectsEx(ARRAYSIZE(events), events, timeout,
+                                                       QS_ALLINPUT, MWMO_INPUTAVAILABLE);
             if (result == WAIT_OBJECT_0 || result == WAIT_FAILED) {
                 break;
             }
             if (result == WAIT_OBJECT_0 + 1) {
-                controller.settings = SettingsSnapshot();
-                ClearWindowStates();
-                EnumWindows(EnumerateWindow, controller.settings->applyToExisting);
+                auto settings = SettingsSnapshot();
+                // Saving the settings for another program leaves this process's
+                // rules unchanged. Don't move its windows back in that case.
+                bool rulesChanged = settings->rules != controller.settings->rules;
+                controller.settings = std::move(settings);
+                if (rulesChanged) {
+                    ClearWindowStates();
+                    EnumWindows(EnumerateWindow, controller.settings->applyToExisting);
+                }
             }
             MSG message;
             // Bound each batch so a flood of events can't starve stop/reload.
@@ -934,6 +982,7 @@ DWORD WINAPI ControllerThread(void*) {
         Wh_Log(L"SetWinEventHook failed: %lu", GetLastError());
     }
     ClearWindowStates();
+    RemoveNativeVerticalSubclasses();
     for (HWINEVENTHOOK hook : {objectHook, uncloakHook, foregroundHook, restoreHook}) {
         if (hook) {
             UnhookWinEvent(hook);
@@ -943,8 +992,6 @@ DWORD WINAPI ControllerThread(void*) {
     if (oldDpi) {
         SetThreadDpiAwarenessContext(oldDpi);
     }
-    ReleaseMutex(singleton);
-    CloseHandle(singleton);
     return 0;
 }
 
@@ -999,28 +1046,32 @@ BOOL Wh_ModInit() {
     size_t slash = g_processPath.find_last_of(L'\\');
     g_processName = g_processPath.substr(slash == std::wstring::npos ? 0 : slash + 1);
     g_settings = ReadSettings();
-    // Stay loaded without a monitor when no rule applies, so adding a rule for
-    // an already running process works through the normal settings callback.
-    return g_settings->rules.empty() || StartController();
+    // Unload from processes without a matching rule. Windhawk calls Wh_ModInit
+    // again in those processes after each settings change.
+    if (g_settings->rules.empty()) {
+        return FALSE;
+    }
+    g_nativeVerticalMessage = RegisterWindowMessageW(L"Windhawk_" WH_MOD_ID L"_NativeVertical");
+    return StartController();
 }
 
-void Wh_ModSettingsChanged() {
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     auto settings = ReadSettings();
-    bool shouldMonitor = !settings->rules.empty();
+    if (settings->rules.empty()) {
+        // The reload calls Wh_ModInit, which unloads the mod from this process.
+        *bReload = TRUE;
+        return TRUE;
+    }
     {
         std::lock_guard<std::mutex> lock(g_settingsMutex);
         g_settings = std::move(settings);
     }
-    if (shouldMonitor) {
-        if (g_thread) {
-            SetEvent(g_reloadEvent);
-        } else if (!StartController()) {
-            Wh_Log(L"Failed to start this process's window controller");
-        }
-    } else {
-        StopController();
-        CloseControllerEvents();
+    if (g_thread) {
+        SetEvent(g_reloadEvent);
+    } else if (!StartController()) {
+        Wh_Log(L"Failed to start this process's window controller");
     }
+    return TRUE;
 }
 
 void Wh_ModBeforeUninit() {
