@@ -1,15 +1,17 @@
 // ==WindhawkMod==
 // @id              uninstall-here
 // @name            Uninstall Here
-// @description     Uninstall desktop apps directly from Start without opening Settings or Control Panel.
-// @version         1.0.0
+// @description     Uninstall desktop apps directly from Start and Search without opening Settings or Control Panel.
+// @version         1.1.0
 // @author          Luiz Bizzio
 // @github          https://github.com/luizbizzio
 // @homepage        https://github.com/luizbizzio/uninstall-here
 // @donateUrl       https://github.com/sponsors/luizbizzio
 // @include         StartMenuExperienceHost.exe
+// @include         SearchHost.exe
+// @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -ladvapi32 -lole32 -loleaut32 -lruntimeobject -lmsi -lshell32 -luser32 -luuid -lversion -lwintrust -lcrypt32
+// @compilerOptions -ladvapi32 -lole32 -loleaut32 -lruntimeobject -lmsi -lshell32 -luser32 -luuid -lversion -lwintrust -lcrypt32 -lcomctl32 -ldwmapi -lgdi32 -lgdiplus
 // @license         Apache-2.0
 // ==/WindhawkMod==
 
@@ -21,15 +23,26 @@ Open a desktop app's own uninstaller from the Windows 11 Start menu. Uninstall H
 
 ## How to use
 
-**Start → All apps → right-click the app → Uninstall**
+Right-click a desktop app and choose **Uninstall** in any of these places:
 
-Confirm the product name before its uninstaller opens. MSI products open Windows Installer in uninstall mode. Follow any subsequent prompts from the uninstaller or Windows.
+- **Start → All**
+- **Start → Pinned**
+- **Start → Recent**
+- **Search results**, from the right-click menu or the **Options** button
 
-This mod targets 64-bit Windows 11. The **All apps** flow was tested on x64 build `26300.10075`.
+Confirm the product name before its uninstaller opens. The confirmation looks the same everywhere and follows the Windows light or dark mode and accent color. **Cancel** is the default. MSI products open Windows Installer in uninstall mode. Follow any subsequent prompts from the uninstaller or Windows.
+
+This mod targets 64-bit Windows 11. These places were tested on x64 build `26300.10075`.
+
+## How it works
+
+Start and Search send the selected shortcut to Explorer over a local pipe. Explorer accepts requests only from those two, then looks up the app, shows the confirmation, and opens the uninstaller. Search runs in a sandbox that can't see every installed app or start an uninstaller properly, so this can't happen there. For this reason, the mod is also loaded into `explorer.exe`, where it hooks nothing.
 
 ## If Installed apps still opens
 
-Windows handles packaged apps and desktop apps without one identifiable registered installation.
+Windows handles packaged apps and desktop apps without one identifiable registered installation. Office apps, which share one installation, are an example.
+
+A shortcut that passes arguments to a program may open something else inside it, such as a web app inside a browser, so the mod leaves most of them to Windows. The exceptions are known forms that start the program itself: the Start shortcuts of Chromium browsers such as Brave and Chrome, Squirrel apps such as Discord, the Java Control Panel pages, and Git Bash and Git CMD.
 
 If you expected the app to work, enable logging for **Uninstall Here** in Windhawk and repeat the click. Include the app version, Windows build, and the mod's log entries in your report. [Report an issue](https://github.com/luizbizzio/uninstall-here/issues)
 
@@ -42,16 +55,22 @@ If you expected the app to work, enable logging for **Uninstall Here** in Windha
 // ==/WindhawkModReadme==
 
 #include <windows.h>
+#include <commctrl.h>
+#include <dwmapi.h>
 #include <inspectable.h>
 #include <msi.h>
 #include <msiquery.h>
+#include <objidl.h>
+#include <gdiplus.h>
 #include <shellapi.h>
 #include <shldisp.h>
 #include <shobjidl.h>
+#include <sddl.h>
 #include <softpub.h>
 #include <wintrust.h>
 #include <windhawk_utils.h>
 #include <winrt/base.h>
+#include <winrt/Windows.UI.ViewManagement.h>
 
 #include <cwchar>
 #include <mutex>
@@ -66,6 +85,12 @@ namespace {
 
 constexpr wchar_t kUninstallKey[] = L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall";
 constexpr size_t kMaxPath = 32767;
+
+// The clicked tile's shortcut, as Windows reports it.
+struct TileShortcut {
+    std::wstring path;
+    std::wstring arguments;
+};
 
 struct AppIdentity {
     std::wstring executable;
@@ -166,6 +191,50 @@ bool IsFile(const std::wstring& path) {
 bool IsUnder(std::wstring_view file, std::wstring_view directory) {
     return directory.size() > 3 && file.size() > directory.size() &&
            file[directory.size()] == L'\\' && Equals(file.substr(0, directory.size()), directory);
+}
+
+std::wstring ParentFolder(const std::wstring& path) {
+    const auto separator = path.find_last_of(L'\\');
+    return separator == path.npos ? std::wstring() : path.substr(0, separator);
+}
+
+std::wstring_view FileName(std::wstring_view path) {
+    return path.substr(path.find_last_of(L'\\') + 1);
+}
+
+// A shortcut with arguments can open something else inside a program, such as a
+// web app inside a browser. Only these forms are known to start the program itself.
+bool ArgumentsKeepApp(std::wstring_view executable, std::wstring_view arguments) {
+    arguments = Trim(arguments);
+    if (arguments.empty()) {
+        return true;
+    }
+    const auto singleWord = [](std::wstring_view text) {
+        return !text.empty() && text.find_first_of(L" \t\"") == text.npos;
+    };
+    // Chromium browsers mark their own Start shortcut.
+    constexpr std::wstring_view source = L"--source-shortcut-location=";
+    if (arguments.starts_with(source)) {
+        return singleWord(arguments.substr(source.size()));
+    }
+    const auto name = FileName(executable);
+    // A Squirrel app's shortcut may repeat the name of the program it starts,
+    // with or without quotes.
+    constexpr std::wstring_view processStart = L"--processStart ";
+    if (arguments.starts_with(processStart)) {
+        auto target = Trim(arguments.substr(processStart.size()));
+        if (target.size() >= 2 && target.front() == L'"' && target.back() == L'"') {
+            target = target.substr(1, target.size() - 2);
+        }
+        return Equals(target, name);
+    }
+    // The pages of the Java Control Panel.
+    constexpr std::wstring_view tab = L"-tab ";
+    if (Equals(name, L"javacpl.exe")) {
+        return arguments.starts_with(tab) && singleWord(arguments.substr(tab.size()));
+    }
+    // Git's own launchers.
+    return (Equals(name, L"git-bash.exe") || Equals(name, L"git-cmd.exe")) && arguments == L"--cd-to-home";
 }
 
 std::wstring EnvironmentPath(PCWSTR name) {
@@ -557,6 +626,11 @@ std::optional<RegisteredUninstaller> FindUninstallCommand(const AppIdentity& app
     const auto localAppData = EnvironmentPath(L"LOCALAPPDATA");
     std::optional<RegisteredUninstaller> matched;
     size_t matches = 0;
+    // Weaker evidence, used only when no registration names the app directly: the
+    // uninstaller sits in the same folder as the selected executable.
+    std::optional<RegisteredUninstaller> sameFolder;
+    size_t sameFolderMatches = 0;
+    const auto appFolder = ParentFolder(app.executable);
 
     for (const auto& root : roots) {
         RegistryKey list;
@@ -593,32 +667,53 @@ std::optional<RegisteredUninstaller> FindUninstallCommand(const AppIdentity& app
 
             std::wstring location;
             bool iconMatches = false;
+            bool noLocation = false;
             if (app.productCode.empty()) {
                 if (app.executable.empty()) {
                     continue;
                 }
                 iconMatches = Equals(IconPath(ReadString(entry.key, L"DisplayIcon")), app.executable);
                 const auto registeredLocation = ReadString(entry.key, L"InstallLocation");
-                if (Trim(registeredLocation).empty()) {
-                    if (msi || !iconMatches) {
+                noLocation = Trim(registeredLocation).empty();
+                if (!noLocation) {
+                    location = LocalPath(registeredLocation);
+                } else if (iconMatches && !msi) {
+                    location = appFolder;
+                }
+                if (msi) {
+                    // Without a registered folder, only Windows Installer's own
+                    // record that it installed this exact file is enough.
+                    const bool inLocation = IsUnder(app.executable, location) && SpecificLocation(location);
+                    if (noLocation ? !SpecificLocation(appFolder) || !MsiOwnsExecutable(subkey, app.executable, windows)
+                                   : !inLocation || (!iconMatches && !MsiOwnsExecutable(subkey, app.executable, windows))) {
                         continue;
                     }
-                    location = app.executable.substr(0, app.executable.find_last_of(L'\\'));
-                } else {
-                    location = LocalPath(registeredLocation);
-                }
-                if (!IsUnder(app.executable, location) || !SpecificLocation(location) ||
-                    (msi && !iconMatches && !MsiOwnsExecutable(subkey, app.executable, windows))) {
-                    continue;
                 }
             }
             std::optional<UninstallCommand> command;
             if (!msi) {
                 command = ParseExecutableCommand(ReadString(entry.key, L"UninstallString"));
-                if (!iconMatches &&
-                    (root.hive != HKEY_CURRENT_USER || !command ||
-                     !IsSquirrelUninstaller(entry.key, subkey, app.executable, location, localAppData, *command))) {
-                    continue;
+                if (app.productCode.empty()) {
+                    const bool direct =
+                        IsUnder(app.executable, location) && SpecificLocation(location) &&
+                        (iconMatches || (root.hive == HKEY_CURRENT_USER && command &&
+                                         IsSquirrelUninstaller(entry.key, subkey, app.executable, location,
+                                                               localAppData, *command)));
+                    if (!direct) {
+                        // A launcher can register commands in its own folder that
+                        // remove something it manages, such as a Steam game.
+                        const bool managedItem =
+                            command && (command->arguments.find(L"://") != std::wstring::npos ||
+                                        (!command->arguments.empty() && Equals(command->executable, app.executable)));
+                        if (command && !managedItem && (noLocation || Equals(location, appFolder)) &&
+                            SpecificLocation(appFolder) &&
+                            Equals(ParentFolder(command->executable), appFolder) &&
+                            !IsUnder(command->executable, windows) && ++sameFolderMatches == 1) {
+                            sameFolder = RegisteredUninstaller{std::move(*command), std::move(displayName),
+                                                               ReadString(entry.key, L"Publisher")};
+                        }
+                        continue;
+                    }
                 }
             }
             if (++matches > 1) {
@@ -640,7 +735,11 @@ std::optional<RegisteredUninstaller> FindUninstallCommand(const AppIdentity& app
         }
     }
     if (matches == 0 && app.productCode.empty() && !app.executable.empty()) {
-        return FindControlPanelUninstaller(app.executable);
+        if (sameFolderMatches > 1) {
+            Wh_Log(L"More than one uninstaller shares the selected app's folder.");
+            return std::nullopt;
+        }
+        return sameFolder ? sameFolder : FindControlPanelUninstaller(app.executable);
     }
     return matched;
 }
@@ -687,7 +786,7 @@ HRESULT GetProperty(IInspectable* object, size_t slot, Output* value) {
     return reinterpret_cast<Getter>(vtable[slot])(object, value);
 }
 
-AppIdentity ReadTile(IInspectable* tile) {
+TileShortcut ReadTile(IInspectable* tile) {
     winrt::com_ptr<IInspectable> unifiedTile;
     winrt::com_ptr<IInspectable> identifier;
     if (!tile || FAILED(tile->QueryInterface(kUnifiedTileInterface, unifiedTile.put_void())) ||
@@ -714,13 +813,17 @@ AppIdentity ReadTile(IInspectable* tile) {
         FAILED(GetProperty(shortcut.get(), 8, winrt::put_abi(arguments)))) {
         return {};
     }
-    auto app = ResolveShortcut(LocalPath(std::wstring_view(path)));
-    // Some shortcuts address a browser profile, web app, or other product by
-    // passing arguments to a common executable. That path alone is insufficient.
-    if (!Trim(std::wstring_view(arguments)).empty() && app.productCode.empty()) {
-        return {};
+    return {std::wstring(std::wstring_view(path)), std::wstring(std::wstring_view(arguments))};
+}
+
+std::optional<RegisteredUninstaller> FindTileUninstaller(const TileShortcut& tile) {
+    const auto app = ResolveShortcut(LocalPath(tile.path));
+    if ((app.executable.empty() && app.productCode.empty()) ||
+        (app.productCode.empty() && !ArgumentsKeepApp(app.executable, tile.arguments))) {
+        Wh_Log(L"The selected shortcut does not identify one desktop app.");
+        return std::nullopt;
     }
-    return app;
+    return FindUninstallCommand(app);
 }
 
 using GetVerbs = HRESULT(WINAPI*)(void*, IInspectable*, void*, void**);
@@ -739,7 +842,7 @@ HMODULE g_startTileData;
 
 thread_local IInspectable* g_enumeratedTile;
 std::mutex g_appMutex;
-std::unordered_map<void*, AppIdentity> g_apps;
+std::unordered_map<void*, TileShortcut> g_apps;
 
 struct EnumerationScope {
     IInspectable* previous;
@@ -778,10 +881,10 @@ HRESULT WINAPI InitHook(void* self, void* args, void* strings, HSTRING provider,
     const HRESULT result = g_originalInit(self, args, strings, provider, group, optionalFeature, featureName);
     if (SUCCEEDED(result) && g_enumeratedTile && !optionalFeature) {
         try {
-            auto app = ReadTile(g_enumeratedTile);
-            if (!app.executable.empty() || !app.productCode.empty()) {
+            auto tile = ReadTile(g_enumeratedTile);
+            if (!tile.path.empty()) {
                 std::lock_guard lock(g_appMutex);
-                g_apps.insert_or_assign(self, std::move(app));
+                g_apps.insert_or_assign(self, std::move(tile));
             }
         } catch (...) {
             Wh_Log(L"Could not read the selected tile's identity.");
@@ -799,33 +902,380 @@ void* WINAPI DeleteHook(void* self, unsigned int flags) {
     return Original(self, flags);
 }
 
-bool ConfirmUninstall(const RegisteredUninstaller& uninstaller) {
-    // Registry labels are displayed as single lines so the product and publisher
-    // cannot run into the surrounding confirmation text.
+// Set when the mod stops, so an open confirmation or a pending request ends.
+HANDLE g_stopEvent;
+
+// The confirmation follows the Windows 11 dialog that Start shows: a title, a
+// short message, and two buttons in a separate bottom area, in the system theme.
+constexpr wchar_t kDialogClass[] = L"WindhawkUninstallHereConfirmation";
+// Sizes at 96 DPI.
+constexpr int kDialogWidth = 372;
+constexpr int kDialogPadding = 24;
+constexpr int kDialogTextGap = 12;
+constexpr int kButtonHeight = 32;
+constexpr int kButtonGap = 8;
+constexpr int kButtonRadius = 4;
+
+struct ButtonColors {
+    COLORREF fill;
+    COLORREF hover;
+    COLORREF pressed;
+    COLORREF edge;
+    COLORREF text;
+};
+
+struct DialogColors {
+    COLORREF content;
+    COLORREF footer;
+    COLORREF divider;
+    COLORREF edge;
+    COLORREF text;
+    ButtonColors button;
+    ButtonColors accent;
+    bool dark;
+};
+
+struct Confirmation {
+    DialogColors colors{};
+    HBRUSH contentBrush = nullptr;
+    HWND hovered = nullptr;
+    int lastFocus = IDNO;
+    int footerTop = 0;
+    UINT dpi = USER_DEFAULT_SCREEN_DPI;
+    bool confirmed = false;
+    bool closed = false;
+
+    int Scale(int value) const { return MulDiv(value, dpi, USER_DEFAULT_SCREEN_DPI); }
+};
+
+COLORREF Mix(COLORREF color, COLORREF other, int percent) {
+    const auto channel = [percent](int a, int b) { return static_cast<BYTE>((a * percent + b * (100 - percent)) / 100); };
+    return RGB(channel(GetRValue(color), GetRValue(other)), channel(GetGValue(color), GetGValue(other)),
+               channel(GetBValue(color), GetBValue(other)));
+}
+
+DialogColors CurrentDialogColors() {
+    HIGHCONTRASTW contrast{sizeof(contrast)};
+    if (SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(contrast), &contrast, 0) &&
+        (contrast.dwFlags & HCF_HIGHCONTRASTON)) {
+        const COLORREF window = GetSysColor(COLOR_WINDOW);
+        const COLORREF text = GetSysColor(COLOR_WINDOWTEXT);
+        const COLORREF highlight = GetSysColor(COLOR_HIGHLIGHT);
+        const COLORREF highlightText = GetSysColor(COLOR_HIGHLIGHTTEXT);
+        return {window, window, text, text, text,
+                {window, window, window, text, text},
+                {highlight, highlight, highlight, text, highlightText},
+                false};
+    }
+    // Start follows the Windows mode, which can differ from the app mode.
+    DWORD light = 0;
+    DWORD size = sizeof(light);
+    const bool dark = RegGetValueW(HKEY_CURRENT_USER,
+                                   L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                                   L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &light, &size) != ERROR_SUCCESS ||
+                      !light;
+    COLORREF accent = dark ? RGB(96, 205, 255) : RGB(0, 95, 184);
+    try {
+        using winrt::Windows::UI::ViewManagement::UIColorType;
+        const auto color = winrt::Windows::UI::ViewManagement::UISettings().GetColorValue(
+            dark ? UIColorType::AccentLight2 : UIColorType::AccentDark1);
+        accent = RGB(color.R, color.G, color.B);
+    } catch (...) {
+        Wh_Log(L"Using the default accent color.");
+    }
+    const COLORREF footer = dark ? RGB(32, 32, 32) : RGB(243, 243, 243);
+    return {dark ? RGB(43, 43, 43) : RGB(255, 255, 255),
+            footer,
+            dark ? RGB(29, 29, 29) : RGB(229, 229, 229),
+            dark ? RGB(69, 69, 69) : RGB(200, 200, 200),
+            dark ? RGB(255, 255, 255) : RGB(27, 27, 27),
+            dark ? ButtonColors{RGB(55, 55, 55), RGB(62, 62, 62), RGB(46, 46, 46), RGB(66, 66, 66), RGB(255, 255, 255)}
+                 : ButtonColors{RGB(251, 251, 251), RGB(246, 246, 246), RGB(240, 240, 240), RGB(214, 214, 214),
+                                RGB(27, 27, 27)},
+            {accent, Mix(accent, footer, 90), Mix(accent, footer, 80), Mix(accent, footer, 90),
+             dark ? RGB(0, 0, 0) : RGB(255, 255, 255)},
+            dark};
+}
+
+void FillArea(HDC dc, const RECT& area, COLORREF color) {
+    SetDCBrushColor(dc, color);
+    FillRect(dc, &area, static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
+}
+
+void AddRoundedRect(Gdiplus::GraphicsPath& path, const Gdiplus::RectF& area, float radius) {
+    const float diameter = radius * 2;
+    path.AddArc(area.X, area.Y, diameter, diameter, 180, 90);
+    path.AddArc(area.X + area.Width - diameter, area.Y, diameter, diameter, 270, 90);
+    path.AddArc(area.X + area.Width - diameter, area.Y + area.Height - diameter, diameter, diameter, 0, 90);
+    path.AddArc(area.X, area.Y + area.Height - diameter, diameter, diameter, 90, 90);
+    path.CloseFigure();
+}
+
+Gdiplus::Color GdiColor(COLORREF color) {
+    return Gdiplus::Color(GetRValue(color), GetGValue(color), GetBValue(color));
+}
+
+void DrawDialogButton(const Confirmation& dialog, const DRAWITEMSTRUCT& item) {
+    // Cancel is the default choice and carries the accent color.
+    const auto& colors = item.CtlID == IDNO ? dialog.colors.accent : dialog.colors.button;
+    const COLORREF fill = (item.itemState & ODS_SELECTED) ? colors.pressed
+                          : dialog.hovered == item.hwndItem ? colors.hover
+                                                            : colors.fill;
+    FillArea(item.hDC, item.rcItem, dialog.colors.footer);
+    {
+        Gdiplus::Graphics graphics(item.hDC);
+        graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        const float width = static_cast<float>(item.rcItem.right - item.rcItem.left);
+        const float height = static_cast<float>(item.rcItem.bottom - item.rcItem.top);
+        const float radius = static_cast<float>(dialog.Scale(kButtonRadius));
+        Gdiplus::GraphicsPath shape;
+        AddRoundedRect(shape, {0.5f, 0.5f, width - 1, height - 1}, radius);
+        const Gdiplus::SolidBrush brush(GdiColor(fill));
+        graphics.FillPath(&brush, &shape);
+        const Gdiplus::Pen edge(GdiColor(colors.edge), 1);
+        graphics.DrawPath(&edge, &shape);
+        // Show keyboard focus once the keyboard is in use.
+        if ((item.itemState & ODS_FOCUS) && !(item.itemState & ODS_NOFOCUSRECT)) {
+            const float inset = static_cast<float>(dialog.Scale(2));
+            Gdiplus::GraphicsPath focus;
+            AddRoundedRect(focus, {inset, inset, width - 2 * inset, height - 2 * inset}, radius);
+            const Gdiplus::Pen ring(GdiColor(colors.text), static_cast<float>(dialog.Scale(2)));
+            graphics.DrawPath(&ring, &focus);
+        }
+    }
+    wchar_t label[32]{};
+    GetWindowTextW(item.hwndItem, label, ARRAYSIZE(label));
+    RECT area = item.rcItem;
+    SetBkMode(item.hDC, TRANSPARENT);
+    SetTextColor(item.hDC, colors.text);
+    const auto previous = SelectObject(item.hDC, reinterpret_cast<HFONT>(SendMessageW(item.hwndItem, WM_GETFONT, 0, 0)));
+    DrawTextW(item.hDC, label, -1, &area, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    SelectObject(item.hDC, previous);
+}
+
+LRESULT CALLBACK DialogButtonProc(HWND button, UINT message, WPARAM wParam, LPARAM lParam, UINT_PTR id,
+                                  DWORD_PTR data) {
+    auto& dialog = *reinterpret_cast<Confirmation*>(data);
+    if (message == WM_MOUSEMOVE && dialog.hovered != button) {
+        dialog.hovered = button;
+        TRACKMOUSEEVENT track{sizeof(track), TME_LEAVE, button, 0};
+        TrackMouseEvent(&track);
+        InvalidateRect(button, nullptr, FALSE);
+    } else if (message == WM_MOUSELEAVE && dialog.hovered == button) {
+        dialog.hovered = nullptr;
+        InvalidateRect(button, nullptr, FALSE);
+    } else if (message == WM_SETFOCUS) {
+        dialog.lastFocus = GetDlgCtrlID(button);
+    } else if (message == WM_NCDESTROY) {
+        RemoveWindowSubclass(button, DialogButtonProc, id);
+    }
+    return DefSubclassProc(button, message, wParam, lParam);
+}
+
+LRESULT CALLBACK ConfirmationProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
+    if (message == WM_NCCREATE) {
+        SetWindowLongPtrW(window, GWLP_USERDATA,
+                          reinterpret_cast<LONG_PTR>(reinterpret_cast<CREATESTRUCTW*>(lParam)->lpCreateParams));
+    }
+    auto dialog = reinterpret_cast<Confirmation*>(GetWindowLongPtrW(window, GWLP_USERDATA));
+    if (!dialog) {
+        return DefWindowProcW(window, message, wParam, lParam);
+    }
+    switch (message) {
+        case WM_ERASEBKGND:
+            return 1;
+        case WM_PAINT: {
+            PAINTSTRUCT paint;
+            const HDC dc = BeginPaint(window, &paint);
+            RECT area;
+            GetClientRect(window, &area);
+            FillArea(dc, {0, 0, area.right, dialog->footerTop}, dialog->colors.content);
+            FillArea(dc, {0, dialog->footerTop, area.right, area.bottom}, dialog->colors.footer);
+            FillArea(dc, {0, dialog->footerTop, area.right, dialog->footerTop + dialog->Scale(1)},
+                     dialog->colors.divider);
+            EndPaint(window, &paint);
+            return 0;
+        }
+        case WM_CTLCOLORSTATIC:
+            SetTextColor(reinterpret_cast<HDC>(wParam), dialog->colors.text);
+            SetBkColor(reinterpret_cast<HDC>(wParam), dialog->colors.content);
+            return reinterpret_cast<LRESULT>(dialog->contentBrush);
+        case WM_DRAWITEM:
+            DrawDialogButton(*dialog, *reinterpret_cast<DRAWITEMSTRUCT*>(lParam));
+            return TRUE;
+        case DM_GETDEFID:
+            // Enter chooses the focused button, and Cancel otherwise.
+            return MAKELRESULT(GetFocus() == GetDlgItem(window, IDYES) ? IDYES : IDNO, DC_HASDEFID);
+        case WM_SETFOCUS:
+            SetFocus(GetDlgItem(window, dialog->lastFocus));
+            return 0;
+        case WM_COMMAND:
+            if (HIWORD(wParam) == BN_CLICKED &&
+                (LOWORD(wParam) == IDYES || LOWORD(wParam) == IDNO || LOWORD(wParam) == IDCANCEL)) {
+                dialog->confirmed = LOWORD(wParam) == IDYES;
+                DestroyWindow(window);
+            }
+            return 0;
+        case WM_CLOSE:
+            DestroyWindow(window);
+            return 0;
+        case WM_DESTROY:
+            dialog->closed = true;
+            return 0;
+    }
+    return DefWindowProcW(window, message, wParam, lParam);
+}
+
+int WrappedTextHeight(HFONT font, const std::wstring& text, int width) {
+    const HDC dc = GetDC(nullptr);
+    const auto previous = SelectObject(dc, font);
+    RECT area{0, 0, width, 0};
+    DrawTextW(dc, text.c_str(), -1, &area, DT_CALCRECT | DT_WORDBREAK | DT_EDITCONTROL | DT_NOPREFIX);
+    SelectObject(dc, previous);
+    ReleaseDC(nullptr, dc);
+    return area.bottom;
+}
+
+// Lays out and shows the dialog, then waits for an answer.
+bool RunConfirmation(HWND window, HINSTANCE module, Confirmation& dialog, const std::wstring& title,
+                     const std::wstring& body, const RECT& workArea, HFONT titleFont, HFONT bodyFont) {
+    const int width = dialog.Scale(kDialogWidth);
+    const int padding = dialog.Scale(kDialogPadding);
+    const int textWidth = width - 2 * padding;
+    const int titleHeight = WrappedTextHeight(titleFont, title, textWidth);
+    const int bodyTop = padding + titleHeight + dialog.Scale(kDialogTextGap);
+    const int bodyHeight = WrappedTextHeight(bodyFont, body, textWidth);
+    dialog.footerTop = bodyTop + bodyHeight + padding;
+    const int height = dialog.footerTop + 2 * padding + dialog.Scale(kButtonHeight);
+    const int buttonWidth = (textWidth - dialog.Scale(kButtonGap)) / 2;
+    const int buttonTop = dialog.footerTop + padding;
+
+    const auto add = [&](PCWSTR type, const std::wstring& text, DWORD style, int id, RECT area, HFONT font) {
+        const HWND control = CreateWindowExW(0, type, text.c_str(), WS_CHILD | WS_VISIBLE | style, area.left, area.top,
+                                             area.right, area.bottom, window,
+                                             reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), module, nullptr);
+        if (control) {
+            SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(font), FALSE);
+        }
+        return control;
+    };
+    constexpr DWORD textStyle = SS_NOPREFIX | SS_EDITCONTROL;
+    constexpr DWORD buttonStyle = WS_TABSTOP | BS_OWNERDRAW;
+    const HWND titleText = add(L"STATIC", title, textStyle, -1, {padding, padding, textWidth, titleHeight}, titleFont);
+    const HWND bodyText = add(L"STATIC", body, textStyle, -1, {padding, bodyTop, textWidth, bodyHeight}, bodyFont);
+    const HWND uninstall = add(L"BUTTON", L"Uninstall", buttonStyle | WS_GROUP, IDYES,
+                               {padding, buttonTop, buttonWidth, dialog.Scale(kButtonHeight)}, bodyFont);
+    const HWND cancel = add(L"BUTTON", L"Cancel", buttonStyle, IDNO,
+                            {width - padding - buttonWidth, buttonTop, buttonWidth, dialog.Scale(kButtonHeight)},
+                            bodyFont);
+    if (!titleText || !bodyText || !uninstall || !cancel ||
+        !SetWindowSubclass(uninstall, DialogButtonProc, 1, reinterpret_cast<DWORD_PTR>(&dialog)) ||
+        !SetWindowSubclass(cancel, DialogButtonProc, 1, reinterpret_cast<DWORD_PTR>(&dialog))) {
+        return false;
+    }
+
+    const BOOL dark = dialog.colors.dark;
+    DwmSetWindowAttribute(window, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
+    const auto corners = DWMWCP_ROUND;
+    DwmSetWindowAttribute(window, DWMWA_WINDOW_CORNER_PREFERENCE, &corners, sizeof(corners));
+    DwmSetWindowAttribute(window, DWMWA_BORDER_COLOR, &dialog.colors.edge, sizeof(dialog.colors.edge));
+
+    SetWindowPos(window, HWND_TOPMOST, workArea.left + (workArea.right - workArea.left - width) / 2,
+                 workArea.top + (workArea.bottom - workArea.top - height) / 2, width, height, SWP_NOACTIVATE);
+    ShowWindow(window, SW_SHOWNORMAL);
+    SetForegroundWindow(window);
+    SetFocus(cancel);
+
+    while (!dialog.closed) {
+        MSG message;
+        while (!dialog.closed && PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+            if (!IsDialogMessageW(window, &message)) {
+                TranslateMessage(&message);
+                DispatchMessageW(&message);
+            }
+        }
+        if (!dialog.closed && MsgWaitForMultipleObjectsEx(1, &g_stopEvent, INFINITE, QS_ALLINPUT,
+                                                          MWMO_INPUTAVAILABLE) != WAIT_OBJECT_0 + 1) {
+            // The mod is stopping, or waiting failed. Either way, don't uninstall.
+            DestroyWindow(window);
+        }
+    }
+    return true;
+}
+
+// Returns the user's answer, or nothing if the dialog could not be shown.
+std::optional<bool> ShowConfirmation(const std::wstring& title, const std::wstring& body) {
+    HINSTANCE module = nullptr;
+    Gdiplus::GdiplusStartupInput gdiplusInput;
+    ULONG_PTR gdiplus = 0;
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            reinterpret_cast<PCWSTR>(&ConfirmationProc), &module) ||
+        Gdiplus::GdiplusStartup(&gdiplus, &gdiplusInput, nullptr) != Gdiplus::Ok) {
+        return std::nullopt;
+    }
+    WNDCLASSEXW windowClass{sizeof(windowClass)};
+    windowClass.lpfnWndProc = ConfirmationProc;
+    windowClass.hInstance = module;
+    windowClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    windowClass.lpszClassName = kDialogClass;
+
+    std::optional<bool> answer;
+    if (RegisterClassExW(&windowClass)) {
+        Confirmation dialog;
+        dialog.colors = CurrentDialogColors();
+        dialog.contentBrush = CreateSolidBrush(dialog.colors.content);
+        // Open on the screen where the click happened.
+        POINT cursor{};
+        GetCursorPos(&cursor);
+        MONITORINFO monitor{sizeof(monitor)};
+        GetMonitorInfoW(MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST), &monitor);
+        const HWND window = CreateWindowExW(WS_EX_TOPMOST | WS_EX_CONTROLPARENT, kDialogClass, L"Uninstall Here",
+                                            WS_POPUP | WS_CLIPCHILDREN, monitor.rcWork.left, monitor.rcWork.top, 0, 0,
+                                            nullptr, nullptr, module, &dialog);
+        if (window) {
+            dialog.dpi = GetDpiForWindow(window);
+            const auto font = [&](int size, int weight, PCWSTR face) {
+                return CreateFontW(-dialog.Scale(size), 0, 0, 0, weight, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+                                   OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, face);
+            };
+            const HFONT titleFont = font(20, FW_SEMIBOLD, L"Segoe UI Variable Display");
+            const HFONT bodyFont = font(14, FW_NORMAL, L"Segoe UI Variable Text");
+            if (RunConfirmation(window, module, dialog, title, body, monitor.rcWork, titleFont, bodyFont)) {
+                answer = dialog.confirmed;
+            }
+            if (!dialog.closed) {
+                DestroyWindow(window);
+            }
+            DeleteObject(titleFont);
+            DeleteObject(bodyFont);
+        }
+        DeleteObject(dialog.contentBrush);
+        UnregisterClassW(kDialogClass, module);
+    }
+    Gdiplus::GdiplusShutdown(gdiplus);
+    return answer;
+}
+
+std::optional<bool> ConfirmUninstall(const RegisteredUninstaller& uninstaller) {
+    // Registry labels are displayed as single lines of a limited length, so the
+    // product and publisher cannot run into the surrounding text.
     auto singleLine = [](std::wstring label) {
         for (auto& character : label) {
             if (character < L' ') {
                 character = L' ';
             }
         }
-        return std::wstring(Trim(label));
+        label = std::wstring(Trim(label));
+        constexpr size_t limit = 160;
+        if (label.size() > limit) {
+            label = label.substr(0, limit) + L"…";
+        }
+        return label;
     };
-    auto message = L"Uninstall " + singleLine(uninstaller.displayName) + L"?";
     const auto publisher = singleLine(uninstaller.publisher);
-    if (!publisher.empty()) {
-        message += L"\n\nPublisher: " + publisher;
-    }
-    // Start has its own window band. Use its foreground window as the owner
-    // when it is still open, and otherwise let the confirmation stand alone.
-    HWND owner = GetForegroundWindow();
-    DWORD ownerProcess = 0;
-    GetWindowThreadProcessId(owner, &ownerProcess);
-    if (ownerProcess != GetCurrentProcessId()) {
-        owner = nullptr;
-    }
-    return MessageBoxW(owner, message.c_str(), L"Uninstall Here",
-                       MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2 | MB_TASKMODAL |
-                           MB_SETFOREGROUND | MB_TOPMOST) == IDYES;
+    return ShowConfirmation(L"Uninstall \"" + singleLine(uninstaller.displayName) + L"\"?",
+                            publisher.empty() ? std::wstring(L"The app's uninstaller will open.")
+                                              : L"Publisher: " + publisher);
 }
 
 bool OpenUninstaller(const RegisteredUninstaller& uninstaller) {
@@ -859,29 +1309,294 @@ bool OpenUninstaller(const RegisteredUninstaller& uninstaller) {
     return false;
 }
 
+// Start and Search only send the clicked shortcut to this mod's copy in
+// Explorer, which does the lookup, confirmation, and launch. One process draws
+// the confirmation, so it looks the same everywhere. It has to be Explorer:
+// Search runs in an AppContainer that can't read per-user installations or start
+// an uninstaller outside its sandbox, and Windows hides the Start menu process's
+// windows while Start is closed.
+constexpr wchar_t kStartPackage[] = L"Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy";
+constexpr wchar_t kSearchPackage[] = L"MicrosoftWindows.Client.CBS_cw5n1h2txyewy";
+// The AppContainer SID of that package, the same on every PC. Deriving it with
+// DeriveAppContainerSidFromAppContainerName inside the packaged Start menu
+// process returns a different SID, so it's written out here.
+#define SEARCH_PACKAGE_SID \
+    L"S-1-15-2-283421221-3183566570-1718213290-751554359-3541592344-2312209569-3374928651"
+constexpr size_t kMaxRequest = 2 * kMaxPath;  // In characters.
+constexpr DWORD kPipeTimeout = 2000;
+constexpr DWORD kLookupTimeout = 15000;
+constexpr DWORD kListenRetry = 5000;
+// Read and write, without the right to create more instances of the pipe.
+constexpr DWORD kPipeClientAccess = FILE_GENERIC_READ | FILE_WRITE_DATA | FILE_WRITE_ATTRIBUTES;
+
+bool g_isExplorer;
+HANDLE g_receiverThread;
+
+std::wstring PipeName() {
+    DWORD session = 0;
+    ProcessIdToSessionId(GetCurrentProcessId(), &session);
+    return L"\\\\.\\pipe\\WindhawkUninstallHere.v1." + std::to_wstring(session);
+}
+
+// Returns true when Explorer takes over the uninstall.
+bool ForwardToExplorer(const TileShortcut& tile) {
+    std::wstring request = tile.path;
+    request.push_back(L'\0');
+    request += tile.arguments;
+    if (request.size() > kMaxRequest) {
+        return false;
+    }
+    const auto name = PipeName();
+    winrt::file_handle pipe;
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        pipe.attach(CreateFileW(name.c_str(), kPipeClientAccess, 0, nullptr, OPEN_EXISTING,
+                                FILE_FLAG_OVERLAPPED | SECURITY_SQOS_PRESENT | SECURITY_ANONYMOUS, nullptr));
+        if (pipe || GetLastError() != ERROR_PIPE_BUSY || !WaitNamedPipeW(name.c_str(), kPipeTimeout)) {
+            break;
+        }
+    }
+    if (!pipe) {
+        Wh_Log(L"Could not reach Explorer. Error %u.", GetLastError());
+        return false;
+    }
+    // Pipe names are shared by all sessions, so another signed-in user could
+    // create this one first.
+    ULONG serverSession = 0;
+    DWORD session = 0;
+    if (!GetNamedPipeServerSessionId(pipe.get(), &serverSession) ||
+        !ProcessIdToSessionId(GetCurrentProcessId(), &session) || serverSession != session) {
+        Wh_Log(L"The pipe isn't served from this session.");
+        return false;
+    }
+    DWORD mode = PIPE_READMODE_MESSAGE;
+    const winrt::handle completed(CreateEventW(nullptr, TRUE, FALSE, nullptr));
+    if (!completed || !SetNamedPipeHandleState(pipe.get(), &mode, nullptr, nullptr)) {
+        return false;
+    }
+    // Search owns the foreground. Let the receiver bring its confirmation forward.
+    ULONG receiver = 0;
+    if (GetNamedPipeServerProcessId(pipe.get(), &receiver)) {
+        AllowSetForegroundWindow(receiver);
+    }
+    OVERLAPPED io{};
+    io.hEvent = completed.get();
+    BYTE accepted = 0;
+    DWORD received = 0;
+    if (!TransactNamedPipe(pipe.get(), request.data(), static_cast<DWORD>(request.size() * sizeof(wchar_t)),
+                           &accepted, sizeof(accepted), nullptr, &io)) {
+        if (GetLastError() != ERROR_IO_PENDING) {
+            return false;
+        }
+        if (WaitForSingleObject(io.hEvent, kLookupTimeout) != WAIT_OBJECT_0) {
+            CancelIoEx(pipe.get(), &io);
+        }
+    }
+    return GetOverlappedResult(pipe.get(), &io, &received, TRUE) && received == sizeof(accepted) && accepted == 1;
+}
+
+// Finishes an overlapped operation for the receiver. A timeout or a stop request
+// cancels it. The receiver is a COM STA, so it handles messages while waiting.
+bool CompleteReceiverIo(HANDLE pipe, OVERLAPPED& io, BOOL done, DWORD timeout, DWORD& bytes) {
+    if (!done) {
+        if (GetLastError() != ERROR_IO_PENDING) {
+            return false;
+        }
+        const HANDLE handles[] = {io.hEvent, g_stopEvent};
+        const ULONGLONG start = GetTickCount64();
+        for (;;) {
+            DWORD remaining = INFINITE;
+            if (timeout != INFINITE) {
+                const ULONGLONG elapsed = GetTickCount64() - start;
+                remaining = elapsed < timeout ? static_cast<DWORD>(timeout - elapsed) : 0;
+            }
+            const DWORD result = MsgWaitForMultipleObjects(ARRAYSIZE(handles), handles, FALSE, remaining, QS_ALLINPUT);
+            if (result != WAIT_OBJECT_0 + ARRAYSIZE(handles)) {
+                if (result != WAIT_OBJECT_0) {
+                    CancelIoEx(pipe, &io);
+                }
+                break;
+            }
+            MSG message;
+            while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+                TranslateMessage(&message);
+                DispatchMessageW(&message);
+            }
+        }
+    }
+    return GetOverlappedResult(pipe, &io, &bytes, TRUE);
+}
+
+HANDLE CreateRequestPipe() {
+    winrt::handle token;
+    BYTE userBuffer[sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE];
+    DWORD size = 0;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, token.put()) ||
+        !GetTokenInformation(token.get(), TokenUser, userBuffer, sizeof(userBuffer), &size)) {
+        return INVALID_HANDLE_VALUE;
+    }
+    PWSTR userText = nullptr;
+    if (!ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER*>(userBuffer)->User.Sid, &userText)) {
+        return INVALID_HANDLE_VALUE;
+    }
+    // Only this user, which covers the Start menu process, and the Search package
+    // get access. The low integrity label lets sandboxed Search write its request.
+    wchar_t access[11]{};
+    std::swprintf(access, ARRAYSIZE(access), L"0x%08x", static_cast<unsigned>(kPipeClientAccess));
+    const auto rules = std::wstring(L"D:P(A;;GA;;;") + userText + L")(A;;" + access +
+                       L";;;" SEARCH_PACKAGE_SID L")S:(ML;;NW;;;LW)";
+    LocalFree(userText);
+
+    SECURITY_ATTRIBUTES security{sizeof(security), nullptr, FALSE};
+    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(rules.c_str(), SDDL_REVISION_1,
+                                                              &security.lpSecurityDescriptor, nullptr)) {
+        return INVALID_HANDLE_VALUE;
+    }
+    const HANDLE pipe = CreateNamedPipeW(
+        PipeName().c_str(), PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED | FILE_FLAG_FIRST_PIPE_INSTANCE,
+        PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS, 1, sizeof(BYTE),
+        64 * 1024, 0, &security);
+    LocalFree(security.lpSecurityDescriptor);
+    return pipe;
+}
+
+bool IsStartOrSearchClient(HANDLE pipe) {
+    ULONG processId = 0;
+    if (!GetNamedPipeClientProcessId(pipe, &processId)) {
+        return false;
+    }
+    const winrt::handle process(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId));
+    std::wstring image(kMaxPath, L'\0');
+    DWORD length = static_cast<DWORD>(image.size());
+    if (!process || !QueryFullProcessImageNameW(process.get(), 0, image.data(), &length)) {
+        return false;
+    }
+    image.resize(length);
+    const auto apps = EnvironmentPath(L"SystemRoot") + L"\\SystemApps\\";
+    return Equals(image, apps + kStartPackage + L"\\StartMenuExperienceHost.exe") ||
+           Equals(image, apps + kSearchPackage + L"\\SearchHost.exe");
+}
+
+// Reads one request and replies. Returns the uninstaller only after the sender
+// has received the reply, so an abandoned request never opens a confirmation.
+std::optional<RegisteredUninstaller> AnswerRequest(HANDLE pipe, HANDLE completed) {
+    if (!IsStartOrSearchClient(pipe)) {
+        Wh_Log(L"Ignored a request that did not come from Start or Search.");
+        return std::nullopt;
+    }
+    std::wstring request(kMaxRequest, L'\0');
+    OVERLAPPED io{};
+    io.hEvent = completed;
+    DWORD bytes = 0;
+    BOOL done = ReadFile(pipe, request.data(), static_cast<DWORD>(request.size() * sizeof(wchar_t)), nullptr, &io);
+    if (!CompleteReceiverIo(pipe, io, done, kPipeTimeout, bytes) || bytes % sizeof(wchar_t)) {
+        return std::nullopt;
+    }
+    request.resize(bytes / sizeof(wchar_t));
+    const auto separator = request.find(L'\0');
+    if (separator == request.npos) {
+        return std::nullopt;
+    }
+    auto uninstaller = FindTileUninstaller({request.substr(0, separator), request.substr(separator + 1)});
+
+    const BYTE accepted = uninstaller.has_value();
+    io = {};
+    io.hEvent = completed;
+    done = WriteFile(pipe, &accepted, sizeof(accepted), nullptr, &io);
+    if (!CompleteReceiverIo(pipe, io, done, kPipeTimeout, bytes)) {
+        return std::nullopt;
+    }
+    // The sender closes its end after reading. Wait for that before disconnecting.
+    BYTE unused = 0;
+    io = {};
+    io.hEvent = completed;
+    done = ReadFile(pipe, &unused, sizeof(unused), nullptr, &io);
+    CompleteReceiverIo(pipe, io, done, kPipeTimeout, bytes);
+    return uninstaller;
+}
+
+// Serves Start and Search until the mod stops or the pipe fails.
+void ServeRequests(HANDLE pipe, HANDLE completed) {
+    while (WaitForSingleObject(g_stopEvent, 0) == WAIT_TIMEOUT) {
+        OVERLAPPED io{};
+        io.hEvent = completed;
+        DWORD bytes = 0;
+        const BOOL done = ConnectNamedPipe(pipe, &io);
+        if (!(!done && GetLastError() == ERROR_PIPE_CONNECTED) &&
+            !CompleteReceiverIo(pipe, io, done, INFINITE, bytes)) {
+            if (GetLastError() != ERROR_NO_DATA) {
+                return;
+            }
+            DisconnectNamedPipe(pipe);
+            continue;
+        }
+        try {
+            const auto uninstaller = AnswerRequest(pipe, completed);
+            DisconnectNamedPipe(pipe);
+            if (uninstaller) {
+                const auto confirmed = ConfirmUninstall(*uninstaller);
+                if (!confirmed || (*confirmed && !OpenUninstaller(*uninstaller))) {
+                    // The sender already handed over the click, so open Installed apps from here.
+                    ShellExecuteW(nullptr, L"open", L"ms-settings:appsfeatures", nullptr, nullptr, SW_SHOWNORMAL);
+                }
+            }
+        } catch (...) {
+            DisconnectNamedPipe(pipe);
+            Wh_Log(L"Handling an uninstall request failed.");
+        }
+    }
+}
+
+DWORD WINAPI ReceiveRequests(void*) {
+    const HRESULT com = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    const winrt::handle completed(CreateEventW(nullptr, TRUE, FALSE, nullptr));
+    // Only one Explorer process can own the pipe. The others keep waiting, so one
+    // of them takes over if the owner exits.
+    while (completed && WaitForSingleObject(g_stopEvent, 0) == WAIT_TIMEOUT) {
+        const winrt::file_handle pipe(CreateRequestPipe());
+        if (pipe) {
+            ServeRequests(pipe.get(), completed.get());
+        }
+        WaitForSingleObject(g_stopEvent, kListenRetry);
+    }
+    if (SUCCEEDED(com)) {
+        CoUninitialize();
+    }
+    return 0;
+}
+
+void StopReceiver() {
+    if (g_receiverThread) {
+        // This also cancels an open confirmation.
+        SetEvent(g_stopEvent);
+        WaitForSingleObject(g_receiverThread, INFINITE);
+        CloseHandle(g_receiverThread);
+        g_receiverThread = nullptr;
+    }
+    if (g_stopEvent) {
+        CloseHandle(g_stopEvent);
+        g_stopEvent = nullptr;
+    }
+}
+
 HRESULT WINAPI ExecuteHook(void* self, void* args) {
     try {
-        AppIdentity app;
+        TileShortcut tile;
         {
             std::lock_guard lock(g_appMutex);
             auto it = g_apps.find(self);
             if (it != g_apps.end()) {
-                app = it->second;
+                tile = it->second;
             }
         }
-        if (!app.executable.empty() || !app.productCode.empty()) {
-            const auto uninstaller = FindUninstallCommand(app);
-            if (uninstaller) {
-                if (!ConfirmUninstall(*uninstaller) || OpenUninstaller(*uninstaller)) {
-                    return S_OK;
-                }
-            }
-            Wh_Log(L"No uninstaller was launched for this installation.");
-        } else {
+        if (tile.path.empty()) {
             Wh_Log(L"The uninstall action has no resolved desktop tile identity.");
+        } else if (ForwardToExplorer(tile)) {
+            return S_OK;
+        } else {
+            Wh_Log(L"Explorer did not take over this uninstall.");
         }
     } catch (...) {
-        Wh_Log(L"Resolving the uninstaller failed.");
+        Wh_Log(L"Forwarding the uninstall failed.");
     }
     return g_originalExecute(self, args);
 }
@@ -889,6 +1604,13 @@ HRESULT WINAPI ExecuteHook(void* self, void* args) {
 }  // namespace
 
 BOOL Wh_ModInit() {
+    wchar_t process[MAX_PATH]{};
+    GetModuleFileNameW(nullptr, process, ARRAYSIZE(process));
+    g_isExplorer = EndsWith(process, L"\\explorer.exe");
+    if (g_isExplorer) {
+        // Explorer only receives requests from Start and Search. It gets no hooks.
+        return TRUE;
+    }
     // Keep the module loaded while Windhawk owns hooks into its code.
     g_startTileData = LoadLibraryExW(L"StartTileData.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!g_startTileData) {
@@ -923,16 +1645,27 @@ BOOL Wh_ModInit() {
                              scalarDelete, DeleteHook<g_originalScalarDelete>, &g_originalScalarDelete)) ||
         (vectorDelete && vectorDelete != scalarDelete && !WindhawkUtils::SetFunctionHook(
                              vectorDelete, DeleteHook<g_originalVectorDelete>, &g_originalVectorDelete))) {
-        Wh_Log(L"Could not install the Start menu hooks on this build.");
+        Wh_Log(L"Could not install the uninstall hooks on this build.");
         FreeLibrary(g_startTileData);
         g_startTileData = nullptr;
         return FALSE;
     }
-    Wh_Log(L"Start menu hooks installed.");
+    Wh_Log(L"Uninstall hooks installed.");
     return TRUE;
 }
 
+void Wh_ModAfterInit() {
+    if (!g_isExplorer) {
+        return;
+    }
+    g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (g_stopEvent) {
+        g_receiverThread = CreateThread(nullptr, 0, ReceiveRequests, nullptr, 0, nullptr);
+    }
+}
+
 void Wh_ModUninit() {
+    StopReceiver();
     if (g_startTileData) {
         FreeLibrary(g_startTileData);
     }
