@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              rdp-icon-refresh
-// @name            Sharp Taskbar Icons After Remote Desktop
-// @description     Re-renders tray and taskbar button icons when you return to the local screen after a Remote Desktop session with a different scale, so they don't stay blurry
-// @version         1.0
+// @name            Sharp Taskbar Icons After Remote Desktop or Resolution Change
+// @description     Re-renders tray and taskbar button icons after a Remote Desktop session with a different scale, or after a program changes the screen resolution and restores it, so they don't stay blurry
+// @version         1.1
 // @author          Solo_mag
 // @github          https://github.com/Solomag
 // @include         explorer.exe
@@ -11,7 +11,11 @@
 
 // ==WindhawkModReadme==
 /*
-# Sharp Taskbar Icons After Remote Desktop
+# Sharp Taskbar Icons After Remote Desktop or Resolution Change
+
+Tray and taskbar icons can stay blurry after a Remote Desktop session with a different
+scale, and after a program (for example a game) changes the screen resolution and
+restores it. This mod renders them again in both cases.
 
 Connecting with Remote Desktop from a device with a different display scale (for example
 the Microsoft Remote Desktop app on a phone, at 200–300%) switches the session to that
@@ -45,6 +49,16 @@ While the remote session is active, the mod checks the taskbar's scale every few
 seconds. If it never differed from the local screen's scale, nothing is done. The
 Windhawk log shows the scales and how many icons were refreshed.
 
+The same blur appears when a program (a game, a full-screen application) switches the
+screen to a lower resolution and back. The mod also refreshes the tray and the taskbar
+buttons once the screen mode has stayed the same for a few seconds after a change
+(`WM_DISPLAYCHANGE`). While a full-screen application or a presentation is running, it
+waits until it ends (the first time it waits is written to the log), and it ignores
+changes that happen during a remote session. Windows sends `WM_DISPLAYCHANGE` for other
+display events too (a monitor plugged in or removed, docking, projection changes, a
+monitor waking up), so the icons are also refreshed a few seconds after those. This can
+be turned off in the settings.
+
 Icons that existed before the mod was enabled are handled too: their copies are read
 from the tray at refresh time. The exception is an icon a program registered by GUID
 before the mod was loaded: Explorer only accepts it by its GUID, which the mod learns
@@ -60,16 +74,25 @@ registered while the mod was running are refreshed.
 // ==WindhawkModSettings==
 /*
 - delaySeconds: 3
-  $name: Delay after returning to the local screen (seconds)
+  $name: Delay before refreshing (seconds)
   $description: >-
-    How long the display scale must stay the same before the icons are refreshed. The
-    scale is watched for a minute: if it changes again, or Explorer is still busy and
-    turns the icons down, they are refreshed again.
+    After returning from Remote Desktop: how long the display scale must stay the same
+    before the icons are refreshed. The scale is watched for a minute: if it changes
+    again, or Explorer is still busy and turns the icons down, they are refreshed again.
+    After a screen resolution change: how long the screen mode must stay the same. 0 is
+    taken as 1 second.
 - logToFile: false
   $name: Log refreshes to a file
   $description: >-
     Also append the refresh reports to refresh.log in the mod's storage folder (its full
     path is written to the Windhawk log). The reports always go to the Windhawk log.
+- refreshOnDisplayChange: true
+  $name: Refresh after the screen resolution changes
+  $description: >-
+    Also refresh the icons after a program changes the screen resolution and restores it
+    (a game, a full-screen application); also after other display changes, such as a
+    monitor being plugged in or waking up. The refresh waits for the delay above, and for
+    a full-screen application to end.
 - refreshOnLoad: false
   $name: Refresh once when the mod is loaded
   $description: Useful to test the refresh, or to fix icons right after enabling the mod.
@@ -134,8 +157,11 @@ constexpr UINT_PTR kRefreshTimer = 1;    // back to the local screen
 constexpr UINT_PTR kRemoteDpiTimer = 2;  // sample the scale of the remote session
 constexpr UINT_PTR kLoadTimer = 3;       // "refresh once on load" setting
 constexpr UINT_PTR kWtsTimer = 4;        // retry the session notification registration
+constexpr UINT_PTR kDisplayTimer = 5;    // the screen mode changed and stayed the same
 
 constexpr UINT kRemoteDpiPeriodMs = 5000;
+constexpr UINT kDisplayRetryMs = 5000;     // a full-screen application is running
+constexpr UINT kDisplayChangedMsg = WM_APP + 1;  // the taskbar got WM_DISPLAYCHANGE
 
 SRWLOCK g_lock = SRWLOCK_INIT;  // guards g_icons and g_logFile
 std::vector<TrayIcon> g_icons;
@@ -143,10 +169,11 @@ WCHAR g_logFile[MAX_PATH];
 
 std::atomic<int> g_delaySeconds{3};
 std::atomic<bool> g_refreshOnLoad{false};
+std::atomic<bool> g_refreshOnDisplay{true};
 
 HANDLE g_thread = nullptr;
 HANDLE g_ready = nullptr;
-HWND g_window = nullptr;           // our message window
+std::atomic<HWND> g_window{nullptr};  // our message window
 std::atomic<HWND> g_tray{nullptr};  // taskbar of this process (subclassed)
 std::atomic<bool> g_subclassed{false};  // the subclass of g_tray is installed
 std::atomic<HICON> g_sendingIcon{nullptr};  // icon of the mod's own NIM_MODIFY in flight
@@ -177,6 +204,7 @@ void LoadSettings() {
     int delay = Wh_GetIntSetting(L"delaySeconds");
     g_delaySeconds = delay < 0 ? 0 : (delay > 60 ? 60 : delay);
     g_refreshOnLoad = Wh_GetIntSetting(L"refreshOnLoad") != 0;
+    g_refreshOnDisplay = Wh_GetIntSetting(L"refreshOnDisplayChange") != 0;
     // The log file lives in the mod's storage folder, which is removed with the mod.
     WCHAR path[MAX_PATH] = L"";
     WCHAR dir[MAX_PATH - 16];
@@ -302,6 +330,13 @@ LRESULT CALLBACK TraySubclass(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
         return collected;
     }
     LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    if (uMsg == WM_DISPLAYCHANGE) {
+        // Sent to every top-level window when the screen mode changes. The refresh runs
+        // on the mod's own thread, once the mode has stayed the same for a while.
+        HWND window = g_window;
+        if (window)
+            PostMessageW(window, kDisplayChangedMsg, 0, 0);
+    }
     if (uMsg == WM_COPYDATA) {
         // The result is what Shell_NotifyIcon returns to the program.
         const auto* cds = (const COPYDATASTRUCT*)lParam;
@@ -573,8 +608,9 @@ bool Refresh(const wchar_t* reason, bool buttons) {
     }
 
     WCHAR line[256];
-    wsprintfW(line, L"refreshed (%s): taskbar DPI %u, remote session DPI %u-%u, tray icons %d of %d, windows %d%s",
-              reason, dpi, g_remoteDpiMin, g_remoteDpiMax, trayIcons, trayTotal, ctx.count,
+    wsprintfW(line, L"refreshed (%s): screen %dx%d, taskbar DPI %u, remote session DPI %u-%u, tray icons %d of %d, windows %d%s",
+              reason, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN), dpi,
+              g_remoteDpiMin, g_remoteDpiMax, trayIcons, trayTotal, ctx.count,
               collected ? L"" : L", the taskbar didn't answer");
     Report(line);
     if (!collected)
@@ -595,6 +631,10 @@ constexpr UINT kSettlePeriodMs = 1000;
 constexpr DWORD kSettleWatchMs = 60000;
 constexpr int kMaxRetries = 5;
 
+bool g_settling = false;   // the watch after returning from a remote session is running
+bool g_displayPending = false;  // a screen mode change came during the watch
+int g_displayRetries = 0;
+bool g_displayDeferredLogged = false;  // the wait for a full-screen application is logged once
 UINT g_settleDpi = 0;      // the scale seen on the last tick
 int g_settleTicks = 0;     // ticks it has stayed the same
 UINT g_refreshedDpi = 0;   // the scale the icons were last refreshed for
@@ -607,6 +647,8 @@ void StartSettling(HWND hwnd) {
     g_refreshedDpi = 0;
     g_retries = 0;
     g_settleStart = GetTickCount();
+    g_settling = true;
+    KillTimer(hwnd, kDisplayTimer);  // the watch covers the mode changes of the return
     SetTimer(hwnd, kRefreshTimer, kSettlePeriodMs, nullptr);
 }
 
@@ -633,8 +675,11 @@ void OnSettleTick(HWND hwnd) {
             wsprintfW(line, L"back to the local screen: same scale as the remote session (DPI %u), nothing to do", dpi);
             Report(line);
             g_refreshedDpi = dpi;
-        } else if (Refresh(L"back to the local screen", g_retries == 0) ||
-                   ++g_retries > kMaxRetries) {
+            g_displayPending = false;
+        } else if (Refresh(L"back to the local screen", g_retries == 0)) {
+            g_refreshedDpi = dpi;
+            g_displayPending = false;  // covers the mode changes before it
+        } else if (++g_retries > kMaxRetries) {
             g_refreshedDpi = dpi;
         } else {
             g_settleTicks = 0;  // Explorer is still busy: try again later
@@ -642,8 +687,43 @@ void OnSettleTick(HWND hwnd) {
     }
     if (watchOver && (g_refreshedDpi == dpi || elapsed >= 2 * kSettleWatchMs)) {
         KillTimer(hwnd, kRefreshTimer);
+        g_settling = false;
         g_remoteDpiMin = g_remoteDpiMax = 0;  // this remote session is handled
+        if (g_displayPending) {  // a mode change came while the watch was running
+            g_displayPending = false;
+            g_displayRetries = 0;
+            g_displayDeferredLogged = false;
+            SetTimer(hwnd, kDisplayTimer, wait * 1000, nullptr);
+        }
     }
+}
+
+// A full-screen application or a presentation is running: the screen mode is probably
+// not the final one, and refreshing would only disturb it.
+bool FullScreenRunning() {
+    QUERY_USER_NOTIFICATION_STATE state;
+    if (FAILED(SHQueryUserNotificationState(&state)))
+        return false;
+    return state == QUNS_BUSY || state == QUNS_RUNNING_D3D_FULL_SCREEN ||
+           state == QUNS_PRESENTATION_MODE;
+}
+
+void OnDisplayTimer(HWND hwnd) {
+    KillTimer(hwnd, kDisplayTimer);
+    if (!g_refreshOnDisplay || g_settling || GetSystemMetrics(SM_REMOTESESSION))
+        return;  // a remote session is handled when it returns to the console
+    if (FullScreenRunning()) {
+        if (!g_displayDeferredLogged) {
+            g_displayDeferredLogged = true;
+            Report(L"screen mode changed: waiting for the full-screen application or presentation to end");
+        }
+        SetTimer(hwnd, kDisplayTimer, kDisplayRetryMs, nullptr);
+        return;
+    }
+    // Explorer may still be busy with the new mode and turn tray requests down.
+    if (!Refresh(L"screen mode changed", g_displayRetries == 0) &&
+        ++g_displayRetries <= kMaxRetries)
+        SetTimer(hwnd, kDisplayTimer, kSettlePeriodMs * 2, nullptr);
 }
 
 bool RegisterSessionNotification(HWND hwnd) {
@@ -669,6 +749,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 g_awayFromConsole = true;
                 g_remoteDpiMin = g_remoteDpiMax = 0;
                 KillTimer(hwnd, kRefreshTimer);
+                g_settling = false;
+                g_displayPending = false;
+                KillTimer(hwnd, kDisplayTimer);
                 SetTimer(hwnd, kRemoteDpiTimer, kRemoteDpiPeriodMs, nullptr);
             } else if (wParam == WTS_CONSOLE_CONNECT) {
                 if (g_awayFromConsole) {
@@ -704,6 +787,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 OnSettleTick(hwnd);
                 return 0;
             }
+            if (wParam == kDisplayTimer) {
+                OnDisplayTimer(hwnd);
+                return 0;
+            }
             if (wParam == kLoadTimer) {
                 // Explorer may still be setting up the tray when the mod loads with it.
                 static int loadRetries = 0;
@@ -712,6 +799,19 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 return 0;
             }
             KillTimer(hwnd, wParam);
+            return 0;
+        case kDisplayChangedMsg:
+            // Every change restarts the timer: the refresh follows the last one, so a
+            // program that lowers the resolution and restores it causes a single refresh.
+            if (g_refreshOnDisplay && g_tray && g_settling)
+                g_displayPending = true;  // handled when the watch ends
+            if (g_refreshOnDisplay && g_tray && !g_settling && !g_awayFromConsole &&
+                !GetSystemMetrics(SM_REMOTESESSION)) {
+                g_displayRetries = 0;
+                g_displayDeferredLogged = false;
+                int wait = g_delaySeconds < 1 ? 1 : (int)g_delaySeconds;
+                SetTimer(hwnd, kDisplayTimer, wait * 1000, nullptr);
+            }
             return 0;
         case WM_CLOSE:
             DestroyWindow(hwnd);
