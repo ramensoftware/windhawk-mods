@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              carica-glow
+// @id              classic-charging-animation
 // @name            Classic Charging Animation
 // @description     Shows the battery level when you plug in, in the style of the Windows 11 volume and brightness indicators.
 // @description:it-IT Mostra il livello della batteria al collegamento del caricatore, nello stile degli indicatori di volume e luminosità di Windows 11.
@@ -17,7 +17,7 @@
 
 Plug in the charger to see the battery percentage in a small bar at the bottom center of the primary display. The bar takes its shape, position and motion from the Windows 11 volume and brightness indicators. It disappears after about two seconds.
 
-![Preview of the charging bar at different battery levels](https://raw.githubusercontent.com/mamt104/windhawk-mods/a2382ac18e16db79056b394a29a25f5a854028e0/previews/carica-glow-preview.gif)
+![Preview of the charging bar at different battery levels](https://raw.githubusercontent.com/mamt104/windhawk-mods/69c605cce728f97219930ce121b3c3bef5401710/previews/classic-charging-animation-preview.gif)
 
 Below 30% the bar starts amber. Below 15% it starts red, and below 5% an exclamation mark appears. At 95% and above a highlight crosses the bar. A check mark appears at 100%. The indicator follows the Windows light, dark, high contrast and animation settings. If Windows cannot report a percentage, the indicator shows a dash.
 
@@ -66,7 +66,7 @@ Sotto il 30% la barra parte in ambra, sotto il 15% in rosso. Sotto il 5% compare
 namespace {
 using namespace Gdiplus;
 
-constexpr wchar_t kWindowClass[] = L"Windhawk.CaricaGlow.1";
+constexpr wchar_t kWindowClass[] = L"Windhawk.ClassicChargingAnimation.1";
 constexpr GUID kPowerSource = {
     0x5d3e9a59,
     0xe9d5,
