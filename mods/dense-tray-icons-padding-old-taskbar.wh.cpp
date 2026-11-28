@@ -72,9 +72,10 @@ shell's own theme queries (`TrayNotifyFlyout`, part 3) with the configured
 cell padding instead of the theme's 12 pixels. The popup re-measures itself
 every time it opens. The tray and the popup draw from one image list, and the
 shell edits that list in place when a tray icon appears, disappears or is
-replaced, without telling the popup. The scaled copies are therefore rebuilt
-after every such edit; a copy kept from before the edit would draw another
-application's picture under the button's tooltip.
+replaced, without telling the popup. The mod therefore applies every such
+edit to its scaled copy as well, scaling only the picture that changed; a copy
+kept from before the edit would draw another application's picture under the
+button's tooltip.
 
 ## Notes
 
@@ -498,8 +499,13 @@ int WINAPI GetSystemMetricsForDpi_Hook(int nIndex, UINT dpi) {
 
 HWND g_overflowWindow = nullptr;
 HWND g_overflowToolbar = nullptr;
-HIMAGELIST g_overflowOriginalImageList = nullptr;
+// Read by the image-list hooks on every thread that edits any image list, so
+// it is atomic; it is only written on the popup toolbar's thread and by the
+// destroy hook.
+std::atomic<HIMAGELIST> g_overflowOriginalImageList{nullptr};
 HIMAGELIST g_overflowScaledImageList = nullptr;
+// At most one full rebuild is queued at a time.
+std::atomic<bool> g_overflowRescalePending{false};
 int g_overflowAppliedSize = 0;
 bool g_inImageListSwap = false;
 UINT g_overflowRefreshMsg = 0;
@@ -514,10 +520,13 @@ constexpr int kOverflowIconSizeMin = 8;
 constexpr int kOverflowIconSizeMax = 96;
 
 // The tray and the popup draw from one image list, and the shell edits that
-// list in place when a tray icon appears or disappears; it sends the popup no
-// message about it. Every such edit therefore schedules a rebuild of the scaled
-// copy. The rebuild is posted, so it runs after the shell finished its own
-// update.
+// list in place when a tray icon appears, disappears, is replaced or animates;
+// it sends the popup no message about it. The scaled copy therefore follows
+// every such edit: the same edit is applied to the copy, with just the changed
+// picture scaled, so animated icons cost one picture per frame and never a
+// full rebuild. The shell makes these edits on the popup toolbar's own thread,
+// which owns the copy. If an edit arrives on another thread, or the copy cannot
+// follow it, one full rebuild is posted instead.
 using ImageListReplaceIcon_t = int(WINAPI*)(HIMAGELIST, int, HICON);
 ImageListReplaceIcon_t ImageList_ReplaceIcon_Original = nullptr;
 using ImageListRemove_t = BOOL(WINAPI*)(HIMAGELIST, int);
@@ -525,39 +534,115 @@ ImageListRemove_t ImageList_Remove_Original = nullptr;
 using ImageListDestroy_t = BOOL(WINAPI*)(HIMAGELIST);
 ImageListDestroy_t ImageList_Destroy_Original = nullptr;
 
-void ScheduleOverflowRescale(HIMAGELIST himl) {
-    if (!himl || himl != g_overflowOriginalImageList || g_unloading ||
-        g_settings.overflowIconSize == kOverflowIconSizeOff) {
+// Returns a copy of one picture of an image list at the given size, or
+// nullptr. The caller destroys the returned icon.
+HICON ScaleImageListIcon(HIMAGELIST source, int index, int iconSize) {
+    HICON icon = ImageList_GetIcon(source, index, ILD_TRANSPARENT);
+    if (!icon) {
+        return nullptr;
+    }
+
+    HICON small = static_cast<HICON>(
+        CopyImage(icon, IMAGE_ICON, iconSize, iconSize, LR_DEFAULTCOLOR));
+    DestroyIcon(icon);
+    return small;
+}
+
+bool IsOverflowSourceEdit(HIMAGELIST himl) {
+    return himl && himl == g_overflowOriginalImageList && !g_unloading &&
+           g_settings.overflowIconSize != kOverflowIconSizeOff;
+}
+
+// Returns the popup toolbar when the current thread owns it, else nullptr.
+HWND OverflowToolbarOnThisThread() {
+    HWND hToolbar = g_overflowToolbar;
+    if (!hToolbar || !IsWindow(hToolbar) ||
+        GetWindowThreadProcessId(hToolbar, nullptr) != GetCurrentThreadId()) {
+        return nullptr;
+    }
+    return hToolbar;
+}
+
+void ScheduleOverflowRescale() {
+    HWND hToolbar = g_overflowToolbar;
+    if (hToolbar && IsWindow(hToolbar) &&
+        !g_overflowRescalePending.exchange(true)) {
+        PostMessageW(hToolbar, g_overflowRefreshMsg, kOverflowRefreshReapply, 0);
+    }
+}
+
+// Called on the toolbar's thread after the copy followed an edit: the copy is
+// valid only while it has exactly as many pictures as the shell's list.
+void FinishOverflowMirror(HWND hToolbar, HIMAGELIST source, bool ok) {
+    if (!ok || ImageList_GetImageCount(g_overflowScaledImageList) !=
+                   ImageList_GetImageCount(source)) {
+        Wh_Log(L"Scaled popup icons could not follow an edit, rebuilding");
+        ScheduleOverflowRescale();
         return;
     }
 
-    HWND hToolbar = g_overflowToolbar;
-    if (hToolbar && IsWindow(hToolbar)) {
-        PostMessageW(hToolbar, g_overflowRefreshMsg, kOverflowRefreshReapply, 0);
+    if (IsWindowVisible(hToolbar)) {
+        InvalidateRect(hToolbar, nullptr, FALSE);
     }
 }
 
 int WINAPI ImageList_ReplaceIcon_Hook(HIMAGELIST himl, int i, HICON hicon) {
     int result = ImageList_ReplaceIcon_Original(himl, i, hicon);
-    if (result >= 0) {
-        ScheduleOverflowRescale(himl);
+    if (result < 0 || !IsOverflowSourceEdit(himl)) {
+        return result;
     }
+
+    HWND hToolbar = OverflowToolbarOnThisThread();
+    HIMAGELIST copy = hToolbar ? g_overflowScaledImageList : nullptr;
+    if (!copy) {
+        ScheduleOverflowRescale();
+        return result;
+    }
+
+    int cx = 0;
+    int cy = 0;
+    bool ok = false;
+    // An append (i == -1) is only mirrored when the copy is in step, so that
+    // the new picture lands at the same number in both lists.
+    if (ImageList_GetIconSize(copy, &cx, &cy) &&
+        (i >= 0 || ImageList_GetImageCount(copy) == result)) {
+        if (HICON small = ScaleImageListIcon(himl, result, cx)) {
+            ok = ImageList_ReplaceIcon_Original(copy, i < 0 ? -1 : result,
+                                                small) == result;
+            DestroyIcon(small);
+        }
+    }
+
+    FinishOverflowMirror(hToolbar, himl, ok);
     return result;
 }
 
 BOOL WINAPI ImageList_Remove_Hook(HIMAGELIST himl, int i) {
     BOOL result = ImageList_Remove_Original(himl, i);
-    if (result) {
-        ScheduleOverflowRescale(himl);
+    if (!result || !IsOverflowSourceEdit(himl)) {
+        return result;
     }
+
+    HWND hToolbar = OverflowToolbarOnThisThread();
+    HIMAGELIST copy = hToolbar ? g_overflowScaledImageList : nullptr;
+    if (!copy) {
+        ScheduleOverflowRescale();
+        return result;
+    }
+
+    // i == -1 removes every picture, in both lists alike.
+    bool ok = ImageList_Remove_Original(copy, i) != FALSE;
+    FinishOverflowMirror(hToolbar, himl, ok);
     return result;
 }
 
 BOOL WINAPI ImageList_Destroy_Hook(HIMAGELIST himl) {
     BOOL result = ImageList_Destroy_Original(himl);
-    if (result && himl == g_overflowOriginalImageList) {
-        g_overflowOriginalImageList = nullptr;
-        g_overflowAppliedSize = 0;
+    if (result && himl) {
+        // Forget the shell's list without racing a thread that installs a
+        // new one at the same time.
+        HIMAGELIST expected = himl;
+        g_overflowOriginalImageList.compare_exchange_strong(expected, nullptr);
     }
     return result;
 }
@@ -710,11 +795,10 @@ HWND FindOverflowNotifyForToolbar(HWND hToolbar) {
     return nullptr;
 }
 
-// The shell edits the shared tray image list in place when an icon appears or
-// disappears and tells the popup nothing about it, so the scaled copy made
-// earlier keeps the old pictures and the buttons draw the wrong icon under the
-// right tooltip. The image-list hooks rebuild the copy after every such edit;
-// the popup is subclassed as well, so an open always starts from a fresh copy.
+// The image-list hooks keep the scaled copy in step with the shell's list. The
+// popup window is subclassed as well, so that an open which does arrive as
+// WM_SHOWWINDOW also starts from a fresh copy; the copy never depends on it,
+// because the shell's usual show path sends no such message.
 LRESULT CALLBACK OverflowWindowSubclassProc(HWND hWnd,
                                             UINT uMsg,
                                             WPARAM wParam,
@@ -724,11 +808,7 @@ LRESULT CALLBACK OverflowWindowSubclassProc(HWND hWnd,
         g_settings.overflowIconSize != kOverflowIconSizeOff) {
         HWND hToolbar = g_overflowToolbar;
         if (hToolbar && IsWindow(hToolbar)) {
-            HIMAGELIST current = reinterpret_cast<HIMAGELIST>(
-                SendMessageW(hToolbar, TB_GETIMAGELIST, 0, 0));
-            Wh_Log(L"Popup opening: toolbar list %p, %d image(s)",
-                   reinterpret_cast<void*>(current),
-                   current ? ImageList_GetImageCount(current) : 0);
+            Wh_Log(L"Popup opening");
             SendMessageW(hToolbar, g_overflowRefreshMsg,
                          kOverflowRefreshReapply, 0);
         }
@@ -769,26 +849,21 @@ HIMAGELIST ScaleImageList(HIMAGELIST source, int iconSize) {
         return nullptr;
     }
 
+    // An empty list gets an empty copy, which later appends are mirrored into.
     int count = ImageList_GetImageCount(source);
-    if (count <= 0) {
+    if (count < 0) {
         return nullptr;
     }
 
-    HIMAGELIST scaled =
-        ImageList_Create(iconSize, iconSize, ILC_COLOR32 | ILC_MASK, count, 1);
+    HIMAGELIST scaled = ImageList_Create(iconSize, iconSize,
+                                         ILC_COLOR32 | ILC_MASK,
+                                         std::max(count, 1), 1);
     if (!scaled) {
         return nullptr;
     }
 
     for (int i = 0; i < count; i++) {
-        HICON icon = ImageList_GetIcon(source, i, ILD_TRANSPARENT);
-        HICON small = icon ? static_cast<HICON>(CopyImage(
-                                 icon, IMAGE_ICON, iconSize, iconSize,
-                                 LR_DEFAULTCOLOR))
-                           : nullptr;
-        if (icon) {
-            DestroyIcon(icon);
-        }
+        HICON small = ScaleImageListIcon(source, i, iconSize);
 
         // Picture numbers must stay aligned with the shell's list: a skipped
         // picture would shift every later number and draw the wrong icon under
@@ -831,8 +906,9 @@ void RestoreOverflowImageList(HWND hToolbar) {
     if (g_overflowScaledImageList && current == g_overflowScaledImageList &&
         g_overflowOriginalImageList) {
         g_inImageListSwap = true;
-        SendMessageW(hToolbar, TB_SETIMAGELIST, 0,
-                     reinterpret_cast<LPARAM>(g_overflowOriginalImageList));
+        SendMessageW(
+            hToolbar, TB_SETIMAGELIST, 0,
+            reinterpret_cast<LPARAM>(g_overflowOriginalImageList.load()));
         g_inImageListSwap = false;
         Wh_Log(L"Overflow image list restored");
     }
@@ -879,6 +955,9 @@ void ApplyOverflowIconSize(HWND hToolbar, bool force = false) {
     HIMAGELIST scaled = ScaleImageList(g_overflowOriginalImageList, iconSize);
     if (!scaled) {
         Wh_Log(L"Failed to scale the overflow image list");
+        // A copy made before the shell's last edit no longer matches the
+        // buttons, so show the shell's own icons instead.
+        RestoreOverflowImageList(hToolbar);
         return;
     }
 
@@ -906,6 +985,9 @@ LRESULT CALLBACK OverflowToolbarSubclassProc(HWND hWnd,
                                              LPARAM lParam,
                                              DWORD_PTR dwRefData) {
     if (uMsg == g_overflowRefreshMsg) {
+        // Cleared first, so an edit during or after this rebuild queues the
+        // next one.
+        g_overflowRescalePending = false;
         if (wParam == kOverflowRefreshRestore) {
             RestoreOverflowImageList(hWnd);
         } else if (!g_unloading &&
@@ -938,15 +1020,6 @@ LRESULT CALLBACK OverflowToolbarSubclassProc(HWND hWnd,
             }
             break;
 
-        case WM_SHOWWINDOW:
-            // The popup sizes itself from the toolbar's cells every time it
-            // opens, so make sure our icons are in place before that happens.
-            if (wParam && !g_unloading &&
-                g_settings.overflowIconSize != kOverflowIconSizeOff) {
-                ApplyOverflowIconSize(hWnd, /*force=*/true);
-            }
-            break;
-
         case WM_NCDESTROY:
             if (hWnd == g_overflowToolbar) {
                 g_overflowToolbar = nullptr;
@@ -962,7 +1035,9 @@ LRESULT CALLBACK OverflowToolbarSubclassProc(HWND hWnd,
 
 // The popup's image-list state belongs to the toolbar's own thread. Other
 // threads ask that thread to apply the configured icon size or to put the
-// shell's own list back, so no other thread touches the state.
+// shell's own list back. The only exceptions are the image-list hooks: on
+// other threads they compare against the atomic source handle, and the
+// destroy hook clears it.
 void RequestOverflowRefresh(bool restore) {
     HWND hToolbar = g_overflowToolbar;
     if (!hToolbar || !IsWindow(hToolbar)) {
