@@ -1,16 +1,16 @@
 // ==WindhawkMod==
 // @id              win81-start-screen-recreation
-// @name            Windows 8.1 Start Screen Recreation
-// @name:it         Ricreazione della schermata Start di Windows 8.1
-// @name:es         Recreación de la pantalla de inicio de Windows 8.1
-// @name:fr         Recréation de l'écran d'accueil de Windows 8.1
-// @name:pt         Recriação da Tela Inicial do Windows 8.1
+// @name            Windows 8/8.1 Start Screen Recreation
+// @name:it         Ricreazione della schermata Start di Windows 8/8.1
+// @name:es         Recreación de la pantalla de inicio de Windows 8/8.1
+// @name:fr         Recréation de l'écran d'accueil de Windows 8/8.1
+// @name:pt         Recriação da Tela Inicial do Windows 8/8.1
 // @description     This mod recreates the Windows 8.1 Start Screen on Windows 10 and Windows 11
 // @description:it  Questa mod ricrea la schermata Start di Windows 8.1 su Windows 10 e Windows 11
 // @description:es  Este mod recrea la pantalla de inicio de Windows 8.1 en Windows 10 y Windows 11
 // @description:fr  Ce mod recrée l'écran d'accueil de Windows 8.1 sur Windows 10 et Windows 11
 // @description:pt  Este mod recria a Tela Inicial do Windows 8.1 no Windows 10 e no Windows 11
-// @version         1.4.0
+// @version         1.4.1
 // @license         GPL-3.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
@@ -21,7 +21,7 @@
 //
 // ==WindhawkModReadme==
 /*
-# Windows 8.1 Start Screen Recreation
+# Windows 8/8.1 Start Screen Recreation
 
 This mod recreates the Windows 8.1 Start Screen on Windows 10 and Windows 11.
 
@@ -109,6 +109,29 @@ are not implemented by this option. Changing it reloads the mod.
   survives mod updates and a mod reinstall and is only removed with the mod itself. The
   files of the previous versions are imported automatically, once.
 
+## Start screen presets
+The preset is first in Settings:
+- **Windows 8 Beta**: hides the header power/search buttons and the Start-page All Apps arrow,
+  uses the 8045-inspired purple background when the built-in background is selected, completely
+  disables the Search Charm (typing on Start or choosing **All apps** opens the full-screen
+  Apps/Search grid directly), and uses the horizontal bottom App Bar on right-click.
+- **Windows 8.0**: hides the header power/search buttons and the Start-page All Apps arrow,
+  completely disables the Search Charm, and uses the theme-colored horizontal bottom App Bar
+  (with **All apps** on the right and contextual tile/app actions on the left).
+- **Windows 8.1 (First Versions)**: hides the top-right power and search buttons, keeps the
+  bottom-left All Apps arrow, completely disables the Search Charm, and uses the theme-colored
+  horizontal bottom App Bar (with **Customize** on the right and contextual actions on the left).
+- **Windows 8.1 Update 3 (default)**: keeps the full Windows 8.1 Update 3 UI with top-right
+  power and search buttons, bottom-left All Apps arrow, floating right-click context menus, and
+  the Search Charm sidebar.
+- **Custom**: lets you toggle the header buttons, the All Apps arrow, and the Search Charm
+  independently; hiding the arrow also enables the horizontal bottom App Bar.
+
+Right-click empty Start space to open the horizontal App Bar (**All apps** on Beta/8.0,
+**Customize** on 8.1 First Versions), or press `Ctrl+Tab` to toggle All Apps. These presets
+are approximations: they do not reproduce all historical backgrounds, per-app Search Contracts,
+or Modern apps.
+
 ## Keyboard shortcuts
 
 | Shortcut | Action |
@@ -123,15 +146,22 @@ The search charm can be opened with the Search button in the header or by typing
 screen. With an empty query it only shows the search box, the scope selector and the Windows 8.1
 hint; clicking anywhere in the panel does nothing else, and a click outside it closes it.
 
-## Compatibility with StartAllBack and ExplorerPatcher
+## Compatibility with StartAllBack, ExplorerPatcher and Explorer7
 
 - When StartAllBack or ExplorerPatcher is installed, the mod waits until their taskbar is ready
   before it creates the Start screen, so the taskbar keeps its style after signing in or
   restarting Explorer. On a slow PC, increase **Delay before creating the Start screen window**.
 - The StartAllBack Start button opens this Start screen, and clicking it again closes it. Turn off
-  **Open with the StartAllBack Start button** to get StartAllBack's own Start menu back.
+  **Open with the StartAllBack or Explorer7 Start button** to get StartAllBack's own Start menu back.
 - If the old taskbar still comes back, restart Explorer from StartAllBack or ExplorerPatcher, or
   set **Compatibility with StartAllBack and ExplorerPatcher** to *Always on* and the delay to 8000 ms.
+
+Explorer7 support is experimental: when its wrp64.dll wrapper is present, the mod
+tries to intercept the classic Start button and uses the keyboard hook instead of the
+modern Start hook. Button discovery depends on the shell version and window title;
+if it is not found, use the Windows key or the optional custom shortcut. Test on your
+specific Explorer7 version before relying on it. The original Start-button interception
+setting can disable button interception.
 
 ## Local tile content
 The reconstructed Metro icons are used for recognized Microsoft apps. Simulated tiles prefer an
@@ -187,17 +217,67 @@ can wait for it. These are simulated features, not notifications read from other
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
 /*
+- startStyle: update3
+  $name: "Start screen preset"
+  $name:it: "Preset della schermata Start"
+  $name:es: "Preajuste de la pantalla de Inicio"
+  $name:fr: "Préréglage de l’écran d’accueil"
+  $name:pt: "Predefinição da Tela Inicial"
+  $description: "This setting chooses a preset. Presets control both visibility options below and right-click behavior; select Custom to use those options. These are approximations, not complete Windows version emulation."
+  $description:it: "Questa impostazione sceglie un preset. I preset controllano le due opzioni di visibilità e il clic destro; scegli Personalizzato per usare le opzioni. Sono approssimazioni, non un’emulazione completa di Windows."
+  $description:es: "Esta configuración elige un preajuste que controla las dos opciones de visibilidad y el clic derecho; selecciona Personalizado para usar las opciones. Son aproximaciones, no una emulación completa de Windows."
+  $description:fr: "Ce paramètre choisit un préréglage qui contrôle les deux options de visibilité et le clic droit ; choisissez Personnalisé pour utiliser les options. Ce sont des approximations, pas une émulation complète de Windows."
+  $description:pt: "Esta configuração escolhe uma predefinição que controla as duas opções de visibilidade e o clique direito; selecione Personalizado para usar as opções. São aproximações, não uma emulação completa do Windows."
+  $options:
+  - beta: "Windows 8 Beta"
+  - win80: "Windows 8.0"
+  - win81early: "Windows 8.1 (First Versions)"
+  - update3: "Windows 8.1 Update 3 (default)"
+  - custom: "Custom / Personalizzato / Personalizado / Personnalisé"
+- hideStartButtons: false
+  $name: "Hide power and search buttons (Custom only)"
+  $name:it: "Nascondi i pulsanti di accensione e ricerca (solo Personalizzato)"
+  $name:es: "Ocultar los botones de encendido y búsqueda (solo Personalizado)"
+  $name:fr: "Masquer les boutons d’alimentation et de recherche (Personnalisé seulement)"
+  $name:pt: "Ocultar os botões de energia e pesquisa (somente Personalizado)"
+  $description: "This setting, used only with the Custom preset, hides the power and search buttons and moves the user name and picture to the right, for a Windows 8-style appearance. Type to search; the All Apps arrow remains available."
+  $description:it: "Questa impostazione, usata solo con il preset Personalizzato, nasconde i pulsanti di accensione e ricerca e sposta nome e immagine utente a destra, per un aspetto stile Windows 8. Scrivi per cercare; la freccia Tutte le app rimane disponibile."
+  $description:es: "Esta configuración, usada solo con el preajuste Personalizado, oculta los botones de encendido y búsqueda y mueve el nombre y la imagen del usuario a la derecha, para lograr un aspecto de Windows 8. Escribe para buscar; la flecha de aplicaciones sigue disponible."
+  $description:fr: "Ce paramètre, utilisé uniquement avec le préréglage Personnalisé, masque les boutons d’alimentation et de recherche et déplace le nom et la photo de l’utilisateur vers la droite, pour retrouver le style Windows 8. Saisissez du texte pour rechercher ; la flèche des applications reste disponible."
+  $description:pt: "Esta configuração, usada apenas com a predefinição Personalizado, oculta os botões de energia e pesquisa e move o nome e a imagem do usuário para a direita, para obter a aparência do Windows 8. Digite para pesquisar; a seta de aplicativos continua disponível."
+- hideAppsArrow: false
+  $name: "Hide the All Apps arrow (Custom only)"
+  $name:it: "Nascondi la freccia Tutte le app (solo Personalizzato)"
+  $name:es: "Ocultar la flecha de aplicaciones (solo Personalizado)"
+  $name:fr: "Masquer la flèche des applications (Personnalisé seulement)"
+  $name:pt: "Ocultar a seta de aplicativos (somente Personalizado)"
+  $description: "This setting hides the Start page arrow in Custom mode and enables the older right-click app bar; right-click empty space and choose All Apps, or press Ctrl+Tab."
+  $description:it: "Questa impostazione nasconde la freccia di Start nella modalità Personalizzato e attiva la barra dei comandi precedente; fai clic destro sullo sfondo e scegli Tutte le app oppure premi Ctrl+Tab."
+  $description:es: "Esta configuración oculta la flecha de Inicio en modo Personalizado y activa la barra de comandos anterior; haz clic derecho en el fondo y elige Todas las aplicaciones o pulsa Ctrl+Tab."
+  $description:fr: "Ce paramètre masque la flèche de l’accueil en mode Personnalisé et active l’ancienne barre de commandes ; cliquez droit sur le fond et choisissez Toutes les applications ou utilisez Ctrl+Tab."
+  $description:pt: "Esta configuração oculta a seta da Tela Inicial no modo Personalizado e ativa a barra de comandos anterior; clique com o botão direito no fundo e escolha Todos os aplicativos ou pressione Ctrl+Tab."
+- disableSearchCharm: true
+  $name: "Disable the Search Charm (Custom only)"
+  $name:it: "Disattiva la Search Charm (solo Personalizzato)"
+  $name:es: "Desactivar el acceso Buscar / Search Charm (solo Personalizado)"
+  $name:fr: "Désactiver l’icône/panneau de recherche Search Charm (Personnalisé seulement)"
+  $name:pt: "Desativar o Search Charm (somente Personalizado)"
+  $description: "This setting, used only with the Custom preset, disables the Windows 8.1 Search Charm sidebar so typing on Start goes directly to the full-screen Apps view. Non-Update 3 presets always disable the Search Charm."
+  $description:it: "Questa impostazione, usata solo con il preset Personalizzato, disattiva la barra laterale Search Charm così digitare su Start apre direttamente la vista Tutte le app a schermo intero. Tutti i preset diversi da Windows 8.1 Update 3 disattivano sempre la Search Charm."
+  $description:es: "Esta configuración, usada solo con el preajuste Personalizado, desactiva el panel lateral Search Charm para que escribir en Inicio abra directamente la vista de aplicaciones a pantalla completa. Los preajustes que no son Update 3 siempre la desactivan."
+  $description:fr: "Ce paramètre, utilisé uniquement avec le préréglage Personnalisé, désactive le panneau latéral Search Charm afin que la saisie sur l'écran d'accueil ouvre directement la vue Applications plein écran. Les préréglages autres que Update 3 le désactivent toujours."
+  $description:pt: "Esta configuração, usada apenas com a predefinição Personalizado, desativa o painel lateral Search Charm para que digitar na Tela Inicial abra diretamente a visualização de Aplicativos em tela cheia. As predefinições fora do Update 3 sempre o desativam."
 - improvedOpeningAnimation: true
   $name: "Use version 1.3.0 opening animations"
   $name:it: "Usa le animazioni di apertura della versione 1.3.0"
   $name:es: "Usar las animaciones de apertura de la versión 1.3.0"
   $name:fr: "Utiliser les animations d'ouverture de la version 1.3.0"
   $name:pt: "Usar as animações de abertura da versão 1.3.0"
-  $description: "This setting uses the version 1.3.0 Start and sign-in opening timeline. Turn it off for the previous 1.4 opening behaviour."
-  $description:it: "Questa impostazione usa le animazioni di apertura Start e di accesso della versione 1.3.0. Disattivala per il comportamento di apertura precedente della 1.4."
-  $description:es: "Esta configuración usa las animaciones de apertura de Inicio y de sesión de la versión 1.3.0. Desactívala para volver al comportamiento anterior de la 1.4."
-  $description:fr: "Ce paramètre utilise les animations d'ouverture de l'écran d'accueil et de session de la version 1.3.0. Désactivez-le pour revenir au comportement précédent de la 1.4."
-  $description:pt: "Esta configuração usa as animações de abertura da Tela Inicial e de entrada da versão 1.3.0. Desative para voltar ao comportamento anterior da 1.4."
+  $description: "This setting uses the version 1.3.0 Start opening timeline, including at sign-in. Turn it off for the previous 1.4 opening behaviour."
+  $description:it: "Questa impostazione usa l’animazione di apertura Start della versione 1.3.0, anche all’accesso. Disattivala per il comportamento di apertura precedente della 1.4."
+  $description:es: "Esta configuración usa la animación de apertura de Inicio de la versión 1.3.0, también al iniciar sesión. Desactívala para volver al comportamiento anterior de la 1.4."
+  $description:fr: "Ce paramètre utilise l’animation d’ouverture de l’écran d’accueil de la version 1.3.0, y compris à l’ouverture de session. Désactivez-le pour revenir au comportement précédent de la 1.4."
+  $description:pt: "Esta configuração usa a animação de abertura da Tela Inicial da versão 1.3.0, inclusive ao entrar. Desative para voltar ao comportamento anterior da 1.4."
 - compactInterface: true
   $name: "Slightly smaller interface"
   $name:it: "Interfaccia leggermente più piccola"
@@ -746,16 +826,16 @@ can wait for it. These are simulated features, not notifications read from other
   $description:fr: "Ce paramètre concerne les éléments suivants. Le mod ouvre cet écran d'accueil en ancrant XamlLauncher::ShowStartView dans twinui.pcshell.dll. Charger cette DLL pendant le démarrage d'Explorer est ce qui perturbait StartAllBack et ExplorerPatcher ; le mod attend donc maintenant que Windows la charge et l'ancre depuis un thread d'arrière-plan. Le chargement forcé reste en secours, 15 secondes après la stabilisation du shell ; désactivez ce paramètre pour revenir au chargement immédiat à l'ouverture de session. Lu au démarrage du mod."
   $description:pt: "Esta configuração refere-se ao seguinte. A mod abre esta Tela Inicial ancorando XamlLauncher::ShowStartView em twinui.pcshell.dll. Carregar essa DLL durante o início do Explorer é o que incomodava o StartAllBack e o ExplorerPatcher, então agora a mod espera que o Windows a carregue e a ancora a partir de uma thread em segundo plano. O carregamento forçado continua como reserva, 15 segundos depois de o shell se estabilizar; desative para voltar a carregar a DLL logo ao entrar. É lida quando a mod inicia."
 - startButtonHook: true
-  $name: "Open with the StartAllBack Start button"
-  $name:it: "Apri con il pulsante Start di StartAllBack"
-  $name:es: "Abrir con el botón Inicio de StartAllBack"
-  $name:fr: "Ouvrir avec le bouton Démarrer de StartAllBack"
-  $name:pt: "Abrir com o botão Iniciar do StartAllBack"
-  $description: "This setting concerns the following. StartAllBack draws its own Start button, which the Windows key setting can't catch. With this on, clicking it opens this Start screen instead of the Windows 11 Start menu. Only used while StartAllBack is running. Turn this off if you want StartAllBack's own Start menu back."
-  $description:it: "Questa impostazione riguarda quanto segue. StartAllBack disegna un proprio pulsante Start, che l'opzione del tasto Windows non può intercettare. Con questa opzione attiva, facendo clic su di esso si apre questa schermata Start invece del menu Start di Windows 11. Viene usata solo quando StartAllBack è in esecuzione. Disattivala se vuoi riavere il menu Start di StartAllBack."
-  $description:es: "Esta configuración se refiere a lo siguiente. StartAllBack dibuja su propio botón Inicio, que la opción de la tecla Windows no puede capturar. Con esta opción activada, al hacer clic en él se abre esta pantalla de inicio en lugar del menú Inicio de Windows 11. Solo se usa mientras StartAllBack está en ejecución. Desactívala si quieres recuperar el menú Inicio de StartAllBack."
-  $description:fr: "Ce paramètre concerne les éléments suivants. StartAllBack dessine son propre bouton Démarrer, que l'option de la touche Windows ne peut pas capturer. Avec cette option active, cliquer dessus ouvre cet écran d'accueil au lieu du menu Démarrer de Windows 11. Utilisée uniquement quand StartAllBack est en cours d'exécution. Désactivez-la pour retrouver le menu Démarrer de StartAllBack."
-  $description:pt: "Esta configuração refere-se ao seguinte. O StartAllBack desenha seu próprio botão Iniciar, que a opção da tecla Windows não consegue capturar. Com esta opção ativa, clicar nele abre esta Tela Inicial em vez do menu Iniciar do Windows 11. Só é usada enquanto o StartAllBack está em execução. Desative-a se quiser o menu Iniciar do StartAllBack de volta."
+  $name: "Open with the StartAllBack or Explorer7 Start button"
+  $name:it: "Apri con il pulsante Start di StartAllBack o Explorer7"
+  $name:es: "Abrir con el botón Inicio de StartAllBack o Explorer7"
+  $name:fr: "Ouvrir avec le bouton Démarrer de StartAllBack ou Explorer7"
+  $name:pt: "Abrir com o botão Iniciar do StartAllBack ou Explorer7"
+  $description: "This setting concerns the following. StartAllBack draws its own Start button, which the Windows key setting can't catch. With this on, clicking it opens this Start screen instead of the Windows 11 Start menu. Only used while StartAllBack is running. Turn this off if you want StartAllBack's own Start menu back. This setting also enables experimental Explorer7 Start button interception."
+  $description:it: "Questa impostazione riguarda quanto segue. StartAllBack disegna un proprio pulsante Start, che l'opzione del tasto Windows non può intercettare. Con questa opzione attiva, facendo clic su di esso si apre questa schermata Start invece del menu Start di Windows 11. Viene usata solo quando StartAllBack è in esecuzione. Disattivala se vuoi riavere il menu Start di StartAllBack. Questa impostazione abilita anche l’intercettazione sperimentale del pulsante Start di Explorer7."
+  $description:es: "Esta configuración se refiere a lo siguiente. StartAllBack dibuja su propio botón Inicio, que la opción de la tecla Windows no puede capturar. Con esta opción activada, al hacer clic en él se abre esta pantalla de inicio en lugar del menú Inicio de Windows 11. Solo se usa mientras StartAllBack está en ejecución. Desactívala si quieres recuperar el menú Inicio de StartAllBack. Esta configuración también activa la captura experimental del botón Inicio de Explorer7."
+  $description:fr: "Ce paramètre concerne les éléments suivants. StartAllBack dessine son propre bouton Démarrer, que l'option de la touche Windows ne peut pas capturer. Avec cette option active, cliquer dessus ouvre cet écran d'accueil au lieu du menu Démarrer de Windows 11. Utilisée uniquement quand StartAllBack est en cours d'exécution. Désactivez-la pour retrouver le menu Démarrer de StartAllBack. Ce paramètre active aussi l’interception expérimentale du bouton Démarrer d’Explorer7."
+  $description:pt: "Esta configuração refere-se ao seguinte. O StartAllBack desenha seu próprio botão Iniciar, que a opção da tecla Windows não consegue capturar. Com esta opção ativa, clicar nele abre esta Tela Inicial em vez do menu Iniciar do Windows 11. Só é usada enquanto o StartAllBack está em execução. Desative-a se quiser o menu Iniciar do StartAllBack de volta. Esta configuração também ativa a interceptação experimental do botão Iniciar do Explorer7."
 - interceptMode: auto
   $name: "How the Windows key / Start button are caught"
   $name:it: "Come vengono intercettati il tasto Windows e il pulsante Start"
@@ -992,6 +1072,9 @@ enum StrId {
     STR_SORTBY_NAME, STR_SORTBY_DATE, STR_SORTBY_CAT,
     STR_CTX_STANDARD_TILE,
     STR_TILE_POWERSHELL,
+    STR_BAR_ALL_APPS,
+    STR_BAR_CUSTOMIZE,
+    STR_BAR_CLEAR_SEL,
     STR_COUNT
 };
 struct LocRow { const wchar_t* text[5]; };
@@ -1078,6 +1161,9 @@ static const LocRow kStrings[STR_COUNT] = {
     { { L"Use the standard tile", L"Usa la tile standard", L"Usar el icono est\u00e1ndar", L"Utiliser la vignette standard", L"Usar o bloco padr\u00e3o" } },
     // The name of the program is the same in every language, as Windows itself writes it.
     { { L"Windows PowerShell", L"Windows PowerShell", L"Windows PowerShell", L"Windows PowerShell", L"Windows PowerShell" } },
+    { { L"All apps", L"Tutte le app", L"Todas las aplicaciones", L"Toutes les applications", L"Todos os aplicativos" } },
+    { { L"Customize", L"Personalizza", L"Personalizar", L"Personnaliser", L"Personalizar" } },
+    { { L"Clear selection", L"Deseleziona", L"Borrar selecci\u00f3n", L"Effacer la s\u00e9lection", L"Limpar sele\u00e7\u00e3o" } },
 };
 static int g_lang = 0;
 
@@ -1101,14 +1187,29 @@ static const wchar_t* T(StrId id) {
 }
 
 
+enum StartPreset {
+    PRESET_UPDATE3    = 0,
+    PRESET_BETA       = 1,
+    PRESET_WIN80      = 2,
+    PRESET_WIN81EARLY = 3,
+    PRESET_CUSTOM     = 4
+};
 static int TILE = 120, GAP = 8, LEFT = 120, TOP = 151;
 static const int MAX_TILES = 96;
+static volatile LONG g_startPreset = PRESET_UPDATE3;
+static volatile LONG g_hideStartButtons = 0;
+static int g_charmW = 0, g_charmH = 0;
+static volatile LONG g_hideAppsArrow = 0;
+static volatile LONG g_legacyAppBar = 0;
+static volatile LONG g_disableSearchCharm = 0;
+static volatile LONG g_betaAppearance = 0;
 static volatile LONG g_compactInterface = 1;
 static volatile LONG g_improvedOpeningAnimation = 1;
 static int g_dpi = 96;
 static float g_dpiScale = 1.0f;
 static int g_userTextW = -1;
 static bool g_swallowAccountUp = false;
+static bool g_swallowBarUp = false;
 static bool g_swallowCharmUp = false;
 static bool g_swallowNamingUp = false;
 static bool g_swallowNamingRightUp = false;   // right press that only closed the name bar
@@ -1119,7 +1220,7 @@ static int GROUP_SEPARATION = 56;
 static volatile LONG g_requestedGroupCols = 2, g_requestedGroupRows = 4;
 static const float PRESS_SCALE   = 0.95f;      
 
-// The enabled option restores the exact 1.3.0 opening timeline. Disabling it
+// The enabled option restores the 1.3.0 normal opening timeline, also at sign-in. Disabling it
 // keeps the previous 1.4 opening behaviour available for comparison.
 static float OpeningTiming(float v130, float v140) {
     return InterlockedCompareExchange(&g_improvedOpeningAnimation, 0, 0) ? v130 : v140;
@@ -1312,7 +1413,6 @@ static DWORD g_trayCloseTick = 0;   // when a taskbar click closed Start: the to
 static volatile LONG g_closeSlideMs = 320;
 static volatile LONG g_openAtLogon = 1;
 static bool g_logonOpening = false;
-static bool g_firstDesktopAfterLogon = false;
 static DWORD g_logonVisualMs = 0, g_logonLastFrameTick = 0, g_logonRevealGateTick = 0;
 static bool g_userToggledStart = false;
 static HANDLE g_logonThread = NULL, g_logonStop = NULL;
@@ -1451,7 +1551,7 @@ static volatile LONG g_deferStartHook = 1;         // don't force-load twinui.pc
 static volatile LONG g_shellPatch = 0;             // bitmask of the detected third-party shells
 static volatile LONG g_startButtonHook = 1;        // intercept the StartAllBack Start button
 
-enum : LONG { SHELL_PATCH_STARTALLBACK = 1, SHELL_PATCH_EXPLORERPATCHER = 2 };
+enum : LONG { SHELL_PATCH_STARTALLBACK = 1, SHELL_PATCH_EXPLORERPATCHER = 2, SHELL_PATCH_EXPLORER7 = 4 };
 
 // StartAllBack draws its own Start button, and that button does not go through
 // XamlLauncher::ShowStartView, so hooking the Windows launcher never sees it. The button is a child
@@ -1675,8 +1775,10 @@ static bool InitGpu();
 static bool RenderGpu();
 // alpha is the opacity of the whole page: 1 in place, less while the page scrolls in or out.
 static void DrawSearchGpu(DWORD now, bool closing, float alpha = 1.0f);
+static void DrawSearchGdi(DWORD now, bool closing);
 static void DrawAppsSearchBoxGpu(float alpha = 1.0f);
 static void DrawSortButtonGpu(float alpha = 1.0f);
+static void EnterAllAppsWithChar(wchar_t firstChar);
 static bool BarClick(int x, int y);
 static void HideBar();
 static bool BarOpen();
@@ -1687,6 +1789,8 @@ static float HeaderOpacity(float to);
 static void ShowMenuFor(HWND owner, RECT anchor, int kind);
 static int HitTile(int mx, int my);
 static void DrawBarGpu(DWORD now);
+static void DrawBarGdi(DWORD now);
+static void DrawGroupNamesGdi(DWORD now);
 static void DrawAppsChromeGpu(float closeA = -1.0f);
 static void DrawAppsChromeGdi(HDC sdc, float closeA = -1.0f);
 static void DrawScrollBarTo(HDC dc, float closeA = -1.0f);
@@ -1745,7 +1849,7 @@ static void TextAt(const wchar_t* s, IDWriteTextFormat* f, float l, float t, flo
 static void ReleaseNameLayouts();
 static void RepaintNow();
 static void BuildOneTile(int i, HDC screenDC);
-static void CloseStart(bool immediate = false);
+static void CloseStart();
 static HFONT g_fTitle = NULL, g_fUser = NULL, g_fLabel = NULL, g_fTopLabel = NULL;
 // Windows 8.1 uses a smaller caption on the Medium (and Small) tiles than on the Wide/Large ones.
 static HFONT g_fLabelMedium = NULL;
@@ -2359,6 +2463,61 @@ static void DrawGroupNamesGpu(DWORD now, float alpha = 1.0f) {
         }
     }
 }
+static void BlendFillGdi(HDC dc, int l, int t, int r, int b, COLORREF c, BYTE a);
+static void DrawGroupNamesGdi(DWORD now) {
+    if (!g_bbDC) return;
+    float k = ZoomPresence(now);
+    SetBkMode(g_bbDC, TRANSPARENT);
+    HGDIOBJ oldF = g_fLabel ? SelectObject(g_bbDC, g_fLabel) : NULL;
+    for (int g = 0; g < g_groupCount; ++g) {
+        bool naming = (g == g_namingGroup);
+        const std::wstring* nm = (g < (int)g_groupNames.size()) ? &g_groupNames[g] : NULL;
+        if (!naming && !g_customize && (!nm || nm->empty())) continue;
+        float l, t, r, b; GroupScreenRect(now, g, &l, &t, &r, &b);
+        if (r < 0.0f || l > (float)g_sw) continue;
+        if (naming) {
+            float bx, by, bxe, bye;
+            GroupNameEditBox(now, g, &bx, &by, &bxe, &bye);
+            RECT box = { (int)bx, (int)by, (int)bxe, (int)bye };
+            FillRect(g_bbDC, &box, (HBRUSH)GetStockObject(WHITE_BRUSH));
+            RECT tr = { box.left + ScI(8), box.top, box.right - ScI(14), box.bottom };
+            const bool selAll = g_nameSelAll && !g_groupNameEdit.empty();
+            if (selAll) {
+                SIZE ssz = {};
+                GetTextExtentPoint32W(g_bbDC, g_groupNameEdit.c_str(), (int)g_groupNameEdit.size(), &ssz);
+                RECT sr = { tr.left, box.top + ScI(5), std::min(tr.right, tr.left + ssz.cx), box.bottom - ScI(5) };
+                HBRUSH sb = CreateSolidBrush(RGB(0, 120, 215));
+                if (sb) { FillRect(g_bbDC, &sr, sb); DeleteObject(sb); }
+            }
+            SetTextColor(g_bbDC, selAll ? RGB(255, 255, 255) : RGB(0, 0, 0));
+            DrawTextW(g_bbDC, g_groupNameEdit.c_str(), -1, &tr, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+            if (!selAll && ((NowMs() / 500) & 1)) {
+                SIZE ssz = {};
+                GetTextExtentPoint32W(g_bbDC, g_groupNameEdit.c_str(), (int)g_groupNameEdit.size(), &ssz);
+                RECT cr = { tr.left + ssz.cx, box.top + ScI(6), tr.left + ssz.cx + ScI(2), box.bottom - ScI(6) };
+                FillRect(g_bbDC, &cr, (HBRUSH)GetStockObject(BLACK_BRUSH));
+            }
+        } else if (g_customize) {
+            int bw = (int)std::max(r - l, ScF(180)), bh = ScI(32);
+            int bx = (int)l, by = (int)t - bh - ScI(10);
+            BlendFillGdi(g_bbDC, bx, by, bx + bw, by + bh, RGB(0, 0, 0), 90);
+            bool has = nm && !nm->empty();
+            SetTextColor(g_bbDC, has ? RGB(255, 255, 255) : RGB(210, 210, 220));
+            RECT tr = { bx + ScI(8), by, bx + bw - ScI(8), by + bh };
+            DrawTextW(g_bbDC, has ? nm->c_str() : T(STR_GROUP_PLACEHOLDER), -1, &tr,
+                      DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+        } else {
+            int nx = (int)(l + ScF(2));
+            int ny = (int)((k > 0.5f) ? b + ScF(6) : t - ScF(30));
+            if (g_fTopLabel) SelectObject(g_bbDC, g_fTopLabel);
+            SetTextColor(g_bbDC, RGB(240, 240, 248));
+            RECT tr = { nx, ny, nx + (int)(r - l), ny + ScI(36) };
+            DrawTextW(g_bbDC, nm->c_str(), -1, &tr, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+            if (g_fLabel) SelectObject(g_bbDC, g_fLabel);
+        }
+    }
+    if (oldF) SelectObject(g_bbDC, oldF);
+}
 struct AutoCompatDC {
     HDC dc = NULL; HGDIOBJ old = NULL;
     explicit AutoCompatDC(HDC ref) { dc = CreateCompatibleDC(ref); }
@@ -2390,9 +2549,9 @@ static void BlendFillGdi(HDC dc, int l, int t, int r, int b, COLORREF c, BYTE a)
     HBITMAP dib = CreateDIBSection(dc, &bi, DIB_RGB_COLORS, &bits, NULL, 0);
     if (!dib || !bits) { if (dib) DeleteObject(dib); return; }
     BYTE* px = (BYTE*)bits;
-    px[0] = (BYTE)(GetRValue(c) * a / 255);
+    px[0] = (BYTE)(GetBValue(c) * a / 255);
     px[1] = (BYTE)(GetGValue(c) * a / 255);
-    px[2] = (BYTE)(GetBValue(c) * a / 255);
+    px[2] = (BYTE)(GetRValue(c) * a / 255);
     px[3] = a;
     {
         AutoCompatDC mdc(dc);
@@ -3135,7 +3294,24 @@ static void BuildBuffers() {
 
     const int bgMode = (int)InterlockedCompareExchange(&g_bgMode, 0, 0);
     bool baseDone = false;
-    if (bgMode == 1 || bgMode == 2) {
+    // 8045-inspired beta background from the supplied reference implementation.
+    // Explicit user-selected backgrounds retain priority over the preset.
+    const bool betaBg = bgMode == 0 && InterlockedCompareExchange(&g_betaAppearance, 0, 0);
+    if (betaBg) {
+        DWORD* px = (DWORD*)bgBits;
+        for (int y = 0; y < g_sh; ++y) {
+            float fy = ((float)y / (float)std::max(1, g_sh - 1) - 0.5f) * 2.0f;
+            for (int x = 0; x < g_sw; ++x) {
+                float fx = ((float)x / (float)std::max(1, g_sw - 1) - 0.5f) * 2.0f;
+                float k = 1.0f - Clamp01(fx * fx * 0.55f + fy * fy * 0.45f);
+                k = k * k * k;
+                int r = (int)(31.0f + 10.4f * k), g = (int)(13.0f + 4.0f * k), b = (int)(46.0f + 15.2f * k);
+                px[(size_t)y * g_sw + x] = ((DWORD)r << 16) | ((DWORD)g << 8) | (DWORD)b;
+            }
+        }
+        baseDone = true;
+    }
+    if (!betaBg && (bgMode == 1 || bgMode == 2)) {
         COLORREF solid = (bgMode == 2) ? SystemAccentColor() : g_bgColor;
         DWORD* px = (DWORD*)bgBits;
         DWORD fill = ((DWORD)GetRValue(solid) << 16) | ((DWORD)GetGValue(solid) << 8) | (DWORD)GetBValue(solid);
@@ -3169,6 +3345,33 @@ static void BuildBuffers() {
     }
 
     if (g_bgPlainBits) memcpy(g_bgPlainBits, bgBits, (size_t)g_sw * (size_t)g_sh * 4);
+    if (betaBg) {
+        struct BetaShape { int x, y, w, h, a0, a1, fade; };
+        static const BetaShape shapes[] = {
+            {380,0,170,230,4,60,1}, {570,0,100,100,4,34,1},
+            {1120,0,260,230,4,44,1}, {1380,0,140,125,12,34,1},
+            {480,630,380,450,4,58,-1}, {740,630,120,450,30,70,-1},
+            {1390,630,280,450,5,66,-1}, {1440,630,210,450,30,64,-1}
+        };
+        DWORD* px = (DWORD*)bgBits;
+        const float sx = (float)g_sw / 1920.0f, sy = (float)g_sh / 1080.0f;
+        for (const auto& shape : shapes) {
+            int x0 = (int)(shape.x * sx), y0 = (int)(shape.y * sy);
+            int w = (int)(shape.w * sx), h = (int)(shape.h * sy);
+            for (int yy = 0; yy < h && y0 + yy < g_sh; ++yy) {
+                float ty = (float)yy / std::max(1, h - 1);
+                float vf = shape.fade > 0 ? 1.0f - 0.85f * ty : 0.15f + 0.85f * ty;
+                for (int xx = 0; xx < w && x0 + xx < g_sw; ++xx) {
+                    float tx = (float)xx / std::max(1, w - 1);
+                    float a = (shape.a0 + (shape.a1 - shape.a0) * tx) * vf * 0.6f / 255.0f;
+                    DWORD& c = px[(size_t)(y0 + yy) * g_sw + x0 + xx];
+                    int r = (c >> 16) & 255, g = (c >> 8) & 255, b = c & 255;
+                    r += (int)((255 - r) * a); g += (int)((255 - g) * a); b += (int)((255 - b) * a);
+                    c = ((DWORD)r << 16) | ((DWORD)g << 8) | (DWORD)b;
+                }
+            }
+        }
+    }
     HDC tileScreen = GetDC(NULL);
     if (tileScreen) { BuildTileBuffers(tileScreen); ReleaseDC(NULL, tileScreen); }
     GdiFlush();
@@ -7249,13 +7452,64 @@ static void ReleaseResizeOldGpu() {
     if (g_resizeOldGpu) { g_resizeOldGpu->Release(); g_resizeOldGpu = NULL; }
 }
 
-// Windows 8.1 selection border & top-right check corner follow the Start theme colour (lightened
+// Returns the true base colour of the currently visible Start background so tile selection
+// accents and the horizontal App Bar always harmonize with the active theme or preset.
+static COLORREF StartThemeBaseColor() {
+    const int bgMode = (int)InterlockedCompareExchange(&g_bgMode, 0, 0);
+    if (bgMode == 0) {
+        if (InterlockedCompareExchange(&g_betaAppearance, 0, 0))
+            return RGB(78, 39, 117);   // Windows 8 Beta (8045) purple
+        return RGB(86, 35, 132);       // Built-in Windows 8/8.1 purple petal artwork
+    }
+    if (bgMode == 2) return SystemAccentColor();
+    return g_bgColor;
+}
+
+// Windows 8/8.1 selection border & top-right check corner follow the Start theme colour (lightened
 // for visibility on dark Start themes, darkened on bright themes).
 static COLORREF SelectionBorderColor() {
-    const int r = GetRValue(g_bgColor), g = GetGValue(g_bgColor), b = GetBValue(g_bgColor);
+    const int bgMode = (int)InterlockedCompareExchange(&g_bgMode, 0, 0);
+    if (bgMode == 0) {
+        return InterlockedCompareExchange(&g_betaAppearance, 0, 0) ? RGB(154, 96, 208) : RGB(158, 92, 224);
+    }
+    const COLORREF base = StartThemeBaseColor();
+    const int r = GetRValue(base), g = GetGValue(base), b = GetBValue(base);
     const int luma = (r * 299 + g * 587 + b * 114) / 1000;
-    if (luma > 165) return ShadeColor(g_bgColor, -0.32f);
-    return Mix(g_bgColor, RGB(255, 255, 255), 0.34f);
+    const int hi = std::max(r, std::max(g, b));
+    if (luma > 165) return ShadeColor(base, -0.38f);
+    if (hi < 24) return RGB(130, 130, 140);
+    const float targetHi = 225.0f;
+    const float gain = std::min(3.3f, std::max(1.25f, targetHi / (float)hi));
+    auto clampB = [](float v) -> BYTE { return v < 0.0f ? 0 : (v > 255.0f ? 255 : (BYTE)(v + 0.5f)); };
+    return Mix(RGB(clampB(r * gain), clampB(g * gain), clampB(b * gain)), RGB(255, 255, 255), 0.12f);
+}
+
+static void DrawCheckmarkGdi(HDC dc, float x0, float y0, float size, COLORREF color, float stroke = 0.0f) {
+    if (!dc || !g_gdipToken || size <= 1.0f) return;
+    Gdiplus::Graphics gp(dc);
+    gp.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    const float w = stroke > 0.0f ? stroke : std::max(1.8f, size * 0.16f);
+    Gdiplus::Pen pen(Gdiplus::Color(255, GetRValue(color), GetGValue(color), GetBValue(color)), w);
+    pen.SetStartCap(Gdiplus::LineCapRound);
+    pen.SetEndCap(Gdiplus::LineCapRound);
+    pen.SetLineJoin(Gdiplus::LineJoinRound);
+    Gdiplus::PointF pts[3] = {
+        Gdiplus::PointF(x0 + size * 0.16f, y0 + size * 0.54f),
+        Gdiplus::PointF(x0 + size * 0.42f, y0 + size * 0.80f),
+        Gdiplus::PointF(x0 + size * 0.86f, y0 + size * 0.24f)
+    };
+    gp.DrawLines(&pen, pts, 3);
+}
+
+static void DrawCheckmarkGpu(float x0, float y0, float size, COLORREF color, float alpha = 1.0f, float stroke = 0.0f) {
+    if (!g_rt || !g_scratch || size <= 1.0f) return;
+    SetBr(color, Clamp01(alpha));
+    const float w = stroke > 0.0f ? stroke : std::max(1.8f, size * 0.16f);
+    D2D1_POINT_2F p0 = D2D1::Point2F(x0 + size * 0.16f, y0 + size * 0.54f);
+    D2D1_POINT_2F p1 = D2D1::Point2F(x0 + size * 0.42f, y0 + size * 0.80f);
+    D2D1_POINT_2F p2 = D2D1::Point2F(x0 + size * 0.86f, y0 + size * 0.24f);
+    g_rt->DrawLine(p0, p1, g_scratch, w);
+    g_rt->DrawLine(p1, p2, g_scratch, w);
 }
 
 static void DrawTile(int i, float a, float slide, float gs) {
@@ -7342,10 +7596,8 @@ static void DrawTile(int i, float a, float slide, float gs) {
             };
             gp.FillPolygon(&cb, tri, 3);
         }
-        SetTextColor(g_bbDC, RGB(255, 255, 255));
-        SelectObject(g_bbDC, g_fHdrGlyph ? g_fHdrGlyph : g_fLabel);
-        RECT ck = { dx + dw - ScI(24), dy + ScI(1), dx + dw - ScI(1), dy + ScI(22) };
-        DrawTextW(g_bbDC, L"\xE10B", -1, &ck, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        DrawCheckmarkGdi(g_bbDC, (float)(dx + dw) - ScF(18.0f), (float)dy + ScF(3.0f),
+                         ScF(15.0f), RGB(255, 255, 255), ScF(2.1f));
     }
 }
 
@@ -7398,7 +7650,7 @@ static void DrawHeader(float a, HDC sdc, float userA = -1.0f) {
     DeleteDC(adc);
     }
     RECT pw, sc; HeaderButtonRects(&pw, &sc);
-    if (EnsureUiIcons()) {
+    if (!InterlockedCompareExchange(&g_hideStartButtons, 0, 0) && EnsureUiIcons()) {
         const BYTE ia = (BYTE)(255.0f * Clamp01(userA));
         RECT pd, sd; IconDestRect(pw, &pd); IconDestRect(sc, &sd);
         if (g_hoverPwr) { RECT q; IconDestRect(pw, &q); InflateRect(&q, ScI(6), ScI(6)); BlitIconGdi(g_bbDC, g_iconHover, q, false, 255); }
@@ -7476,7 +7728,7 @@ static HRESULT MakeSearchFormats() {
                                 M = DWRITE_TEXT_ALIGNMENT_CENTER;
     g_subFormat     = NewFmt(L"Segoe UI", 22.0f, DWRITE_FONT_WEIGHT_LIGHT, N, L, false);
     g_itemFormat    = NewFmt(L"Segoe UI", 15.0f, DWRITE_FONT_WEIGHT_NORMAL, N, L, true);
-    g_flyFormat     = NewFmt(L"Segoe UI Semibold", 15.0f, DWRITE_FONT_WEIGHT_SEMI_BOLD, N, L, false);
+    g_flyFormat     = NewFmt(L"Segoe UI Semibold", 15.0f, DWRITE_FONT_WEIGHT_SEMI_BOLD, C, L, false);
     if (g_flyFormat) {
         DWRITE_TRIMMING trim = { DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0 };
         IDWriteInlineObject* ell = NULL;
@@ -7576,7 +7828,7 @@ static bool InitGpu() {
         return false;
     }
     BOOL dwmEnabled = FALSE;
-    if (FAILED(DwmIsCompositionEnabled(&dwmEnabled)) || !dwmEnabled) return false;
+    DwmIsCompositionEnabled(&dwmEnabled);
 
     if (!g_d2dFactory && FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,
                                                   &g_d2dFactory))) return false;
@@ -7584,10 +7836,6 @@ static bool InitGpu() {
                        __uuidof(IDWriteFactory), (IUnknown**)&g_writeFactory))) return false;
     if (!g_bgBits || !g_snapBits || !g_wnd) return false;
 
-    D2D1_RENDER_TARGET_PROPERTIES p = D2D1::RenderTargetProperties(
-        D2D1_RENDER_TARGET_TYPE_HARDWARE,
-        D2D1::PixelFormat(DXGI_FORMAT_UNKNOWN, D2D1_ALPHA_MODE_UNKNOWN),
-        96.0f, 96.0f);
     RECT client = {};
     if (!GetClientRect(g_wnd, &client) || client.right <= 0 || client.bottom <= 0) return false;
     // FrameThread already paces drawing against the display refresh. The default
@@ -7596,7 +7844,21 @@ static bool InitGpu() {
     // the compositor/driver can still impose its own scheduling or backpressure.
     D2D1_HWND_RENDER_TARGET_PROPERTIES hp = D2D1::HwndRenderTargetProperties(
         g_wnd, D2D1::SizeU((UINT32)client.right, (UINT32)client.bottom), D2D1_PRESENT_OPTIONS_IMMEDIATELY);
-    HRESULT hr = g_d2dFactory->CreateHwndRenderTarget(p, hp, &g_rt);
+    HRESULT hr = E_FAIL;
+    if (dwmEnabled) {
+        D2D1_RENDER_TARGET_PROPERTIES pHw = D2D1::RenderTargetProperties(
+            D2D1_RENDER_TARGET_TYPE_HARDWARE,
+            D2D1::PixelFormat(DXGI_FORMAT_UNKNOWN, D2D1_ALPHA_MODE_UNKNOWN),
+            96.0f, 96.0f);
+        hr = g_d2dFactory->CreateHwndRenderTarget(pHw, hp, &g_rt);
+    }
+    if (FAILED(hr)) {
+        D2D1_RENDER_TARGET_PROPERTIES pDef = D2D1::RenderTargetProperties(
+            D2D1_RENDER_TARGET_TYPE_DEFAULT,
+            D2D1::PixelFormat(DXGI_FORMAT_UNKNOWN, D2D1_ALPHA_MODE_UNKNOWN),
+            96.0f, 96.0f);
+        hr = g_d2dFactory->CreateHwndRenderTarget(pDef, hp, &g_rt);
+    }
     if (FAILED(hr)) { ReleaseGpuTarget(); return false; }
     g_rt->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_CLEARTYPE);
 
@@ -7680,7 +7942,7 @@ static void DrawHeaderGpu(float a, float userA = -1.0f) {
     g_rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x + AV * 0.5f, y + ScF(36.0f)), ScF(12.8f), ScF(14.5f)), g_avatarFg);
     g_rt->PopAxisAlignedClip();
     }
-    if (EnsureUiIcons()) {
+    if (!InterlockedCompareExchange(&g_hideStartButtons, 0, 0) && EnsureUiIcons()) {
         RECT pw, sc; HeaderButtonRects(&pw, &sc);
         auto put = [&](const UiIcon& ic, const RECT& r, bool hov, int dy = 0) {
             if (hov && g_iconHover.gpu) {
@@ -7825,8 +8087,8 @@ static void DrawTileGpu(int i, float a, float slide, float gs) {
             g_rt->FillGeometry(corner, g_scratch);
         } else if (sink) sink->Release();
         if (corner) corner->Release();
-        TextAt(L"\xE10B", g_glyphSmall, dest.right - ScF(23.0f), dest.top + ScF(1.0f),
-               dest.right - ScF(1.0f), dest.top + ScF(22.0f), RGB(255, 255, 255));
+        DrawCheckmarkGpu(dest.right - ScF(18.0f), dest.top + ScF(3.0f),
+                         ScF(15.0f), RGB(255, 255, 255), Clamp01(a), ScF(2.1f));
     }
 }
 
@@ -8037,12 +8299,27 @@ static void DrawSnapshot(float s, float opacity) {
 
 static void Render() {
     if (!g_bbDC || !g_bgDC) return;
-    BitBlt(g_bbDC, 0, 0, g_sw, g_sh, g_bgDC, 0, 0, SRCCOPY);
-    SetBkMode(g_bbDC, TRANSPARENT);
     DWORD now = NowMs();
     HDC sdc = GetDC(NULL);
+    const bool searchView = (g_view == VIEW_SEARCH);
+    if (searchView && g_bgPlainBmp) {
+        HDC pdc = CreateCompatibleDC(sdc);
+        if (pdc) {
+            HGDIOBJ old = SelectObject(pdc, g_bgPlainBmp);
+            BitBlt(g_bbDC, 0, 0, g_sw, g_sh, pdc, 0, 0, SRCCOPY);
+            SelectObject(pdc, old);
+            DeleteDC(pdc);
+        } else {
+            BitBlt(g_bbDC, 0, 0, g_sw, g_sh, g_bgDC, 0, 0, SRCCOPY);
+        }
+    } else {
+        BitBlt(g_bbDC, 0, 0, g_sw, g_sh, g_bgDC, 0, 0, SRCCOPY);
+    }
+    SetBkMode(g_bbDC, TRANSPARENT);
 
-    if (!g_closing) {
+    if (!g_closing && searchView) {
+        DrawSearchGdi(now, false);
+    } else if (!g_closing) {
         float to = (float)OpeningElapsedMs(now) / 1000.0f;
         const float lv = g_leaveTick ? Clamp01((float)(now - g_leaveTick) / LEAVE_MS) : 0.0f;
         const float zk = ZoomPresence(now);
@@ -8072,7 +8349,9 @@ static void Render() {
         const float tileU = Clamp01(tc / CLOSE_TILE_T);
         const float hdrA = 1.0f - Clamp01(tc / CLOSE_HEADER_T);
         const float wallA = Clamp01((tc - CLOSE_DESK_DELAY) / CLOSE_DESK_T);
-        if (g_view == VIEW_START) {
+        if (g_view == VIEW_SEARCH) {
+            DrawSearchGdi(now, true);
+        } else {
             DrawHeader(hdrA, sdc, hdrA);
             for (int pass = 0; pass < 2; ++pass) for (int i = 0; i < g_tileCount; ++i) {
                 if (i == g_launchFlipTile) continue;
@@ -8091,11 +8370,13 @@ static void Render() {
         }
         DrawSnapshot(1.0f, wallA);
     }
+    if (!g_closing && g_open && g_view == VIEW_START) DrawGroupNamesGdi(now);
     DrawAlphaGridGdi(now);
     DrawZoomOverlayGdi(now);
     DrawScrollBarTo(g_bbDC);
+    if (!g_closing) DrawBarGdi(now);
     DrawAppsChromeGdi(sdc);
-    DrawCharmBarGdi(sdc, now);
+    DrawCharmBarGdi(g_bbDC, now);
     ReleaseDC(NULL, sdc);
     g_dirty = false;
 }
@@ -9669,7 +9950,7 @@ static float LeaveEase(int i, DWORD now) {
 }
 static void CommitAllApps() {
     g_leaveTick = 0;
-    if (!g_rt || !g_bgPlainGpu) return;
+    if (!g_bgPlainBits && !g_bgDC) return;
     g_view = VIEW_SEARCH;
     g_queryLen = 0; g_query[0] = 0;
     g_scrollCur = g_scrollTarget = 0.0f;
@@ -9681,6 +9962,31 @@ static void CommitAllApps() {
     g_arrowTick = NowMs();     // the up arrow appears now that the scroll has finished
     RepaintNow();
 }
+static void EnterAllAppsWithChar(wchar_t firstChar) {
+    if (!g_open || g_closing) return;
+    g_alphaGrid = false;
+    if (g_zoomOut || g_zoomTick) {
+        g_zoomOut = false; g_zoomTick = 0; g_hoverGroup = -1; g_dragGroup = -1;
+        if (g_namingGroup >= 0) CancelNaming();
+    }
+    if (g_customize) ExitCustomize();
+    CloseCharm(true);
+    g_charmTick = 0;
+    HideBar();
+    g_leaveTick = 0;
+    g_returnTick = 0;
+    g_view = VIEW_SEARCH;
+    g_queryLen = 0; g_query[0] = 0; g_querySelAll = false;
+    if (firstChar) QueryAppend(firstChar);
+    g_appsSearchFocus = true;
+    g_selected = 0;
+    g_hover = g_pressed = -1;
+    g_scrollCur = g_scrollTarget = 0.0f;
+    RunSearch();
+    g_searchTick = NowMs() - (DWORD)((RESULT_FADE + 0.2f) * 1000.0f);
+    g_arrowTick = NowMs();
+    RepaintNow();
+}
 static void EnterAllApps() {
     g_alphaGrid = false;
     g_appsSearchFocus = false;
@@ -9688,25 +9994,36 @@ static void EnterAllApps() {
         g_zoomOut = false; g_zoomTick = 0; g_hoverGroup = -1; g_dragGroup = -1;
         if (g_namingGroup >= 0) CancelNaming();
     }
+    if (g_customize) ExitCustomize();
     if (g_leaveTick) return;
     CloseCharm(true);
+    g_charmTick = 0;
     if (g_view == VIEW_START) {
         // The page that scrolls in has to hold the list of all apps already, so the list is built
-        // now and not when the scroll ends. The app bar and the query of the search charm belong
-        // to the Start screen and do not travel with that page.
+        // now and not when the scroll ends. The app bar belongs to the Start screen and does not
+        // travel with that page.
         HideBar();
         g_queryLen = 0; g_query[0] = 0;
         RunSearch();
+    }
+    if (!g_rt || !g_bgPlainGpu) {
+        CommitAllApps();
+        return;
     }
     g_leaveTick = NowMs();
     RepaintNow();
 }
 
 static void EnterSearchEmpty() {
+    if (InterlockedCompareExchange(&g_disableSearchCharm, 0, 0) != 0) {
+        EnterAllAppsWithChar(0);
+        return;
+    }
     CharmToggle();
 }
 
 static void LeaveSearch() {
+    CloseCharm(true);
     DWORD now = NowMs();
     g_logonOpening = false;
     g_view = VIEW_START;
@@ -9729,7 +10046,7 @@ static void LeaveSearch() {
 }
 
 static void LaunchEntry(const AppEntry& a) {
-    if (a.desktop) { CloseStart(g_firstDesktopAfterLogon); return; }
+    if (a.desktop) { CloseStart(); return; }
     if (a.launchKind != 0) { CloseStart(); LaunchSettingEntry(a); return; }
     std::wstring target = AppTarget(a);
     CloseStart();
@@ -9742,13 +10059,19 @@ static void LaunchResult(int i) {
 }
 
 static void OnSearchChar(wchar_t c) {
-    if (g_charmOpen) {
+    if (g_charmOpen && !InterlockedCompareExchange(&g_disableSearchCharm, 0, 0)) {
         g_charmDdOpen = false; g_charmDdHover = -1;
         QueryAppend(c); RunSearch();
         if (g_charmSel >= (int)g_results.size()) g_charmSel = 0;
         CharmRender(g_charmCont); RepaintNow(); return;
     }
-    if (g_view == VIEW_START) { OpenCharm(c); return; }
+    if (g_view == VIEW_START) {
+        if (InterlockedCompareExchange(&g_disableSearchCharm, 0, 0) != 0)
+            EnterAllAppsWithChar(c);
+        else
+            OpenCharm(c);
+        return;
+    }
     g_appsSearchFocus = true;
     g_alphaGrid = false;
     QueryAppend(c);
@@ -9774,7 +10097,11 @@ static void MoveSelection(int delta) {
     if (g_selected >= n) g_selected = n - 1;
     float x = (float)(kItemX + ResultCol(g_selected) * kItemPitchX);
     if (x - g_scrollTarget < 0.0f) g_scrollTarget = x - (float)kItemX;
-    else if (x + kItemW - g_scrollTarget > (float)g_sw - ScF(40.0f)) g_scrollTarget = x + kItemW - (float)g_sw + ScF(40.0f);
+    else {
+        const int visibleWidth = g_sw;
+        if (x + kItemW - g_scrollTarget > (float)visibleWidth - ScF(40.0f))
+            g_scrollTarget = x + kItemW - (float)visibleWidth + ScF(40.0f);
+    }
     float m = MaxScrollSearch();
     if (g_scrollTarget < 0.0f) g_scrollTarget = 0.0f;
     if (g_scrollTarget > m) g_scrollTarget = m;
@@ -9804,7 +10131,7 @@ static void OnSearchKey(UINT vk) {
         }
         return;
     }
-    if (g_charmOpen) {
+    if (g_charmOpen && !InterlockedCompareExchange(&g_disableSearchCharm, 0, 0)) {
         switch (vk) {
         case VK_ESCAPE:
             if (g_charmDdOpen) { g_charmDdOpen = false; g_charmDdHover = -1; CharmRender(g_charmCont); RepaintNow(); }
@@ -9822,14 +10149,16 @@ static void OnSearchKey(UINT vk) {
                 LaunchResult(g_charmSel < (int)g_results.size() ? g_charmSel : 0);
             break;
         case VK_DOWN: CharmMoveSel(1); break;
-        case VK_UP:   CharmMoveSel(-1); break;
+        case VK_UP: CharmMoveSel(-1); break;
         }
         return;
     }
     if (g_view != VIEW_SEARCH) {
         if (vk == VK_ESCAPE) {
             if (g_namingGroup >= 0) CancelNaming();
+            else if (g_advancedOpen || g_resizeOpen) { g_advancedOpen = g_resizeOpen = false; RepaintNow(); }
             else if (g_barVisible) HideBar();
+            else if (g_customize) ExitCustomize();
             else if (ZoomPresence(NowMs()) > 0.0f) ExitZoom(-1);
             else CloseStart();
         } else if (vk == VK_LEFT || vk == VK_RIGHT || vk == VK_UP || vk == VK_DOWN) {
@@ -9841,12 +10170,15 @@ static void OnSearchKey(UINT vk) {
             if (g_barVisible) HideBar();
             else if (g_focus >= 0 && g_focus < g_tileCount && g_tiles[g_focus].alive)
                 ShowBar(1, g_focus);
+            else if (InterlockedCompareExchange(&g_legacyAppBar, 0, 0) != 0)
+                ShowBar(6, -1);
         }
         return;
     }
     switch (vk) {
     case VK_ESCAPE:
         if (g_alphaGrid) { g_alphaGrid = false; g_searchTick = NowMs(); RepaintNow(); break; }
+        if (g_advancedOpen || g_resizeOpen) { g_advancedOpen = g_resizeOpen = false; RepaintNow(); break; }
         if (g_barVisible) { HideBar(); break; }
         LeaveSearch();
         break;
@@ -10039,14 +10371,39 @@ static void DrawSearchGpu(DWORD now, bool closing, float alpha) {
             float y = (float)(kItemY + ResultRow(i) * kItemPitchY);
             if (x + kItemW < 0.0f || x > (float)g_sw) continue;
             int ai = g_results[i];
+            const bool barSel = (g_barVisible && g_barMode == 2 && g_barIdx == i);
+            if (barSel) {
+                const COLORREF selC = SelectionBorderColor();
+                FillRc(x, y, x + (float)kItemW, y + (float)kItemH, selC, 0.72f * fade);
+            }
             COLORREF plate = g_apps[ai].lower == L"store" ? RGB(172, 137, 0) : RGB(92, 40, 138);
             FillRc(x + ScF(8.0f), y + ScF(7.0f), x + ScF(53.0f), y + ScF(52.0f), plate, fade);
             if (ID2D1Bitmap* ic = IconGpu(ai))
                 g_rt->DrawBitmap(ic, D2D1::RectF(x + ScF(10.5f), y + ScF(9.5f), x + ScF(50.5f), y + ScF(49.5f)), fade,
                                  D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
-            NameTextAt(ai, g_itemFormat, x + ScF(60.0f), y + ScF(8.0f), x + (float)kItemW - ScF(4.0f), y + ScF(54.0f),
-                       RGB(235, 235, 245), fade);
-            if (i == g_selected) {
+            NameTextAt(ai, g_itemFormat, x + ScF(60.0f), y + ScF(8.0f),
+                       x + (float)kItemW - (barSel ? ScF(26.0f) : ScF(4.0f)), y + ScF(54.0f),
+                       RGB(245, 245, 255), fade);
+            if (barSel) {
+                const COLORREF selC = SelectionBorderColor();
+                SetBr(selC, fade);
+                g_rt->DrawRectangle(D2D1::RectF(x + 1.5f, y + 1.5f, x + (float)kItemW - 1.5f, y + (float)kItemH - 1.5f),
+                                    g_scratch, ScF(2.5f));
+                const float cs = ScF(24.0f);
+                ID2D1PathGeometry* corner = NULL;
+                ID2D1GeometrySink* sink = NULL;
+                if (g_d2dFactory && SUCCEEDED(g_d2dFactory->CreatePathGeometry(&corner)) && corner &&
+                    SUCCEEDED(corner->Open(&sink)) && sink) {
+                    sink->BeginFigure(D2D1::Point2F(x + (float)kItemW - cs, y), D2D1_FIGURE_BEGIN_FILLED);
+                    sink->AddLine(D2D1::Point2F(x + (float)kItemW, y));
+                    sink->AddLine(D2D1::Point2F(x + (float)kItemW, y + cs));
+                    sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+                    sink->Close(); sink->Release();
+                    g_rt->FillGeometry(corner, g_scratch);
+                } else if (sink) sink->Release();
+                if (corner) corner->Release();
+                DrawCheckmarkGpu(x + (float)kItemW - ScF(14.5f), y + ScF(2.0f), ScF(12.0f), RGB(255, 255, 255), fade, ScF(1.8f));
+            } else if (i == g_selected) {
                 SetBr(RGB(255, 255, 255), fade);
                 g_rt->DrawRectangle(D2D1::RectF(x + 1.0f, y + 1.0f, x + (float)kItemW - 1.0f, y + (float)kItemH - 1.0f),
                                     g_scratch, 2.0f);
@@ -10071,6 +10428,123 @@ static void DrawSearchGpu(DWORD now, bool closing, float alpha) {
         }
     }
 
+    (void)now;
+}
+
+static void DrawSearchGdi(DWORD now, bool closing) {
+    if (!g_bbDC) return;
+    SetBkMode(g_bbDC, TRANSPARENT);
+    SetTextColor(g_bbDC, RGB(255, 255, 255));
+    HGDIOBJ oldF = g_fTitle ? SelectObject(g_bbDC, g_fTitle) : NULL;
+    RECT tr = { LEFT - ScI(3), ScI(42), LEFT + ScI(400), ScI(140) };
+    DrawTextW(g_bbDC, T(STR_APPS), -1, &tr, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX);
+    if (g_queryLen > 0) {
+        wchar_t sub[384];
+        swprintf_s(sub, T(STR_RESULTS_FOR), std::wstring(g_query, (size_t)g_queryLen).c_str(),
+                   (unsigned)g_results.size());
+        SIZE sz = {};
+        int sx = LEFT + ScI(150);
+        if (GetTextExtentPoint32W(g_bbDC, T(STR_APPS), (int)wcslen(T(STR_APPS)), &sz))
+            sx = LEFT + sz.cx + ScI(18);
+        if (g_fTopLabel) SelectObject(g_bbDC, g_fTopLabel);
+        SetTextColor(g_bbDC, RGB(181, 189, 217));
+        RECT sr = { sx, ScI(72), g_sw - ScI(380), ScI(112) };
+        DrawTextW(g_bbDC, sub, -1, &sr, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+    }
+    if (g_alphaGrid && !closing) {
+        if (oldF) SelectObject(g_bbDC, oldF);
+        return;
+    }
+    if (g_results.empty()) {
+        if (g_queryLen > 0) {
+            if (g_fTopLabel) SelectObject(g_bbDC, g_fTopLabel);
+            SetTextColor(g_bbDC, RGB(225, 225, 235));
+            RECT nr = { LEFT, ScI(180), g_sw - ScI(40), ScI(240) };
+            DrawTextW(g_bbDC, T(STR_NO_RESULTS), -1, &nr, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX);
+        }
+        if (oldF) SelectObject(g_bbDC, oldF);
+        return;
+    }
+    if (g_queryLen == 0) {
+        if (g_fTopLabel) SelectObject(g_bbDC, g_fTopLabel);
+        SetTextColor(g_bbDC, RGB(235, 235, 245));
+        for (const AppHeading& h : g_appHeadings) {
+            int x = (int)((float)(kItemX + h.col * kItemPitchX) - g_scrollCur);
+            if (x + kItemW < 0 || x > g_sw) continue;
+            RECT hr = { x + ScI(8), ScI(132), x + kItemW, ScI(168) };
+            if (!h.text.empty()) {
+                DrawTextW(g_bbDC, h.text.c_str(), -1, &hr, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+            } else if (h.bucket >= 0) {
+                DrawTextW(g_bbDC, T((StrId)(STR_DATE_TODAY + h.bucket)), -1, &hr, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX);
+            } else {
+                wchar_t label[4] = { h.first, 0, 0, 0 };
+                if (h.last != h.first) { label[1] = L'\x2013'; label[2] = h.last; }
+                DrawTextW(g_bbDC, label, -1, &hr, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX);
+            }
+        }
+    }
+    if (g_fLabel) SelectObject(g_bbDC, g_fLabel);
+    const int nRes = (int)g_results.size();
+    for (int i = 0; i < nRes; ++i) {
+        int x = (int)((float)(kItemX + ResultCol(i) * kItemPitchX) - g_scrollCur);
+        int y = (int)(kItemY + ResultRow(i) * kItemPitchY);
+        if (x + kItemW < 0 || x > g_sw) continue;
+        int ai = g_results[i];
+        const bool barSel = (g_barVisible && g_barMode == 2 && g_barIdx == i);
+        if (barSel) {
+            const COLORREF selC = SelectionBorderColor();
+            BlendFillGdi(g_bbDC, x, y, x + kItemW, y + kItemH, selC, 185);
+        }
+        COLORREF plate = g_apps[ai].lower == L"store" ? RGB(172, 137, 0) : RGB(92, 40, 138);
+        RECT pr = { x + ScI(8), y + ScI(7), x + ScI(53), y + ScI(52) };
+        HBRUSH pb = CreateSolidBrush(plate);
+        if (pb) { FillRect(g_bbDC, &pr, pb); DeleteObject(pb); }
+        if (ai >= 0 && ai < (int)g_icons.size() && g_icons[ai].px && InterlockedCompareExchange(&g_icons[ai].ready, 0, 0)) {
+            BITMAPINFO bmi = {};
+            bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+            bmi.bmiHeader.biWidth = g_icons[ai].w;
+            bmi.bmiHeader.biHeight = -g_icons[ai].h;
+            bmi.bmiHeader.biPlanes = 1;
+            bmi.bmiHeader.biBitCount = 32;
+            bmi.bmiHeader.biCompression = BI_RGB;
+            StretchDIBits(g_bbDC, x + ScI(10), y + ScI(9), ScI(40), ScI(40),
+                          0, 0, g_icons[ai].w, g_icons[ai].h, g_icons[ai].px, &bmi, DIB_RGB_COLORS, SRCCOPY);
+        }
+        SetTextColor(g_bbDC, RGB(242, 242, 252));
+        RECT nr = { x + ScI(60), y + ScI(8), x + kItemW - (barSel ? ScI(26) : ScI(4)), y + ScI(54) };
+        DrawTextW(g_bbDC, g_apps[ai].name.c_str(), -1, &nr, DT_LEFT | DT_TOP | DT_WORDBREAK | DT_END_ELLIPSIS | DT_NOPREFIX);
+        if (barSel) {
+            const COLORREF selC = SelectionBorderColor();
+            HBRUSH sb = CreateSolidBrush(selC);
+            if (sb) {
+                RECT br = { x, y, x + kItemW, y + kItemH };
+                FrameRect(g_bbDC, &br, sb);
+                InflateRect(&br, -1, -1);
+                FrameRect(g_bbDC, &br, sb);
+                DeleteObject(sb);
+            }
+            if (g_gdipToken) {
+                Gdiplus::Graphics gp(g_bbDC);
+                gp.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+                Gdiplus::SolidBrush cb(Gdiplus::Color(255, GetRValue(selC), GetGValue(selC), GetBValue(selC)));
+                float cs = ScF(24.0f);
+                Gdiplus::PointF tri[3] = {
+                    Gdiplus::PointF((float)(x + kItemW) - cs, (float)y),
+                    Gdiplus::PointF((float)(x + kItemW), (float)y),
+                    Gdiplus::PointF((float)(x + kItemW), (float)y + cs)
+                };
+                gp.FillPolygon(&cb, tri, 3);
+            }
+            DrawCheckmarkGdi(g_bbDC, (float)(x + kItemW) - ScF(14.5f), (float)y + ScF(2.0f),
+                             ScF(12.0f), RGB(255, 255, 255), ScF(1.8f));
+        } else if (i == g_selected) {
+            RECT sr = { x + 1, y + 1, x + kItemW - 1, y + kItemH - 1 };
+            FrameRect(g_bbDC, &sr, (HBRUSH)GetStockObject(WHITE_BRUSH));
+            InflateRect(&sr, -1, -1);
+            FrameRect(g_bbDC, &sr, (HBRUSH)GetStockObject(WHITE_BRUSH));
+        }
+    }
+    if (oldF) SelectObject(g_bbDC, oldF);
     (void)now;
 }
 
@@ -11559,7 +12033,8 @@ static void EndDrag() {
     RepaintNow();
 }
 
-struct BarButton { int id; const wchar_t* glyph; const wchar_t* label; };
+struct BarButton { int id; const wchar_t* label; bool alignRight = false; bool activeToggle = false; };
+static const int kBarMaxBtns = 10;
 struct AdvancedAction { int id; const wchar_t* label; };
 static int kBarH = 100, kBarBtnW = 100;
 
@@ -11655,27 +12130,107 @@ static int AdvancedActions(AdvancedAction* out) {
     return 0;
 }
 
+static bool CanUninstallSelection(const SelectedItem& item, bool isTile, int tileIdx) {
+    if (item.target.empty() || item.target == kDesktopTarget || item.computer) return false;
+    if (isTile && tileIdx >= 0 && tileIdx < g_tileCount && g_tiles[tileIdx].style == DESKTOP_REFERENCE)
+        return false;
+    std::wstring low = item.target;
+    for (wchar_t& ch : low) ch = (wchar_t)towlower(ch);
+    if (low == L"control.exe" || low == L"explorer.exe" || low == L"taskmgr.exe" ||
+        low == L"powershell.exe" || low == L"cmd.exe" || low.find(L"shell:mycomputerfolder") != std::wstring::npos ||
+        low.find(L"shell:controlpanelfolder") != std::wstring::npos)
+        return false;
+    return true;
+}
+
 static int BarButtons(BarButton* out) {
-    if (g_barMode == 5) {
-        out[0] = { 26, L"\xE13E", T(STR_BAR_NAME_GROUP) };
+    const bool hideArrow = InterlockedCompareExchange(&g_hideAppsArrow, 0, 0) != 0;
+    const LONG preset = InterlockedCompareExchange(&g_startPreset, 0, 0);
+    if (g_barMode == 6) {
+        if (hideArrow) {
+            out[0] = { 27, T(STR_BAR_ALL_APPS), true, false };
+            return 1;
+        }
+        out[0] = { 28, T(STR_BAR_CUSTOMIZE), true, g_customize };
         return 1;
+    }
+    if (g_barMode == 5) {
+        out[0] = { 26, T(STR_BAR_NAME_GROUP), false, false };
+        out[1] = { 15, T(STR_BAR_CLEAR_SEL), false, false };
+        return 2;
     }
     if (g_barMode != 1 && g_barMode != 2) return 0;
     SelectedItem item = CurrentSelection();
     if (item.target.empty()) return 0;
     int n = 0;
     AdvancedAction adv[4];
-    if (AdvancedActions(adv)) out[n++] = { 10, L"\xE10C", T(STR_BAR_ADVANCED) };
-    out[n++] = { 12, L"\xE102", T(STR_BAR_RUN) };
+    const int advCount = AdvancedActions(adv);
     if (g_barMode == 1) {
         const Tile& tile = g_tiles[g_barIdx];
+        out[n++] = { 1, T(STR_CTX_UNPIN_START), false, false };
+        if (CanUninstallSelection(item, true, g_barIdx))
+            out[n++] = { 13, T(STR_CTX_UNINSTALL), false, false };
         if (SupportsResize(tile))
-            out[n++] = { 2, L"\xE1D9", T(STR_SIZE_RESIZE) };
-        out[n++] = { 1, L"\xE196", T(STR_BAR_UNPIN) };
+            out[n++] = { 2, T(STR_SIZE_RESIZE), false, false };
+        out[n++] = { 12, T(STR_BAR_RUN), false, false };
+        if (advCount > 0)
+            out[n++] = { 10, T(STR_BAR_ADVANCED), false, false };
+        if (tile.mg >= 0)
+            out[n++] = { 14, T(STR_CTX_STANDARD_TILE), false, false };
+        out[n++] = { 15, T(STR_BAR_CLEAR_SEL), false, false };
+        if (hideArrow)
+            out[n++] = { 27, T(STR_BAR_ALL_APPS), true, false };
+        else if (preset == PRESET_WIN81EARLY)
+            out[n++] = { 28, T(STR_BAR_CUSTOMIZE), true, g_customize };
+    } else {
+        if (IsPinned(item.target.c_str()))
+            out[n++] = { 3, T(STR_CTX_UNPIN_START), false, false };
+        else
+            out[n++] = { 4, T(STR_BAR_PIN_START), false, false };
+        out[n++] = { 12, T(STR_BAR_RUN), false, false };
+        if (item.classic) {
+            out[n++] = { 24, T(STR_ADV_RUNAS), false, false };
+            out[n++] = { 25, T(STR_ADV_OPENFILE), false, false };
+        } else if (advCount > 0) {
+            out[n++] = { 10, T(STR_BAR_ADVANCED), false, false };
+        }
+        if (CanUninstallSelection(item, false, -1))
+            out[n++] = { 13, T(STR_CTX_UNINSTALL), false, false };
+        out[n++] = { 15, T(STR_BAR_CLEAR_SEL), false, false };
+        if (hideArrow)
+            out[n++] = { 29, T(STR_START), true, false };
     }
-    else if (IsPinned(item.target.c_str())) out[n++] = { 3, L"\xE196", T(STR_BAR_UNPIN) };
-    else out[n++] = { 4, L"\xE141", T(STR_BAR_PIN_START) };
     return n;
+}
+
+static int BarButtonPitch(int count) {
+    const int margin = ScI(20);
+    const int avail = std::max(ScI(100), g_sw - margin * 2);
+    if (count <= 0) return kBarBtnW;
+    const int maxW = avail / count;
+    return std::max(ScI(74), std::min(kBarBtnW, maxW));
+}
+
+static bool BarButtonRect(int index, const BarButton* buttons, int count, RECT* out, int barTop = -1) {
+    if (!buttons || !out || index < 0 || index >= count) return false;
+    const int pitch = BarButtonPitch(count);
+    const int margin = ScI(20);
+    const int top = (barTop >= 0) ? barTop : (g_sh - kBarH);
+    int rightTotal = 0;
+    for (int i = 0; i < count; ++i) if (buttons[i].alignRight) ++rightTotal;
+    int leftIdx = 0, rightIdx = 0;
+    for (int i = 0; i < index; ++i) {
+        if (buttons[i].alignRight) ++rightIdx;
+        else ++leftIdx;
+    }
+    int x = buttons[index].alignRight
+        ? (g_sw - margin - (rightTotal - rightIdx) * pitch)
+        : (margin + leftIdx * pitch);
+    out->left = x;
+    out->top = top;
+    out->right = x + pitch;
+    out->bottom = top + kBarH;
+    return true;
 }
 
 // The bar counts as open only while it is not sliding out: everything that takes input from it
@@ -11914,16 +12469,71 @@ static void ExecuteAdvanced(int id) {
 }
 
 static void ExecuteBar(int id) {
-    if (id == 10) { g_advancedOpen = !g_advancedOpen; g_resizeOpen = false; RepaintNow(); return; }
-    if (id == 2) { g_resizeOpen = !g_resizeOpen; g_advancedOpen = false; RepaintNow(); return; }
+    if (id == 10) {
+        g_advancedOpen = !g_advancedOpen;
+        g_resizeOpen = false;
+        g_advHoverRow = g_advPressedRow = -1;
+        RepaintNow();
+        return;
+    }
+    if (id == 2) {
+        g_resizeOpen = !g_resizeOpen;
+        g_advancedOpen = false;
+        g_resizeHoverRow = g_resizePressedRow = -1;
+        RepaintNow();
+        return;
+    }
+    if (id == 24 || id == 25) {
+        ExecuteAdvanced(id);
+        return;
+    }
     int idx = g_barIdx, mode = g_barMode;
     SelectedItem item = CurrentSelection();
     HideBar();
     switch (id) {
+    case 27: EnterAllApps(); break;
+    case 28:
+        if (g_customize) ExitCustomize();
+        else EnterCustomize();
+        break;
+    case 29: LeaveSearch(); break;
+    case 15: break;
     case 1: UnpinTile(idx); break;
     case 3: UnpinTile(FindPinned(item.target.c_str())); break;
     case 4:
         if (idx >= 0 && idx < (int)g_results.size()) PinApp(g_apps[g_results[idx]].name.c_str(), item.target);
+        break;
+    case 13: {
+        const bool packaged = (mode == 1 && idx >= 0 && idx < g_tileCount && g_tiles[idx].style == PINNED_APP) ||
+                              (mode == 2 && IsPackagedAppTarget(item.target.c_str()));
+        CloseStart();
+        if (packaged) {
+            if ((INT_PTR)ShellExecuteW(NULL, L"open", L"ms-settings:appsfeatures", NULL, NULL, SW_SHOWNORMAL) <= 32)
+                ShellExecuteW(NULL, L"open", L"control.exe", L"/name Microsoft.ProgramsAndFeatures", NULL, SW_SHOWNORMAL);
+        } else {
+            ShellExecuteW(NULL, L"open", L"control.exe", L"/name Microsoft.ProgramsAndFeatures", NULL, SW_SHOWNORMAL);
+        }
+        break;
+    }
+    case 14:
+        if (mode == 1 && idx >= 0 && idx < g_tileCount && g_tiles[idx].mg >= 0) {
+            Tile& t = g_tiles[idx];
+            if (t.target) MetroStandardAdd(t.target);
+            t.mg = -1;
+            t.mgAuto = false;
+            t.caption[0] = 0;
+            t.style = TOP_APP;
+            ApplyDesktopTileTheme(t);
+            ApplyShortcutLook(t);
+            SetShortcutName(t);
+            if (t.icon) { DestroyIcon(t.icon); t.icon = NULL; }
+            if (t.pinBmp) { DeleteObject(t.pinBmp); t.pinBmp = NULL; }
+            LoadPinIcon(t);
+            UpdateTileAppColor(t);
+            RebuildTile(idx);
+            SaveLayout();
+            RepaintNow();
+        }
         break;
     case 26: StartNaming(idx); break;
     case 12:
@@ -11938,17 +12548,18 @@ static int BarResizeSizes(int out[4]) {
     return SupportedSizes(g_tiles[g_barIdx], out);
 }
 
-static void AdvancedRect(int count, const wchar_t* const* labels, int* left, int* top, int* right, int* bottom) {
-    int w = kAdvW;
-    if (labels && count > 0 && g_writeFactory && g_flyFormat) {
-        static const wchar_t* cFirst = NULL, *cLast = NULL;
-        static int cCount = -1, cSW = -1, cW = kAdvW;
-        static float cScale = -1.0f;
-        if (labels[0] == cFirst && labels[count - 1] == cLast && count == cCount &&
-            g_sw == cSW && ScF(1.0f) == cScale) {
-            w = cW;
-        } else {
-            float need = 0.0f;
+static int BarFlyoutRowH() { return std::max(28, ScI(kAdvRowH)); }
+static int BarFlyoutPad() { return std::max(6, ScI(kAdvPad)); }
+
+static void BarFlyoutRect(int anchorBtnId, int count, const wchar_t* const* labels,
+                          int* left, int* top, int* right, int* bottom) {
+    const int minW = ScI(236);
+    const int rowH = BarFlyoutRowH();
+    const int pad = BarFlyoutPad();
+    int w = minW;
+    if (labels && count > 0) {
+        float need = 0.0f;
+        if (g_writeFactory && g_flyFormat) {
             for (int i = 0; i < count; ++i) {
                 if (!labels[i]) continue;
                 IDWriteTextLayout* lay = NULL;
@@ -11959,15 +12570,42 @@ static void AdvancedRect(int count, const wchar_t* const* labels, int* left, int
                     lay->Release();
                 }
             }
-            if (need > 0.0f) w = std::max(w, (int)(need + 34 + 16 + 0.5f));
-            w = std::min(w, std::max(kAdvW, g_sw - 40));
-            cFirst = labels[0]; cLast = labels[count - 1]; cCount = count; cSW = g_sw; cScale = ScF(1.0f); cW = w;
+        } else {
+            HDC mdc = GetDC(NULL);
+            if (mdc) {
+                HGDIOBJ oldF = g_fLabel ? SelectObject(mdc, g_fLabel) : NULL;
+                for (int i = 0; i < count; ++i) {
+                    if (!labels[i]) continue;
+                    SIZE sz = {};
+                    if (GetTextExtentPoint32W(mdc, labels[i], (int)wcslen(labels[i]), &sz))
+                        need = std::max(need, (float)sz.cx);
+                }
+                if (oldF) SelectObject(mdc, oldF);
+                ReleaseDC(NULL, mdc);
+            }
+        }
+        if (need > 0.0f) w = std::max(w, (int)(need + ScF(58.0f) + 0.5f));
+        w = std::min(w, std::max(minW, g_sw - ScI(32)));
+    }
+    int anchorCx = g_sw - ScI(20) - w / 2;
+    BarButton buttons[kBarMaxBtns];
+    int n = BarButtons(buttons);
+    for (int i = 0; i < n; ++i) {
+        if (buttons[i].id == anchorBtnId) {
+            RECT br;
+            if (BarButtonRect(i, buttons, n, &br))
+                anchorCx = (br.left + br.right) / 2;
+            break;
         }
     }
-    *right = g_sw - 20;
-    *left = *right - w;
+    int l = anchorCx - w / 2;
+    const int margin = ScI(12);
+    if (l < margin) l = margin;
+    if (l + w > g_sw - margin) l = g_sw - margin - w;
+    *left = l;
+    *right = l + w;
     *bottom = g_sh - kBarH - ScI(8);
-    *top = *bottom - (count * kAdvRowH + kAdvPad * 2);
+    *top = *bottom - (count * rowH + pad * 2);
 }
 
 static bool BarPoint(int x, int y) {
@@ -11977,14 +12615,14 @@ static bool BarPoint(int x, int y) {
     int l, t, r, b;
     if (g_advancedOpen && ac) {
         const wchar_t* labs[4]; for (int i = 0; i < ac; ++i) labs[i] = actions[i].label;
-        AdvancedRect(ac, labs, &l, &t, &r, &b);
+        BarFlyoutRect(10, ac, labs, &l, &t, &r, &b);
         if (x >= l && x < r && y >= t && y < g_sh - kBarH) return true;
     }
     int sizes[4];
     int sc = BarResizeSizes(sizes);
     if (g_resizeOpen && sc) {
         const wchar_t* labs[4]; for (int i = 0; i < sc; ++i) labs[i] = SizeName(sizes[i]);
-        AdvancedRect(sc, labs, &l, &t, &r, &b);
+        BarFlyoutRect(2, sc, labs, &l, &t, &r, &b);
         if (x >= l && x < r && y >= t && y < g_sh - kBarH) return true;
     }
     return y >= g_sh - kBarH && y < g_sh;
@@ -11992,23 +12630,29 @@ static bool BarPoint(int x, int y) {
 
 static void UpdateBarHover(int x, int y) {
     if (!BarOpen()) return;
-    BarButton buttons[4];
+    BarButton buttons[kBarMaxBtns];
     int n = BarButtons(buttons);
     int hovered = -1, advanced = -1, row = -1, resizeBtn = -1, rrow = -1;
+    POINT pt = { x, y };
     for (int i = 0; i < n; ++i) {
         if (buttons[i].id == 10) advanced = i;
         if (buttons[i].id == 2) resizeBtn = i;
+        RECT br;
+        if (BarButtonRect(i, buttons, n, &br) && PtInRect(&br, pt))
+            hovered = i;
     }
-    if (y >= g_sh - kBarH && y < g_sh && x >= g_sw - n * kBarBtnW && x < g_sw)
-        hovered = (x - (g_sw - n * kBarBtnW)) / kBarBtnW;
+    const int rowH = BarFlyoutRowH();
+    const int pad = BarFlyoutPad();
     if (g_advancedOpen && advanced >= 0) {
         AdvancedAction actions[4];
         int ac = AdvancedActions(actions), l, t, r, b;
         if (ac) {
             const wchar_t* labs[4]; for (int i = 0; i < ac; ++i) labs[i] = actions[i].label;
-            AdvancedRect(ac, labs, &l, &t, &r, &b);
-            if (x >= l && x < r && y >= t + kAdvPad && y < b - kAdvPad)
-                row = (y - t - kAdvPad) / kAdvRowH;
+            BarFlyoutRect(10, ac, labs, &l, &t, &r, &b);
+            if (x >= l && x < r && y >= t + pad && y < b - pad) {
+                int idx = (y - t - pad) / rowH;
+                if (idx >= 0 && idx < ac) row = idx;
+            }
         }
     }
     if (g_resizeOpen && resizeBtn >= 0) {
@@ -12016,9 +12660,11 @@ static void UpdateBarHover(int x, int y) {
         int sc = BarResizeSizes(sizes), l, t, r, b;
         if (sc) {
             const wchar_t* labs[4]; for (int i = 0; i < sc; ++i) labs[i] = SizeName(sizes[i]);
-            AdvancedRect(sc, labs, &l, &t, &r, &b);
-            if (x >= l && x < r && y >= t + kAdvPad && y < b - kAdvPad)
-                rrow = (y - t - kAdvPad) / kAdvRowH;
+            BarFlyoutRect(2, sc, labs, &l, &t, &r, &b);
+            if (x >= l && x < r && y >= t + pad && y < b - pad) {
+                int idx = (y - t - pad) / rowH;
+                if (idx >= 0 && idx < sc) rrow = idx;
+            }
         }
     }
     if (hovered != g_barHoverButton || row != g_advHoverRow || rrow != g_resizeHoverRow) {
@@ -12057,13 +12703,18 @@ static bool BarClick(int x, int y) {
         return true;
     }
     if (y >= g_sh - kBarH) {
-        BarButton buttons[4];
+        BarButton buttons[kBarMaxBtns];
         int n = BarButtons(buttons);
-        int start = g_sw - n * kBarBtnW;
-        if (n && x >= start && x < g_sw) {
-            int which = (x - start) / kBarBtnW;
-            ExecuteBar(buttons[which].id);
-        } else HideBar();
+        POINT pt = { x, y };
+        for (int i = 0; i < n; ++i) {
+            RECT br;
+            if (BarButtonRect(i, buttons, n, &br) && PtInRect(&br, pt)) {
+                ExecuteBar(buttons[i].id);
+                return true;
+            }
+        }
+        if (g_advancedOpen || g_resizeOpen) { g_advancedOpen = g_resizeOpen = false; RepaintNow(); }
+        else HideBar();
         return true;
     }
     HideBar();
@@ -12080,13 +12731,41 @@ static void OnRightClick(int x, int y) {
         if (PtInRect(&pw, pt)) { ShowMenuFor(g_wnd, pw, 1); return; }
         if (PtInRect(&ar, pt)) { ShowUserMenu(g_wnd); return; }
     }
+    const bool legacyBar = InterlockedCompareExchange(&g_legacyAppBar, 0, 0) != 0;
     if (g_view == VIEW_SEARCH) {
         int r = HitResult(x, y);
-        if (r >= 0) { g_selected = r; if (BarOpen() && g_barMode == 2 && g_barIdx == r) HideBar(); else ShowBar(2, r); }
-        else HideBar();
+        if (r >= 0) {
+            g_selected = r;
+            if (!legacyBar) {
+                HideBar();
+                g_ctxRow = r;
+                g_ctxAppValid = r < (int)g_results.size();
+                if (g_ctxAppValid) g_ctxApp = g_apps[g_results[r]];
+                RECT an = { x, y, x, y };
+                ShowMenuFor(g_wnd, an, 4);
+                RepaintNow();
+            } else {
+                if (BarOpen() && g_barMode == 2 && g_barIdx == r) HideBar();
+                else ShowBar(2, r);
+            }
+        } else {
+            HideBar();
+        }
         return;
     }
     int tile = HitTile(x, y);
+    if (legacyBar && g_view == VIEW_START && !g_charmOpen && !g_zoomOut) {
+        if (tile >= 0) {
+            if (g_customize) ExitCustomize();
+            if (BarOpen() && g_barMode == 1 && g_barIdx == tile) HideBar();
+            else ShowBar(1, tile);
+        } else if (BarOpen() && g_barMode == 6) {
+            HideBar();
+        } else {
+            ShowBar(6, -1);
+        }
+        return;
+    }
     if (tile >= 0) {
         HideBar();
         g_ctxTile = tile;
@@ -12126,9 +12805,20 @@ static void DrawAppsSearchBoxGpu(float alpha) {
                (float)b.right - ScI(40), (float)b.bottom, selAll ? RGB(255, 255, 255) : RGB(0, 0, 0),
                alpha);
     }
-    TextAt(q.empty() ? L"" : L"", g_glyphSmall,
-           (float)b.right - ScI(36), (float)b.top, (float)b.right, (float)b.bottom,
-           lit ? RGB(90, 90, 90) : RGB(220, 220, 230), alpha);
+    const COLORREF iconColor = lit ? RGB(90, 90, 90) : RGB(220, 220, 230);
+    const float icx = (float)b.right - ScF(18.0f);
+    const float icy = ((float)b.top + (float)b.bottom) * 0.5f;
+    SetBr(iconColor, alpha);
+    if (q.empty()) {
+        const float r = ScF(5.5f);
+        g_rt->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(icx - ScF(1.5f), icy - ScF(1.5f)), r, r), g_scratch, ScF(1.8f));
+        g_rt->DrawLine(D2D1::Point2F(icx + ScF(2.5f), icy + ScF(2.5f)),
+                       D2D1::Point2F(icx + ScF(6.5f), icy + ScF(6.5f)), g_scratch, ScF(1.9f));
+    } else {
+        const float d = ScF(5.0f);
+        g_rt->DrawLine(D2D1::Point2F(icx - d, icy - d), D2D1::Point2F(icx + d, icy + d), g_scratch, ScF(1.8f));
+        g_rt->DrawLine(D2D1::Point2F(icx + d, icy - d), D2D1::Point2F(icx - d, icy + d), g_scratch, ScF(1.8f));
+    }
     if (g_appsSearchFocus && ((NowMs() / 500) & 1)) {
         float cx = (float)b.left + ScI(10) + DwTextWidth(q.c_str(), q.size(), g_queryFormat);
         FillRc(cx, (float)b.top + ScI(6), cx + 1.0f, (float)b.bottom - ScI(6), RGB(0, 0, 0), alpha);
@@ -12156,10 +12846,25 @@ static void DrawAppsSearchBoxGdi() {
         }
         DrawTextW(g_bbDC, q.c_str(), -1, &tr, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     }
-    SetTextColor(g_bbDC, lit ? RGB(90, 90, 90) : RGB(220, 220, 230));
-    SelectObject(g_bbDC, g_fHdrGlyph);
-    RECT gr = { b.right - ScI(36), b.top, b.right, b.bottom };
-    DrawTextW(g_bbDC, q.empty() ? L"" : L"", -1, &gr, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    if (g_gdipToken) {
+        const COLORREF icCol = lit ? RGB(90, 90, 90) : RGB(220, 220, 230);
+        const float icx = (float)b.right - ScF(18.0f);
+        const float icy = ((float)b.top + (float)b.bottom) * 0.5f;
+        Gdiplus::Graphics gp(g_bbDC);
+        gp.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        Gdiplus::Pen pen(Gdiplus::Color(255, GetRValue(icCol), GetGValue(icCol), GetBValue(icCol)), ScF(1.8f));
+        pen.SetStartCap(Gdiplus::LineCapRound);
+        pen.SetEndCap(Gdiplus::LineCapRound);
+        if (q.empty()) {
+            const float r = ScF(5.5f);
+            gp.DrawEllipse(&pen, icx - ScF(1.5f) - r, icy - ScF(1.5f) - r, r * 2.0f, r * 2.0f);
+            gp.DrawLine(&pen, icx + ScF(2.5f), icy + ScF(2.5f), icx + ScF(6.5f), icy + ScF(6.5f));
+        } else {
+            const float d = ScF(5.0f);
+            gp.DrawLine(&pen, icx - d, icy - d, icx + d, icy + d);
+            gp.DrawLine(&pen, icx + d, icy - d, icx - d, icy + d);
+        }
+    }
     if (g_appsSearchFocus && ((NowMs() / 500) & 1)) {
         SelectObject(g_bbDC, g_fLabel);
         SIZE sz = {}; int tw = 0;
@@ -12181,7 +12886,7 @@ static void DrawAppsChromeGdi(HDC, float closeA) {
     const BYTE ha = (BYTE)(255.0f * pres * ARROW_HOVER_DISC);
     // While the app bar is open it covers the corner where the arrow lives, so the arrow is not
     // drawn at all: in Windows 8.1 it is simply not there until the bar goes away again.
-    if (g_view == VIEW_START && ZoomPresence(now) <= 0.0f && !g_barVisible) {
+    if (g_view == VIEW_START && !InterlockedCompareExchange(&g_hideAppsArrow, 0, 0) && ZoomPresence(now) <= 0.0f && !g_barVisible) {
         RECT ar; AppsArrowRect(&ar);
         // The disc first: it is the background inside the ring, the white glyph goes over it.
         if (g_hoverArrow && ha > 0) BlitIconGdi(g_bbDC, g_iconArrowHoverDisc, ar, false, ha);
@@ -12241,7 +12946,7 @@ static void DrawAppsChromeGpu(float closeA) {
         g_rt->DrawBitmap(ic.gpu, dst, base, mode);
     };
     if (g_view == VIEW_START) {
-        if (ZoomPresence(now) <= 0.0f && !g_barVisible) {
+        if (!InterlockedCompareExchange(&g_hideAppsArrow, 0, 0) && ZoomPresence(now) <= 0.0f && !g_barVisible) {
             RECT ar; AppsArrowRect(&ar);
             arrow(g_iconArrowDown, ar);
         }
@@ -12256,28 +12961,334 @@ static void DrawAppsChromeGpu(float closeA) {
     }
     if (g_view == VIEW_SEARCH && !g_charmOpen) DrawAppsSearchBoxGpu(1.0f);
 }
-static void DrawBarLabelFit(const wchar_t* label, float x, float top) {
-    try {
-    const float maxW = (float)kBarBtnW - ScF(6.0f);
+struct AppBarPalette {
+    COLORREF bg;
+    COLORREF topBorder;
+    COLORREF activeMark;
+};
+
+// Computes the authentic Windows 8 Beta / Windows 8.0 / Windows 8.1 First Versions horizontal
+// App Bar palette harmonized to the active Start background/accent theme.
+static AppBarPalette ComputeAppBarPalette() {
+    AppBarPalette pal = {};
+    const int bgMode = (int)InterlockedCompareExchange(&g_bgMode, 0, 0);
+    if (bgMode == 0 && InterlockedCompareExchange(&g_betaAppearance, 0, 0)) {
+        // Authentic Windows 8 Beta (Build 8045) purple bar from reference implementation.
+        pal.bg = RGB(78, 39, 117);
+        pal.topBorder = RGB(130, 87, 164);
+        pal.activeMark = RGB(76, 35, 110);
+        return pal;
+    }
+    if (bgMode == 0) {
+        // Built-in Windows 8/8.1 dark-purple petal background (#240040): match with rich Start
+        // Accent purple (just like real Windows 8 #180052 -> #4617B4 and #003B46 -> #00757A).
+        pal.bg = RGB(88, 36, 136);
+        pal.topBorder = Mix(pal.bg, RGB(255, 255, 255), 0.24f);
+        pal.activeMark = ShadeColor(pal.bg, -0.18f);
+        return pal;
+    }
+    const COLORREF base = StartThemeBaseColor();
+    const int r = GetRValue(base), g = GetGValue(base), b = GetBValue(base);
+    const int luma = (r * 299 + g * 587 + b * 114) / 1000;
+    const int hi = std::max(r, std::max(g, b));
+    if (luma < 85) {
+        // Dark Start backgrounds (navy, dark teal, deep purple, charcoal): lift into a vibrant
+        // Start Accent Bar tone preserving the exact hue.
+        if (hi < 24) {
+            pal.bg = RGB(52, 52, 58);
+        } else {
+            const float targetHi = 178.0f;
+            const float gain = std::min(2.6f, std::max(1.35f, targetHi / (float)hi));
+            auto clampByte = [](float v) -> BYTE {
+                if (v < 0.0f) return 0;
+                if (v > 255.0f) return 255;
+                return (BYTE)(v + 0.5f);
+            };
+            pal.bg = RGB(clampByte(r * gain), clampByte(g * gain), clampByte(b * gain));
+        }
+    } else if (luma <= 165) {
+        // Mid-tone solid/accent Start color: step to a distinct richer companion shade so the
+        // bar clearly separates from the Start background while keeping the exact theme hue.
+        pal.bg = ShadeColor(base, -0.26f);
+    } else {
+        // Bright Start color: darken for crisp legibility behind white circular command buttons.
+        pal.bg = ShadeColor(base, -0.48f);
+    }
+    pal.topBorder = Mix(pal.bg, RGB(255, 255, 255), 0.24f);
+    pal.activeMark = ShadeColor(pal.bg, -0.18f);
+    return pal;
+}
+
+static void DrawBarIconGpu(int id, float cx, float cy, COLORREF col) {
+    if (!g_rt || !g_scratch) return;
+    SetBr(col, 1.0f);
+    const float s = ScF(1.0f);
+    const float st = std::max(1.4f, 2.0f * s);
+    switch (id) {
+    case 1:
+    case 3:
+    case 4: {
+        // Pushpin icon (diagonal, 45 deg), plus strikethrough slash for Unpin (id 1 / 3).
+        // Pin head top-right -> body -> needle bottom-left.
+        g_rt->DrawLine(D2D1::Point2F(cx + 1.5f * s, cy - 8.5f * s), D2D1::Point2F(cx + 8.5f * s, cy - 1.5f * s), g_scratch, 2.2f * s);
+        g_rt->DrawLine(D2D1::Point2F(cx + 3.0f * s, cy - 7.0f * s), D2D1::Point2F(cx - 2.0f * s, cy - 2.0f * s), g_scratch, st);
+        g_rt->DrawLine(D2D1::Point2F(cx + 7.0f * s, cy - 3.0f * s), D2D1::Point2F(cx + 2.0f * s, cy + 2.0f * s), g_scratch, st);
+        g_rt->DrawLine(D2D1::Point2F(cx - 4.5f * s, cy - 4.5f * s), D2D1::Point2F(cx + 4.5f * s, cy + 4.5f * s), g_scratch, 2.2f * s);
+        g_rt->DrawLine(D2D1::Point2F(cx - 1.5f * s, cy + 1.5f * s), D2D1::Point2F(cx - 8.0f * s, cy + 8.0f * s), g_scratch, st);
+        if (id == 1 || id == 3) {
+            // Crisp diagonal unpin slash (top-left -> bottom-right)
+            g_rt->DrawLine(D2D1::Point2F(cx - 9.0f * s, cy - 9.0f * s), D2D1::Point2F(cx + 9.0f * s, cy + 9.0f * s), g_scratch, 2.2f * s);
+        }
+        break;
+    }
+    case 13: {
+        // Trash bin (Uninstall)
+        g_rt->DrawLine(D2D1::Point2F(cx - 7.5f * s, cy - 6.0f * s), D2D1::Point2F(cx + 7.5f * s, cy - 6.0f * s), g_scratch, st);
+        g_rt->DrawRectangle(D2D1::RectF(cx - 3.0f * s, cy - 9.0f * s, cx + 3.0f * s, cy - 6.0f * s), g_scratch, std::max(1.2f, 1.7f * s));
+        g_rt->DrawRectangle(D2D1::RectF(cx - 5.5f * s, cy - 6.0f * s, cx + 5.5f * s, cy + 8.5f * s), g_scratch, st);
+        g_rt->DrawLine(D2D1::Point2F(cx - 2.0f * s, cy - 3.0f * s), D2D1::Point2F(cx - 2.0f * s, cy + 5.5f * s), g_scratch, std::max(1.2f, 1.6f * s));
+        g_rt->DrawLine(D2D1::Point2F(cx + 2.0f * s, cy - 3.0f * s), D2D1::Point2F(cx + 2.0f * s, cy + 5.5f * s), g_scratch, std::max(1.2f, 1.6f * s));
+        break;
+    }
+    case 2: {
+        // Resize (outer square + filled smaller square + diagonal resize arrow)
+        g_rt->DrawRectangle(D2D1::RectF(cx - 8.5f * s, cy - 8.5f * s, cx + 8.5f * s, cy + 8.5f * s), g_scratch, st);
+        g_rt->FillRectangle(D2D1::RectF(cx - 8.5f * s, cy + 1.0f * s, cx - 1.0f * s, cy + 8.5f * s), g_scratch);
+        g_rt->DrawLine(D2D1::Point2F(cx - 0.5f * s, cy + 0.5f * s), D2D1::Point2F(cx + 5.5f * s, cy - 5.5f * s), g_scratch, std::max(1.3f, 1.8f * s));
+        g_rt->DrawLine(D2D1::Point2F(cx + 1.5f * s, cy - 5.5f * s), D2D1::Point2F(cx + 5.5f * s, cy - 5.5f * s), g_scratch, std::max(1.3f, 1.8f * s));
+        g_rt->DrawLine(D2D1::Point2F(cx + 5.5f * s, cy - 1.5f * s), D2D1::Point2F(cx + 5.5f * s, cy - 5.5f * s), g_scratch, std::max(1.3f, 1.8f * s));
+        break;
+    }
+    case 10: {
+        // Advanced (three clean horizontal dots)
+        for (int d = -1; d <= 1; ++d)
+            g_rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx + d * 6.5f * s, cy), 2.2f * s, 2.2f * s), g_scratch);
+        break;
+    }
+    case 12: {
+        // Run / Open new window (clean open-window frame + upward launch arrow)
+        g_rt->DrawRectangle(D2D1::RectF(cx - 8.0f * s, cy - 6.5f * s, cx + 8.0f * s, cy + 7.5f * s), g_scratch, st);
+        g_rt->DrawLine(D2D1::Point2F(cx - 8.0f * s, cy - 2.5f * s), D2D1::Point2F(cx + 8.0f * s, cy - 2.5f * s), g_scratch, std::max(1.2f, 1.6f * s));
+        g_rt->DrawLine(D2D1::Point2F(cx, cy + 5.0f * s), D2D1::Point2F(cx, cy - 0.5f * s), g_scratch, st);
+        g_rt->DrawLine(D2D1::Point2F(cx - 3.2f * s, cy + 2.2f * s), D2D1::Point2F(cx, cy - 1.0f * s), g_scratch, std::max(1.3f, 1.8f * s));
+        g_rt->DrawLine(D2D1::Point2F(cx + 3.2f * s, cy + 2.2f * s), D2D1::Point2F(cx, cy - 1.0f * s), g_scratch, std::max(1.3f, 1.8f * s));
+        break;
+    }
+    case 24: {
+        // Run as administrator (shield emblem)
+        D2D1_POINT_2F p0 = D2D1::Point2F(cx, cy - 8.5f * s);
+        D2D1_POINT_2F p1 = D2D1::Point2F(cx + 7.0f * s, cy - 5.5f * s);
+        D2D1_POINT_2F p2 = D2D1::Point2F(cx + 6.5f * s, cy + 2.0f * s);
+        D2D1_POINT_2F p3 = D2D1::Point2F(cx, cy + 8.5f * s);
+        D2D1_POINT_2F p4 = D2D1::Point2F(cx - 6.5f * s, cy + 2.0f * s);
+        D2D1_POINT_2F p5 = D2D1::Point2F(cx - 7.0f * s, cy - 5.5f * s);
+        g_rt->DrawLine(p0, p1, g_scratch, st); g_rt->DrawLine(p1, p2, g_scratch, st);
+        g_rt->DrawLine(p2, p3, g_scratch, st); g_rt->DrawLine(p3, p4, g_scratch, st);
+        g_rt->DrawLine(p4, p5, g_scratch, st); g_rt->DrawLine(p5, p0, g_scratch, st);
+        g_rt->DrawLine(D2D1::Point2F(cx, cy - 6.0f * s), D2D1::Point2F(cx, cy + 6.0f * s), g_scratch, std::max(1.2f, 1.5f * s));
+        g_rt->DrawLine(D2D1::Point2F(cx - 5.0f * s, cy - 0.5f * s), D2D1::Point2F(cx + 5.0f * s, cy - 0.5f * s), g_scratch, std::max(1.2f, 1.5f * s));
+        break;
+    }
+    case 25: {
+        // Open file location (folder icon)
+        g_rt->DrawLine(D2D1::Point2F(cx - 8.0f * s, cy - 6.0f * s), D2D1::Point2F(cx - 2.0f * s, cy - 6.0f * s), g_scratch, st);
+        g_rt->DrawLine(D2D1::Point2F(cx - 2.0f * s, cy - 6.0f * s), D2D1::Point2F(cx, cy - 3.5f * s), g_scratch, st);
+        g_rt->DrawLine(D2D1::Point2F(cx, cy - 3.5f * s), D2D1::Point2F(cx + 8.0f * s, cy - 3.5f * s), g_scratch, st);
+        g_rt->DrawLine(D2D1::Point2F(cx + 8.0f * s, cy - 3.5f * s), D2D1::Point2F(cx + 8.0f * s, cy + 7.0f * s), g_scratch, st);
+        g_rt->DrawLine(D2D1::Point2F(cx + 8.0f * s, cy + 7.0f * s), D2D1::Point2F(cx - 8.0f * s, cy + 7.0f * s), g_scratch, st);
+        g_rt->DrawLine(D2D1::Point2F(cx - 8.0f * s, cy + 7.0f * s), D2D1::Point2F(cx - 8.0f * s, cy - 6.0f * s), g_scratch, st);
+        break;
+    }
+    case 27: {
+        // All apps (authentic Windows 8 3-row bulleted list)
+        const float ys[3] = { cy - 5.2f * s, cy, cy + 5.2f * s };
+        for (int r = 0; r < 3; ++r) {
+            g_rt->FillRectangle(D2D1::RectF(cx - 8.0f * s, ys[r] - 1.3f * s, cx - 5.2f * s, ys[r] + 1.3f * s), g_scratch);
+            g_rt->FillRectangle(D2D1::RectF(cx - 3.0f * s, ys[r] - 1.2f * s, cx + 8.0f * s, ys[r] + 1.2f * s), g_scratch);
+        }
+        break;
+    }
+    case 28: {
+        // Customize (authentic Windows 8.1 2x2 tile grid)
+        const float g0 = 1.6f * s, sz = 6.2f * s;
+        g_rt->FillRectangle(D2D1::RectF(cx - g0 - sz, cy - g0 - sz, cx - g0, cy - g0), g_scratch);
+        g_rt->FillRectangle(D2D1::RectF(cx + g0,      cy - g0 - sz, cx + g0 + sz, cy - g0), g_scratch);
+        g_rt->FillRectangle(D2D1::RectF(cx - g0 - sz, cy + g0,      cx - g0, cy + g0 + sz), g_scratch);
+        g_rt->FillRectangle(D2D1::RectF(cx + g0,      cy + g0,      cx + g0 + sz, cy + g0 + sz), g_scratch);
+        break;
+    }
+    case 26: {
+        // Name group (clean pencil + baseline)
+        g_rt->DrawLine(D2D1::Point2F(cx - 6.5f * s, cy + 5.5f * s), D2D1::Point2F(cx + 5.5f * s, cy - 6.5f * s), g_scratch, 2.4f * s);
+        g_rt->DrawLine(D2D1::Point2F(cx - 7.5f * s, cy + 8.0f * s), D2D1::Point2F(cx + 7.5f * s, cy + 8.0f * s), g_scratch, std::max(1.3f, 1.8f * s));
+        break;
+    }
+    case 14: {
+        // Standard tile (centered square inside frame)
+        g_rt->DrawRectangle(D2D1::RectF(cx - 7.5f * s, cy - 7.5f * s, cx + 7.5f * s, cy + 7.5f * s), g_scratch, st);
+        g_rt->FillRectangle(D2D1::RectF(cx - 3.5f * s, cy - 3.5f * s, cx + 3.5f * s, cy + 3.5f * s), g_scratch);
+        break;
+    }
+    case 29: {
+        // Back to Start (up-pointing arrow)
+        g_rt->DrawLine(D2D1::Point2F(cx, cy + 7.5f * s), D2D1::Point2F(cx, cy - 6.5f * s), g_scratch, st);
+        g_rt->DrawLine(D2D1::Point2F(cx - 6.0f * s, cy - 1.0f * s), D2D1::Point2F(cx, cy - 7.0f * s), g_scratch, st);
+        g_rt->DrawLine(D2D1::Point2F(cx + 6.0f * s, cy - 1.0f * s), D2D1::Point2F(cx, cy - 7.0f * s), g_scratch, st);
+        break;
+    }
+    case 15:
+    default: {
+        // Clear selection (crisp X)
+        const float d = 6.2f * s;
+        g_rt->DrawLine(D2D1::Point2F(cx - d, cy - d), D2D1::Point2F(cx + d, cy + d), g_scratch, st);
+        g_rt->DrawLine(D2D1::Point2F(cx + d, cy - d), D2D1::Point2F(cx - d, cy + d), g_scratch, st);
+        break;
+    }
+    }
+}
+
+static void DrawBarIconGdi(Gdiplus::Graphics& gp, int id, float cx, float cy, COLORREF col) {
+    const float s = ScF(1.0f);
+    const float st = std::max(1.4f, 2.0f * s);
+    Gdiplus::Color c(255, GetRValue(col), GetGValue(col), GetBValue(col));
+    Gdiplus::Pen pen(c, st);
+    pen.SetStartCap(Gdiplus::LineCapRound);
+    pen.SetEndCap(Gdiplus::LineCapRound);
+    pen.SetLineJoin(Gdiplus::LineJoinRound);
+    Gdiplus::SolidBrush br(c);
+    switch (id) {
+    case 1:
+    case 3:
+    case 4: {
+        Gdiplus::Pen bold(c, 2.2f * s);
+        bold.SetStartCap(Gdiplus::LineCapRound); bold.SetEndCap(Gdiplus::LineCapRound);
+        gp.DrawLine(&bold, cx + 1.5f * s, cy - 8.5f * s, cx + 8.5f * s, cy - 1.5f * s);
+        gp.DrawLine(&pen,  cx + 3.0f * s, cy - 7.0f * s, cx - 2.0f * s, cy - 2.0f * s);
+        gp.DrawLine(&pen,  cx + 7.0f * s, cy - 3.0f * s, cx + 2.0f * s, cy + 2.0f * s);
+        gp.DrawLine(&bold, cx - 4.5f * s, cy - 4.5f * s, cx + 4.5f * s, cy + 4.5f * s);
+        gp.DrawLine(&pen,  cx - 1.5f * s, cy + 1.5f * s, cx - 8.0f * s, cy + 8.0f * s);
+        if (id == 1 || id == 3)
+            gp.DrawLine(&bold, cx - 9.0f * s, cy - 9.0f * s, cx + 9.0f * s, cy + 9.0f * s);
+        break;
+    }
+    case 13: {
+        Gdiplus::Pen thin(c, std::max(1.2f, 1.6f * s));
+        gp.DrawLine(&pen, cx - 7.5f * s, cy - 6.0f * s, cx + 7.5f * s, cy - 6.0f * s);
+        gp.DrawRectangle(&thin, cx - 3.0f * s, cy - 9.0f * s, 6.0f * s, 3.0f * s);
+        gp.DrawRectangle(&pen, cx - 5.5f * s, cy - 6.0f * s, 11.0f * s, 14.5f * s);
+        gp.DrawLine(&thin, cx - 2.0f * s, cy - 3.0f * s, cx - 2.0f * s, cy + 5.5f * s);
+        gp.DrawLine(&thin, cx + 2.0f * s, cy - 3.0f * s, cx + 2.0f * s, cy + 5.5f * s);
+        break;
+    }
+    case 2: {
+        gp.DrawRectangle(&pen, cx - 8.5f * s, cy - 8.5f * s, 17.0f * s, 17.0f * s);
+        gp.FillRectangle(&br, cx - 8.5f * s, cy + 1.0f * s, 7.5f * s, 7.5f * s);
+        gp.DrawLine(&pen, cx - 0.5f * s, cy + 0.5f * s, cx + 5.5f * s, cy - 5.5f * s);
+        gp.DrawLine(&pen, cx + 1.5f * s, cy - 5.5f * s, cx + 5.5f * s, cy - 5.5f * s);
+        gp.DrawLine(&pen, cx + 5.5f * s, cy - 1.5f * s, cx + 5.5f * s, cy - 5.5f * s);
+        break;
+    }
+    case 10: {
+        for (int d = -1; d <= 1; ++d)
+            gp.FillEllipse(&br, cx + d * 6.5f * s - 2.2f * s, cy - 2.2f * s, 4.4f * s, 4.4f * s);
+        break;
+    }
+    case 12: {
+        gp.DrawRectangle(&pen, cx - 8.0f * s, cy - 6.5f * s, 16.0f * s, 14.0f * s);
+        gp.DrawLine(&pen, cx - 8.0f * s, cy - 2.5f * s, cx + 8.0f * s, cy - 2.5f * s);
+        gp.DrawLine(&pen, cx, cy + 5.0f * s, cx, cy - 0.5f * s);
+        gp.DrawLine(&pen, cx - 3.2f * s, cy + 2.2f * s, cx, cy - 1.0f * s);
+        gp.DrawLine(&pen, cx + 3.2f * s, cy + 2.2f * s, cx, cy - 1.0f * s);
+        break;
+    }
+    case 24: {
+        Gdiplus::PointF pts[6] = {
+            Gdiplus::PointF(cx, cy - 8.5f * s),
+            Gdiplus::PointF(cx + 7.0f * s, cy - 5.5f * s),
+            Gdiplus::PointF(cx + 6.5f * s, cy + 2.0f * s),
+            Gdiplus::PointF(cx, cy + 8.5f * s),
+            Gdiplus::PointF(cx - 6.5f * s, cy + 2.0f * s),
+            Gdiplus::PointF(cx - 7.0f * s, cy - 5.5f * s)
+        };
+        gp.DrawPolygon(&pen, pts, 6);
+        Gdiplus::Pen thin(c, std::max(1.2f, 1.5f * s));
+        gp.DrawLine(&thin, cx, cy - 6.0f * s, cx, cy + 6.0f * s);
+        gp.DrawLine(&thin, cx - 5.0f * s, cy - 0.5f * s, cx + 5.0f * s, cy - 0.5f * s);
+        break;
+    }
+    case 25: {
+        Gdiplus::PointF pts[6] = {
+            Gdiplus::PointF(cx - 8.0f * s, cy - 6.0f * s),
+            Gdiplus::PointF(cx - 2.0f * s, cy - 6.0f * s),
+            Gdiplus::PointF(cx, cy - 3.5f * s),
+            Gdiplus::PointF(cx + 8.0f * s, cy - 3.5f * s),
+            Gdiplus::PointF(cx + 8.0f * s, cy + 7.0f * s),
+            Gdiplus::PointF(cx - 8.0f * s, cy + 7.0f * s)
+        };
+        gp.DrawPolygon(&pen, pts, 6);
+        break;
+    }
+    case 27: {
+        const float ys[3] = { cy - 5.2f * s, cy, cy + 5.2f * s };
+        for (int r = 0; r < 3; ++r) {
+            gp.FillRectangle(&br, cx - 8.0f * s, ys[r] - 1.3f * s, 2.8f * s, 2.6f * s);
+            gp.FillRectangle(&br, cx - 3.0f * s, ys[r] - 1.2f * s, 11.0f * s, 2.4f * s);
+        }
+        break;
+    }
+    case 28: {
+        const float g0 = 1.6f * s, sz = 6.2f * s;
+        gp.FillRectangle(&br, cx - g0 - sz, cy - g0 - sz, sz, sz);
+        gp.FillRectangle(&br, cx + g0,      cy - g0 - sz, sz, sz);
+        gp.FillRectangle(&br, cx - g0 - sz, cy + g0,      sz, sz);
+        gp.FillRectangle(&br, cx + g0,      cy + g0,      sz, sz);
+        break;
+    }
+    case 26: {
+        Gdiplus::Pen bold(c, 2.4f * s);
+        bold.SetStartCap(Gdiplus::LineCapRound); bold.SetEndCap(Gdiplus::LineCapRound);
+        gp.DrawLine(&bold, cx - 6.5f * s, cy + 5.5f * s, cx + 5.5f * s, cy - 6.5f * s);
+        gp.DrawLine(&pen, cx - 7.5f * s, cy + 8.0f * s, cx + 7.5f * s, cy + 8.0f * s);
+        break;
+    }
+    case 14: {
+        gp.DrawRectangle(&pen, cx - 7.5f * s, cy - 7.5f * s, 15.0f * s, 15.0f * s);
+        gp.FillRectangle(&br, cx - 3.5f * s, cy - 3.5f * s, 7.0f * s, 7.0f * s);
+        break;
+    }
+    case 29: {
+        gp.DrawLine(&pen, cx, cy + 7.5f * s, cx, cy - 6.5f * s);
+        gp.DrawLine(&pen, cx - 6.0f * s, cy - 1.0f * s, cx, cy - 7.0f * s);
+        gp.DrawLine(&pen, cx + 6.0f * s, cy - 1.0f * s, cx, cy - 7.0f * s);
+        break;
+    }
+    case 15:
+    default: {
+        const float d = 6.2f * s;
+        gp.DrawLine(&pen, cx - d, cy - d, cx + d, cy + d);
+        gp.DrawLine(&pen, cx + d, cy - d, cx - d, cy + d);
+        break;
+    }
+    }
+}
+
+static void SplitBarLabelTwoLines(const wchar_t* label, float maxW, std::wstring& l1, std::wstring& l2) {
+    l1.clear(); l2.clear();
+    if (!label || !*label) return;
     HDC mdc = GetDC(NULL);
     HGDIOBJ oldM = NULL;
-    int oneW = 0;
-    if (mdc) {
-        if (g_fBarMeas) oldM = SelectObject(mdc, g_fBarMeas);
-        SIZE sz = {};
-        if (GetTextExtentPoint32W(mdc, label, (int)wcslen(label), &sz)) oneW = sz.cx;
-    }
-    if ((float)oneW <= maxW || !mdc) {
-        if (mdc) { if (oldM) SelectObject(mdc, oldM); ReleaseDC(NULL, mdc); }
-        TextAt(label, g_barLabel, x, top + 57, x + kBarBtnW, top + 88, RGB(255, 255, 255));
-        return;
-    }
-    std::wstring l1, l2;
-    auto widthOf = [&](const std::wstring& s) {
+    if (mdc && g_fBarMeas) oldM = SelectObject(mdc, g_fBarMeas);
+    auto widthOf = [&](const std::wstring& s) -> int {
+        if (!mdc || s.empty()) return 0;
         SIZE sz = {};
         if (GetTextExtentPoint32W(mdc, s.c_str(), (int)s.size(), &sz)) return (int)sz.cx;
         return 0;
     };
+    if (!mdc || (float)widthOf(label) <= maxW) {
+        l1 = label;
+        if (mdc) { if (oldM) SelectObject(mdc, oldM); ReleaseDC(NULL, mdc); }
+        return;
+    }
     const wchar_t* p = label;
     while (*p) {
         const wchar_t* sp = wcschr(p, L' ');
@@ -12288,16 +13299,44 @@ static void DrawBarLabelFit(const wchar_t* label, float x, float top) {
         if (!sp) break;
         p = sp + 1;
     }
-    if (!l2.empty()) {
+    if (!l2.empty() && widthOf(l2) > (int)maxW) {
         while (widthOf(l2 + L"\x2026") > (int)maxW && l2.size() > 1) l2.resize(l2.size() - 1);
         l2 += L"\x2026";
     }
     if (oldM) SelectObject(mdc, oldM);
     ReleaseDC(NULL, mdc);
-    TextAt(l1.c_str(), g_barLabel, x, top + 53, x + kBarBtnW, top + 71, RGB(255, 255, 255));
-    if (!l2.empty())
-        TextAt(l2.c_str(), g_barLabel, x, top + 71, x + kBarBtnW, top + 88, RGB(255, 255, 255));
+}
+
+static void DrawBarLabelFit(const wchar_t* label, float x, float w, float top) {
+    try {
+        std::wstring l1, l2;
+        SplitBarLabelTwoLines(label, w - ScF(6.0f), l1, l2);
+        if (l2.empty()) {
+            TextAt(l1.c_str(), g_barLabel, x, top + ScF(56.0f), x + w, top + ScF(82.0f), RGB(255, 255, 255));
+        } else {
+            TextAt(l1.c_str(), g_barLabel, x, top + ScF(53.0f), x + w, top + ScF(70.0f), RGB(255, 255, 255));
+            TextAt(l2.c_str(), g_barLabel, x, top + ScF(69.0f), x + w, top + ScF(86.0f), RGB(255, 255, 255));
+        }
     } catch (...) { Wh_Log(L"[bar] label fitting failed; label skipped"); }
+}
+
+static void DrawBarLabelFitGdi(HDC dc, const wchar_t* label, int x, int w, int top) {
+    if (!dc || !label || !*label) return;
+    std::wstring l1, l2;
+    SplitBarLabelTwoLines(label, (float)w - ScF(6.0f), l1, l2);
+    SetBkMode(dc, TRANSPARENT);
+    SetTextColor(dc, RGB(255, 255, 255));
+    HGDIOBJ oldF = g_fBarMeas ? SelectObject(dc, g_fBarMeas) : (g_fLabel ? SelectObject(dc, g_fLabel) : NULL);
+    if (l2.empty()) {
+        RECT r = { x, top + ScI(56), x + w, top + ScI(82) };
+        DrawTextW(dc, l1.c_str(), -1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+    } else {
+        RECT r1 = { x, top + ScI(53), x + w, top + ScI(70) };
+        RECT r2 = { x, top + ScI(69), x + w, top + ScI(86) };
+        DrawTextW(dc, l1.c_str(), -1, &r1, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+        DrawTextW(dc, l2.c_str(), -1, &r2, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+    }
+    if (oldF) SelectObject(dc, oldF);
 }
 
 // The 1 px black frame of the menus of Windows 8.1 (kMenuFrame, the same as the popups drawn with
@@ -12308,65 +13347,72 @@ static void MenuFrameGpu(int l, int top, int r, int bottom) {
     g_rt->DrawRectangle(D2D1::RectF((float)l + 0.5f, (float)top + 0.5f,
                                     (float)r - 0.5f, (float)bottom - 0.5f), g_scratch, 1.0f);
 }
+
 static void DrawBarGpu(DWORD now) {
     if (!g_barVisible || !g_scratch || !g_barLabel) return;
-    BarButton buttons[4];
+    BarButton buttons[kBarMaxBtns];
     int n = BarButtons(buttons);
     if (!n) return;
-    // Opening: the bar rises from the bottom edge. Closing (g_barHideTick): it goes back down in
-    // the same time and with the same curve, from however far it had got when it was dismissed.
     float t = Clamp01((float)(now - g_barTick) / 1000.0f / BAR_OPEN_S);
     if (g_barHideTick)
         t = g_barCloseFrom * (1.0f - Clamp01((float)(now - g_barHideTick) / 1000.0f / BAR_CLOSE_S));
-    float off = (1.0f - EaseOut(t)) * (float)kBarH;
-    float top = (float)(g_sh - kBarH) + off;
-    FillRc(0, top, (float)g_sw, (float)g_sh + off, RGB(78, 39, 117), 1.0f);
-    FillRc(0, top, (float)g_sw, top + 1.0f, RGB(130, 87, 164), 0.85f);
-    float start = (float)(g_sw - n * kBarBtnW);
+    const float off = (1.0f - EaseOut(t)) * (float)kBarH;
+    const float top = (float)(g_sh - kBarH) + off;
+    const AppBarPalette pal = ComputeAppBarPalette();
+
+    FillRc(0.0f, top, (float)g_sw, (float)g_sh + off, pal.bg, 1.0f);
+    FillRc(0.0f, top, (float)g_sw, top + 1.0f, pal.topBorder, 0.90f);
+
+    const float radius = ScF(19.5f);
+    const float cy = top + ScF(30.5f);
     for (int i = 0; i < n; ++i) {
-        float x = start + i * kBarBtnW;
-        bool down = g_barPressedButton == i && g_barHoverButton == i;
-        bool active = down || (buttons[i].id == 10 && g_advancedOpen) || (buttons[i].id == 2 && g_resizeOpen);
-        COLORREF mark = active ? RGB(76, 35, 110) : RGB(255, 255, 255);
-        if (buttons[i].id == 10 || buttons[i].id == 1 || buttons[i].id == 3 || buttons[i].id == 2) {
+        RECT br;
+        if (!BarButtonRect(i, buttons, n, &br, (int)roundf(top))) continue;
+        const float bx = (float)br.left;
+        const float bw = (float)(br.right - br.left);
+        const float cx = bx + bw * 0.5f;
+        const bool hovered = (g_barHoverButton == i);
+        const bool down = (g_barPressedButton == i && hovered);
+        const bool active = down || buttons[i].activeToggle ||
+                            (buttons[i].id == 10 && g_advancedOpen) ||
+                            (buttons[i].id == 2 && g_resizeOpen);
+        D2D1_ELLIPSE circle = D2D1::Ellipse(D2D1::Point2F(cx, cy), radius, radius);
+        if (active) {
             SetBr(RGB(255, 255, 255), 1.0f);
-            D2D1_ELLIPSE circle = D2D1::Ellipse(D2D1::Point2F(x + 50, top + 34), 19, 19);
-            if (active) g_rt->FillEllipse(circle, g_scratch);
-            else g_rt->DrawEllipse(circle, g_scratch, 2.5f);
-            if (buttons[i].id == 10) {
-                SetBr(mark, 1.0f);
-                for (int d = -1; d <= 1; ++d)
-                    g_rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x + 50 + d * 10, top + 34), 2.1f, 2.1f), g_scratch);
-            } else if (buttons[i].id == 2) {
-                SetBr(mark, 1.0f);
-                g_rt->DrawRectangle(D2D1::RectF(x + 39, top + 23, x + 61, top + 45), g_scratch, 2.2f);
-                g_rt->FillRectangle(D2D1::RectF(x + 44, top + 28, x + 52, top + 36), g_scratch);
-            } else {
-                TextAt(buttons[i].glyph, g_glyphSmall, x + 32, top + 16, x + 68, top + 52, mark);
-            }
+            g_rt->FillEllipse(circle, g_scratch);
+            g_rt->DrawEllipse(circle, g_scratch, ScF(2.0f));
         } else {
-            TextAt(buttons[i].glyph, g_glyphFormat, x, top + 11, x + kBarBtnW, top + 56,
-                   RGB(255, 255, 255));
+            if (hovered) {
+                SetBr(RGB(255, 255, 255), 0.28f);
+                g_rt->FillEllipse(circle, g_scratch);
+            }
+            SetBr(RGB(255, 255, 255), hovered ? 1.0f : 0.94f);
+            g_rt->DrawEllipse(circle, g_scratch, hovered ? ScF(2.3f) : ScF(2.0f));
         }
-        DrawBarLabelFit(buttons[i].label, x, top);
+        DrawBarIconGpu(buttons[i].id, cx, cy, active ? pal.activeMark : RGB(255, 255, 255));
+        DrawBarLabelFit(buttons[i].label, bx, bw, top);
     }
+
+    const int rowH = BarFlyoutRowH();
+    const int pad = BarFlyoutPad();
     AdvancedAction actions[4];
     int count = AdvancedActions(actions);
     if (g_advancedOpen && count && off < 1.0f) {
         int l, topMenu, r, bottomMenu;
         const wchar_t* labs[4]; for (int i = 0; i < count; ++i) labs[i] = actions[i].label;
-        AdvancedRect(count, labs, &l, &topMenu, &r, &bottomMenu);
-        FillRc((float)l + 4, (float)topMenu + 4, (float)r + 4, (float)bottomMenu + 4, RGB(9, 2, 13), 0.45f);
-        FillRc((float)l, (float)topMenu, (float)r, (float)bottomMenu, RGB(250, 250, 250));
+        BarFlyoutRect(10, count, labs, &l, &topMenu, &r, &bottomMenu);
+        FillRc((float)l + ScF(4.0f), (float)topMenu + ScF(4.0f), (float)r + ScF(4.0f), (float)bottomMenu + ScF(4.0f), RGB(9, 2, 13), 0.40f);
+        FillRc((float)l, (float)topMenu, (float)r, (float)bottomMenu, RGB(252, 252, 252));
         MenuFrameGpu(l, topMenu, r, bottomMenu);
         for (int i = 0; i < count; ++i) {
-            float y = (float)(topMenu + kAdvPad + i * kAdvRowH);
+            float y = (float)(topMenu + pad + i * rowH);
             if (i == g_advHoverRow) {
-                COLORREF shade = (i == g_advPressedRow) ? RGB(255, 255, 255) : RGB(224, 224, 224);
-                FillRc((float)l + 19, y + 1, (float)r - 19, y + kAdvRowH - 1, shade);
+                COLORREF shade = (i == g_advPressedRow) ? RGB(204, 204, 204) : RGB(224, 224, 224);
+                FillRc((float)l + ScF(2.0f), y + 1.0f, (float)r - ScF(2.0f), y + (float)rowH - 1.0f, shade);
             }
-            TextAt(actions[i].label, g_flyFormat ? g_flyFormat : g_itemFormat, (float)l + 34, y + 3, (float)r - 7, y + kAdvRowH - 2,
-                   RGB(28, 28, 28));
+            TextAt(actions[i].label, g_flyFormat ? g_flyFormat : g_itemFormat,
+                   (float)l + ScF(24.0f), y, (float)r - ScF(10.0f), y + (float)rowH,
+                   RGB(24, 24, 24));
         }
     }
     int sizes[4];
@@ -12374,22 +13420,127 @@ static void DrawBarGpu(DWORD now) {
     if (g_resizeOpen && scount && off < 1.0f) {
         int l, topMenu, r, bottomMenu;
         const wchar_t* labs[4]; for (int i = 0; i < scount; ++i) labs[i] = SizeName(sizes[i]);
-        AdvancedRect(scount, labs, &l, &topMenu, &r, &bottomMenu);
-        FillRc((float)l + 4, (float)topMenu + 4, (float)r + 4, (float)bottomMenu + 4, RGB(9, 2, 13), 0.45f);
-        FillRc((float)l, (float)topMenu, (float)r, (float)bottomMenu, RGB(250, 250, 250));
+        BarFlyoutRect(2, scount, labs, &l, &topMenu, &r, &bottomMenu);
+        FillRc((float)l + ScF(4.0f), (float)topMenu + ScF(4.0f), (float)r + ScF(4.0f), (float)bottomMenu + ScF(4.0f), RGB(9, 2, 13), 0.40f);
+        FillRc((float)l, (float)topMenu, (float)r, (float)bottomMenu, RGB(252, 252, 252));
         MenuFrameGpu(l, topMenu, r, bottomMenu);
         for (int i = 0; i < scount; ++i) {
-            float y = (float)(topMenu + kAdvPad + i * kAdvRowH);
+            float y = (float)(topMenu + pad + i * rowH);
             if (i == g_resizeHoverRow) {
-                COLORREF shade = (i == g_resizePressedRow) ? RGB(255, 255, 255) : RGB(224, 224, 224);
-                FillRc((float)l + 19, y + 1, (float)r - 19, y + kAdvRowH - 1, shade);
+                COLORREF shade = (i == g_resizePressedRow) ? RGB(204, 204, 204) : RGB(224, 224, 224);
+                FillRc((float)l + ScF(2.0f), y + 1.0f, (float)r - ScF(2.0f), y + (float)rowH - 1.0f, shade);
             }
-            if (sizes[i] == g_tiles[g_barIdx].cw)
-                TextAt(L"\xE10B", g_glyphSmall, (float)l + 10, y + 8, (float)l + 34, y + kAdvRowH - 6,
-                       RGB(28, 28, 28));
-            TextAt(SizeName(sizes[i]), g_flyFormat ? g_flyFormat : g_itemFormat, (float)l + 34, y + 3, (float)r - 7, y + kAdvRowH - 2,
-                   RGB(28, 28, 28));
+            if (g_barIdx >= 0 && g_barIdx < g_tileCount && sizes[i] == g_tiles[g_barIdx].cw) {
+                DrawCheckmarkGpu((float)l + ScF(11.0f), y + ((float)rowH - ScF(14.0f)) * 0.5f,
+                                 ScF(14.0f), RGB(24, 24, 24), 1.0f, ScF(2.0f));
+            }
+            TextAt(SizeName(sizes[i]), g_flyFormat ? g_flyFormat : g_itemFormat,
+                   (float)l + ScF(34.0f), y, (float)r - ScF(10.0f), y + (float)rowH,
+                   RGB(24, 24, 24));
         }
+    }
+}
+
+static void DrawBarGdi(DWORD now) {
+    if (!g_barVisible || !g_bbDC) return;
+    BarButton buttons[kBarMaxBtns];
+    int n = BarButtons(buttons);
+    if (!n) return;
+    float t = Clamp01((float)(now - g_barTick) / 1000.0f / BAR_OPEN_S);
+    if (g_barHideTick)
+        t = g_barCloseFrom * (1.0f - Clamp01((float)(now - g_barHideTick) / 1000.0f / BAR_CLOSE_S));
+    const int off = (int)roundf((1.0f - EaseOut(t)) * (float)kBarH);
+    const int top = (g_sh - kBarH) + off;
+    const AppBarPalette pal = ComputeAppBarPalette();
+
+    RECT barRc = { 0, top, g_sw, g_sh + off };
+    HBRUSH bgBr = CreateSolidBrush(pal.bg);
+    if (bgBr) { FillRect(g_bbDC, &barRc, bgBr); DeleteObject(bgBr); }
+    RECT borderRc = { 0, top, g_sw, top + 1 };
+    HBRUSH bdBr = CreateSolidBrush(pal.topBorder);
+    if (bdBr) { FillRect(g_bbDC, &borderRc, bdBr); DeleteObject(bdBr); }
+
+    const float radius = ScF(19.5f);
+    const float cy = (float)top + ScF(30.5f);
+    for (int i = 0; i < n; ++i) {
+        RECT br;
+        if (!BarButtonRect(i, buttons, n, &br, top)) continue;
+        const int bx = br.left;
+        const int bw = br.right - br.left;
+        const float cx = (float)bx + (float)bw * 0.5f;
+        const bool hovered = (g_barHoverButton == i);
+        const bool down = (g_barPressedButton == i && hovered);
+        const bool active = down || buttons[i].activeToggle ||
+                            (buttons[i].id == 10 && g_advancedOpen) ||
+                            (buttons[i].id == 2 && g_resizeOpen);
+        if (g_gdipToken) {
+            Gdiplus::Graphics gp(g_bbDC);
+            gp.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+            if (active) {
+                Gdiplus::SolidBrush wb(Gdiplus::Color(255, 255, 255, 255));
+                gp.FillEllipse(&wb, cx - radius, cy - radius, radius * 2.0f, radius * 2.0f);
+            } else {
+                if (hovered) {
+                    Gdiplus::SolidBrush hb(Gdiplus::Color(72, 255, 255, 255));
+                    gp.FillEllipse(&hb, cx - radius, cy - radius, radius * 2.0f, radius * 2.0f);
+                }
+                Gdiplus::Pen rp(Gdiplus::Color(hovered ? 255 : 240, 255, 255, 255), hovered ? ScF(2.3f) : ScF(2.0f));
+                gp.DrawEllipse(&rp, cx - radius, cy - radius, radius * 2.0f, radius * 2.0f);
+            }
+            DrawBarIconGdi(gp, buttons[i].id, cx, cy, active ? pal.activeMark : RGB(255, 255, 255));
+        }
+        DrawBarLabelFitGdi(g_bbDC, buttons[i].label, bx, bw, top);
+    }
+
+    const int rowH = BarFlyoutRowH();
+    const int pad = BarFlyoutPad();
+    auto drawFlyoutGdi = [&](int anchorId, int count, const wchar_t* const* labels, int hoverRow, int pressRow, int checkedRow) {
+        if (count <= 0 || off >= 1) return;
+        int l, topMenu, r, bottomMenu;
+        BarFlyoutRect(anchorId, count, labels, &l, &topMenu, &r, &bottomMenu);
+        BlendFillGdi(g_bbDC, l + ScI(4), topMenu + ScI(4), r + ScI(4), bottomMenu + ScI(4), RGB(9, 2, 13), 102);
+        RECT box = { l, topMenu, r, bottomMenu };
+        HBRUSH fb = CreateSolidBrush(RGB(252, 252, 252));
+        if (fb) { FillRect(g_bbDC, &box, fb); DeleteObject(fb); }
+        FrameRect(g_bbDC, &box, (HBRUSH)GetStockObject(BLACK_BRUSH));
+        SetBkMode(g_bbDC, TRANSPARENT);
+        HGDIOBJ oldF = g_fLabel ? SelectObject(g_bbDC, g_fLabel) : NULL;
+        for (int i = 0; i < count; ++i) {
+            int y = topMenu + pad + i * rowH;
+            if (i == hoverRow) {
+                COLORREF shade = (i == pressRow) ? RGB(204, 204, 204) : RGB(224, 224, 224);
+                RECT hr = { l + ScI(2), y + 1, r - ScI(2), y + rowH - 1 };
+                HBRUSH hb = CreateSolidBrush(shade);
+                if (hb) { FillRect(g_bbDC, &hr, hb); DeleteObject(hb); }
+            }
+            if (i == checkedRow) {
+                DrawCheckmarkGdi(g_bbDC, (float)l + ScF(11.0f), (float)y + ((float)rowH - ScF(14.0f)) * 0.5f,
+                                 ScF(14.0f), RGB(24, 24, 24), ScF(2.0f));
+            }
+            SetTextColor(g_bbDC, RGB(24, 24, 24));
+            RECT tr = { l + (checkedRow >= -1 && anchorId == 2 ? ScI(34) : ScI(24)), y, r - ScI(10), y + rowH };
+            DrawTextW(g_bbDC, labels[i], -1, &tr, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+        }
+        if (oldF) SelectObject(g_bbDC, oldF);
+    };
+
+    AdvancedAction actions[4];
+    int count = AdvancedActions(actions);
+    if (g_advancedOpen && count) {
+        const wchar_t* labs[4]; for (int i = 0; i < count; ++i) labs[i] = actions[i].label;
+        drawFlyoutGdi(10, count, labs, g_advHoverRow, g_advPressedRow, -1);
+    }
+    int sizes[4];
+    int scount = BarResizeSizes(sizes);
+    if (g_resizeOpen && scount) {
+        const wchar_t* labs[4];
+        int checkedRow = -1;
+        for (int i = 0; i < scount; ++i) {
+            labs[i] = SizeName(sizes[i]);
+            if (g_barIdx >= 0 && g_barIdx < g_tileCount && sizes[i] == g_tiles[g_barIdx].cw)
+                checkedRow = i;
+        }
+        drawFlyoutGdi(2, scount, labs, g_resizeHoverRow, g_resizePressedRow, checkedRow);
     }
 }
 
@@ -13509,7 +14660,7 @@ static void BlitIconGdi(HDC dc, const UiIcon& ic, const RECT& r, bool hover, BYT
 }
 static HBITMAP g_charmBmp = NULL;
 static BYTE* g_charmBits = NULL;
-static int g_charmW = 0, g_charmH = 0;
+
 static ID2D1Bitmap* g_charmGpu = NULL;
 #define CHARM_SLIDE_IN_MS  475   // same timings as the Windows 8 Networks charm
 #define CHARM_SLIDE_OUT_MS 380
@@ -14000,7 +15151,7 @@ static void CharmRenderEx(int contOff, const RECT* dirtyIn, int dirtyCount) {
             }
         }
         int y = L.listY;
-        for (int r = g_charmScroll; g_queryLen > 0 && r < (int)g_results.size() && r < g_charmScroll + L.vis; r++, y += L.rowH) {
+        for (int r = g_charmScroll; CharmListActive() && r < (int)g_results.size() && r < g_charmScroll + L.vis; r++, y += L.rowH) {
             RECT rowRect = { 0, y, W, y + L.rowH };
             if (!hits(rowRect)) continue;           // a partial redraw leaves this row as it is
             int idx = g_results[r];
@@ -14223,6 +15374,7 @@ static bool CharmVisible(DWORD now) {
     return g_charmOpen || (g_charmTick && (now - g_charmTick) < CHARM_SLIDE_MS);
 }
 static void DrawCharmBarGpu(DWORD now) {
+    if (InterlockedCompareExchange(&g_disableSearchCharm, 0, 0) != 0) return;
     if (!CharmVisible(now) || !g_charmGpu) return;
     try {
     float e = CharmPresence(now);
@@ -14233,14 +15385,16 @@ static void DrawCharmBarGpu(DWORD now) {
                                  : D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
     } catch (...) { Wh_Log(L"[charm] gpu draw failed"); }
 }
-static void DrawCharmBarGdi(HDC sdc, DWORD now) {
-    if (!CharmVisible(now) || !g_charmBmp) return;
+static void DrawCharmBarGdi(HDC dstDc, DWORD now) {
+    if (InterlockedCompareExchange(&g_disableSearchCharm, 0, 0) != 0) return;
+    if (!CharmVisible(now) || !g_charmBmp || !dstDc) return;
     try {
     float e = CharmPresence(now);
     float off = (1.0f - e) * (float)g_charmW;
-    HDC idc = CreateCompatibleDC(sdc);
+    HDC idc = CreateCompatibleDC(dstDc);
+    if (!idc) return;
     HGDIOBJ o = SelectObject(idc, g_charmBmp);
-    BitBlt(sdc, g_sw - g_charmW + (int)off, 0, g_charmW, g_charmH, idc, 0, 0, SRCCOPY);
+    BitBlt(dstDc, g_sw - g_charmW + (int)off, 0, g_charmW, g_charmH, idc, 0, 0, SRCCOPY);
     SelectObject(idc, o);
     DeleteDC(idc);
     } catch (...) { Wh_Log(L"[charm] gdi draw failed"); }
@@ -14311,12 +15465,39 @@ static bool StartAllBackRunning() {
         if (GetModuleHandleW(module)) return true;
     return false;
 }
+static bool Explorer7Running() {
+    // Explorer7 and Windows 7 Explorer Restorer load this wrapper in their shell.
+    // A name match is detection only, not a guarantee of the button layout.
+    return GetModuleHandleW(L"wrp64.dll") != NULL;
+}
 struct OrbScan { HWND wnd[8]; int count; };
+static bool Explorer7OrbCandidate(HWND h, HWND tray) {
+    if (!h || !tray || !IsWindowVisible(h)) return false;
+    DWORD pid = 0; GetWindowThreadProcessId(h, &pid);
+    if (pid != GetCurrentProcessId()) return false;
+    wchar_t cls[32] = {}, title[96] = {};
+    GetClassNameW(h, cls, ARRAYSIZE(cls));
+    GetWindowTextW(h, title, ARRAYSIZE(title));
+    if (_wcsicmp(cls, L"Button") || _wcsicmp(title, L"Start")) return false;
+    RECT button = {}, bar = {}, overlap = {};
+    if (!GetWindowRect(h, &button) || !GetWindowRect(tray, &bar) || !IntersectRect(&overlap, &button, &bar)) return false;
+    const int w = button.right - button.left, height = button.bottom - button.top;
+    return w >= 4 && height >= 4 && w <= ScI(600) && w <= 12 * height;
+}
+static BOOL CALLBACK Explorer7TopLevelOrb(HWND h, LPARAM lp) {
+    OrbScan* scan = (OrbScan*)lp;
+    if (scan->count >= (int)ARRAYSIZE(scan->wnd)) return FALSE;
+    HWND tray = FindWindowW(L"Shell_TrayWnd", NULL);
+    if (Explorer7OrbCandidate(h, tray)) scan->wnd[scan->count++] = h;
+    return TRUE;
+}
 static BOOL CALLBACK OrbEnumChildProc(HWND h, LPARAM lp) {
     OrbScan* scan = (OrbScan*)lp;
     if (scan->count >= (int)ARRAYSIZE(scan->wnd)) return FALSE;
     wchar_t cls[32] = {};
-    if (GetClassNameW(h, cls, ARRAYSIZE(cls)) && IsStartOrbClass(cls)) scan->wnd[scan->count++] = h;
+    if (GetClassNameW(h, cls, ARRAYSIZE(cls)) &&
+        (IsStartOrbClass(cls) || (Explorer7Running() && Explorer7OrbCandidate(h, FindWindowW(L"Shell_TrayWnd", NULL)))))
+        scan->wnd[scan->count++] = h;
     return TRUE;
 }
 // Only the taskbars of this process are scanned, never windows of other programs.
@@ -14352,7 +15533,7 @@ static void LogTaskbarClassesOnce() {
     GetWindowThreadProcessId(bar, &pid);
     if (pid != GetCurrentProcessId()) return;
     g_orbScanLogged = true;
-    Wh_Log(L"StartAllBack Start button not found; listing the taskbar windows instead");
+    Wh_Log(L"Classic Start button not found; listing the taskbar windows instead");
     int n = 0;
     EnumChildWindows(bar, OrbClassLogProc, (LPARAM)&n);
 }
@@ -14373,7 +15554,7 @@ static void RequestStartToggle() {
     if (!g_wnd) return;
     const LONG n = InterlockedIncrement(&g_orbClicks);
     if (n <= 3 || n % 20 == 0)
-        Wh_Log(L"StartAllBack Start button click %d: open=%d closing=%d", (int)n, (int)g_open, (int)g_closing);
+        Wh_Log(L"Classic Start button click %d: open=%d closing=%d", (int)n, (int)g_open, (int)g_closing);
     if (!PostMessageW(g_wnd, WM_APP_TOGGLE, 0, 0))
         Wh_Log(L"Couldn't post the Start toggle, error %u", (unsigned)GetLastError());
 }
@@ -14459,7 +15640,7 @@ static void EnsureOrbSubclass() {
         if (!SubclassOrbWindow(button, button)) {
             if (!g_orbSubFailLogged) {
                 g_orbSubFailLogged = true;
-                Wh_Log(L"Couldn't subclass the StartAllBack Start button, error %u", (unsigned)GetLastError());
+                Wh_Log(L"Couldn't subclass the classic Start button, error %u", (unsigned)GetLastError());
             }
             continue;
         }
@@ -14467,7 +15648,7 @@ static void EnsureOrbSubclass() {
         OrbChildren children = {};
         EnumChildWindows(button, OrbChildCollectProc, (LPARAM)&children);
         for (int c = 0; c < children.count; ++c) SubclassOrbWindow(children.wnd[c], button);
-        if (isNew) Wh_Log(L"StartAllBack Start button subclassed: clicking it opens this Start screen");
+        if (isNew) Wh_Log(L"Classic Start button subclassed: clicking it opens this Start screen");
     }
 }
 
@@ -14475,7 +15656,7 @@ static void EnsureOrbSubclass() {
 // is running and the button is still missing, longer once it has been found, and long when there is
 // nothing to look for.
 static UINT RefreshStartOrb() {
-    const bool enabled = InterlockedCompareExchange(&g_startButtonHook, 0, 0) != 0 && StartAllBackRunning();
+    const bool enabled = InterlockedCompareExchange(&g_startButtonHook, 0, 0) != 0 && (StartAllBackRunning() || Explorer7Running());
     if (!enabled) {
         RemoveOrbSubclasses();
         if (g_orbCount) {
@@ -14489,6 +15670,7 @@ static UINT RefreshStartOrb() {
     }
     OrbScan scan = {};
     ScanTaskbarsOfThisProcess(&scan);
+    if (Explorer7Running()) EnumWindows(Explorer7TopLevelOrb, (LPARAM)&scan);
     HWND wnd[8] = {};
     RECT rect[8] = {};
     int kept = 0;
@@ -14512,7 +15694,7 @@ static UINT RefreshStartOrb() {
     if (kept > 0 && (!g_orbLogged || previousCount != kept)) {
         wchar_t cls[32] = {};
         GetClassNameW(wnd[0], cls, ARRAYSIZE(cls));
-        Wh_Log(L"StartAllBack Start button found (class %s, %d window(s), rect %d,%d-%d,%d)",
+        Wh_Log(L"Classic Start button found (class %s, %d window(s), rect %d,%d-%d,%d)",
                cls, kept, (int)rect[0].left, (int)rect[0].top, (int)rect[0].right, (int)rect[0].bottom);
         g_orbLogged = true;
     } else if (kept == 0) {
@@ -14524,6 +15706,10 @@ static UINT RefreshStartOrb() {
 }
 static void OpenCharm(wchar_t firstChar) {
     if (!g_open || g_closing) return;
+    if (InterlockedCompareExchange(&g_disableSearchCharm, 0, 0) != 0) {
+        EnterAllAppsWithChar(firstChar);
+        return;
+    }
     try {
     g_queryLen = 0; g_query[0] = 0; g_querySelAll = false;
     if (firstChar) QueryAppend(firstChar);
@@ -14551,6 +15737,11 @@ static void CloseCharm(bool now) {
     RepaintNow();
 }
 static void CharmToggle() {
+    if (InterlockedCompareExchange(&g_disableSearchCharm, 0, 0) != 0) {
+        if (g_view == VIEW_SEARCH) LeaveSearch();
+        else EnterAllAppsWithChar(0);
+        return;
+    }
     if (g_charmOpen) CloseCharm(false);
     else OpenCharm(0);
 }
@@ -14633,10 +15824,18 @@ static int UserTextWidth() {
     return w;
 }
 
-static int HeaderAvatarRight() { return g_sw - ScI(162); }
+// Offsets are 96-DPI logical pixels, scaled with the current monitor DPI.
+static int HeaderAvatarRight() {
+    return g_sw - ScI(InterlockedCompareExchange(&g_hideStartButtons, 0, 0) ? 36 : 162);
+}
 static void HeaderButtonRects(RECT* pwr, RECT* srch) {
     // Centres as on the reference: power 126 px and search 68 px from the right edge, both on the
     // vertical centre of the title (y = 80).
+    if (InterlockedCompareExchange(&g_hideStartButtons, 0, 0)) {
+        if (pwr) SetRectEmpty(pwr);
+        if (srch) SetRectEmpty(srch);
+        return;
+    }
     const int s = ScI(40), top = ScI(60);
     if (srch) { srch->right = g_sw - ScI(48); srch->left = srch->right - s; srch->top = top; srch->bottom = top + s; }
     if (pwr) { pwr->right = g_sw - ScI(106); pwr->left = pwr->right - s; pwr->top = top; pwr->bottom = top + s; }
@@ -15700,8 +16899,9 @@ static void OpenStart(bool atLogon = false) {
                      SWP_NOZORDER | SWP_NOACTIVATE | SWP_HIDEWINDOW);
         wasVisible = false;
     }
-    if (atLogon) g_snapReady = false;
-    else if (!wasVisible) CaptureDesktop();
+    // Capture the desktop before showing Start, including at sign-in, so the
+    // normal closing animation can reveal it on the first dismissal.
+    if (!wasVisible) CaptureDesktop();
     RefreshDesktopTile();
     ComputePivot();
     for (int i = 0; i < MAX_TILES; i++) g_tileScale[i] = 1.0f;
@@ -15722,10 +16922,10 @@ static void OpenStart(bool atLogon = false) {
     SetCharmMouseHook(false);
     g_queryLen = 0; g_query[0] = 0;
     g_results.clear(); g_selected = 0;
-    g_logonOpening = atLogon;
-    if (atLogon) g_firstDesktopAfterLogon = true;
+    // Use the same opening timeline and clock as every subsequent opening.
+    g_logonOpening = false;
     g_logonVisualMs = 0;
-    g_skipSnapshot = atLogon || !g_snapReady;
+    g_skipSnapshot = !g_snapReady;
     g_returnTick = 0;
     g_dragIdx = -1; g_dragging = false;
     g_customize = false;
@@ -15736,11 +16936,12 @@ static void OpenStart(bool atLogon = false) {
     g_barHoverButton = g_barPressedButton = g_advHoverRow = g_advPressedRow = -1;
     g_resizeHoverRow = g_resizePressedRow = -1;
 
-    bool gpuReady = atLogon && g_rt && g_bgGpu ? true : InitGpu();
+    // Refresh the GPU snapshot after capturing the desktop at sign-in too.
+    bool gpuReady = InitGpu();
     if (!gpuReady) Wh_Log(L"Direct2D unavailable; using GDI fallback");
     if (gpuReady && atLogon) WarmLogonTileTextures();
     if (atLogon) Wh_Log(L"Sign-in reveal: desktop capture %ls, %d tile groups, GPU %ls",
-                        L"skipped (direct return)", g_blockCount,
+                        g_snapReady ? L"ready" : L"unavailable", g_blockCount,
                         gpuReady ? L"ready" : L"fallback");
     g_openTick = g_lastTick = NowMs();
     g_open = true;
@@ -15777,10 +16978,8 @@ static LONG CloseSlideMs() {
     return ms;
 }
 
-static void CloseStart(bool immediate) {
+static void CloseStart() {
     if (!g_open) return;
-    bool instantDesktop = immediate && g_firstDesktopAfterLogon;
-    if (instantDesktop) g_firstDesktopAfterLogon = false;
     g_open = false;
     UpdatePhotoWorker();
     g_photoAnimationTick = 0;
@@ -15792,7 +16991,7 @@ static void CloseStart(bool immediate) {
     DismissUserMenu();
     if (g_dragging) EndDrag();
     g_logonOpening = false;
-    if (instantDesktop || (!g_snapReady && g_launchFlipTile < 0)) {
+    if (!g_snapReady && g_launchFlipTile < 0) {
         g_closing = false;
         g_launchFlipTile = -1;
         g_pressed = g_hover = -1;
@@ -15818,8 +17017,6 @@ static void Launch(int i) {
     const wchar_t* target = tile.target;
     bool desktop = tile.style == DESKTOP_REFERENCE ||
                    (target && _wcsicmp(target, kDesktopTarget) == 0);
-    if (desktop) Wh_Log(L"Desktop tile: first-after-logon=%d, direct return=%d",
-                        (int)g_firstDesktopAfterLogon, (int)(desktop && g_firstDesktopAfterLogon));
     // The launch-tile flip code is prepared for a future update, but remains disabled:
     // it is not yet connected reliably to actual UWP app activation. This is separate
     // from the Start screen entrance animation and the normal closing transition.
@@ -15830,7 +17027,7 @@ static void Launch(int i) {
         wchar_t full[MAX_PATH] = L"";
         if (FileInSystemDir(target, full, ARRAYSIZE(full)) && full[0]) exe = full;
     }
-    CloseStart(desktop && g_firstDesktopAfterLogon);
+    CloseStart();
     if (!target || desktop) return;
     OpenTileTarget(exe);
 }
@@ -16199,6 +17396,8 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         RepaintNow();
         return 0;
     case WM_APP_REBUILD_BG:
+        if (InterlockedCompareExchange(&g_disableSearchCharm, 0, 0) != 0 && g_charmOpen)
+            CloseCharm(false);
         if (InterlockedExchange(&g_tileColorsDirty, 0)) UpdateTileAppColors();
         BuildBuffers();
         InitGpu();
@@ -16249,9 +17448,8 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     case WM_APP_LOGON_OPEN:
         if (InterlockedCompareExchange(&g_openAtLogon, 0, 0) != 0) {
-            g_firstDesktopAfterLogon = true;
             if (!g_userToggledStart && !g_open && !g_closing) {
-                Wh_Log(L"Opening Start once after sign-in with the 8102-style tile reveal");
+                Wh_Log(L"Opening Start once after sign-in using the normal opening animation");
                 OpenStart(true);
             }
         }
@@ -16306,7 +17504,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_APP_CLOSE: CloseStart(); return 0;
     case WM_APP_ALL_APPS:
         if (g_open && !g_closing) {
-            if (g_view == VIEW_SEARCH && g_queryLen == 0) LeaveSearch();
+            if (g_view == VIEW_SEARCH && (g_queryLen == 0 || InterlockedCompareExchange(&g_hideAppsArrow, 0, 0))) LeaveSearch();
             else EnterAllApps();
         }
         return 0;
@@ -16521,7 +17719,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             // The arrow is revealed only once the scroll between the two views has finished:
             // until then it is not there, so it does not react to the pointer either.
             bool overArw = g_open && !g_closing && !zActive && ArrowPresence(NowMs()) > 0.0f &&
-                           ((inStart && PtInRect(&arw, pt) != FALSE) ||
+                           ((inStart && !InterlockedCompareExchange(&g_hideAppsArrow, 0, 0) && PtInRect(&arw, pt) != FALSE) ||
                             (inApps && PtInRect(&br, pt) != FALSE));
             bool overZoom = g_open && !g_closing && inStart && !zActive && PtInRect(&zr, pt) != FALSE;
             if (overZoom != g_hoverZoomBtn) { g_hoverZoomBtn = overZoom; g_dirty = true; InvalidateRect(h, NULL, FALSE); }
@@ -16711,6 +17909,26 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             if (g_closing && OrbScreenContains(op)) { g_orbPressOnStart = true; SetCapture(h); }
             return 0;
         }
+        if (BarOpen()) {
+            const int bx = (short)LOWORD(lp), by = (short)HIWORD(lp);
+            if (BarMouseDown(bx, by)) {
+                g_pressed = -1;
+                if (g_barPressedButton < 0 && g_advPressedRow < 0 && g_resizePressedRow < 0) {
+                    if (g_advancedOpen || g_resizeOpen) { g_advancedOpen = g_resizeOpen = false; RepaintNow(); }
+                    else HideBar();
+                    g_swallowBarUp = true;
+                    return 0;
+                }
+                SetCapture(h);
+                return 0;
+            }
+            // Clicking outside an open horizontal App Bar dismisses it without launching the tile
+            // or app row underneath (authentic Windows 8.0 / Windows 8.1 RTM behavior).
+            HideBar();
+            g_pressed = -1;
+            g_swallowBarUp = true;
+            return 0;
+        }
         if (ScrollBarVisible()) {
             POINT spt = { (short)LOWORD(lp), (short)HIWORD(lp) };
             RECT sal = ScrollArrowRect(false), sar = ScrollArrowRect(true);
@@ -16732,11 +17950,6 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
                 ScrollStep(spt.x < sth.left ? -page : page);
                 return 0;
             }
-        }
-        if (BarOpen() && BarMouseDown((short)LOWORD(lp), (short)HIWORD(lp))) {
-            g_pressed = -1;
-            SetCapture(h);
-            return 0;
         }
         {
             // The Start screen covers the StartAllBack Start button. A press there that no visible
@@ -16784,6 +17997,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             if (NowMs() - g_swallowPickTick < 800) { g_pressed = -1; return 0; }
         }
         if (g_swallowMenuUp) { g_swallowMenuUp = false; return 0; }
+        if (g_swallowBarUp) { g_swallowBarUp = false; g_pressed = -1; return 0; }
         if (g_swallowCharmUp) { g_swallowCharmUp = false; g_pressed = -1; g_charmPressed = -1; return 0; }
         if (g_swallowNamingUp) { g_swallowNamingUp = false; return 0; }
         if (g_sbDrag) { g_sbDrag = false; RepaintNow(); return 0; }
@@ -16823,8 +18037,6 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
                         g_charmPressed = -1;
                         return 0;
                     }
-                    // The charm is open, so its panel owns the click: close it, but don't let the
-                    // click reach the Start screen (tiles or groups) that is drawn underneath.
                     CloseCharm(false);
                     return 0;
                 }
@@ -16839,7 +18051,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
                 }
                 // The bottom left arrow: in the Start screen it opens the list of all apps, in the
                 // list it goes back to the Start screen (Windows 8.1 uses one corner for both).
-                if (g_open && !g_closing && ArrowPresence(NowMs()) > 0.0f && PtInRect(&arw, pt)) {
+                if (g_open && !g_closing && (g_view != VIEW_START || !InterlockedCompareExchange(&g_hideAppsArrow, 0, 0)) && ArrowPresence(NowMs()) > 0.0f && PtInRect(&arw, pt)) {
                     g_pressed = -1;
                     if (g_charmOpen) return 0;
                     if (g_view == VIEW_START) EnterAllApps();
@@ -17088,6 +18300,7 @@ static LONG DetectThirdPartyShell() {
     if (!(patch & SHELL_PATCH_EXPLORERPATCHER) &&
         RegistryKeyExists(HKEY_CURRENT_USER, L"Software\\ExplorerPatcher"))
         patch |= SHELL_PATCH_EXPLORERPATCHER;
+    if (GetModuleHandleW(L"wrp64.dll")) patch |= SHELL_PATCH_EXPLORER7;
     return patch;
 }
 
@@ -17972,6 +19185,23 @@ static void LoadSettings() {
     LONG priv = Wh_GetIntSetting(L"privacyMode") != 0 ? 1 : 0;
     LONG appc = Wh_GetIntSetting(L"appTileColors") != 0 ? 1 : 0;
     bool chromeChanged = false;
+    WindhawkUtils::StringSetting style(WindhawkUtils::StringSetting::make(L"startStyle"));
+    const wchar_t* preset = style.get();
+    const bool custom = preset && wcscmp(preset, L"custom") == 0;
+    const bool beta = preset && wcscmp(preset, L"beta") == 0;
+    const bool win80 = preset && wcscmp(preset, L"win80") == 0;
+    const bool early81 = preset && wcscmp(preset, L"win81early") == 0;
+    const LONG presetEnum = beta ? PRESET_BETA : win80 ? PRESET_WIN80 : early81 ? PRESET_WIN81EARLY : custom ? PRESET_CUSTOM : PRESET_UPDATE3;
+    if (InterlockedExchange(&g_startPreset, presetEnum) != presetEnum) chromeChanged = true;
+    if (InterlockedExchange(&g_betaAppearance, beta) != beta) chromeChanged = true;
+    const LONG hideButtons = custom ? (Wh_GetIntSetting(L"hideStartButtons") != 0) : (beta || win80 || early81);
+    const LONG hideArrow = custom ? (Wh_GetIntSetting(L"hideAppsArrow") != 0) : (beta || win80);
+    const LONG legacyBar = beta || win80 || early81 || (custom && hideArrow);
+    const LONG disableCharm = custom ? (Wh_GetIntSetting(L"disableSearchCharm") != 0) : (beta || win80 || early81);
+    if (InterlockedExchange(&g_hideStartButtons, hideButtons) != hideButtons) chromeChanged = true;
+    if (InterlockedExchange(&g_hideAppsArrow, hideArrow) != hideArrow) chromeChanged = true;
+    if (InterlockedExchange(&g_legacyAppBar, legacyBar) != legacyBar) chromeChanged = true;
+    if (InterlockedExchange(&g_disableSearchCharm, disableCharm) != disableCharm) chromeChanged = true;
     if (InterlockedExchange(&g_privacyMode, priv) != priv) { g_userTextW = -1; chromeChanged = true; }
     if (InterlockedExchange(&g_appTileColors, appc) != appc) { InterlockedExchange(&g_tileColorsDirty, 1); chromeChanged = true; }
     {
@@ -18115,6 +19345,9 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     RunGuarded(L"ModAfterInit", [] {
         if (g_keyboardOnly || !g_thread) return;
+        // Explorer7 uses the classic shell rather than XamlLauncher. The orb
+        // subclass and keyboard hook provide the best-effort entry points.
+        if (Explorer7Running()) { Wh_Log(L"Explorer7 detected: using keyboard and classic Start button interception"); return; }
         g_startHookStop = CreateEventW(NULL, TRUE, FALSE, NULL);
         if (g_startHookStop) g_startHookThread = CreateThread(NULL, 0, StartHookThread, NULL, 0, NULL);
         if (!g_startHookThread)
