@@ -50,6 +50,17 @@ Arrastra desde el título para mover el panel durante la sesión.
 
 Cambia de vista con las pestañas Compacta, Mes, Semana, Día y Año. Elige
 la vista inicial y ajusta el ancho y la altura en Configuración.
+El mes completo y el año junto al reloj siguen el periodo que estás consultando.
+La cabecera usa el color de selección. Las modificaciones y cancelaciones
+individuales de eventos repetidos sustituyen su ocurrencia original.
+En la vista mensual, +N indica cuántos eventos del día quedan sin mostrar.
+La cabecera está centrada y los controles comparten la fila de las vistas.
+Activa Bloqueo para impedir cambios con clics, rueda o arrastre; el selector
+permanece disponible para desbloquear el calendario. Se recuerda al reiniciar.
+En Compacta, las casillas más altas muestran un punto por evento en varias
+filas, con +N cuando no caben todos.
+El botón de actualización gira mientras se consultan las suscripciones.
+El calendario no muestra mensajes ni contadores de suscripciones en el pie.
 
 Las suscripciones son de solo lectura. Consulta el [README del proyecto](https://github.com/SharkIT-sys/calendar_desktop#readme)
 para conocer los límites de esta versión.
@@ -109,7 +120,7 @@ Los doce meses en un solo panel, con festivos y fechas señaladas.
   $name: Altura del panel (px a 96 DPI)
 - showClock: true
   $name: Mostrar reloj en la cabecera
-  $description: Sustituye el título de la vista por la hora local y la fecha abreviada.
+  $description: Muestra la hora local junto al mes completo y año de la vista consultada, en el color de selección.
 - initialView: compact
   $name: Vista inicial
   $options:
@@ -128,8 +139,8 @@ Los doce meses en un solo panel, con festivos y fechas señaladas.
   $name: Intervalo de actualización (minutos)
 - holidays:
     - municipality: ""
-      $name: Código INE del municipio (España)
-      $description: Cinco dígitos. Por ejemplo, 28079 para Madrid. Vacío para desactivar.
+      $name: Municipio de los festivos (código INE, no postal)
+      $description: Cinco dígitos del INE. Madrid capital es 28079, aunque tu código postal sea distinto. Incluye festivos nacionales, autonómicos y locales publicados. Vacío para desactivar.
     - url: ""
       $name: Enlace alternativo de festivos
       $description: Una URL HTTPS o webcal sustituye la fuente municipal.
@@ -158,11 +169,15 @@ Los doce meses en un solo panel, con festivos y fechas señaladas.
 #include <array>
 #include <chrono>
 #include <climits>
+#include <cmath>
 #include <cstdio>
 #include <cwchar>
+#include <map>
 #include <mutex>
+#include <set>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <vector>
 
 namespace {
@@ -204,10 +219,15 @@ struct Feed {
     std::vector<Event> events;
     bool failed = false;
     unsigned issues = 0;
+    std::wstring name;
 };
 
 constexpr UINT SettingsMessage = WM_APP + 1;
 constexpr UINT RefreshMessage = WM_APP + 2;
+constexpr UINT_PTR ClockTimerId = 1;
+constexpr UINT_PTR RefreshAnimationTimerId = 2;
+constexpr UINT RefreshAnimationInterval = 80;
+constexpr unsigned RefreshAnimationFrames = 24;
 constexpr size_t MaxEvents = 25000;
 constexpr wchar_t WindowClass[] = L"Windhawk.CalendarioEscritorio";
 HANDLE stopEvent, wakeEvent, readyEvent, uiThread, fetchThread;
@@ -485,13 +505,14 @@ bool ExpandRule(std::string_view rule, std::string_view rawStart,
         char formatted[16];
         std::snprintf(formatted, sizeof(formatted), "%04d%02u%02u", int(date.year()),
                       unsigned(date.month()), unsigned(date.day()));
-        auto occurrence = ParseDate(std::string(formatted) + std::string(rawStart.substr(8)), zone);
+        auto rawOccurrence = std::string(formatted) + std::string(rawStart.substr(8));
+        auto occurrence = ParseDate(rawOccurrence, zone);
         if (!occurrence.valid) return false;
         if (until.valid && (occurrence.day > until.day ||
             (occurrence.day == until.day && occurrence.minute > until.minute && until.minute >= 0)))
             return true;
         if ((occurrence.day != start.day || occurrence.minute != start.minute) &&
-            !emit(occurrence)) return false;
+            !emit(occurrence, rawOccurrence)) return false;
     }
     return previous >= count;
 }
@@ -500,53 +521,35 @@ bool ParseCalendar(std::string_view body, Feed& feed) {
     if (body.starts_with("\xef\xbb\xbf")) body.remove_prefix(3);
     if (!body.starts_with("BEGIN:VCALENDAR")) return false;
     std::string line;
-    Date start, end;
-    std::wstring title;
-    std::string rule, rawStart, startZone;
-    std::vector<Date> extra, excluded;
-    bool inside = false, cancelled = false, complete = false;
-    unsigned issues = 0;
+    struct Occurrence {
+        Date date;
+        std::string raw, zone;
+    };
+    struct Component {
+        Date start, end, recurrence;
+        std::wstring title = L"Sin título";
+        std::string uid, rule, rawStart, startZone, rawRecurrence, recurrenceZone, stamp;
+        std::vector<Occurrence> extra;
+        std::vector<Date> excluded;
+        int sequence = 0;
+        unsigned issues = 0;
+        bool cancelled = false, hasRecurrence = false, hasTitle = false;
+        bool hasStart = false, future = false;
+    } current;
+    std::vector<Component> components;
+    bool inside = false, complete = false;
     int depth = 0;
     auto process = [&] {
+        constexpr std::string_view namePrefix = "X-WR-CALNAME:";
+        if (!inside && line.starts_with(namePrefix)) feed.name = EventTitle(std::string_view(line).substr(namePrefix.size()));
         if (line == "END:VCALENDAR" && !inside) complete = true;
         if (line == "BEGIN:VEVENT" && !inside) {
-            start = end = {};
-            title = L"Sin título";
-            extra.clear();
-            excluded.clear();
-            rule.clear();
-            rawStart.clear();
-            startZone.clear();
+            current = {};
             inside = true;
-            cancelled = false;
-            issues = 0;
             depth = 0;
         } else if (line == "END:VEVENT" && inside && !depth) {
             inside = false;
-            if (cancelled) return;
-            feed.issues |= issues;
-            if (!start.valid) feed.issues |= UnsupportedDate;
-            if (!start.valid) return;
-            auto emit = [&](Date entry) {
-                if (feed.events.size() > MaxEvents) return false;
-                if (std::ranges::any_of(excluded, [&](Date skip) {
-                    return skip.day == entry.day && (skip.minute == -1 || skip.minute == entry.minute);
-                })) return true;
-                auto span = end.valid ? end.day - start.day : days{0};
-                if (!end.valid || start.minute == -1 || end.minute > 0 || end.second > 0)
-                    span += days{1};
-                feed.events.push_back({entry.day, entry.day + std::max(span, days{1}),
-                                       entry.minute, title});
-                return feed.events.size() <= MaxEvents;
-            };
-            // DTSTART is the first occurrence, even if the rule isn't supported.
-            // DTEND for all-day events is already exclusive.
-            if (start.minute == -1 && end.valid) end.day -= days{1};
-            emit(start);
-            for (auto date : extra)
-                if (!emit(date)) break;
-            if (!rule.empty() && !ExpandRule(rule, rawStart, startZone, start, emit))
-                feed.issues |= UnsupportedRule;
+            components.push_back(std::move(current));
         } else if (inside) {
             if (line.starts_with("BEGIN:")) { ++depth; return; }
             if (line.starts_with("END:") && depth) { --depth; return; }
@@ -564,26 +567,48 @@ bool ParseCalendar(std::string_view body, Feed& feed) {
                     zone = zone.substr(1, zone.size() - 2);
             }
             if (name == "DTSTART") {
-                start = ParseDate(value, zone);
-                rawStart = value;
-                startZone = zone;
+                current.hasStart = true;
+                current.start = ParseDate(value, zone);
+                current.rawStart = value;
+                current.startZone = zone;
+                if (!current.start.valid) current.issues |= UnsupportedDate;
             }
             if (name == "DTEND") {
-                end = ParseDate(value, zone);
-                if (!end.valid) issues |= UnsupportedDate;
+                current.end = ParseDate(value, zone);
+                if (!current.end.valid) current.issues |= UnsupportedDate;
             }
-            if (name == "SUMMARY") title = EventTitle(value);
-            if (name == "STATUS") cancelled = value == "CANCELLED";
-            if (name == "RRULE") rule = value;
-            if (name == "RECURRENCE-ID") issues |= UnsupportedException;
-            if (name == "DURATION") issues |= UnsupportedDuration;
+            if (name == "UID") current.uid = value;
+            if (name == "SEQUENCE") current.sequence = std::max(0, Digits(value));
+            if (name == "DTSTAMP") current.stamp = value;
+            if (name == "SUMMARY") {
+                current.title = EventTitle(value);
+                current.hasTitle = true;
+            }
+            if (name == "STATUS") current.cancelled = value == "CANCELLED";
+            if (name == "RRULE") current.rule = value;
+            if (name == "RECURRENCE-ID") {
+                current.hasRecurrence = true;
+                current.recurrence = ParseDate(value, zone);
+                current.rawRecurrence = value;
+                current.recurrenceZone = zone;
+                if (!current.recurrence.valid) current.issues |= UnsupportedException;
+                if (auto position = key.find(";RANGE="); position != key.npos) {
+                    auto range = key.substr(position + 7);
+                    range = range.substr(0, range.find(';'));
+                    current.future = range == "THISANDFUTURE";
+                    if (!current.future) current.issues |= UnsupportedException;
+                }
+            }
+            if (name == "DURATION") current.issues |= UnsupportedDuration;
             if (name == "RDATE" || name == "EXDATE") {
-                auto& list = name == "RDATE" ? extra : excluded;
                 while (!value.empty()) {
                     auto comma = value.find(',');
-                    auto date = ParseDate(value.substr(0, comma), zone);
-                    if (date.valid) list.push_back(date);
-                    else issues |= UnsupportedDate;
+                    auto raw = value.substr(0, comma);
+                    auto date = ParseDate(raw, zone);
+                    if (date.valid) {
+                        if (name == "RDATE") current.extra.push_back({date, std::string(raw), std::string(zone)});
+                        else current.excluded.push_back(date);
+                    } else current.issues |= UnsupportedDate;
                     if (comma == value.npos) break;
                     value.remove_prefix(comma + 1);
                 }
@@ -600,12 +625,138 @@ bool ParseCalendar(std::string_view body, Feed& feed) {
             process();
             line.assign(physical);
         }
-        if (feed.events.size() > MaxEvents || line.size() > 65536) return false;
+        if (components.size() > MaxEvents || line.size() > 65536) return false;
         if (newline == body.npos) break;
         body.remove_prefix(newline + 1);
     }
     if (!complete) process();
-    return complete && feed.events.size() <= MaxEvents;
+    if (!complete || components.size() > MaxEvents) return false;
+
+    using DateKey = std::tuple<sys_days, int, int>;
+    auto keyOf = [](Date date) { return DateKey{date.day, date.minute, date.second}; };
+    auto moment = [](Date date) {
+        return sys_seconds(date.day) + minutes(std::max(0, date.minute)) + seconds(date.second);
+    };
+    auto durationOf = [&](const Component& component, Date fallback = {}) {
+        const auto start = component.start.valid ? component.start : fallback;
+        if (start.valid && component.end.valid) {
+            auto duration = moment(component.end) - moment(start);
+            if (duration < seconds::zero()) feed.issues |= UnsupportedDate;
+            return std::max(seconds::zero(), duration);
+        }
+        return start.minute < 0 ? seconds(days{1}) : seconds::zero();
+    };
+    bool eventLimitExceeded = false;
+    auto append = [&](Date date, seconds duration, const std::wstring& title) {
+        if (feed.events.size() >= MaxEvents) { eventLimitExceeded = true; return false; }
+        const auto end = ceil<days>(moment(date) + duration);
+        feed.events.push_back({date.day, std::max(date.day + days{1}, end), date.minute, title});
+        return true;
+    };
+    auto newer = [](const Component& left, const Component& right) {
+        return std::tie(left.sequence, left.stamp) >= std::tie(right.sequence, right.stamp);
+    };
+    struct Series {
+        const Component* master = nullptr;
+        std::map<DateKey, const Component*> exceptions;
+    };
+    std::map<std::pair<bool, std::string>, Series> series;
+    for (size_t index = 0; index < components.size(); ++index) {
+        const auto& component = components[index];
+        feed.issues |= component.issues;
+        if (component.hasRecurrence && (component.uid.empty() || !component.recurrence.valid)) {
+            feed.issues |= UnsupportedException;
+            continue;
+        }
+        auto& group = series[{!component.uid.empty(),
+            component.uid.empty() ? std::to_string(index) : component.uid}];
+        if (component.hasRecurrence) {
+            auto& previous = group.exceptions[keyOf(component.recurrence)];
+            if (!previous || newer(component, *previous)) previous = &component;
+        } else if (!group.master || newer(component, *group.master)) group.master = &component;
+    }
+    for (const auto& [uid, group] : series) {
+        const auto* master = group.master;
+        if (master && master->cancelled) continue;
+        const seconds masterDuration = master ? durationOf(*master) : seconds::zero();
+        std::map<DateKey, const Component*> overrides, ranges;
+        for (const auto& [key, exception] : group.exceptions) {
+            if ((exception->hasStart && !exception->start.valid) ||
+                (master && master->start.valid &&
+                 (master->start.minute < 0) != (exception->recurrence.minute < 0))) {
+                feed.issues |= UnsupportedException;
+                continue;
+            }
+            overrides.emplace(key, exception);
+            if (exception->future) ranges.emplace(key, exception);
+        }
+        if (master && master->start.valid) {
+            std::set<DateKey> emitted;
+            auto emit = [&](Date original, std::string_view raw, std::string_view zone) {
+                const auto key = keyOf(original);
+                if (!emitted.insert(key).second || overrides.contains(key)) return true;
+                if (std::ranges::any_of(master->excluded, [&](Date skip) {
+                    return skip.day == original.day && (skip.minute < 0 || keyOf(skip) == key);
+                })) return true;
+                Date date = original;
+                auto duration = masterDuration;
+                const auto* title = &master->title;
+                auto range = ranges.upper_bound(key);
+                if (range != ranges.begin()) {
+                    const auto& change = *std::prev(range)->second;
+                    if (change.cancelled) return true;
+                    // Shift the source's wall time before converting, preserving DST.
+                    const bool sameZone = zone == change.startZone && zone == change.recurrenceZone &&
+                        raw.ends_with("Z") == change.rawStart.ends_with("Z") &&
+                        raw.ends_with("Z") == change.rawRecurrence.ends_with("Z");
+                    if (sameZone && change.start.valid) {
+                        auto wall = [](std::string_view value) {
+                            if (value.ends_with("Z")) value.remove_suffix(1);
+                            return ParseDate(value);
+                        };
+                        const auto shifted = moment(wall(raw)) +
+                            (moment(wall(change.rawStart)) - moment(wall(change.rawRecurrence)));
+                        const year_month_day day(floor<days>(shifted));
+                        const auto time = shifted - floor<days>(shifted);
+                        char formatted[32]{};
+                        if (original.minute < 0) {
+                            std::snprintf(formatted, sizeof(formatted), "%04d%02u%02u", int(day.year()),
+                                unsigned(day.month()), unsigned(day.day()));
+                        } else {
+                            const auto hh = duration_cast<hours>(time);
+                            const auto mm = duration_cast<minutes>(time - hh);
+                            const auto ss = duration_cast<seconds>(time - hh - mm);
+                            std::snprintf(formatted, sizeof(formatted), "%04d%02u%02uT%02d%02d%02d%s",
+                                int(day.year()), unsigned(day.month()), unsigned(day.day()),
+                                int(hh.count()), int(mm.count()), int(ss.count()), raw.ends_with("Z") ? "Z" : "");
+                        }
+                        date = ParseDate(formatted, zone);
+                        if (!date.valid) { feed.issues |= UnsupportedException; return true; }
+                        if (change.end.valid) duration = durationOf(change);
+                        if (change.hasTitle) title = &change.title;
+                    } else feed.issues |= UnsupportedException;
+                }
+                return append(date, duration, *title);
+            };
+            if (!emit(master->start, master->rawStart, master->startZone)) return false;
+            for (const auto& extra : master->extra)
+                if (!emit(extra.date, extra.raw, extra.zone)) return false;
+            if (!master->rule.empty() && !ExpandRule(master->rule, master->rawStart, master->startZone,
+                    master->start, [&](Date date, std::string_view raw) { return emit(date, raw, master->startZone); })) {
+                if (eventLimitExceeded) return false;
+                feed.issues |= UnsupportedRule;
+            }
+        } else if (master) feed.issues |= UnsupportedDate;
+        // Overrides are emitted once, even when their master is missing or excluded.
+        for (const auto& [key, exception] : overrides) {
+            if (exception->cancelled) continue;
+            const auto start = exception->start.valid ? exception->start : exception->recurrence;
+            const auto duration = exception->end.valid || !master ? durationOf(*exception, start) : masterDuration;
+            const auto& title = exception->hasTitle || !master ? exception->title : master->title;
+            if (!append(start, duration, title)) return false;
+        }
+    }
+    return feed.events.size() <= MaxEvents;
 }
 
 DWORD WINAPI FetchLoop(void*) {
@@ -628,6 +779,9 @@ DWORD WINAPI FetchLoop(void*) {
             Feed result{source.url, {}};
             std::string body;
             bool ok = Download(source.url, body) && ParseCalendar(body, result);
+            if (!ok) Wh_Log(L"No se ha podido actualizar el calendario: %ls", source.name.c_str());
+            else if (result.issues)
+                Wh_Log(L"Incidencias de importación en %ls (máscara %u)", source.name.c_str(), result.issues);
             std::lock_guard lock(dataMutex);
             const auto latest = SourcesForYear(pending, year);
             if (std::ranges::find(latest, source.url, &Source::url) == latest.end()) continue;
@@ -658,12 +812,65 @@ DWORD WINAPI FetchLoop(void*) {
 
 constexpr int GridTop = 88;
 constexpr int Margin = 16;
+constexpr int ToolbarTop = 48;
+constexpr int ToolbarHeight = 24;
 constexpr PCWSTR MonthNames[] = {L"Enero", L"Febrero", L"Marzo", L"Abril", L"Mayo",
     L"Junio", L"Julio", L"Agosto", L"Septiembre", L"Octubre", L"Noviembre", L"Diciembre"};
-constexpr PCWSTR MonthCodes[] = {L"ENE", L"FEB", L"MAR", L"ABR", L"MAY", L"JUN",
-    L"JUL", L"AGO", L"SEP", L"OCT", L"NOV", L"DIC"};
 constexpr PCWSTR WeekdayNames[] = {L"LU", L"MA", L"MI", L"JU", L"VI", L"SÁ", L"DO"};
 constexpr PCWSTR ModeNames[] = {L"Compacta", L"Mes", L"Semana", L"Día", L"Año"};
+constexpr PCWSTR ShortModeNames[] = {L"Cmp", L"Mes", L"Sem", L"Día", L"Año"};
+
+struct ToolbarLayout {
+    int tabsRight;
+    RECT previous, today, next, refresh, lock;
+    RECT Tab(int index) const {
+        const int available = tabsRight - Margin;
+        return {Margin + index * available / 5, ToolbarTop,
+                Margin + (index + 1) * available / 5, ToolbarTop + ToolbarHeight};
+    }
+};
+
+ToolbarLayout LayoutToolbar(int width) {
+    const bool narrow = width < 420;
+    const int arrowWidth = narrow ? 18 : 22;
+    const int todayWidth = narrow ? 26 : 32;
+    const int refreshWidth = narrow ? 22 : 26;
+    const int lockWidth = narrow ? 50 : 70;
+    const int right = width - Margin;
+    int left = right - lockWidth - 6 - refreshWidth - 2 * arrowWidth - todayWidth;
+    ToolbarLayout layout{};
+    layout.tabsRight = left - 6;
+    auto take = [&](int size) {
+        const RECT area{left, ToolbarTop, left + size, ToolbarTop + ToolbarHeight};
+        left += size;
+        return area;
+    };
+    layout.previous = take(arrowWidth);
+    layout.today = take(todayWidth);
+    layout.next = take(arrowWidth);
+    layout.refresh = take(refreshWidth);
+    left += 6;
+    layout.lock = take(lockWidth);
+    return layout;
+}
+
+int CompactRowHeight(int height) {
+    // Preserve space for the selected day's title and at least one agenda item.
+    return std::clamp((height - Margin - GridTop - 23 - 66) / 6, 27, 36);
+}
+
+struct CompactIndicatorLayout {
+    int columns, rows, visible, hidden, badgeSlots;
+};
+
+CompactIndicatorLayout LayoutCompactIndicators(int width, int height, int count, int badgeWidth = 0) {
+    const int columns = std::max(1, (width - 1) / 7);
+    const int rows = std::max(1, (height - 22) / 6);
+    const int capacity = columns * rows;
+    const int badgeSlots = count > capacity ? std::min(columns, std::max(1, (badgeWidth + 9) / 7)) : 0;
+    const int visible = std::min(count, capacity - badgeSlots);
+    return {columns, rows, visible, count - visible, badgeSlots};
+}
 
 sys_days MondayOf(sys_days date) {
     return date - days((weekday(date).c_encoding() + 6) % 7);
@@ -682,6 +889,9 @@ struct View {
     int dpi = 96;
     DWORD clockStamp = 0;
     bool positioned = false;
+    bool interactionLocked = false;
+    bool refreshAnimating = false;
+    unsigned refreshFrame = 0;
     struct DayTarget { RECT area; sys_days day; };
     std::vector<DayTarget> dayTargets;
     int Scale(int value) const { return MulDiv(value, dpi, 96); }
@@ -709,15 +919,81 @@ struct View {
     }
 };
 
+void SyncRefreshAnimation(HWND window, View& view) {
+    const bool active = refreshing.load();
+    if (active == view.refreshAnimating) return;
+    view.refreshFrame = 0;
+    if (active) {
+        view.refreshAnimating = SetTimer(window, RefreshAnimationTimerId, RefreshAnimationInterval, nullptr) != 0;
+    } else {
+        KillTimer(window, RefreshAnimationTimerId);
+        view.refreshAnimating = false;
+    }
+}
+
+void DrawRefreshIcon(HDC dc, HDC mask, const RECT& area, COLORREF color, HFONT font, unsigned frame) {
+    const double angle = double(frame % RefreshAnimationFrames) * 6.283185307179586 / RefreshAnimationFrames;
+    const FLOAT cosine = FLOAT(std::cos(angle)), sine = FLOAT(std::sin(angle));
+    const FLOAT centerX = FLOAT(area.left + area.right) / 2;
+    const FLOAT centerY = FLOAT(area.top + area.bottom) / 2;
+    const XFORM rotation{cosine, sine, -sine, cosine,
+        centerX - cosine * centerX + sine * centerY,
+        centerY - sine * centerX - cosine * centerY};
+    auto draw = [&](HDC target, COLORREF foreground) {
+        if (!target) return;
+        const int saved = SaveDC(target);
+        if (!saved) return;
+        IntersectClipRect(target, area.left, area.top, area.right, area.bottom);
+        SetGraphicsMode(target, GM_ADVANCED);
+        SetWorldTransform(target, &rotation);
+        SetBkMode(target, TRANSPARENT);
+        SetTextColor(target, foreground);
+        SelectObject(target, font);
+        RECT rect = area;
+        DrawTextW(target, L"↻", 1, &rect, DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
+        RestoreDC(target, saved);
+    };
+    draw(dc, color);
+    draw(mask, RGB(255, 255, 255));
+}
+
 DWORD ClockStamp(const SYSTEMTIME& local) {
     return (DWORD(local.wDay) * 24 + local.wHour) * 60 + local.wMinute;
 }
 
-std::wstring HeaderClock(const SYSTEMTIME& local) {
-    wchar_t clock[16]{};
-    swprintf(clock, std::size(clock), L"%02u:%02u %ls/%02u", unsigned(local.wHour),
-        unsigned(local.wMinute), MonthCodes[local.wMonth - 1], unsigned(local.wYear % 100));
+std::wstring HeaderClock(const SYSTEMTIME& local, year_month displayedMonth) {
+    wchar_t clock[48]{};
+    swprintf(clock, std::size(clock), L"%02u:%02u %ls %04d", unsigned(local.wHour),
+        unsigned(local.wMinute), MonthNames[unsigned(displayedMonth.month()) - 1],
+        int(displayedMonth.year()));
     return clock;
+}
+
+HFONT CreateHeaderFont(HDC dc, std::wstring_view caption, int pixelWidth, int dpi) {
+    for (int size = 24; size >= 8; --size) {
+        HFONT font = CreateFontW(-MulDiv(size, dpi, 96), 0, 0, 0, FW_SEMIBOLD, 0, 0, 0,
+            DEFAULT_CHARSET, 0, 0, ANTIALIASED_QUALITY, 0, L"Segoe UI");
+        if (!font) continue;
+        const auto previous = SelectObject(dc, font);
+        SIZE extent{};
+        const bool measured = GetTextExtentPoint32W(dc, caption.data(), int(caption.size()), &extent);
+        SelectObject(dc, previous);
+        if ((measured && extent.cx <= pixelWidth) || size == 8) return font;
+        DeleteObject(font);
+    }
+    return nullptr;
+}
+
+struct EventCellLayout {
+    int visible, hidden;
+    bool counterOnOwnRow;
+};
+
+EventCellLayout LayoutEventCell(int count, int stored, bool counterFitsHeader) {
+    int visible = std::min(count, stored);
+    const bool counterOnOwnRow = count > visible && !counterFitsHeader && visible > 0;
+    if (counterOnOwnRow) --visible;
+    return {visible, count - visible, counterOnOwnRow};
 }
 
 void ApplyAppearance(HWND window, View& view) {
@@ -841,6 +1117,8 @@ void Paint(HWND window, View& view) {
         DEFAULT_CHARSET, 0, 0, ANTIALIASED_QUALITY, 0, L"Segoe UI");
     HFONT tiny = CreateFontW(-scale(10), 0, 0, 0, FW_NORMAL, 0, 0, 0,
         DEFAULT_CHARSET, 0, 0, ANTIALIASED_QUALITY, 0, L"Segoe UI");
+    HFONT counterSmall = CreateFontW(-scale(7), 0, 0, 0, FW_NORMAL, 0, 0, 0,
+        DEFAULT_CHARSET, 0, 0, ANTIALIASED_QUALITY, 0, L"Segoe UI");
     HGDIOBJ oldFont = SelectObject(dc, normal);
     HGDIOBJ oldMaskFont = maskDc ? SelectObject(maskDc, normal) : nullptr;
     auto label = [&](std::wstring_view text, int x, int y, int w, int h,
@@ -881,33 +1159,55 @@ void Paint(HWND window, View& view) {
     if (view.mode == Mode::Year) caption = std::to_wstring(int(view.month.year()));
     if (view.mode == Mode::Day) {
         caption = std::to_wstring(unsigned(selected.day())) + L" " +
-            std::wstring(MonthNames[unsigned(selected.month()) - 1], 3) + L" " +
+            MonthNames[unsigned(selected.month()) - 1] + L" " +
             std::to_wstring(int(selected.year()));
     }
     if (view.mode == Mode::Week) {
         year_month_day start(weekStart), end(weekStart + days{6});
         caption = std::to_wstring(unsigned(start.day()));
         if (start.month() != end.month())
-            caption += L" " + std::wstring(MonthNames[unsigned(start.month()) - 1], 3);
+            caption += L" " + std::wstring(MonthNames[unsigned(start.month()) - 1]);
         caption += L"–" + std::to_wstring(unsigned(end.day())) + L" " +
-            std::wstring(MonthNames[unsigned(end.month()) - 1], 3);
+            MonthNames[unsigned(end.month()) - 1];
     }
     SYSTEMTIME local{};
     GetLocalTime(&local);
     view.clockStamp = ClockStamp(local);
-    if (view.config.showClock) caption = HeaderClock(local);
-    label(caption, 19, 10, width - 159, 36, foreground, heading);
-    label(L"‹", width - 138, 10, 27, 36, foreground, heading, true);
-    label(L"Hoy", width - 111, 10, 40, 36, accent, small, true);
-    label(L"›", width - 71, 10, 27, 36, foreground, heading, true);
-    label(L"↻", width - 44, 10, 27, 36, accent, heading, true);
+    if (view.config.showClock) caption = HeaderClock(local, view.month);
+    HFONT captionFont = CreateHeaderFont(dc, caption, scale(width - 2 * Margin), view.dpi);
+    label(caption, Margin, 6, width - 2 * Margin, 36, accent, captionFont ? captionFont : normal, true);
 
-    const int tabWidth = (width - 2 * Margin) / 5;
+    const auto toolbar = LayoutToolbar(width);
+    auto toolbarLabel = [&](std::wstring_view text, const RECT& area, COLORREF color, HFONT font) {
+        label(text, area.left, area.top, area.right - area.left, area.bottom - area.top, color, font, true);
+    };
+    const auto controlsColor = view.interactionLocked ? muted : foreground;
+    toolbarLabel(L"‹", toolbar.previous, controlsColor, heading);
+    toolbarLabel(L"Hoy", toolbar.today, view.interactionLocked ? muted : accent, small);
+    toolbarLabel(L"›", toolbar.next, controlsColor, heading);
+    const bool busy = refreshing.load();
+    const RECT refreshArea{scale(toolbar.refresh.left), scale(toolbar.refresh.top),
+        scale(toolbar.refresh.right), scale(toolbar.refresh.bottom)};
+    DrawRefreshIcon(dc, maskDc, refreshArea, busy || !view.interactionLocked ? accent : muted,
+                    heading, busy ? view.refreshFrame : 0);
+    const int checkX = toolbar.lock.right - 14;
+    const auto lockColor = view.interactionLocked ? accent : muted;
+    label(width < 420 ? L"Bloq." : L"Bloqueo", toolbar.lock.left, ToolbarTop,
+          checkX - toolbar.lock.left - 2, ToolbarHeight, lockColor, width < 420 ? tiny : small);
+    fill(checkX, ToolbarTop + 5, 14, 14, lockColor, 2);
+    if (view.interactionLocked)
+        label(L"✓", checkX, ToolbarTop + 3, 14, 18, background, tiny, true);
+    else fill(checkX + 1, ToolbarTop + 6, 12, 12, background, 1);
     for (int index = 0; index < 5; ++index) {
-        int x = Margin + index * tabWidth;
+        const auto area = toolbar.Tab(index);
         bool active = view.mode == Mode(index);
-        if (active) fill(x + 3, 72, tabWidth - 6, 2, accent);
-        label(ModeNames[index], x, 48, tabWidth, 24, active ? accent : muted, small, true);
+        if (active) fill(area.left + 2, ToolbarTop + ToolbarHeight, area.right - area.left - 4, 2, accent);
+        SIZE extent{};
+        SelectObject(dc, small);
+        GetTextExtentPoint32W(dc, ModeNames[index], int(std::wcslen(ModeNames[index])), &extent);
+        const bool full = extent.cx <= scale(area.right - area.left - 2);
+        toolbarLabel(full ? ModeNames[index] : ShortModeNames[index], area,
+                     active ? accent : muted, full ? small : tiny);
     }
 
     struct AgendaRow { int minute; std::wstring title, source; COLORREF color; bool holiday; };
@@ -915,6 +1215,7 @@ void Paint(HWND window, View& view) {
         std::vector<AgendaRow> entries;
         std::vector<COLORREF> colors;
         int count = 0;
+        int eventCount = 0;
         bool holiday = false;
     };
     const auto earlier = [](const AgendaRow& left, const AgendaRow& right) {
@@ -939,38 +1240,35 @@ void Paint(HWND window, View& view) {
     }
     std::vector<CalendarDay> calendar(dayCount);
     std::vector<AgendaRow> agenda;
-    const int bodyBottom = height - 43;
+    const int bodyBottom = height - Margin;
     const bool hasAgenda = view.mode == Mode::Compact || view.mode == Mode::Week || view.mode == Mode::Day;
-    const int gridHeight = view.mode == Mode::Compact ? 6 * 27 :
+    const int compactRowHeight = CompactRowHeight(height);
+    const auto compactCapacity = LayoutCompactIndicators((width - 2 * Margin) / 7, compactRowHeight, 0);
+    const int gridHeight = view.mode == Mode::Compact ? 6 * compactRowHeight :
         view.mode == Mode::Week ? std::max(62, (bodyBottom - GridTop - 23) / 2) :
         std::max(0, bodyBottom - GridTop - 23);
     constexpr int EventRowHeight = 16;
     const int eventSlots = std::max(0,
         ((eventMonth ? gridHeight / (dayCount / 7) : gridHeight) - 22) / EventRowHeight);
     const int currentYear = int(year_month_day(today).year());
-    const int displayedYear = int(view.month.year());
     const auto sources = SourcesForYear(view.config, currentYear);
-    int errors = 0, affected = 0;
-    unsigned issues = 0;
-    std::wstring failedSource, affectedSource;
     {
         std::lock_guard lock(dataMutex);
         for (const auto& source : sources) {
             auto feed = std::ranges::find(feeds, source.url, &Feed::url);
             if (feed == feeds.end()) continue;
-            if (!source.holidayYear || source.holidayYear == displayedYear) {
-                if (feed->failed) { ++errors; failedSource = source.holiday ? L"Festivos" : source.name; }
-                if (feed->issues) { ++affected; affectedSource = source.name; issues |= feed->issues; }
-            }
             for (const auto& event : feed->events) {
                 for (auto day = std::max(first, event.start);
                      day < std::min(first + days(dayCount), event.end); day += days{1}) {
                     auto& cell = calendar[(day - first).count()];
                     cell.holiday |= source.holiday;
                     ++cell.count;
-                    if (view.mode == Mode::Compact && !source.holiday && cell.colors.size() < 4 &&
-                        std::ranges::find(cell.colors, source.color) == cell.colors.end())
-                        cell.colors.push_back(source.color);
+                    if (!source.holiday) {
+                        ++cell.eventCount;
+                        if (view.mode == Mode::Compact &&
+                            int(cell.colors.size()) < compactCapacity.columns * compactCapacity.rows)
+                            cell.colors.push_back(source.color);
+                    }
                     if ((view.mode == Mode::Month || view.mode == Mode::Week) && eventSlots > 0) {
                         AgendaRow row{day == event.start ? event.minute : -1, event.title,
                                       source.name, source.color, source.holiday};
@@ -1065,14 +1363,43 @@ void Paint(HWND window, View& view) {
                 date.month() == view.month.month() || view.mode == Mode::Week ? foreground : muted);
             if (view.mode == Mode::Compact) {
                 auto selectionColor = dayColor(day, cell.holiday, accent);
-                if (day == view.selected) fill(x + 2, y, cellWidth - 4, 26, selectionColor);
+                if (day == view.selected) fill(x + 2, y, cellWidth - 4, bottom - y - 1, selectionColor);
                 label(std::to_wstring(unsigned(date.day())), x, y, cellWidth, 22,
                       day == view.selected ? background : number, normal, true);
-                int dotX = x + (cellWidth - int(cell.colors.size()) * 7 + 3) / 2;
-                for (auto color : cell.colors) {
-                    fill(dotX, y + 22, 4, 3,
-                         day == view.selected && color == selectionColor ? background : color);
-                    dotX += 7;
+                auto indicators = LayoutCompactIndicators((width - 2 * Margin) / 7,
+                    bottom - y, cell.eventCount);
+                std::wstring more;
+                if (indicators.hidden) {
+                    for (;;) {
+                        more = L"+" + std::to_wstring(indicators.hidden);
+                        SIZE extent{};
+                        SelectObject(dc, counterSmall);
+                        GetTextExtentPoint32W(dc, more.data(), int(more.size()), &extent);
+                        const int badgeWidth = int((extent.cx * 96 + view.dpi - 1) / view.dpi);
+                        const auto next = LayoutCompactIndicators((width - 2 * Margin) / 7,
+                            bottom - y, cell.eventCount, badgeWidth);
+                        if (next.visible == indicators.visible) break;
+                        indicators = next;
+                    }
+                }
+                for (int row = 0; row < indicators.rows; ++row) {
+                    const int count = std::clamp(indicators.visible - row * indicators.columns, 0, indicators.columns);
+                    const bool badge = indicators.hidden && row == indicators.rows - 1;
+                    const int slots = count + (badge ? indicators.badgeSlots : 0);
+                    if (!slots) continue;
+                    int dotX = x + (cellWidth - slots * 7 + 3) / 2;
+                    for (int column = 0; column < count; ++column) {
+                        const auto color = cell.colors[row * indicators.columns + column];
+                        fill(dotX, y + 22 + row * 6, 4, 3,
+                             day == view.selected && color == selectionColor ? background : color);
+                        dotX += 7;
+                    }
+                    if (badge) {
+                        const int badgeY = y + 20 + row * 6;
+                        label(more, dotX, badgeY, indicators.badgeSlots * 7 - 3,
+                              std::min(10, bottom - badgeY), day == view.selected ? background : muted,
+                              counterSmall, true);
+                    }
                 }
             } else {
                 if (!eventMonth) {
@@ -1080,9 +1407,21 @@ void Paint(HWND window, View& view) {
                     fill(x, y, 1, bottom - y, muted);
                     if (index % 7 == 6) fill(right - 1, y, 1, bottom - y, muted);
                 }
-                const int visible = int(cell.entries.size());
-                const int dateX = eventMonth && (cell.count == visible || cellWidth >= 52)
-                    ? x + (cellWidth - 20) / 2 : x + 3;
+                const int stored = int(cell.entries.size());
+                SIZE counterSize{};
+                if (cell.count > stored) {
+                    const auto text = L"+" + std::to_wstring(cell.count - stored);
+                    SelectObject(dc, tiny);
+                    GetTextExtentPoint32W(dc, text.data(), int(text.size()), &counterSize);
+                }
+                const auto layout = LayoutEventCell(cell.count, stored,
+                    counterSize.cx <= scale(cellWidth - 28));
+                const int visible = layout.visible;
+                const int centeredDateX = x + (cellWidth - 20) / 2;
+                const bool counterFitsCentered = counterSize.cx <= scale(right - centeredDateX - 25);
+                const int dateX = eventMonth &&
+                    (!layout.hidden || layout.counterOnOwnRow || counterFitsCentered)
+                    ? centeredDateX : x + 3;
                 if (day == view.selected) {
                     auto selection = dayColor(day, cell.holiday, accent);
                     if (eventMonth) fill(dateX, y + 2, 20, 20, selection, 20);
@@ -1090,11 +1429,17 @@ void Paint(HWND window, View& view) {
                 }
                 label(std::to_wstring(unsigned(date.day())), dateX, y + 2, eventMonth ? 20 : 22, 19,
                       day == view.selected ? background : number, eventMonth ? normal : small, true);
-                if (cell.count > visible) {
-                    int badgeX = eventMonth ? dateX + 20 : x + 25;
-                    if (right - badgeX >= 11)
-                        label(L"+" + std::to_wstring(cell.count - visible), badgeX, y + 2,
-                              right - badgeX, 19, muted, tiny, true);
+                if (layout.hidden) {
+                    const auto text = L"+" + std::to_wstring(layout.hidden);
+                    const int badgeX = layout.counterOnOwnRow ? x + 3 : dateX + 22;
+                    const int badgeY = layout.counterOnOwnRow
+                        ? y + 22 + visible * EventRowHeight : y + 2;
+                    const int badgeWidth = right - badgeX - 3;
+                    const int badgeHeight = layout.counterOnOwnRow ? EventRowHeight - 2 : 19;
+                    SelectObject(dc, tiny);
+                    GetTextExtentPoint32W(dc, text.data(), int(text.size()), &counterSize);
+                    const auto font = counterSize.cx <= scale(badgeWidth) ? tiny : counterSmall;
+                    label(text, badgeX, badgeY, badgeWidth, badgeHeight, muted, font, true);
                 }
                 for (int row = 0; row < visible; ++row) {
                     const auto& entry = cell.entries[row];
@@ -1147,38 +1492,12 @@ void Paint(HWND window, View& view) {
             label(detail + L"  ·  " + row.source, 29, y + 18, width - 48, 16, muted, small);
         }
     }
-    std::wstring status;
-    const bool municipal = view.config.holidayUrl.empty() && ValidMunicipality(view.config.municipality);
-    if (view.config.holidayUrl.empty() && !view.config.municipality.empty() && !municipal)
-        status = L"El código INE debe tener cinco dígitos";
-    else if (sources.empty()) status = L"Añade un enlace en los ajustes de Windhawk";
-    else if (refreshing) status = L"Actualizando calendarios…";
-    else if (errors == 1) status = L"Error al actualizar · " + failedSource;
-    else if (errors > 1) status = std::to_wstring(errors) + L" calendarios con error";
-    else if (municipal && (displayedYear < currentYear - 1 || displayedYear > currentYear + 1))
-        status = L"Festivos municipales fuera del intervalo consultado";
-    else {
-        auto count = view.config.sources.size();
-        if (count) status = std::to_wstring(count) + (count == 1 ? L" calendario" : L" calendarios");
-        if (municipal || !view.config.holidayUrl.empty())
-            status += count ? L" · Festivos" : L"Festivos";
-    }
-    label(status, 19, affected ? height - 37 : height - 30, width - 38, 18, muted, small);
-    if (affected) {
-        PCWSTR reason = L"Eventos incompletos";
-        if (issues == UnsupportedRule) reason = L"Repeticiones incompatibles";
-        if (issues == UnsupportedDate) reason = L"Fechas o zonas incompatibles";
-        if (issues == UnsupportedException) reason = L"Excepciones de repetición incompatibles";
-        if (issues == UnsupportedDuration) reason = L"Duraciones incompatibles";
-        std::wstring detail = reason;
-        if (affected == 1) detail += L" · " + affectedSource;
-        label(detail, 19, height - 19, width - 38, 16, muted, small);
-    }
-
     SelectObject(dc, oldFont);
     if (maskDc) SelectObject(maskDc, oldMaskFont);
     DeleteObject(heading);
+    if (captionFont) DeleteObject(captionFont);
     DeleteObject(tiny);
+    DeleteObject(counterSmall);
     DeleteObject(small);
     DeleteObject(normal);
     GdiFlush();
@@ -1217,9 +1536,20 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
             [[fallthrough]];
         }
         case RefreshMessage:
+            SyncRefreshAnimation(window, *view);
             InvalidateRect(window, nullptr, FALSE);
             return 0;
         case WM_TIMER: {
+            if (wParam == RefreshAnimationTimerId) {
+                SyncRefreshAnimation(window, *view);
+                if (view->refreshAnimating)
+                    view->refreshFrame = (view->refreshFrame + 1) % RefreshAnimationFrames;
+                const auto area = LayoutToolbar(view->width).refresh;
+                const RECT pixels{view->Scale(area.left), view->Scale(area.top),
+                    view->Scale(area.right), view->Scale(area.bottom)};
+                InvalidateRect(window, &pixels, FALSE);
+                return 0;
+            }
             SYSTEMTIME local{};
             GetLocalTime(&local);
             if (ClockStamp(local) != view->clockStamp &&
@@ -1247,7 +1577,7 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
         case WM_NCHITTEST: {
             POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             ScreenToClient(window, &point);
-            if (point.y < view->Scale(47) && point.x < view->Scale(view->width - 138))
+            if (!view->interactionLocked && point.y >= 0 && point.y < view->Scale(ToolbarTop))
                 return HTCAPTION;
             return HTCLIENT;
         }
@@ -1255,15 +1585,28 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
             int x = MulDiv(GET_X_LPARAM(lParam), 96, view->dpi);
             int y = MulDiv(GET_Y_LPARAM(lParam), 96, view->dpi);
             int width = view->width;
-            int tabWidth = (width - 2 * Margin) / 5;
-            if (y >= 10 && y < 46 && x >= width - 138 && x < width - 17) {
-                if (x < width - 111) view->Navigate(-1);
-                else if (x < width - 71) view->Select(Today());
-                else if (x < width - 44) view->Navigate(1);
-                else SetEvent(wakeEvent);
-            } else if (y >= 48 && y < 76 && x >= Margin && x < Margin + 5 * tabWidth) {
-                view->ChangeMode(Mode((x - Margin) / tabWidth));
-            } else if (view->agendaTop && y >= view->agendaTop && y < view->agendaTop + 27) {
+            const auto toolbar = LayoutToolbar(width);
+            const POINT point{x, y};
+            if (PtInRect(&toolbar.lock, point)) {
+                view->interactionLocked = !view->interactionLocked;
+                Wh_SetIntValue(L"interactionLocked", view->interactionLocked);
+                InvalidateRect(window, nullptr, FALSE);
+                return 0;
+            }
+            if (view->interactionLocked) return 0;
+            for (int index = 0; index < 5; ++index) {
+                const auto area = toolbar.Tab(index);
+                if (PtInRect(&area, point)) {
+                    view->ChangeMode(Mode(index));
+                    InvalidateRect(window, nullptr, FALSE);
+                    return 0;
+                }
+            }
+            if (PtInRect(&toolbar.previous, point)) view->Navigate(-1);
+            else if (PtInRect(&toolbar.today, point)) view->Select(Today());
+            else if (PtInRect(&toolbar.next, point)) view->Navigate(1);
+            else if (PtInRect(&toolbar.refresh, point)) SetEvent(wakeEvent);
+            else if (view->agendaTop && y >= view->agendaTop && y < view->agendaTop + 27) {
                 if (x >= width - 114 && x < width - 93)
                     view->ScrollAgenda(-1);
                 if (x >= width - 38 && x < width - 17)
@@ -1282,6 +1625,7 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
             return 0;
         }
         case WM_MOUSEWHEEL: {
+            if (view->interactionLocked) return 0;
             POINT point{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             ScreenToClient(window, &point);
             int direction = GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? -1 : 1;
@@ -1316,6 +1660,7 @@ DWORD WINAPI UiLoop(void*) {
         view.config = pending;
     }
     view.mode = view.config.initialView;
+    view.interactionLocked = Wh_GetIntValue(L"interactionLocked", 0) != 0;
     if (registered) {
         window = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
             WindowClass, L"Calendario de escritorio", WS_POPUP,
@@ -1326,7 +1671,7 @@ DWORD WINAPI UiLoop(void*) {
         ApplyAppearance(window, view);
         ShowWindow(window, SW_SHOWNOACTIVATE);
         InvalidateRect(window, nullptr, FALSE);
-        SetTimer(window, 1, 1000, nullptr);
+        SetTimer(window, ClockTimerId, 1000, nullptr);
         widget = window;
     }
     SetEvent(readyEvent);
