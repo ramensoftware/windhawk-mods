@@ -8,7 +8,7 @@
 // @author          caotu2005
 // @github          https://github.com/caotu2005
 // @include         windhawk.exe
-// @compilerOptions -DWIN32_LEAN_AND_MEAN -ld2d1 -ldwrite -ldwmapi -lgdi32 -luser32 -lshell32 -lshlwapi -lole32 -loleaut32 -lwindowscodecs -luuid -lwinmm
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -ld2d1 -ldwrite -ldwmapi -lgdi32 -luser32 -lshell32 -lshlwapi -lole32 -loleaut32 -lwindowscodecs -luuid -lwinmm -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -59,7 +59,7 @@ A lightweight, native Direct2D + WIC + OLE2 **Drag & Drop Shelf & Optional `Win 
   - **Live Copy / Cut / Paste Alerts:** Non-blocking toast notifications for Copy, Cut, and Paste actions, respecting both `ExcludeClipboardContentFromMonitorProcessing` and `CanIncludeInClipboardHistory = 0` so protected/password content is never previewed.
 - **Optional `Win + V` Clipboard History Replacement (Off by Default):**
   - Enable **Replace `Win + V`** in settings to intercept `Win + V` cleanly and open the **Clipboard History** tab right beside your cursor (with 10–100 configurable history slots and category filters).
-  - **Storage Note:** Staged browser/app images, virtual files, and images saved in Clipboard History (while `Replace Win + V` is enabled) are temporarily stored as files inside this mod's Windhawk storage folder (`staged/`) while they remain on the shelf or in history, and are automatically cleared when removed, unloaded, or on next startup.
+  - **Storage Note:** Staged browser/app images, virtual files, and images saved in Clipboard History (while `Replace Win + V` is enabled) are temporarily stored as files inside this mod's Windhawk storage folder (`staged/<UserSID>/`) while they remain on the shelf or in history, and are automatically cleared when removed, unloaded, or on next startup.
 - **30 Global Languages:** Automatically detects your Windows display language across 30 major languages (including English, Vietnamese, Chinese, Spanish, French, German, Japanese, Korean, Portuguese, Russian, Arabic, Hindi, Indonesian, Turkish, and more), or select any language manually in Settings.
 - **Flexible Triggers:**
   - **Auto-Summon on File Drag**, **Shake-to-Summon** near cursor, **Screen Edge-Bump** while dragging text/images, and an optional **`Alt + Shift + D`** global toggle hotkey (**off by default** so it does not override `Alt + Shift + D` in apps such as Microsoft Word).
@@ -82,7 +82,7 @@ A lightweight, native Direct2D + WIC + OLE2 **Drag & Drop Shelf & Optional `Win 
   - Thông báo nổi khi Sao chép / Cắt / Dán tự động bỏ qua nội dung bảo mật (`ExcludeClipboardContentFromMonitorProcessing` và `CanIncludeInClipboardHistory = 0`).
 - **Tùy chọn thay thế `Win + V` (Mặc định tắt):**
   - Bật **Thay thế `Win + V`** trong Cài đặt để dùng tab **Lịch sử Clipboard** tích hợp (lưu 10–100 mục).
-  - **Lưu ý lưu trữ:** Hình ảnh kéo từ trình duyệt/ứng dụng, tệp ảo và hình ảnh trong Lịch sử Clipboard (khi bật `Thay thế Win + V`) được lưu tạm dạng tệp trong thư mục lưu trữ riêng của mod (`staged/`), và tự động xóa khi gỡ mục, tắt mod hoặc lần khởi chạy kế tiếp.
+  - **Lưu ý lưu trữ:** Hình ảnh kéo từ trình duyệt/ứng dụng, tệp ảo và hình ảnh trong Lịch sử Clipboard (khi bật `Thay thế Win + V`) được lưu tạm dạng tệp trong thư mục lưu trữ riêng của mod (`staged/<UserSID>/`), và tự động xóa khi gỡ mục, tắt mod hoặc lần khởi chạy kế tiếp.
 - **Hỗ trợ 30 ngôn ngữ toàn cầu:** Tự động nhận diện ngôn ngữ Windows trên 30 ngôn ngữ thông dụng nhất (mặc định đầy đủ Tiếng Việt, Tiếng Anh cùng Trung, Nhật, Hàn, Pháp, Đức, Tây Ban Nha, Nga, Ả Rập, Hindi, Thái, Indonesia...) hoặc chọn thủ công trong Cài đặt.
 - **Gọi kệ linh hoạt:** Tự hiện khi kéo tệp, **Lắc chuột để gọi**, **Chạm mép màn hình (Edge-Bump)**, và tùy chọn phím tắt toàn cục **`Alt + Shift + D`** (**mặc định tắt** để tránh trùng phím chèn ngày trong Microsoft Word).
 
@@ -312,6 +312,7 @@ A lightweight, native Direct2D + WIC + OLE2 **Drag & Drop Shelf & Optional `Win 
 #include <windhawk_utils.h>
 #include <windows.h>
 #include <windowsx.h>
+#include <sddl.h>
 #include <dwmapi.h>
 #include <shellapi.h>
 #include <shlobj.h>
@@ -366,8 +367,8 @@ struct ModSettings {
     ShelfPosition    shelfPosition      = ShelfPosition::TopCenter;
     bool             enableEdgeBump     = true;
     ShakeSensitivity shakeSensitivity   = ShakeSensitivity::Medium;
-    bool             enableGlobalHotkey = true;
-    bool             replaceWinV        = true;
+    bool             enableGlobalHotkey = false;
+    bool             replaceWinV        = false;
     int              maxClipboardHistory = 30;
 
     bool autoClearAfterDrop  = true;
@@ -390,7 +391,7 @@ static ModSettings       g_settings;
 static std::atomic<bool> g_running{false};
 static std::atomic<bool> g_unloading{false};
 static std::atomic<bool> g_settingsDirty{false};
-static std::atomic<bool> g_replaceWinVAtomic{true};
+static std::atomic<bool> g_replaceWinVAtomic{false};
 static std::atomic<bool> g_enableCopyPasteAlertAtomic{true};
 static std::atomic<ULONGLONG> g_lastCutKeyTick{0};
 static bool              g_systemLightTheme = false;
@@ -822,15 +823,50 @@ static std::wstring FormatFileSizeCompact(uint64_t bytes) {
     return buf;
 }
 
+static std::wstring GetCurrentUserSidString() {
+    std::wstring result;
+    HANDLE token = nullptr;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+        alignas(TOKEN_USER) BYTE buf[sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE];
+        DWORD len = 0;
+        if (GetTokenInformation(token, TokenUser, buf, sizeof(buf), &len)) {
+            LPWSTR sid = nullptr;
+            if (ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER*>(buf)->User.Sid, &sid)) {
+                result = sid;
+                LocalFree(sid);
+            }
+        }
+        CloseHandle(token);
+    }
+    return result;
+}
+
 static std::wstring GetTempStagingDir() {
     wchar_t baseDir[MAX_PATH] = {};
     if (Wh_GetModStoragePath(baseDir, ARRAYSIZE(baseDir)) == 0 || !baseDir[0]) {
         return {};
     }
+    std::wstring sid = GetCurrentUserSidString();
+    if (sid.empty()) return {};
+
     CreateDirectoryW(baseDir, nullptr);
-    std::wstring dir = std::wstring(baseDir) + L"\\staged";
-    CreateDirectoryW(dir.c_str(), nullptr);
-    return dir;
+    std::wstring stagedRoot = std::wstring(baseDir) + L"\\staged";
+    CreateDirectoryW(stagedRoot.c_str(), nullptr);
+
+    std::wstring userDir = stagedRoot + L"\\" + sid;
+    SECURITY_ATTRIBUTES sa{};
+    sa.nLength = sizeof(sa);
+    sa.bInheritHandle = FALSE;
+    // Protected DACL: full access only to the current user SID and SYSTEM (so Windhawk can remove mod storage on uninstall)
+    std::wstring sddl = L"D:P(A;OICI;GA;;;" + sid + L")(A;OICI;GA;;;SY)";
+    if (ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            sddl.c_str(), SDDL_REVISION_1, &sa.lpSecurityDescriptor, nullptr)) {
+        CreateDirectoryW(userDir.c_str(), &sa);
+        LocalFree(sa.lpSecurityDescriptor);
+    } else {
+        CreateDirectoryW(userDir.c_str(), nullptr);
+    }
+    return userDir;
 }
 
 static void ClearStagingDirContents() {
@@ -1016,28 +1052,36 @@ static std::shared_ptr<DecodedBgraImage> DecodeFileThumbnailWic(const wchar_t* f
                 UINT dstW = std::max<UINT>(1u, static_cast<UINT>(std::lround(srcW * scale)));
                 UINT dstH = std::max<UINT>(1u, static_cast<UINT>(std::lround(srcH * scale)));
 
-                IWICBitmapScaler* scaler = nullptr;
-                if (SUCCEEDED(factory->CreateBitmapScaler(&scaler)) && scaler) {
-                    if (SUCCEEDED(scaler->Initialize(frame, dstW, dstH, WICBitmapInterpolationModeFant))) {
-                        IWICFormatConverter* conv = nullptr;
-                        if (SUCCEEDED(factory->CreateFormatConverter(&conv)) && conv) {
-                            if (SUCCEEDED(conv->Initialize(scaler, GUID_WICPixelFormat32bppPBGRA,
-                                                           WICBitmapDitherTypeNone, nullptr, 0.0,
-                                                           WICBitmapPaletteTypeCustom))) {
-                                auto img = std::make_shared<DecodedBgraImage>();
-                                img->width = dstW;
-                                img->height = dstH;
-                                img->pixels.resize(static_cast<size_t>(dstW) * dstH);
-                                if (SUCCEEDED(conv->CopyPixels(nullptr, dstW * 4,
-                                                               static_cast<UINT>(img->pixels.size() * 4),
-                                                               reinterpret_cast<BYTE*>(img->pixels.data())))) {
-                                    result = std::move(img);
+                // Cap decoded pixel buffer for 32-bit windhawk.exe tool process safety (<= 8192px edge, <= 32M pixels)
+                if (dstW <= 8192u && dstH <= 8192u &&
+                    (static_cast<uint64_t>(dstW) * static_cast<uint64_t>(dstH)) <= 33554432ULL) {
+                    IWICBitmapScaler* scaler = nullptr;
+                    if (SUCCEEDED(factory->CreateBitmapScaler(&scaler)) && scaler) {
+                        if (SUCCEEDED(scaler->Initialize(frame, dstW, dstH, WICBitmapInterpolationModeFant))) {
+                            IWICFormatConverter* conv = nullptr;
+                            if (SUCCEEDED(factory->CreateFormatConverter(&conv)) && conv) {
+                                if (SUCCEEDED(conv->Initialize(scaler, GUID_WICPixelFormat32bppPBGRA,
+                                                               WICBitmapDitherTypeNone, nullptr, 0.0,
+                                                               WICBitmapPaletteTypeCustom))) {
+                                    try {
+                                        auto img = std::make_shared<DecodedBgraImage>();
+                                        img->width = dstW;
+                                        img->height = dstH;
+                                        img->pixels.resize(static_cast<size_t>(dstW) * dstH);
+                                        if (SUCCEEDED(conv->CopyPixels(nullptr, dstW * 4,
+                                                                       static_cast<UINT>(img->pixels.size() * 4),
+                                                                       reinterpret_cast<BYTE*>(img->pixels.data())))) {
+                                            result = std::move(img);
+                                        }
+                                    } catch (const std::bad_alloc&) {
+                                        result.reset();
+                                    }
                                 }
+                                conv->Release();
                             }
-                            conv->Release();
                         }
+                        scaler->Release();
                     }
-                    scaler->Release();
                 }
             }
             frame->Release();
@@ -1205,6 +1249,10 @@ static HGLOBAL LoadFileBytesToHGlobal(const wchar_t* filePath) {
 static HGLOBAL BuildDibHGlobalFromImageFile(const wchar_t* filePath) {
     auto img = DecodeFileThumbnailWic(filePath, 0);
     if (!img || img->width == 0 || img->height == 0 || img->pixels.empty()) return nullptr;
+    if (img->width > 8192u || img->height > 8192u ||
+        (static_cast<uint64_t>(img->width) * static_cast<uint64_t>(img->height)) > 33554432ULL) {
+        return nullptr;
+    }
     SIZE_T pixelBytes = static_cast<SIZE_T>(img->width) * img->height * 4;
     SIZE_T totalBytes = sizeof(BITMAPINFOHEADER) + pixelBytes;
     HGLOBAL hMem = GlobalAlloc(GHND | GMEM_SHARE, totalBytes);
