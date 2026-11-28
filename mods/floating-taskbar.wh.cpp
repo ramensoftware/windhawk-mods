@@ -4,7 +4,7 @@
 // @name:zh-CN      悬浮任务栏
 // @description     Turns the Windows 11 taskbar into a floating rounded bar with configurable width, height, spacing, corners, colors and gradients. Blank areas click through; tray menus and Quick Settings follow the bar.
 // @description:zh-CN 将 Windows 11 任务栏变为独立的悬浮圆角条，可调整长度、区域高度、悬浮间距、圆角与背景颜色/渐变；空白区域点击穿透，托盘菜单和快速设置面板对齐悬浮条右端。
-// @version         2.1.16
+// @version         2.1.17
 // @author          chaochenzhudian
 // @github          https://github.com/chaochenzhudian
 // @include         explorer.exe
@@ -16,57 +16,65 @@
 
 // ==WindhawkModReadme==
 /*
-# Floating Taskbar
+# Floating Taskbar / 悬浮任务栏
 
 ![Floating Taskbar with left-aligned taskbar icons](https://raw.githubusercontent.com/chaochenzhudian/windhawk-mods/assets/floating-taskbar/assets/floating-taskbar-left.png)
 
-Left-aligned taskbar layout with the default gradient background.
+*Left-aligned taskbar layout with the linear gradient background / 左对齐任务栏布局与线性渐变背景效果*
 
-## Features
+---
 
-- Configure the floating bar width, taskbar area height, bottom gap, and
-  corner radii.
-- Configure the corner radius of taskbar hover highlights.
-- Use the system background, a transparent background, translucent color, a
-  solid color, a linear gradient, or a custom XAML brush.
-- Click through blank areas inside the floating taskbar.
-- Keep tray menus and Quick Settings aligned with the right edge of the bar.
+## English
 
-## Settings
+Turns the Windows 11 taskbar (both primary and secondary monitors) into a centered, floating rounded bar with customizable dimensions, corner radii, and backgrounds.
 
-Widths, area height, spacing, and radii are physical pixels. A taskbar area
-height of 0 follows the system. A custom XAML background that is left empty
-also follows the system background.
+### Features
 
-The same physical-pixel values appear differently at different display scales.
-Set the values separately if precise consistency across mixed-DPI monitors is
-required.
+- **Floating Layout & Dimensions**: Customize the floating bar width (fixed pixel width or auto-fit to content), taskbar area height, bottom floating gap, and bar corner radius. Taskbar icons and system tray items are automatically vertically centered inside the bar.
+- **Hover & Visual Polish**: Customize the corner radius of taskbar and tray hover highlights, apply rounded corners to taskbar tooltips, hide the Start button focus rectangle, and clean up stacked multi-window taskbar highlights.
+- **Flexible Background Styles**: Choose from 6 background modes:
+  - **Follow system**: Keeps the default Windows taskbar background.
+  - **Transparent**: Fully transparent background.
+  - **Translucent color**: Custom color (`#RRGGBB` / `#AARRGGBB`) combined with configurable opacity (`0–100`).
+  - **Solid color**: Custom color that preserves the alpha channel when using `#AARRGGBB`.
+  - **Linear gradient**: Two-color gradient with configurable opacity, angle (`0°` left-to-right, `45°` top-left to bottom-right, `90°` top-to-bottom, `180°` right-to-left), and start/end stop positions (`0–100%`).
+  - **Custom XAML**: Supply any valid XAML brush (e.g., `<SolidColorBrush Color="#CC202020" />`). Leaving it empty falls back to the system background.
+- **Click-Through Empty Space**: Empty areas around and beneath the floating bar pass mouse clicks through to windows underneath and automatically update when layout or tray width changes.
+- **Tray & Quick Settings Alignment**: Automatically keeps the system tray positioned inside the right edge of the floating bar, repositions tray context menus near the cursor, and aligns the Quick Settings panel (`ControlCenterWindow`) with the right edge of the bar without visible jumping.
 
-Multi-window taskbar highlights are currently detected from the Chinese and
-English taskbar accessible names. On other Windows display languages, those
-highlights may not be hidden.
+### Notes & Compatibility
 
-## Differences from other mods
+- **Physical Pixels & Mixed DPI**: Width, area height, bottom gap, and corner radii are specified in physical pixels. The same values will appear differently on monitors with different DPI scaling.
+- **Multi-Window Highlight Cleanup**: Multi-window taskbar buttons are detected via Chinese (`个运行窗口`) and English (`running window`) accessibility names. On other Windows display languages, those highlights may not be hidden.
+- **Differences from Other Mods**: Compared to *Windows 11 Taskbar Styler*, *Taskbar height and icon size*, and *MacOS Style Dock*, this mod integrates click-through outer space, system tray & Quick Settings alignment, automatic tray layout reassertion, tooltip rounding, Start button focus-ring cleanup, and multi-window highlight cleanup. Because it modifies properties on `RootGrid` and `BackgroundFill`, combining it with a *Taskbar Styler* theme that targets the same elements is not supported.
+- **Enable / Disable**: Use Windhawk's built-in mod toggle; all taskbar modifications are restored automatically when disabled.
 
-Windows 11 Taskbar Styler, Taskbar height and icon size, and MacOS Style Dock
-can also create a floating or unusually sized taskbar. Floating Taskbar also
-adds click-through blank space, tray and Quick Settings alignment, automatic
-tray layout reassertion, and multi-window highlight cleanup. It writes
-properties on the taskbar's `RootGrid` and `BackgroundFill`, so combining it
-with a Taskbar Styler theme that styles the same properties is not supported.
-
-Use Windhawk's normal mod toggle to disable the mod; there is no separate
-enable setting.
+---
 
 ## 中文说明
 
-将 Windows 11 任务栏变为独立的悬浮圆角条，可调整长度、区域高度、悬浮间距、
-任务栏与待选框圆角，以及背景颜色或渐变。悬浮条内部空白区域可以点击穿透，
-托盘菜单与快速设置面板会对齐悬浮条右端。
+将 Windows 11 任务栏（支持主显示器与副显示器）转换为居中悬浮的独立圆角条，支持自由调整尺寸、圆角与背景样式。
 
-长度、区域高度、间距和圆角使用物理像素。多窗口任务栏高亮目前依靠中文或英文
-辅助功能名称识别，其他显示语言可能不隐藏该高亮。若同时使用 Taskbar Styler
-并修改相同的 `RootGrid` 或 `BackgroundFill` 属性，两个 Mod 可能冲突。
+### 核心功能
+
+- **悬浮布局与尺寸定制**：可自定义悬浮条长度（固定像素宽度或按内容自动适应）、任务栏区域高度、底部悬浮间距以及任务栏圆角半径；任务栏图标与系统托盘内容会在悬浮条内自动垂直居中。
+- **悬停与视觉细节优化**：可自定义任务栏与托盘悬停待选框的圆角半径；自动将任务栏悬停提示（ToolTip）调整为圆角；隐藏开始按钮焦点外框，并清理多窗口任务的叠加高亮效果。
+- **多样化背景画刷**：内置 6 种背景模式：
+  - **跟随系统**：沿用 Windows 原生任务栏背景。
+  - **完全透明**：透明背景。
+  - **色彩通透定制**：自定义颜色（`#RRGGBB` / `#AARRGGBB`）并配合背景透明度（`0–100`）。
+  - **纯色**：纯色背景，使用 `#AARRGGBB` 时保留颜色自带的透明度。
+  - **线性渐变**：双色渐变，支持设置透明度、渐变角度（`0°` 从左到右、`45°` 左上到右下、`90°` 从上到下、`180°` 从右到左）以及起止渐变位置（`0–100%`）。
+  - **自定义 XAML**：支持填入任意合法 XAML 画刷（示例：`<SolidColorBrush Color="#CC202020" />`），留空时跟随系统背景。
+- **空白区域点击穿透**：悬浮条两侧及底部间隙的透明区域支持鼠标点击穿透，并在布局或托盘宽度变化时自动同步可点击区域。
+- **托盘与面板跟随对齐**：自动将系统托盘保持在悬浮条右端；修正托盘右键菜单弹出位置使其贴近鼠标；让快速设置面板对齐悬浮条右端且打开时无明显跳动。
+
+### 注意事项与兼容性
+
+- **物理像素与多 DPI**：长度、区域高度、悬浮间距和圆角均以物理像素计算，在不同缩放比例的显示器上视觉尺寸会有所不同。
+- **多窗口高亮清理**：多窗口状态目前通过任务栏按钮的中文（`个运行窗口`）或英文（`running window`）辅助功能名称识别，在其他 Windows 显示语言下可能无法隐藏该高亮。
+- **与其他 Mod 的区别与冲突**：相比 *Windows 11 Taskbar Styler*、*Taskbar height and icon size* 和 *MacOS Style Dock*，本 Mod 额外整合了外围空白区点击穿透、托盘与快速设置面板对齐、托盘布局自动保持、提示框圆角、开始按钮焦点框隐藏以及多窗口高亮清理。由于本 Mod 会修改 `RootGrid` 和 `BackgroundFill` 属性，不支持与同时修改这些属性的 *Taskbar Styler* 主题混用。
+- **启用与禁用**：直接使用 Windhawk 自带的 Mod 开关即可，禁用或卸载时会自动还原原始任务栏状态。
 */
 // ==/WindhawkModReadme==
 
@@ -81,7 +89,7 @@ enable setting.
       physical pixels. 0 uses the content width.
     $description:zh-CN: >-
       悬浮条的总长度（包含右下角系统托盘区），单位为物理像素。0 表示根据内容自动宽度。
-  - taskbarAreaHeight: 60
+  - taskbarAreaHeight: 75
     $name: Taskbar area height
     $name:zh-CN: 任务栏区域高度
     $description: >-
@@ -91,7 +99,7 @@ enable setting.
     $description:zh-CN: >-
       悬浮条顶端到屏幕底端的距离（即整个“任务栏区域”的高度），单位为物理像素。
       0 表示跟随系统任务栏高度。悬浮条高度 = 本项 − 悬浮间距。
-  - floatMargin: 5
+  - floatMargin: 8
     $name: Bottom gap
     $name:zh-CN: 悬浮间距
     $description: >-
@@ -99,12 +107,12 @@ enable setting.
       in physical pixels.
     $description:zh-CN: >-
       悬浮条底端到屏幕底端的距离，单位为物理像素。
-  - cornerRadius: 14
+  - cornerRadius: 20
     $name: Taskbar corner radius
     $name:zh-CN: 任务栏圆角半径
     $description: Corner radius of the floating bar in physical pixels.
     $description:zh-CN: 悬浮条的圆角半径，单位为物理像素。
-  - hoverCornerRadius: 10
+  - hoverCornerRadius: 15
     $name: Hover highlight corner radius
     $name:zh-CN: 任务栏待选框圆角半径
     $description: >-
@@ -138,7 +146,7 @@ enable setting.
     - translucent: 色彩通透定制
     - solid: 纯色
     - gradient: 线性渐变
-  - backgroundColor: "#202020"
+  - backgroundColor: "#e0c3ff"
     $name: Background color
     $name:zh-CN: 背景颜色
     $description: >-
@@ -155,17 +163,17 @@ enable setting.
       gradient styles.
     $description:zh-CN: >-
       0 = 完全透明，100 = 完全不透明。用于色彩通透定制和渐变样式。
-  - gradientColor1: "#1F2937"
+  - gradientColor1: "#FFFFFF"
     $name: Gradient start color
     $name:zh-CN: 渐变起始颜色
     $description: Linear gradient start color in #RRGGBB or #AARRGGBB format.
     $description:zh-CN: 线性渐变的起始颜色，格式为 #RRGGBB 或 #AARRGGBB。
-  - gradientColor2: "#111827"
+  - gradientColor2: "#00C853"
     $name: Gradient end color
     $name:zh-CN: 渐变结束颜色
     $description: Linear gradient end color in #RRGGBB or #AARRGGBB format.
     $description:zh-CN: 线性渐变的结束颜色，格式为 #RRGGBB 或 #AARRGGBB。
-  - gradientAngle: 45
+  - gradientAngle: 0
     $name: Gradient angle
     $name:zh-CN: 渐变角度
     $description: >-
@@ -173,12 +181,12 @@ enable setting.
       and 180 is right to left.
     $description:zh-CN: >-
       0 = 从左到右，45 = 左上到右下，90 = 从上到下，180 = 从右到左。
-  - gradientStartPosition: 0
+  - gradientStartPosition: 40
     $name: Gradient start position (%)
     $name:zh-CN: 渐变起始位置（%）
     $description: First color position along the gradient; 0 is start, 100 is end.
     $description:zh-CN: 第一个颜色在渐变方向上的落点，0 = 起点，100 = 终点。
-  - gradientEndPosition: 100
+  - gradientEndPosition: 80
     $name: Gradient end position (%)
     $name:zh-CN: 渐变结束位置（%）
     $description: Second color position along the gradient; 0 is start, 100 is end.
@@ -248,13 +256,13 @@ enum class BackgroundStyle {
 
 struct BackgroundSettings {
     BackgroundStyle style = BackgroundStyle::system;
-    std::wstring color = L"#202020";
+    std::wstring color = L"#e0c3ff";
     int opacity = 75;
-    std::wstring gradientColor1 = L"#1F2937";
-    std::wstring gradientColor2 = L"#111827";
-    int gradientAngle = 45;
-    int gradientStartPosition = 0;
-    int gradientEndPosition = 100;
+    std::wstring gradientColor1 = L"#FFFFFF";
+    std::wstring gradientColor2 = L"#00C853";
+    int gradientAngle = 0;
+    int gradientStartPosition = 40;
+    int gradientEndPosition = 80;
     std::wstring customXaml;
 };
 
@@ -263,7 +271,7 @@ std::atomic<int> g_settingTaskbarWidth{0};
 std::atomic<int> g_settingTaskbarAreaHeight{0};
 std::atomic<int> g_settingFloatMargin{0};
 std::atomic<int> g_settingCornerRadius{0};
-std::atomic<int> g_settingHoverCornerRadius{10};
+std::atomic<int> g_settingHoverCornerRadius{15};
 std::atomic<double> g_hoverRadiusDip{8.0};
 std::atomic<double> g_systemTaskbarContentHeightDip{0.0};
 std::mutex g_settingsMutex;
@@ -358,6 +366,19 @@ struct SavedTaskButtonNameCallback {
     int64_t token = 0;
 };
 
+struct SavedFocusVisual {
+    winrt::weak_ref<Control> element;
+    bool hadLocalUseSystemFocusVisuals = false;
+    bool originalUseSystemFocusVisuals = true;
+    bool hadLocalPrimaryThickness = false;
+    Thickness originalPrimaryThickness{};
+    bool hadLocalSecondaryThickness = false;
+    Thickness originalSecondaryThickness{};
+    int64_t useSystemFocusVisualsToken = 0;
+    int64_t primaryThicknessToken = 0;
+    int64_t secondaryThicknessToken = 0;
+};
+
 struct SavedTaskbarToolTip {
     winrt::weak_ref<ToolTip> toolTip;
     CornerRadius originalCornerRadius{};
@@ -397,6 +418,7 @@ struct AppliedTaskbarState {
     std::vector<SavedMultiWindowHighlight> savedMultiWindowHighlights;
     std::vector<SavedTaskButtonNameCallback> savedTaskButtonNameCallbacks;
     std::vector<SavedVerticalLayout> savedVerticalLayouts;
+    std::vector<SavedFocusVisual> savedFocusVisuals;
     winrt::weak_ref<muxc::ItemsRepeater> taskButtonRepeater;
     muxc::ItemsRepeater::ElementPrepared_revoker
         taskButtonRepeaterRevoker;
@@ -1556,6 +1578,253 @@ void RestoreTaskButtonNameCallbacks(
     }
 }
 
+bool IsZeroThickness(Thickness const& value) {
+    return std::abs(value.Left) <= 0.05 && std::abs(value.Top) <= 0.05 &&
+           std::abs(value.Right) <= 0.05 && std::abs(value.Bottom) <= 0.05;
+}
+
+bool IsStartButtonElement(FrameworkElement const& element) {
+    try {
+        const auto automationId =
+            AutomationProperties::GetAutomationId(element);
+        const std::wstring_view id = AsWStringView(automationId);
+        if (id == L"StartButton") {
+            return true;
+        }
+        if (id.empty() &&
+            ClassNameEquals(winrt::get_class_name(element),
+                            L"Taskbar.ExperienceToggleButton") &&
+            ElementNameEquals(element, L"LaunchListButton")) {
+            return true;
+        }
+    } catch (...) {
+    }
+    return false;
+}
+
+void HideFocusVisual(AppliedTaskbarState& record, Control const& control) {
+    if (!control) {
+        return;
+    }
+
+    bool alreadySaved = false;
+    for (auto const& saved : record.savedFocusVisuals) {
+        if (saved.element.get() == control) {
+            alreadySaved = true;
+            break;
+        }
+    }
+
+    if (!alreadySaved) {
+        SavedFocusVisual saved;
+        saved.element = winrt::make_weak(control);
+        try {
+            auto unsetValue = DependencyProperty::UnsetValue();
+            saved.hadLocalUseSystemFocusVisuals =
+                control.ReadLocalValue(
+                    Control::UseSystemFocusVisualsProperty()) != unsetValue;
+            if (saved.hadLocalUseSystemFocusVisuals) {
+                saved.originalUseSystemFocusVisuals =
+                    control.UseSystemFocusVisuals();
+            }
+            saved.hadLocalPrimaryThickness =
+                control.ReadLocalValue(
+                    FrameworkElement::FocusVisualPrimaryThicknessProperty()) !=
+                unsetValue;
+            if (saved.hadLocalPrimaryThickness) {
+                saved.originalPrimaryThickness =
+                    control.FocusVisualPrimaryThickness();
+            }
+            saved.hadLocalSecondaryThickness =
+                control.ReadLocalValue(
+                    FrameworkElement::
+                        FocusVisualSecondaryThicknessProperty()) != unsetValue;
+            if (saved.hadLocalSecondaryThickness) {
+                saved.originalSecondaryThickness =
+                    control.FocusVisualSecondaryThickness();
+            }
+
+            saved.useSystemFocusVisualsToken =
+                control.RegisterPropertyChangedCallback(
+                    Control::UseSystemFocusVisualsProperty(),
+                    [](DependencyObject const& sender,
+                       DependencyProperty const&) {
+                        if (g_unloading) {
+                            return;
+                        }
+                        auto ctrl = sender.try_as<Control>();
+                        if (ctrl && ctrl.UseSystemFocusVisuals()) {
+                            ctrl.UseSystemFocusVisuals(false);
+                        }
+                    });
+            saved.primaryThicknessToken =
+                control.RegisterPropertyChangedCallback(
+                    FrameworkElement::FocusVisualPrimaryThicknessProperty(),
+                    [](DependencyObject const& sender,
+                       DependencyProperty const&) {
+                        if (g_unloading) {
+                            return;
+                        }
+                        auto el = sender.try_as<FrameworkElement>();
+                        if (el &&
+                            !IsZeroThickness(
+                                el.FocusVisualPrimaryThickness())) {
+                            el.FocusVisualPrimaryThickness(
+                                Thickness{0, 0, 0, 0});
+                        }
+                    });
+            saved.secondaryThicknessToken =
+                control.RegisterPropertyChangedCallback(
+                    FrameworkElement::FocusVisualSecondaryThicknessProperty(),
+                    [](DependencyObject const& sender,
+                       DependencyProperty const&) {
+                        if (g_unloading) {
+                            return;
+                        }
+                        auto el = sender.try_as<FrameworkElement>();
+                        if (el &&
+                            !IsZeroThickness(
+                                el.FocusVisualSecondaryThickness())) {
+                            el.FocusVisualSecondaryThickness(
+                                Thickness{0, 0, 0, 0});
+                        }
+                    });
+        } catch (...) {
+            try {
+                if (saved.useSystemFocusVisualsToken) {
+                    control.UnregisterPropertyChangedCallback(
+                        Control::UseSystemFocusVisualsProperty(),
+                        saved.useSystemFocusVisualsToken);
+                }
+                if (saved.primaryThicknessToken) {
+                    control.UnregisterPropertyChangedCallback(
+                        FrameworkElement::FocusVisualPrimaryThicknessProperty(),
+                        saved.primaryThicknessToken);
+                }
+                if (saved.secondaryThicknessToken) {
+                    control.UnregisterPropertyChangedCallback(
+                        FrameworkElement::
+                            FocusVisualSecondaryThicknessProperty(),
+                        saved.secondaryThicknessToken);
+                }
+            } catch (...) {
+            }
+            return;
+        }
+
+        record.savedFocusVisuals.push_back(std::move(saved));
+    }
+
+    try {
+        if (control.UseSystemFocusVisuals()) {
+            control.UseSystemFocusVisuals(false);
+        }
+        if (!IsZeroThickness(control.FocusVisualPrimaryThickness())) {
+            control.FocusVisualPrimaryThickness(Thickness{0, 0, 0, 0});
+        }
+        if (!IsZeroThickness(control.FocusVisualSecondaryThickness())) {
+            control.FocusVisualSecondaryThickness(Thickness{0, 0, 0, 0});
+        }
+    } catch (...) {
+    }
+}
+
+void HideControlFocusVisualsRecursive(FrameworkElement const& root,
+                                      AppliedTaskbarState& record,
+                                      int depth = 0) {
+    if (!root || depth > 40) {
+        return;
+    }
+
+    if (auto control = root.try_as<Control>()) {
+        HideFocusVisual(record, control);
+    }
+
+    int count = 0;
+    try {
+        count = VisualTreeHelper::GetChildrenCount(root);
+    } catch (...) {
+        return;
+    }
+
+    for (int i = 0; i < count; i++) {
+        FrameworkElement child = nullptr;
+        try {
+            child =
+                VisualTreeHelper::GetChild(root, i).try_as<FrameworkElement>();
+        } catch (...) {
+        }
+        if (child) {
+            HideControlFocusVisualsRecursive(child, record, depth + 1);
+        }
+    }
+}
+
+void HideStartButtonFocusVisual(FrameworkElement const& root,
+                                AppliedTaskbarState& record) {
+    if (!root) {
+        return;
+    }
+
+    FrameworkElement startButton =
+        IsStartButtonElement(root)
+            ? root
+            : FindChildByPredicate(root, IsStartButtonElement);
+    if (startButton) {
+        HideControlFocusVisualsRecursive(startButton, record);
+    }
+}
+
+void RestoreFocusVisuals(
+    std::vector<SavedFocusVisual> const& savedFocusVisuals) {
+    for (auto const& saved : savedFocusVisuals) {
+        if (auto control = saved.element.get()) {
+            try {
+                if (saved.useSystemFocusVisualsToken) {
+                    control.UnregisterPropertyChangedCallback(
+                        Control::UseSystemFocusVisualsProperty(),
+                        saved.useSystemFocusVisualsToken);
+                }
+                if (saved.primaryThicknessToken) {
+                    control.UnregisterPropertyChangedCallback(
+                        FrameworkElement::FocusVisualPrimaryThicknessProperty(),
+                        saved.primaryThicknessToken);
+                }
+                if (saved.secondaryThicknessToken) {
+                    control.UnregisterPropertyChangedCallback(
+                        FrameworkElement::
+                            FocusVisualSecondaryThicknessProperty(),
+                        saved.secondaryThicknessToken);
+                }
+                if (saved.hadLocalUseSystemFocusVisuals) {
+                    control.UseSystemFocusVisuals(
+                        saved.originalUseSystemFocusVisuals);
+                } else {
+                    control.ClearValue(
+                        Control::UseSystemFocusVisualsProperty());
+                }
+                if (saved.hadLocalPrimaryThickness) {
+                    control.FocusVisualPrimaryThickness(
+                        saved.originalPrimaryThickness);
+                } else {
+                    control.ClearValue(
+                        FrameworkElement::
+                            FocusVisualPrimaryThicknessProperty());
+                }
+                if (saved.hadLocalSecondaryThickness) {
+                    control.FocusVisualSecondaryThickness(
+                        saved.originalSecondaryThickness);
+                } else {
+                    control.ClearValue(
+                        FrameworkElement::
+                            FocusVisualSecondaryThicknessProperty());
+                }
+            } catch (...) {
+            }
+        }
+    }
+}
+
 bool NearlyEqual(double a, double b, double tolerance) {
     if (std::isnan(a) || std::isnan(b)) {
         return std::isnan(a) && std::isnan(b);
@@ -1882,15 +2151,6 @@ void ApplyHoverShapesRecursive(FrameworkElement const& root,
         }
 
         if (supported) {
-            if (namedBackground && !trayContext) {
-                // The left taskbar row keeps its existing behavior. Its
-                // auto-sized highlight must not be forced visible.
-                SaveAndApplyVerticalLayout(
-                    record.savedVerticalLayouts, root,
-                    std::numeric_limits<double>::quiet_NaN(),
-                    VerticalAlignment::Center);
-            }
-
             SavedHoverShape* savedShape = nullptr;
             for (auto& saved : record.savedHoverShapes) {
                 if (saved.element.get() == root) {
@@ -2169,7 +2429,7 @@ Brush CreateBackgroundBrush(BackgroundSettings const& settings) {
 
         case BackgroundStyle::solid: {
             ParsedBackgroundColor color =
-                ParseBackgroundColor(settings.color, L"#202020");
+                ParseBackgroundColor(settings.color, L"#e0c3ff");
             SolidColorBrush brush;
             brush.Color(MakeColor(
                 color.rgb, color.hasAlpha ? color.alpha : 0xFF));
@@ -2178,7 +2438,7 @@ Brush CreateBackgroundBrush(BackgroundSettings const& settings) {
 
         case BackgroundStyle::translucent: {
             ParsedBackgroundColor color =
-                ParseBackgroundColor(settings.color, L"#202020");
+                ParseBackgroundColor(settings.color, L"#e0c3ff");
             SolidColorBrush brush;
             brush.Color(MakeColor(color.rgb,
                                   AlphaFromOpacity(settings.opacity)));
@@ -2187,9 +2447,9 @@ Brush CreateBackgroundBrush(BackgroundSettings const& settings) {
 
         case BackgroundStyle::gradient: {
             ParsedBackgroundColor color1 =
-                ParseBackgroundColor(settings.gradientColor1, L"#1F2937");
+                ParseBackgroundColor(settings.gradientColor1, L"#FFFFFF");
             ParsedBackgroundColor color2 =
-                ParseBackgroundColor(settings.gradientColor2, L"#111827");
+                ParseBackgroundColor(settings.gradientColor2, L"#00C853");
             unsigned alpha = AlphaFromOpacity(settings.opacity);
 
             LinearGradientBrush brush;
@@ -3184,6 +3444,7 @@ void DetachAppliedTaskbarCallbacks(AppliedTaskbarState& record) {
     RestoreMultiWindowHighlights(record.savedMultiWindowHighlights);
     RestoreVerticalLayouts(record.savedVerticalLayouts);
     RestoreHoverShapes(record.savedHoverShapes);
+    RestoreFocusVisuals(record.savedFocusVisuals);
     record.taskButtonRepeaterRevoker.revoke();
     record.rootGridSizeChangedRevoker.revoke();
     record.traySizeChangedRevoker.revoke();
@@ -3192,6 +3453,7 @@ void DetachAppliedTaskbarCallbacks(AppliedTaskbarState& record) {
     record.savedMultiWindowHighlights.clear();
     record.savedVerticalLayouts.clear();
     record.savedHoverShapes.clear();
+    record.savedFocusVisuals.clear();
 }
 
 bool RestoreFrame(AppliedTaskbarState& record) {
@@ -3410,6 +3672,13 @@ bool ApplyToFrame(FrameworkElement const& frame, HWND knownTaskbarWnd = nullptr)
                            return !saved.button.get();
                        }),
         record.savedTaskButtonNameCallbacks.end());
+    record.savedFocusVisuals.erase(
+        std::remove_if(record.savedFocusVisuals.begin(),
+                       record.savedFocusVisuals.end(),
+                       [](SavedFocusVisual const& saved) {
+                           return !saved.element.get();
+                       }),
+        record.savedFocusVisuals.end());
 
     RestoreMultiWindowHighlights(record.savedMultiWindowHighlights);
     record.savedMultiWindowHighlights.clear();
@@ -3565,6 +3834,7 @@ bool ApplyToFrame(FrameworkElement const& frame, HWND knownTaskbarWnd = nullptr)
     double hoverRadius = toDip(hoverCornerRadiusSetting);
     g_hoverRadiusDip = hoverRadius;
     ApplyHoverShapesRecursive(rootGrid, record, hoverRadius, false);
+    HideStartButtonFocusVisual(rootGrid, record);
     if (trayElement) {
         ApplyHoverShapesRecursive(trayElement, record, hoverRadius, true);
     }
@@ -3611,7 +3881,7 @@ bool ApplyToFrame(FrameworkElement const& frame, HWND knownTaskbarWnd = nullptr)
         if (backgroundSettings.style == BackgroundStyle::gradient &&
             customBrush && gradientOverlay) {
             ParsedBackgroundColor baseColor = ParseBackgroundColor(
-                backgroundSettings.gradientColor1, L"#1F2937");
+                backgroundSettings.gradientColor1, L"#FFFFFF");
             SolidColorBrush baseBrush;
             baseBrush.Color(MakeColor(baseColor.rgb, 0xFF));
 
@@ -3748,6 +4018,9 @@ void RefreshTaskButtonVisuals(FrameworkElement const& button) {
             RestoreMultiWindowHighlights(buttonHighlights);
 
             HideMultiWindowVisualsRecursive(button, record);
+            if (IsStartButtonElement(button)) {
+                HideControlFocusVisualsRecursive(button, record);
+            }
             return;
         }
     } catch (...) {
