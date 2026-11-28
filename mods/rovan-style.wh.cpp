@@ -179,6 +179,10 @@ struct WindowState {
     ULONGLONG nextAttempt = 0;
     ULONGLONG deadline = 0;
     bool pending = false;
+    // Pending, but minimized or cloaked. Not polled; window events wake it.
+    bool waitingUntilUsable = false;
+    // A short poll after a wake event, in case the state changes just after it.
+    ULONGLONG usableWakeDeadline = 0;
     bool restoreRequested = false;
     bool reported = false;
     bool placementPending = false;
@@ -455,6 +459,7 @@ void ClearWindowStates() {
 
 void ScheduleWindow(WindowState& state, const Settings& settings) {
     state.pending = true;
+    state.waitingUntilUsable = false;
     state.ruleRetryDeadline = 0;
     state.nextAttempt = GetTickCount64() + settings.delayMs;
     state.deadline = state.nextAttempt + settings.settleMs;
@@ -494,6 +499,11 @@ void ObserveWindow(HWND hwnd, bool schedule) {
     auto found = controller.windows.find(hwnd);
     if (found != controller.windows.end()) {
         if (found->second.processId == processId && found->second.threadId == threadId) {
+            if (schedule && found->second.waitingUntilUsable) {
+                // Restore, uncloak and foreground events can arrive just before
+                // the window reports the new state. Poll briefly to catch it.
+                found->second.usableWakeDeadline = GetTickCount64() + kPlacementWaitMs;
+            }
             RetryWindowRule(hwnd, found->second, *controller.settings, schedule);
             return;
         }
@@ -642,10 +652,12 @@ LRESULT CALLBACK NativeVerticalSubclassProc(HWND hwnd,
             if (found != g_nativeTasks.end() && found->second->id == wParam) {
                 task = std::move(found->second);
                 g_nativeTasks.erase(found);
+                // Count the call under the lock that hands out the task, so the
+                // teardown can't miss a call that has taken its task.
+                g_nativeCallsInProgress.fetch_add(1);
             }
         }
         if (task) {
-            g_nativeCallsInProgress.fetch_add(1);
             RECT rect{};
             if (!task->cancelled.load(std::memory_order_acquire) && IsWindowVisible(hwnd) &&
                 !IsIconic(hwnd) && GetWindowRect(hwnd, &rect)) {
@@ -659,6 +671,9 @@ LRESULT CALLBACK NativeVerticalSubclassProc(HWND hwnd,
                                static_cast<SHORT>(rect.top)));
             }
             task->completed.store(true, std::memory_order_release);
+            // At teardown this may be the last reference. Release it before the
+            // decrement so no task cleanup runs after the teardown stops waiting.
+            task.reset();
             g_nativeCallsInProgress.fetch_sub(1);
         }
         return 0;
@@ -688,18 +703,21 @@ void RemoveNativeVerticalSubclasses() {
     {
         std::lock_guard<std::mutex> lock(g_nativeMutex);
         windows.swap(g_subclassedWindows);
+        // No new native call can start after this.
         g_nativeTasks.clear();
     }
+    // Wait before removing the subclasses, so the removal can't run nested
+    // inside the default handler, which can process sent messages.
+    while (g_nativeCallsInProgress.load() > 0) {
+        Sleep(10);
+    }
+    // Each removal returns only after the window's thread has handled it, which
+    // happens after that thread has left the subclass procedure.
     for (HWND hwnd : windows) {
         DWORD processId = 0;
         if (GetWindowThreadProcessId(hwnd, &processId) && processId == GetCurrentProcessId()) {
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, NativeVerticalSubclassProc);
         }
-    }
-    // The default handler can process sent messages, so the removal above may
-    // run nested inside it. Don't let the mod unload while it's still running.
-    while (g_nativeCallsInProgress.load() > 0) {
-        Sleep(10);
     }
 }
 
@@ -868,8 +886,15 @@ void ProcessPendingWindows() {
             continue;
         }
         // Keep waiting while minimized/cloaked; don't bring hidden desktops forward.
-        // Start the adjustment period only when the window actually becomes usable.
+        // This isn't polled: the restore and uncloak events wake the loop. Start
+        // the adjustment period only when the window actually becomes usable.
         if (IsIconic(hwnd) || IsCloaked(hwnd)) {
+            state.waitingUntilUsable = true;
+            continue;
+        }
+        if (state.waitingUntilUsable) {
+            state.waitingUntilUsable = false;
+            state.usableWakeDeadline = 0;
             state.nextAttempt = now + kRetryIntervalMs;
             state.deadline = state.nextAttempt + controller.settings->settleMs;
             continue;
@@ -922,8 +947,12 @@ void ProcessPendingWindows() {
 // Poll only while a window still needs work. Window events and the stop and
 // reload events wake the loop otherwise.
 bool HasPendingWork(const Controller& controller) {
+    const ULONGLONG now = GetTickCount64();
     for (const auto& [hwnd, state] : controller.windows) {
-        if (state.pending || state.placementPending || state.ruleRetryDeadline) {
+        if (state.pending && (!state.waitingUntilUsable || now < state.usableWakeDeadline)) {
+            return true;
+        }
+        if (state.placementPending || state.ruleRetryDeadline) {
             return true;
         }
     }
