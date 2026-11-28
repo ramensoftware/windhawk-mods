@@ -155,6 +155,7 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
+    // twinui.pcshell.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {{LR"(public: virtual long __cdecl CVirtualDesktop::IsViewVisible(struct IApplicationView *,int *))"},
          &IsViewVisible_Original,
