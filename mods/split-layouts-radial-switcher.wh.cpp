@@ -16,9 +16,9 @@
 Two features that work together. Each one can be turned off in the settings.
 
 ## Split layouts
-Drag a window to the top center of the screen. A layouts bar appears with five
-layouts: top/bottom halves, left/right halves, two thirds + one third, half +
-two quarters and four quarters. The top half is lightly highlighted as a hint.
+Drag a window to the top center of the screen. A layouts bar appears with four
+layouts: top/bottom halves, left/right halves, half + two quarters and four
+quarters. The top half is lightly highlighted as a hint.
 Hover a zone to select it: a preview shows the area the window will be
 stretched to, and releasing the mouse places the window there. Releasing it
 without a selected zone leaves the window where it was dropped.
@@ -44,6 +44,34 @@ is dragged to the top of the screen. To use only this mod's bar, turn off "Show
 snap layouts when I drag a window to the top of my screen" in Settings > System
 > Multitasking > Snap windows. The mod doesn't change this Windows setting.
 
+## Resizing split windows together
+Drag the border between the windows of a split arrangement, and the windows on
+the other side of it are resized at the same time, so the windows keep filling
+the screen without gaps or overlaps, like in Split View on a Mac. In a layout
+with more than two windows, the whole divider moves: dragging the border
+between the two upper quarters also moves the border between the lower ones.
+
+A divider can't be moved closer than a tenth of the screen to its edge. When
+a window has a minimum size and can't get as small as asked, the divider moves
+back to where that window ends once the mouse is released. The windows stay a
+split arrangement afterwards: they still appear as one Alt+Tab item, scroll
+together and can be resized again. Dragging an outer border, the one at the
+screen edge, resizes only that window. Can be turned off with "Resize split
+windows together".
+
+## Gluing windows to a split
+Move or resize a window until its border touches the border of a window that is
+in a zone, for example a window in the right half. A preview shows the empty
+zone next to that window, and releasing the mouse places the window there: it
+gets the same height (or, above and below, the same width) as the window it
+touches and fills the rest of the layout on that side. It works for every
+layout and from every side: a window touching the left border of the upper
+right quarter becomes the upper left quarter, and a window touching its lower
+border becomes the lower right quarter. Nothing happens when the zone is taken,
+or when
+the split window is hidden behind other windows at that border. Can be turned
+off with "Glue a window to a split window when their borders touch".
+
 ## Radial Alt+Tab
 Replaces the Alt+Tab switcher with a full-screen view split into two halves:
 
@@ -55,13 +83,23 @@ Replaces the Alt+Tab switcher with a full-screen view split into two halves:
   with the mouse and springs back to the center when the mouse stops, and a
   pointer marks the selected window.
 
-Windows that fill one of the split layouts together, for example two windows
+Windows that are in zones of the same split layout, for example two windows
 side by side or one above the other, appear as **one item**: the wheel shows
 their icons side by side, the titles are joined with `|`, the preview shows the
 whole arrangement, and switching to the item brings all of them back to the
 front, also with a quick Alt+Tab. Groups are recognized from the window
-positions, so they work however the windows were arranged, and a group splits
-up as soon as one of its windows is moved, resized or minimized.
+positions, so they work however the windows were arranged and wherever the
+border between them is, and a group splits up as soon as one of its windows is
+moved away, resized on its own or minimized. The zones of a layout don't all
+have to be taken: two of four quarters are a group already. A window keeps its
+place on the wheel when other windows join it in a split, so the group appears
+where the first window was.
+
+With several monitors, "Alt+Tab shows only the windows of the current monitor"
+gives each monitor its own Alt+Tab: the view lists only the windows on the
+monitor with the mouse pointer, and a quick Alt+Tab switches between the last
+two windows of that monitor. Minimized windows belong to the monitor they are
+restored to. When the setting is off, all windows are listed.
 
 - Hold **Alt** and press **Tab**. If you release Alt quickly, you switch to the
   previous window without seeing the wheel, like the default Alt+Tab.
@@ -157,11 +195,29 @@ administrator window is in the foreground.
     Stops Windows from maximizing or snapping windows dragged to the screen
     edges, and from showing its previews. Applies to the current session only
     and is turned back on when this setting is off or the mod is disabled.
+- linkedResize: true
+  $name: Resize split windows together
+  $description: >-
+    Dragging the border between the windows of a split arrangement also resizes
+    the windows on the other side of it.
+- glueWindows: true
+  $name: Glue a window to a split window when their borders touch
+  $description: >-
+    Moving or resizing a window until its border touches the border of a window
+    that is in a zone places it in the empty zone next to that window.
 - radialSwitcher: true
   $name: Radial Alt+Tab
   $description: Replace the Alt+Tab switcher with the radial view.
 - groupSplitWindows: true
   $name: Show split windows as one Alt+Tab item
+  $description: >-
+    Two or more windows in zones of the same layout share one place on the
+    wheel, also when other zones of the layout are still empty.
+- perMonitorAltTab: false
+  $name: Alt+Tab shows only the windows of the current monitor
+  $description: >-
+    With several monitors, the Alt+Tab view lists only the windows on the
+    monitor with the mouse pointer, so each monitor has its own Alt+Tab.
 - syncScroll: enabled
   $name: Scroll split windows together
   $description: >-
@@ -200,6 +256,7 @@ administrator window is in the foreground.
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <shellscalingapi.h>
 #include <gdiplus.h>
 #include <sddl.h>
@@ -217,28 +274,35 @@ namespace common {
 constexpr ULONG_PTR INPUT_TAG = 0x53504C54;
 constexpr WORD VK_MASK = 0xE8;
 
+constexpr int MAXMEMBERS = 4;
+constexpr int TOL = 20;
+
+// Zone coordinates are grid lines: 0 and GRID are the edges of the work area,
+// the lines between them are dividers.
+constexpr int GRID = 2;
+
 struct Zone {
     BYTE x0, y0, x1, y1;
 };
 
 struct Layout {
     int n;
-    Zone z[4];
+    Zone z[MAXMEMBERS];
 };
 
 const Layout g_layouts[] = {
-    {2, {{0, 0, 6, 3}, {0, 3, 6, 6}}},
-    {2, {{0, 0, 3, 6}, {3, 0, 6, 6}}},
-    {2, {{0, 0, 4, 6}, {4, 0, 6, 6}}},
-    {3, {{0, 0, 3, 6}, {3, 0, 6, 3}, {3, 3, 6, 6}}},
-    {4, {{0, 0, 3, 3}, {3, 0, 6, 3}, {0, 3, 3, 6}, {3, 3, 6, 6}}},
+    {2, {{0, 0, 2, 1}, {0, 1, 2, 2}}},
+    {2, {{0, 0, 1, 2}, {1, 0, 2, 2}}},
+    {3, {{0, 0, 1, 2}, {1, 0, 2, 1}, {1, 1, 2, 2}}},
+    {4, {{0, 0, 1, 1}, {1, 0, 2, 1}, {0, 1, 1, 2}, {1, 1, 2, 2}}},
 };
 constexpr int NL = sizeof(g_layouts) / sizeof(g_layouts[0]);
+constexpr int QUARTERS = 3;
 
 RECT ZoneIn(RECT a, Zone z) {
     int w = a.right - a.left, h = a.bottom - a.top;
-    return {a.left + w * z.x0 / 6, a.top + h * z.y0 / 6, a.left + w * z.x1 / 6,
-            a.top + h * z.y1 / 6};
+    return {a.left + w * z.x0 / GRID, a.top + h * z.y0 / GRID, a.left + w * z.x1 / GRID,
+            a.top + h * z.y1 / GRID};
 }
 
 int MonitorDpi(HMONITOR mon) {
@@ -294,33 +358,214 @@ bool IsCandidate(HWND hwnd, bool* floating) {
     return normal || isFloating;
 }
 
-bool FrameMatches(HWND hwnd, RECT r) {
+// A window as the split detection sees it. ok: it can be part of a split, that
+// is, it isn't minimized or maximized.
+struct Win {
+    HWND w;
+    HMONITOR mon;
     RECT f;
-    if (IsIconic(hwnd) ||
-        FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &f, sizeof(f))))
-        return false;
-    if (abs(f.left - r.left) <= 20 && abs(f.top - r.top) <= 20 &&
-        abs(f.right - r.right) <= 20 && abs(f.bottom - r.bottom) <= 20)
+    bool floating, ok;
+};
+
+Win MakeWin(HWND hwnd) {
+    Win win{};
+    win.w = hwnd;
+    win.ok = !IsIconic(hwnd) && !IsZoomed(hwnd) &&
+             SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &win.f,
+                                             sizeof(win.f)));
+    if (win.ok) {
+        win.mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        win.floating = IsFloating(hwnd);
+    }
+    return win;
+}
+
+bool Fits(const Win& win, const RECT& r) {
+    const RECT& f = win.f;
+    if (abs(f.left - r.left) <= TOL && abs(f.top - r.top) <= TOL &&
+        abs(f.right - r.right) <= TOL && abs(f.bottom - r.bottom) <= TOL)
         return true;
-    if (!IsFloating(hwnd) || f.left < r.left - 20 || f.top < r.top - 20 ||
-        f.right > r.right + 20 || f.bottom > r.bottom + 20)
+    if (!win.floating || f.left < r.left - TOL || f.top < r.top - TOL ||
+        f.right > r.right + TOL || f.bottom > r.bottom + TOL)
         return false;
     LONGLONG area = (LONGLONG)(f.right - f.left) * (f.bottom - f.top);
     return area * 10 >= (LONGLONG)(r.right - r.left) * (r.bottom - r.top) * 4;
 }
 
+bool FrameMatches(HWND hwnd, RECT r) {
+    Win win{};
+    win.w = hwnd;
+    if (IsIconic(hwnd) ||
+        FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &win.f, sizeof(win.f))))
+        return false;
+    win.floating = IsFloating(hwnd);
+    return Fits(win, r);
+}
+
+// A split arrangement: windows that are in zones of the same layout. Not every
+// zone has to be taken, and the dividers (px, py: the place of each grid line)
+// don't have to be evenly spread, so the windows stay a split after the border
+// between them was dragged.
+struct Split {
+    int layout, seedZone, n;
+    int px[GRID + 1], py[GRID + 1];
+    int idx[MAXMEMBERS];
+    RECT zones[MAXMEMBERS];
+    RECT work;
+};
+
+constexpr int MAXLIST = 128;
+constexpr int UNSET = -0x7fffffff;
+
+// An edge of a window is on grid line k when the line is known and near it. A
+// line that isn't known yet takes the place of the edge, when that keeps a
+// tenth of the work area between the lines.
+bool BindLine(int* p, int k, int v) {
+    if (p[k] != UNSET)
+        return abs(v - p[k]) <= TOL;
+    int min = (p[GRID] - p[0]) / 10;
+    for (int j = 0; j <= GRID; j++)
+        if (p[j] != UNSET && (j < k ? v < p[j] + min : v > p[j] - min))
+            return false;
+    p[k] = v;
+    return true;
+}
+
+bool BindZone(Split& s, const RECT& f, Zone z) {
+    int px[GRID + 1], py[GRID + 1];
+    memcpy(px, s.px, sizeof(px));
+    memcpy(py, s.py, sizeof(py));
+    if (!BindLine(px, z.x0, f.left) || !BindLine(px, z.x1, f.right) ||
+        !BindLine(py, z.y0, f.top) || !BindLine(py, z.y1, f.bottom))
+        return false;
+    memcpy(s.px, px, sizeof(px));
+    memcpy(s.py, py, sizeof(py));
+    return true;
+}
+
+// Puts the seed window in the zone s.seedZone of the layout s.layout, then the
+// other windows in the zones that are left. A floating window doesn't fill its
+// zone, so it can't tell where a divider is.
+bool TrySplit(const Win* wins, int count, const bool* taken, int seed, Split& s) {
+    const Layout& L = g_layouts[s.layout];
+    const RECT a = s.work;
+    for (int k = 0; k <= GRID; k++) {
+        bool known = wins[seed].floating || k == 0 || k == GRID;
+        s.px[k] = known ? a.left + (a.right - a.left) * k / GRID : UNSET;
+        s.py[k] = known ? a.top + (a.bottom - a.top) * k / GRID : UNSET;
+    }
+    for (int z = 0; z < MAXMEMBERS; z++)
+        s.idx[z] = -1;
+    auto rect = [&](int z) {
+        return RECT{s.px[L.z[z].x0], s.py[L.z[z].y0], s.px[L.z[z].x1], s.py[L.z[z].y1]};
+    };
+    if (wins[seed].floating ? !Fits(wins[seed], rect(s.seedZone))
+                            : !BindZone(s, wins[seed].f, L.z[s.seedZone]))
+        return false;
+    s.idx[s.seedZone] = seed;
+    s.n = 1;
+    auto isFree = [&](int i) {
+        if (i == seed || !wins[i].ok || (taken && taken[i]) || wins[i].mon != wins[seed].mon)
+            return false;
+        for (int z = 0; z < L.n; z++)
+            if (s.idx[z] == i)
+                return false;
+        return true;
+    };
+    for (int i = 0; i < count; i++) {
+        if (wins[i].floating || !isFree(i))
+            continue;
+        for (int z = 0; z < L.n; z++)
+            if (s.idx[z] < 0 && BindZone(s, wins[i].f, L.z[z])) {
+                s.idx[z] = i;
+                s.n++;
+                break;
+            }
+    }
+    // The lines that no window touches are spread evenly between the others.
+    for (int* p : {s.px, s.py})
+        for (int k = 1; k < GRID; k++) {
+            if (p[k] != UNSET)
+                continue;
+            int m = k + 1;
+            while (p[m] == UNSET)
+                m++;
+            p[k] = p[k - 1] + (p[m] - p[k - 1]) / (m - k + 1);
+        }
+    for (int z = 0; z < L.n; z++)
+        s.zones[z] = rect(z);
+    for (int i = 0; i < count; i++) {
+        if (!wins[i].floating || !isFree(i))
+            continue;
+        for (int z = 0; z < L.n; z++)
+            if (s.idx[z] < 0 && Fits(wins[i], s.zones[z])) {
+                s.idx[z] = i;
+                s.n++;
+                break;
+            }
+    }
+    return true;
+}
+
+// Whether a window with this frame can be in a zone at all: every zone touches
+// at least two edges of the work area. Cheap, so it is checked first.
+bool MayBeInSplit(const Win& win, RECT* work) {
+    MONITORINFO mi{sizeof(mi)};
+    if (!win.ok || !GetMonitorInfo(win.mon, &mi))
+        return false;
+    *work = mi.rcWork;
+    const RECT& f = win.f;
+    int touching = (abs(f.left - work->left) <= TOL) + (abs(f.top - work->top) <= TOL) +
+                   (abs(f.right - work->right) <= TOL) + (abs(f.bottom - work->bottom) <= TOL);
+    return win.floating || touching >= 2;
+}
+
+// Finds the split that has the window wins[seed], among the windows that
+// aren't taken: the one with the most windows; then one whose zones are all
+// taken; then the layout with fewer zones. accept can turn a split down.
+template <typename Accept>
+bool FindSplit(const Win* wins, int count, const bool* taken, int seed, Split& best,
+               Accept accept) {
+    RECT work;
+    if (count > MAXLIST || !MayBeInSplit(wins[seed], &work))
+        return false;
+    int bestScore = -1;
+    for (int l = 0; l < NL; l++)
+        for (int z = 0; z < g_layouts[l].n; z++) {
+            Split s;
+            s.layout = l;
+            s.seedZone = z;
+            s.work = work;
+            if (!TrySplit(wins, count, taken, seed, s))
+                continue;
+            int score = s.n * 100 + (s.n == g_layouts[l].n ? 50 : 0) +
+                        (MAXMEMBERS - g_layouts[l].n) * 4;
+            if (score > bestScore && accept(s)) {
+                best = s;
+                bestScore = score;
+            }
+        }
+    return bestScore >= 0;
+}
+
+bool FindSplit(const Win* wins, int count, const bool* taken, int seed, Split& best) {
+    return FindSplit(wins, count, taken, seed, best, [](const Split&) { return true; });
+}
+
 struct WindowList {
     int n;
-    HWND w[128];
+    Win w[MAXLIST];
 };
 
 BOOL CALLBACK CollectProc(HWND hwnd, LPARAM lp) {
     auto* list = (WindowList*)lp;
-    if (!IsWindowVisible(hwnd) || IsIconic(hwnd) || IsZoomed(hwnd) ||
-        !IsCandidate(hwnd, nullptr))
+    if (!IsCandidate(hwnd, nullptr))
         return TRUE;
-    list->w[list->n++] = hwnd;
-    return list->n < 128;
+    Win win = MakeWin(hwnd);
+    if (!win.ok)
+        return TRUE;
+    list->w[list->n++] = win;
+    return list->n < MAXLIST;
 }
 
 HWND RootAt(POINT pt) {
@@ -328,50 +573,53 @@ HWND RootAt(POINT pt) {
     return hwnd ? GetAncestor(hwnd, GA_ROOT) : nullptr;
 }
 
-// Finds the windows that fill a split layout together with the window at pt.
-// It is called from low-level hooks, so the common case, a window that isn't in
-// any zone, returns after a few calls, without listing the open windows.
-int FindSplitGroup(POINT pt, HWND* members, RECT* zones) {
-    HWND root = RootAt(pt);
-    if (!root || IsIconic(root) || IsZoomed(root) || !IsCandidate(root, nullptr))
+// The windows of a split, without the empty zones. self: the window asked for.
+struct Group {
+    int n, self;
+    HWND w[MAXMEMBERS];
+    RECT r[MAXMEMBERS];
+    int zone[MAXMEMBERS];
+    Split s;
+};
+
+// Finds the split of the window root. It is called from low-level hooks, so
+// the common case, a window that isn't in any zone, returns after a few calls,
+// without listing the open windows.
+int FindGroupOf(HWND root, Group& g) {
+    g.n = g.self = 0;
+    if (!root || !IsCandidate(root, nullptr))
         return 0;
-    HMONITOR mon = MonitorFromWindow(root, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO mi{sizeof(mi)};
-    if (!GetMonitorInfo(mon, &mi))
+    RECT work;
+    if (!MayBeInSplit(MakeWin(root), &work))
         return 0;
     WindowList list{};
-    bool listed = false;
-    for (int l = NL - 1; l >= 0; l--) {
-        const Layout& L = g_layouts[l];
-        int rootZone = -1;
-        for (int z = 0; z < L.n; z++) {
-            zones[z] = ZoneIn(mi.rcWork, L.z[z]);
-            if (rootZone < 0 && FrameMatches(root, zones[z]))
-                rootZone = z;
-        }
-        if (rootZone < 0)
+    EnumWindows(CollectProc, (LPARAM)&list);
+    int seed = -1;
+    for (int i = 0; i < list.n && seed < 0; i++)
+        if (list.w[i].w == root)
+            seed = i;
+    if (seed < 0 || !FindSplit(list.w, list.n, nullptr, seed, g.s))
+        return 0;
+    for (int z = 0; z < g_layouts[g.s.layout].n; z++) {
+        if (g.s.idx[z] < 0)
             continue;
-        if (!listed) {
-            EnumWindows(CollectProc, (LPARAM)&list);
-            listed = true;
-        }
-        bool ok = true;
-        for (int z = 0; z < L.n && ok; z++) {
-            members[z] = z == rootZone ? root : nullptr;
-            for (int i = 0; i < list.n && !members[z]; i++) {
-                bool used = list.w[i] == root;
-                for (int y = 0; y < z; y++)
-                    used |= members[y] == list.w[i];
-                if (!used && MonitorFromWindow(list.w[i], MONITOR_DEFAULTTONEAREST) == mon &&
-                    FrameMatches(list.w[i], zones[z]))
-                    members[z] = list.w[i];
-            }
-            ok = members[z] != nullptr;
-        }
-        if (ok)
-            return L.n;
+        if (z == g.s.seedZone)
+            g.self = g.n;
+        g.w[g.n] = list.w[g.s.idx[z]].w;
+        g.r[g.n] = g.s.zones[z];
+        g.zone[g.n++] = z;
     }
-    return 0;
+    return g.n;
+}
+
+int FindSplitGroup(POINT pt, HWND* members, RECT* zones) {
+    Group g;
+    int n = FindGroupOf(RootAt(pt), g);
+    for (int m = 0; m < n; m++) {
+        members[m] = g.w[m];
+        zones[m] = g.r[m];
+    }
+    return n;
 }
 
 int RefreshRate(HMONITOR mon) {
@@ -476,7 +724,7 @@ void RunMessageLoop(FrameClock& clock, Callback onFrame) {
 
 }  // namespace common
 
-constexpr int MAXMEMBERS = 4;
+using common::MAXMEMBERS;
 
 namespace split {
 
@@ -490,6 +738,8 @@ struct {
     std::atomic<bool> enabled;
     std::atomic<bool> noEdgeSnap;
     std::atomic<bool> assist;
+    std::atomic<bool> link;
+    std::atomic<bool> glue;
 } settings;
 
 HANDLE g_thread;
@@ -786,13 +1036,24 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     return DefWindowProc(hwnd, msg, wp, lp);
 }
 
+// Set while a window is moved or resized: g_others are the other windows, as
+// they were when that started; g_glueRect is the zone the window is glued to
+// when it is released now.
+WindowList g_others;
+RECT g_startFrame, g_glueRect;
+bool g_sizing, g_glueOk, g_glued;
+
 void CALLBACK ApplyProc(HWND, UINT, UINT_PTR, DWORD) {
     bool zoomed = IsZoomed(g_hwnd);
     ++g_ticks;
-    if (g_force ? g_ticks < 6 : !zoomed && g_ticks < 20)
+    if (g_glued ? g_ticks < 2 : g_force ? g_ticks < 6 : !zoomed && g_ticks < 20)
         return;
     KillTimer(nullptr, g_timer);
     g_timer = 0;
+    if (g_glued) {
+        Place(g_hwnd, g_glueRect);
+        return;
+    }
     RECT zone = ZoneIn(g_work, g_layouts[g_layout].z[g_zone]);
     if ((!g_force && !zoomed) || !Place(g_hwnd, zone))
         return;
@@ -828,7 +1089,247 @@ void StopTracking() {
     HideAt(g_preview, g_previewShown);
 }
 
+// Resizing split windows together: while the border of a window of a split is
+// dragged, the grid lines of that border follow it and the other windows are
+// placed in their zones again.
+struct {
+    bool active;
+    int n, layout, self, cx, cy;
+    int px[GRID + 1], py[GRID + 1], px0[GRID + 1], py0[GRID + 1];
+    HWND w[MAXMEMBERS];
+    int zone[MAXMEMBERS];
+    RECT inset[MAXMEMBERS], last[MAXMEMBERS];
+    RECT start;
+} g_link;
+
+void StopLink() {
+    if (g_link.active)
+        g_frames.Stop();
+    g_link.active = false;
+}
+
+RECT LinkZone(int m) {
+    const Zone z = g_layouts[g_link.layout].z[g_link.zone[m]];
+    return {g_link.px[z.x0], g_link.py[z.y0], g_link.px[z.x1], g_link.py[z.y1]};
+}
+
+void MoveMember(int m, RECT r, bool async) {
+    const RECT& in = g_link.inset[m];
+    if (IsHungAppWindow(g_link.w[m]))
+        return;
+    SetWindowPos(g_link.w[m], nullptr, r.left - in.left, r.top - in.top,
+                 r.right - r.left + in.left + in.right, r.bottom - r.top + in.top + in.bottom,
+                 SWP_NOZORDER | SWP_NOACTIVATE | (async ? SWP_ASYNCWINDOWPOS : 0));
+    g_link.last[m] = r;
+}
+
+void MoveOthers(bool async) {
+    for (int m = 0; m < g_link.n; m++) {
+        RECT r = LinkZone(m);
+        if (m != g_link.self && !EqualRect(&r, &g_link.last[m]))
+            MoveMember(m, r, async);
+    }
+}
+
+// Moves grid line k by d from where it was, keeping a tenth of the work area
+// between it and the lines of the layout next to it.
+void DragLine(int* p, const int* p0, bool vertical, int k, int d) {
+    const Layout& L = g_layouts[g_link.layout];
+    int min = (p0[GRID] - p0[0]) / 10, lo = p0[0] + min, hi = p0[GRID] - min;
+    for (int z = 0; z < L.n; z++) {
+        int lines[2] = {vertical ? L.z[z].x0 : L.z[z].y0, vertical ? L.z[z].x1 : L.z[z].y1};
+        for (int j : lines) {
+            if (j < k && p0[j] + min > lo)
+                lo = p0[j] + min;
+            if (j > k && p0[j] - min < hi)
+                hi = p0[j] - min;
+        }
+    }
+    int v = p0[k] + d;
+    p[k] = v < lo ? lo : v > hi ? hi : v;
+}
+
+void LinkFrame(bool end) {
+    HWND self = g_link.w[g_link.self];
+    RECT f;
+    if (!IsWindow(self) ||
+        FAILED(DwmGetWindowAttribute(self, DWMWA_EXTENDED_FRAME_BOUNDS, &f, sizeof(f)))) {
+        StopLink();
+        return;
+    }
+    const Layout& L = g_layouts[g_link.layout];
+    const Zone sz = L.z[g_link.zone[g_link.self]];
+    const RECT& st = g_link.start;
+    memcpy(g_link.px, g_link.px0, sizeof(g_link.px));
+    memcpy(g_link.py, g_link.py0, sizeof(g_link.py));
+    g_link.cx = g_link.cy = -1;
+    if (sz.x0 > 0 && f.left != st.left) {
+        g_link.cx = sz.x0;
+        DragLine(g_link.px, g_link.px0, true, sz.x0, f.left - st.left);
+    } else if (sz.x1 < GRID && f.right != st.right) {
+        g_link.cx = sz.x1;
+        DragLine(g_link.px, g_link.px0, true, sz.x1, f.right - st.right);
+    }
+    if (sz.y0 > 0 && f.top != st.top) {
+        g_link.cy = sz.y0;
+        DragLine(g_link.py, g_link.py0, false, sz.y0, f.top - st.top);
+    } else if (sz.y1 < GRID && f.bottom != st.bottom) {
+        g_link.cy = sz.y1;
+        DragLine(g_link.py, g_link.py0, false, sz.y1, f.bottom - st.bottom);
+    }
+    if (!end) {
+        MoveOthers(true);
+        return;
+    }
+    // The last pass waits for the windows, so their real sizes can be read.
+    for (int m = 0; m < g_link.n; m++)
+        SetRectEmpty(&g_link.last[m]);
+    MoveOthers(false);
+
+    // A window that has a minimum size didn't shrink to its zone: move the
+    // dragged line back so that the windows don't overlap.
+    int fixX = 0, fixY = 0;
+    for (int m = 0; m < g_link.n; m++) {
+        RECT now;
+        if (m == g_link.self ||
+            FAILED(DwmGetWindowAttribute(g_link.w[m], DWMWA_EXTENDED_FRAME_BOUNDS, &now,
+                                         sizeof(now))))
+            continue;
+        const Zone z = L.z[g_link.zone[m]];
+        int dx = now.right - now.left - (g_link.last[m].right - g_link.last[m].left);
+        int dy = now.bottom - now.top - (g_link.last[m].bottom - g_link.last[m].top);
+        if (dx > 2 && !fixX && g_link.cx >= 0)
+            fixX = z.x1 == g_link.cx ? dx : z.x0 == g_link.cx ? -dx : 0;
+        if (dy > 2 && !fixY && g_link.cy >= 0)
+            fixY = z.y1 == g_link.cy ? dy : z.y0 == g_link.cy ? -dy : 0;
+    }
+    if (fixX || fixY) {
+        if (fixX)
+            g_link.px[g_link.cx] += fixX;
+        if (fixY)
+            g_link.py[g_link.cy] += fixY;
+        for (int m = 0; m < g_link.n; m++)
+            SetRectEmpty(&g_link.last[m]);
+        MoveOthers(false);
+    }
+    // The resized window gives way where the line couldn't follow it.
+    RECT r = f;
+    if (sz.x0 > 0)
+        r.left = g_link.px[sz.x0];
+    if (sz.x1 < GRID)
+        r.right = g_link.px[sz.x1];
+    if (sz.y0 > 0)
+        r.top = g_link.py[sz.y0];
+    if (sz.y1 < GRID)
+        r.bottom = g_link.py[sz.y1];
+    if (!EqualRect(&r, &f) && !IsZoomed(self) && !IsIconic(self))
+        MoveMember(g_link.self, r, false);
+}
+
+bool StartLink(HWND hwnd) {
+    Group g;
+    if (FindGroupOf(hwnd, g) < 2)
+        return false;
+    g_link = {};
+    g_link.n = g.n;
+    g_link.layout = g.s.layout;
+    g_link.self = g.self;
+    g_link.cx = g_link.cy = -1;
+    memcpy(g_link.px0, g.s.px, sizeof(g_link.px0));
+    memcpy(g_link.py0, g.s.py, sizeof(g_link.py0));
+    memcpy(g_link.px, g.s.px, sizeof(g_link.px));
+    memcpy(g_link.py, g.s.py, sizeof(g_link.py));
+    for (int m = 0; m < g.n; m++) {
+        g_link.w[m] = g.w[m];
+        g_link.zone[m] = g.zone[m];
+        g_link.last[m] = g.r[m];
+        RECT wr, fr;
+        if (!GetWindowRect(g.w[m], &wr))
+            return false;
+        if (FAILED(DwmGetWindowAttribute(g.w[m], DWMWA_EXTENDED_FRAME_BOUNDS, &fr, sizeof(fr))))
+            fr = wr;
+        g_link.inset[m] = {fr.left - wr.left, fr.top - wr.top, wr.right - fr.right,
+                           wr.bottom - fr.bottom};
+        if (m == g.self)
+            g_link.start = fr;
+    }
+    g_link.active = true;
+    g_frames.Start(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST));
+    return true;
+}
+
+// Gluing: the window that is moved or resized touches a border of a window
+// that is in a zone, and the zone on this side of that border is empty and as
+// long as the border. Gives that zone. Only a window that can be seen at the
+// border counts, not one that is behind other windows there.
+bool FindGlue(RECT* out) {
+    Win self = MakeWin(g_hwnd);
+    if (!self.ok || EqualRect(&self.f, &g_startFrame))
+        return false;
+    const RECT f = self.f;
+    int reach = Sc(12), in = reach + Sc(16);
+    for (int i = 0; i < g_others.n; i++) {
+        const Win& o = g_others.w[i];
+        const RECT& b = o.f;
+        if (o.mon != self.mon || o.floating)
+            continue;
+        int top = f.top > b.top ? f.top : b.top, left = f.left > b.left ? f.left : b.left;
+        int oy = (f.bottom < b.bottom ? f.bottom : b.bottom) - top;
+        int ox = (f.right < b.right ? f.right : b.right) - left;
+        int fh = f.bottom - f.top, bh = b.bottom - b.top, fw = f.right - f.left,
+            bw = b.right - b.left;
+        bool alongY = oy > 0 && oy * 4 >= (fh < bh ? fh : bh);
+        bool alongX = ox > 0 && ox * 4 >= (fw < bw ? fw : bw);
+        // side: the border of the other window that is touched.
+        int side = -1;
+        POINT probe{};
+        if (alongY && abs(f.right - b.left) <= reach) {
+            side = 0;
+            probe = {b.left + in, top + oy / 2};
+        } else if (alongY && abs(f.left - b.right) <= reach) {
+            side = 2;
+            probe = {b.right - in, top + oy / 2};
+        } else if (alongX && abs(f.bottom - b.top) <= reach) {
+            side = 1;
+            probe = {left + ox / 2, b.top + in};
+        } else if (alongX && abs(f.top - b.bottom) <= reach) {
+            side = 3;
+            probe = {left + ox / 2, b.bottom - in};
+        }
+        if (side < 0 || RootAt(probe) != o.w)
+            continue;
+        int target = -1;
+        Split s;
+        auto accept = [&](const Split& c) {
+            const Layout& L = g_layouts[c.layout];
+            const Zone a = L.z[c.seedZone];
+            for (int z = 0; z < L.n; z++) {
+                const Zone t = L.z[z];
+                bool sameY = t.y0 == a.y0 && t.y1 == a.y1, sameX = t.x0 == a.x0 && t.x1 == a.x1;
+                bool next = side == 0   ? sameY && t.x1 == a.x0
+                            : side == 2 ? sameY && t.x0 == a.x1
+                            : side == 1 ? sameX && t.y1 == a.y0
+                                        : sameX && t.y0 == a.y1;
+                if (c.idx[z] < 0 && next) {
+                    target = z;
+                    return true;
+                }
+            }
+            return false;
+        };
+        if (!FindSplit(g_others.w, g_others.n, nullptr, i, s, accept))
+            continue;
+        *out = s.zones[target];
+        return !Fits(self, *out);
+    }
+    return false;
+}
+
 void TrackFrame() {
+    if (g_link.active) {
+        LinkFrame(false);
+        return;
+    }
     // A window closed while it is dragged never reports the end of the drag.
     if (!g_tracking || !IsWindow(g_hwnd)) {
         StopTracking();
@@ -838,7 +1339,8 @@ void TrackFrame() {
     GetCursorPos(&pt);
     HMONITOR mon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
     MONITORINFO mi{sizeof(mi)};
-    GetMonitorInfo(mon, &mi);
+    if (!GetMonitorInfo(mon, &mi))
+        return;
     g_dpi = MonitorDpi(mon);
     g_work = mi.rcWork;
 
@@ -846,16 +1348,18 @@ void TrackFrame() {
     int bw = last.right + Sc(10), bh = last.bottom + Sc(10);
     int bx = (mi.rcMonitor.left + mi.rcMonitor.right - bw) / 2, by = mi.rcWork.top + Sc(8);
     int dx = pt.x - g_start.x, dy = pt.y - g_start.y, d = GetSystemMetrics(SM_CXDRAG);
-    bool moved = dx * dx + dy * dy >= d * d;
+    // The layouts bar is for windows that are moved; gluing also for resizing.
+    bool bar = settings.enabled && !g_sizing;
+    bool moved = bar && dx * dx + dy * dy >= d * d;
     RECT m = mi.rcMonitor;
     int e = Sc(6), corner = Sc(40);
-    auto free = [&](int ox, int oy) {
+    auto outer = [&](int ox, int oy) {
         return moved && !MonitorFromPoint({pt.x + ox, pt.y + oy}, MONITOR_DEFAULTTONULL);
     };
-    bool L = pt.x <= m.left + e && free(-2 * e, 0);
-    bool R = pt.x >= m.right - 1 - e && free(2 * e, 0);
-    bool T = pt.y <= m.top + e && free(0, -2 * e);
-    bool B = pt.y >= m.bottom - 1 - e && free(0, 2 * e);
+    bool L = pt.x <= m.left + e && outer(-2 * e, 0);
+    bool R = pt.x >= m.right - 1 - e && outer(2 * e, 0);
+    bool T = pt.y <= m.top + e && outer(0, -2 * e);
+    bool B = pt.y >= m.bottom - 1 - e && outer(0, 2 * e);
     int h = L ? 0 : R ? 1 : -1, v = T ? 0 : B ? 1 : -1;
     if (h < 0 && v >= 0)
         h = pt.x <= m.left + corner ? 0 : pt.x >= m.right - corner ? 1 : -1;
@@ -864,7 +1368,7 @@ void TrackFrame() {
 
     int hl = -1, hz = -1;
     if (h >= 0 && v >= 0) {
-        hl = NL - 1;
+        hl = QUARTERS;
         hz = v * 2 + h;
     } else if (h >= 0) {
         hl = 1;
@@ -873,8 +1377,8 @@ void TrackFrame() {
         hl = 0;
         hz = v;
     }
-    bool show = hl >= 0 ||
-                (pt.y < by + bh + Sc(80) && pt.x > bx - Sc(100) && pt.x < bx + bw + Sc(100));
+    bool show = bar && (hl >= 0 || (pt.y < by + bh + Sc(80) && pt.x > bx - Sc(100) &&
+                                    pt.x < bx + bw + Sc(100)));
     for (int l = 0; show && l < NL; l++)
         for (int z = 0; z < g_layouts[l].n; z++) {
             RECT c = CellRect(l, z);
@@ -897,9 +1401,12 @@ void TrackFrame() {
         InvalidateRect(g_bar, nullptr, FALSE);
     }
 
+    g_glueOk = hl < 0 && settings.glue && FindGlue(&g_glueRect);
     if (hl >= 0)
         ShowAt(g_preview, g_hwnd, ZoneIn(g_work, g_layouts[hl].z[hz]), g_previewRect,
                g_previewShown);
+    else if (g_glueOk)
+        ShowAt(g_preview, g_hwnd, g_glueRect, g_previewRect, g_previewShown);
     else
         HideAt(g_preview, g_previewShown);
 }
@@ -919,12 +1426,17 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
     GetCursorPos(&pt);
 
     if (event == EVENT_SYSTEM_MOVESIZESTART) {
-        if (!settings.enabled)
-            return;
         DWORD_PTR hit = HTCAPTION;
         SendMessageTimeout(hwnd, WM_NCHITTEST, 0, MAKELPARAM(pt.x, pt.y),
                            SMTO_ABORTIFHUNG, 50, &hit);
-        if (hit >= HTLEFT && hit <= HTBOTTOMRIGHT)
+        StopLink();
+        bool sizing = hit >= HTLEFT && hit <= HTBOTTOMRIGHT;
+        if (sizing && settings.link) {
+            StopTracking();
+            if (StartLink(hwnd))
+                return;
+        }
+        if (!settings.glue && (sizing || !settings.enabled))
             return;
         HideChooser();
         if (g_timer) {
@@ -933,6 +1445,20 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
         }
         g_hwnd = hwnd;
         g_start = pt;
+        g_sizing = sizing;
+        g_glueOk = false;
+        g_others.n = 0;
+        SetRectEmpty(&g_startFrame);
+        DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &g_startFrame,
+                              sizeof(g_startFrame));
+        if (settings.glue) {
+            EnumWindows(CollectProc, (LPARAM)&g_others);
+            int n = 0;
+            for (int i = 0; i < g_others.n; i++)
+                if (g_others.w[i].w != hwnd)
+                    g_others.w[n++] = g_others.w[i];
+            g_others.n = n;
+        }
         g_hl = g_hz = -1;
         InvalidateRect(g_bar, nullptr, FALSE);
         g_tracking = true;
@@ -940,16 +1466,26 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
         return;
     }
 
+    if (g_link.active) {
+        if (hwnd == g_link.w[g_link.self]) {
+            LinkFrame(true);
+            StopLink();
+        }
+        return;
+    }
     if (!g_tracking || hwnd != g_hwnd)
         return;
     StopTracking();
 
     MONITORINFO mi{sizeof(mi)};
-    GetMonitorInfo(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST), &mi);
+    if (!GetMonitorInfo(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST), &mi))
+        return;
     int dx = pt.x - g_start.x, dy = pt.y - g_start.y, d = GetSystemMetrics(SM_CXDRAG);
-    bool edge = pt.y <= mi.rcMonitor.top + 1 && dx * dx + dy * dy >= d * d;
-    g_force = g_hl >= 0 && dx * dx + dy * dy >= d * d;
-    if (!g_force && !edge)
+    bool moved = settings.enabled && !g_sizing && dx * dx + dy * dy >= d * d;
+    bool edge = moved && pt.y <= mi.rcMonitor.top + 1;
+    g_force = moved && g_hl >= 0;
+    g_glued = !g_force && g_glueOk;
+    if (!g_force && !edge && !g_glued)
         return;
 
     g_work = mi.rcWork;
@@ -1001,6 +1537,7 @@ DWORD WINAPI ThreadProc(LPVOID) {
     g_frames.Create();
     RunMessageLoop(g_frames, TrackFrame);
 
+    g_link.active = false;
     g_frames.Destroy();
     if (g_timer)
         KillTimer(nullptr, g_timer);
@@ -1084,7 +1621,14 @@ void LoadSettings() {
     settings.enabled = Wh_GetIntSetting(L"splitLayouts");
     settings.assist = Wh_GetIntSetting(L"snapAssist");
     settings.noEdgeSnap = Wh_GetIntSetting(L"noEdgeSnap");
+    settings.link = Wh_GetIntSetting(L"linkedResize");
+    settings.glue = Wh_GetIntSetting(L"glueWindows");
     SetDocking(settings.enabled && settings.noEdgeSnap);
+}
+
+// The thread serves the layouts bar, the resizing of split windows and gluing.
+bool Wanted() {
+    return settings.enabled || settings.link || settings.glue;
 }
 
 bool Start() {
@@ -1115,6 +1659,7 @@ struct {
     std::atomic<bool> enabled;
     std::atomic<bool> group;
     std::atomic<bool> force;
+    std::atomic<bool> perMonitor;
     std::atomic<int> delay;
     std::atomic<int> maxWindows;
 } settings;
@@ -1172,9 +1717,23 @@ void SendKey(WORD vk, bool up) {
     SendInput(1, &in, sizeof(INPUT));
 }
 
+// With "only the windows of the current monitor": the monitor whose windows
+// are listed. A minimized window belongs to the monitor it is restored to.
+HMONITOR g_listMon;
+
+HMONITOR WindowMonitor(HWND hwnd) {
+    WINDOWPLACEMENT wp{};
+    wp.length = sizeof(wp);
+    if (IsIconic(hwnd) && GetWindowPlacement(hwnd, &wp))
+        return MonitorFromRect(&wp.rcNormalPosition, MONITOR_DEFAULTTONEAREST);
+    return MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+}
+
 BOOL CALLBACK EnumProc(HWND hwnd, LPARAM) {
     bool floating = false;
     if (hwnd == g_wnd || !IsCandidate(hwnd, &floating))
+        return TRUE;
+    if (g_listMon && WindowMonitor(hwnd) != g_listMon)
         return TRUE;
     g_rawFloating[g_rawCount] = floating;
     DWORD_PTR icon = 0;
@@ -1188,6 +1747,20 @@ BOOL CALLBACK EnumProc(HWND hwnd, LPARAM) {
     g_rawIcons[g_rawCount] = (HICON)icon;
     g_raw[g_rawCount++] = hwnd;
     return g_rawCount < MAXRAW;
+}
+
+// While the view is open the pointer is kept on its monitor, so the list stays
+// that of the monitor the view was opened for.
+void ListWindows() {
+    g_listMon = nullptr;
+    if (settings.perMonitor) {
+        POINT pt = g_center;
+        if (!g_open)
+            GetCursorPos(&pt);
+        g_listMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+    }
+    g_rawCount = 0;
+    EnumWindows(EnumProc, 0);
 }
 
 void Activate(HWND hwnd) {
@@ -1272,49 +1845,33 @@ void BuildItems() {
         break;
     }
 
-    struct Group {
+    struct Found {
         int n;
         int idx[MAXMEMBERS];
         RECT r[MAXMEMBERS];
     } groups[MAXRAW / 2];
     int ng = 0, groupOf[MAXRAW];
-    for (int i = 0; i < g_rawCount; i++)
+    Win wins[MAXRAW];
+    bool taken[MAXRAW] = {};
+    for (int i = 0; i < g_rawCount; i++) {
         groupOf[i] = -1;
+        wins[i] = MakeWin(g_raw[i]);
+    }
     for (int i = 0; settings.group && i < g_rawCount; i++) {
-        if (groupOf[i] >= 0 || IsIconic(g_raw[i]) || IsZoomed(g_raw[i]))
+        Split s;
+        if (taken[i] || !FindSplit(wins, g_rawCount, taken, i, s) || s.n < 2)
             continue;
-        HMONITOR mon = MonitorFromWindow(g_raw[i], MONITOR_DEFAULTTONEAREST);
-        MONITORINFO mi{sizeof(mi)};
-        if (!GetMonitorInfo(mon, &mi))
-            continue;
-        for (int l = NL - 1; l >= 0; l--) {
-            const Layout& L = g_layouts[l];
-            Group gr{};
-            gr.n = L.n;
-            bool ok = true;
-            for (int z = 0; z < L.n && ok; z++) {
-                gr.r[z] = ZoneIn(mi.rcWork, L.z[z]);
-                gr.idx[z] = -1;
-                for (int j = 0; j < g_rawCount && gr.idx[z] < 0; j++) {
-                    bool used = groupOf[j] >= 0;
-                    for (int y = 0; y < z; y++)
-                        used |= gr.idx[y] == j;
-                    if (!used && MonitorFromWindow(g_raw[j], MONITOR_DEFAULTTONEAREST) == mon &&
-                        !IsZoomed(g_raw[j]) && FrameMatches(g_raw[j], gr.r[z]))
-                        gr.idx[z] = j;
-                }
-                ok = gr.idx[z] >= 0;
-            }
-            bool hasSeed = false;
-            for (int z = 0; ok && z < L.n; z++)
-                hasSeed |= gr.idx[z] == i;
-            if (!ok || !hasSeed)
+        Found& gr = groups[ng];
+        gr.n = 0;
+        for (int z = 0; z < g_layouts[s.layout].n; z++) {
+            if (s.idx[z] < 0)
                 continue;
-            for (int z = 0; z < L.n; z++)
-                groupOf[gr.idx[z]] = ng;
-            groups[ng++] = gr;
-            break;
+            gr.idx[gr.n] = s.idx[z];
+            gr.r[gr.n++] = s.zones[z];
+            groupOf[s.idx[z]] = ng;
+            taken[s.idx[z]] = true;
         }
+        ng++;
     }
 
     bool emitted[MAXRAW / 2] = {};
@@ -1414,29 +1971,36 @@ void UpdatePreview() {
     }
 }
 
+// Gives every item its place on the wheel. A place is remembered by one window
+// of its item, so a window keeps its place when other windows join it in a
+// split, and the split keeps it as long as that window is part of it.
 void BuildSlots() {
     HWND next[MAXWIN];
-    int n = 0;
+    int item[MAXWIN], n = 0;
+    bool placed[MAXWIN] = {};
+    auto has = [](int i, HWND w) {
+        for (int m = 0; m < g_items[i].n; m++)
+            if (g_items[i].w[m] == w)
+                return true;
+        return false;
+    };
     for (int k = 0; k < g_orderCount; k++)
         for (int i = 0; i < g_count; i++)
-            if (g_items[i].w[0] == g_order[k]) {
+            if (!placed[i] && has(i, g_order[k])) {
+                placed[i] = true;
+                item[n] = i;
                 next[n++] = g_order[k];
                 break;
             }
-    for (int i = 0; i < g_count; i++) {
-        bool known = false;
-        for (int k = 0; k < n; k++)
-            known |= next[k] == g_items[i].w[0];
-        if (!known)
-            next[n++] = g_items[i].w[0];
-    }
+    for (int i = 0; i < g_count; i++)
+        if (!placed[i]) {
+            item[n] = i;
+            next[n++] = g_items[i].w[g_items[i].primary];
+        }
     for (int k = 0; k < n; k++) {
         g_order[k] = next[k];
-        for (int i = 0; i < g_count; i++)
-            if (g_items[i].w[0] == next[k]) {
-                g_slot[k] = i;
-                g_slotOf[i] = k;
-            }
+        g_slot[k] = item[k];
+        g_slotOf[item[k]] = k;
     }
     g_orderCount = n;
 }
@@ -1444,8 +2008,7 @@ void BuildSlots() {
 void Refresh() {
     HWND key = g_sel < g_count ? g_items[g_sel].w[0] : nullptr;
     int oldSel = g_sel;
-    g_rawCount = 0;
-    EnumWindows(EnumProc, 0);
+    ListWindows();
     BuildItems();
     if (!g_count) {
         g_session = false;
@@ -1475,9 +2038,17 @@ void Select(int sel) {
 
 void Open() {
     GetCursorPos(&g_savedPos);
-    HMONITOR mon = MonitorFromPoint(g_savedPos, MONITOR_DEFAULTTONEAREST);
+    HMONITOR mon =
+        g_listMon ? g_listMon : MonitorFromPoint(g_savedPos, MONITOR_DEFAULTTONEAREST);
     MONITORINFO mi{sizeof(mi)};
-    GetMonitorInfo(mon, &mi);
+    if (!GetMonitorInfo(mon, &mi)) {
+        mon = MonitorFromPoint(g_savedPos, MONITOR_DEFAULTTOPRIMARY);
+        if (!GetMonitorInfo(mon, &mi)) {
+            g_session = false;
+            g_count = 0;
+            return;
+        }
+    }
     g_dpi = MonitorDpi(mon);
     g_mon = mi.rcMonitor;
     int w = g_mon.right - g_mon.left, h = g_mon.bottom - g_mon.top;
@@ -1788,8 +2359,17 @@ LRESULT CALLBACK MouseProc(int code, WPARAM wp, LPARAM lp) {
     } else if (wp == WM_RBUTTONDOWN) {
         g_upToSwallow = WM_RBUTTONUP;
         PostMessage(g_wnd, WM_APP_CLOSEITEM, 0, 0);
+    } else if (wp == WM_MBUTTONDOWN) {
+        g_upToSwallow = WM_MBUTTONUP;
+    } else if (wp == WM_XBUTTONDOWN) {
+        g_upToSwallow = WM_XBUTTONUP;
     } else if (wp == WM_MOUSEWHEEL) {
         PostMessage(g_wnd, WM_APP_STEP, (short)HIWORD(m->mouseData) > 0 ? -1 : 1, 0);
+    } else if (wp == WM_LBUTTONUP || wp == WM_RBUTTONUP || wp == WM_MBUTTONUP ||
+               wp == WM_XBUTTONUP) {
+        // Its press wasn't taken (it came before the view opened), so the app
+        // that got the press gets the release, too.
+        return CallNextHookEx(nullptr, code, wp, lp);
     }
     return 1;
 }
@@ -1944,8 +2524,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_APP_START:
             SendKey(VK_MASK, false);
             SendKey(VK_MASK, true);
-            g_rawCount = 0;
-            EnumWindows(EnumProc, 0);
+            ListWindows();
             BuildItems();
             if (!g_count) {
                 g_session = false;
@@ -2135,6 +2714,7 @@ void LoadSettings() {
     settings.enabled = Wh_GetIntSetting(L"radialSwitcher");
     settings.group = Wh_GetIntSetting(L"groupSplitWindows");
     settings.force = Wh_GetIntSetting(L"forceClose");
+    settings.perMonitor = Wh_GetIntSetting(L"perMonitorAltTab");
     int delay = Wh_GetIntSetting(L"openDelay");
     int maxWindows = Wh_GetIntSetting(L"maxWindows");
     settings.delay = delay < 0 ? 0 : delay;
@@ -2548,9 +3128,9 @@ void LoadSettings() {
         scroll::Stop();
         g_scrollRunning = false;
     }
-    if (split::settings.enabled && !g_splitRunning) {
+    if (split::Wanted() && !g_splitRunning) {
         g_splitRunning = split::Start();
-    } else if (!split::settings.enabled && g_splitRunning) {
+    } else if (!split::Wanted() && g_splitRunning) {
         split::Stop();
         g_splitRunning = false;
     }
