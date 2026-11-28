@@ -367,10 +367,12 @@ struct SavedTaskButtonNameCallback {
 };
 
 struct SavedFocusVisual {
-    winrt::weak_ref<FrameworkElement> element;
-    bool isControl = false;
+    winrt::weak_ref<Control> element;
+    bool hadLocalUseSystemFocusVisuals = false;
     bool originalUseSystemFocusVisuals = true;
+    bool hadLocalPrimaryThickness = false;
     Thickness originalPrimaryThickness{};
+    bool hadLocalSecondaryThickness = false;
     Thickness originalSecondaryThickness{};
     int64_t useSystemFocusVisualsToken = 0;
     int64_t primaryThicknessToken = 0;
@@ -1600,16 +1602,14 @@ bool IsStartButtonElement(FrameworkElement const& element) {
     return false;
 }
 
-void HideFocusVisual(AppliedTaskbarState& record,
-                     FrameworkElement const& element) {
-    if (!element) {
+void HideFocusVisual(AppliedTaskbarState& record, Control const& control) {
+    if (!control) {
         return;
     }
 
-    auto control = element.try_as<Control>();
     bool alreadySaved = false;
     for (auto const& saved : record.savedFocusVisuals) {
-        if (saved.element.get() == element) {
+        if (saved.element.get() == control) {
             alreadySaved = true;
             break;
         }
@@ -1617,35 +1617,48 @@ void HideFocusVisual(AppliedTaskbarState& record,
 
     if (!alreadySaved) {
         SavedFocusVisual saved;
-        saved.element = winrt::make_weak(element);
-        saved.isControl = control != nullptr;
+        saved.element = winrt::make_weak(control);
         try {
-            if (control) {
+            auto unsetValue = DependencyProperty::UnsetValue();
+            saved.hadLocalUseSystemFocusVisuals =
+                control.ReadLocalValue(
+                    Control::UseSystemFocusVisualsProperty()) != unsetValue;
+            if (saved.hadLocalUseSystemFocusVisuals) {
                 saved.originalUseSystemFocusVisuals =
                     control.UseSystemFocusVisuals();
             }
-            saved.originalPrimaryThickness =
-                element.FocusVisualPrimaryThickness();
-            saved.originalSecondaryThickness =
-                element.FocusVisualSecondaryThickness();
-
-            if (control) {
-                saved.useSystemFocusVisualsToken =
-                    control.RegisterPropertyChangedCallback(
-                        Control::UseSystemFocusVisualsProperty(),
-                        [](DependencyObject const& sender,
-                           DependencyProperty const&) {
-                            if (g_unloading) {
-                                return;
-                            }
-                            auto ctrl = sender.try_as<Control>();
-                            if (ctrl && ctrl.UseSystemFocusVisuals()) {
-                                ctrl.UseSystemFocusVisuals(false);
-                            }
-                        });
+            saved.hadLocalPrimaryThickness =
+                control.ReadLocalValue(
+                    FrameworkElement::FocusVisualPrimaryThicknessProperty()) !=
+                unsetValue;
+            if (saved.hadLocalPrimaryThickness) {
+                saved.originalPrimaryThickness =
+                    control.FocusVisualPrimaryThickness();
             }
+            saved.hadLocalSecondaryThickness =
+                control.ReadLocalValue(
+                    FrameworkElement::
+                        FocusVisualSecondaryThicknessProperty()) != unsetValue;
+            if (saved.hadLocalSecondaryThickness) {
+                saved.originalSecondaryThickness =
+                    control.FocusVisualSecondaryThickness();
+            }
+
+            saved.useSystemFocusVisualsToken =
+                control.RegisterPropertyChangedCallback(
+                    Control::UseSystemFocusVisualsProperty(),
+                    [](DependencyObject const& sender,
+                       DependencyProperty const&) {
+                        if (g_unloading) {
+                            return;
+                        }
+                        auto ctrl = sender.try_as<Control>();
+                        if (ctrl && ctrl.UseSystemFocusVisuals()) {
+                            ctrl.UseSystemFocusVisuals(false);
+                        }
+                    });
             saved.primaryThicknessToken =
-                element.RegisterPropertyChangedCallback(
+                control.RegisterPropertyChangedCallback(
                     FrameworkElement::FocusVisualPrimaryThicknessProperty(),
                     [](DependencyObject const& sender,
                        DependencyProperty const&) {
@@ -1661,7 +1674,7 @@ void HideFocusVisual(AppliedTaskbarState& record,
                         }
                     });
             saved.secondaryThicknessToken =
-                element.RegisterPropertyChangedCallback(
+                control.RegisterPropertyChangedCallback(
                     FrameworkElement::FocusVisualSecondaryThicknessProperty(),
                     [](DependencyObject const& sender,
                        DependencyProperty const&) {
@@ -1678,18 +1691,18 @@ void HideFocusVisual(AppliedTaskbarState& record,
                     });
         } catch (...) {
             try {
-                if (control && saved.useSystemFocusVisualsToken) {
+                if (saved.useSystemFocusVisualsToken) {
                     control.UnregisterPropertyChangedCallback(
                         Control::UseSystemFocusVisualsProperty(),
                         saved.useSystemFocusVisualsToken);
                 }
                 if (saved.primaryThicknessToken) {
-                    element.UnregisterPropertyChangedCallback(
+                    control.UnregisterPropertyChangedCallback(
                         FrameworkElement::FocusVisualPrimaryThicknessProperty(),
                         saved.primaryThicknessToken);
                 }
                 if (saved.secondaryThicknessToken) {
-                    element.UnregisterPropertyChangedCallback(
+                    control.UnregisterPropertyChangedCallback(
                         FrameworkElement::
                             FocusVisualSecondaryThicknessProperty(),
                         saved.secondaryThicknessToken);
@@ -1703,35 +1716,28 @@ void HideFocusVisual(AppliedTaskbarState& record,
     }
 
     try {
-        if (control && control.UseSystemFocusVisuals()) {
+        if (control.UseSystemFocusVisuals()) {
             control.UseSystemFocusVisuals(false);
         }
-        if (!IsZeroThickness(element.FocusVisualPrimaryThickness())) {
-            element.FocusVisualPrimaryThickness(Thickness{0, 0, 0, 0});
+        if (!IsZeroThickness(control.FocusVisualPrimaryThickness())) {
+            control.FocusVisualPrimaryThickness(Thickness{0, 0, 0, 0});
         }
-        if (!IsZeroThickness(element.FocusVisualSecondaryThickness())) {
-            element.FocusVisualSecondaryThickness(Thickness{0, 0, 0, 0});
+        if (!IsZeroThickness(control.FocusVisualSecondaryThickness())) {
+            control.FocusVisualSecondaryThickness(Thickness{0, 0, 0, 0});
         }
     } catch (...) {
     }
 }
 
-void HideStartButtonFocusVisualRecursive(FrameworkElement const& root,
-                                         AppliedTaskbarState& record,
-                                         int depth = 0,
-                                         bool insideStartButton = false) {
+void HideControlFocusVisualsRecursive(FrameworkElement const& root,
+                                      AppliedTaskbarState& record,
+                                      int depth = 0) {
     if (!root || depth > 40) {
         return;
     }
 
-    if (!insideStartButton && IsStartButtonElement(root)) {
-        insideStartButton = true;
-    }
-
-    if (insideStartButton &&
-        (root.try_as<Control>() != nullptr ||
-         IsHoverBackgroundElement(root))) {
-        HideFocusVisual(record, root);
+    if (auto control = root.try_as<Control>()) {
+        HideFocusVisual(record, control);
     }
 
     int count = 0;
@@ -1749,43 +1755,70 @@ void HideStartButtonFocusVisualRecursive(FrameworkElement const& root,
         } catch (...) {
         }
         if (child) {
-            HideStartButtonFocusVisualRecursive(child, record, depth + 1,
-                                                insideStartButton);
+            HideControlFocusVisualsRecursive(child, record, depth + 1);
         }
+    }
+}
+
+void HideStartButtonFocusVisual(FrameworkElement const& root,
+                                AppliedTaskbarState& record) {
+    if (!root) {
+        return;
+    }
+
+    FrameworkElement startButton =
+        IsStartButtonElement(root)
+            ? root
+            : FindChildByPredicate(root, IsStartButtonElement);
+    if (startButton) {
+        HideControlFocusVisualsRecursive(startButton, record);
     }
 }
 
 void RestoreFocusVisuals(
     std::vector<SavedFocusVisual> const& savedFocusVisuals) {
     for (auto const& saved : savedFocusVisuals) {
-        if (auto element = saved.element.get()) {
+        if (auto control = saved.element.get()) {
             try {
-                if (saved.isControl) {
-                    if (auto control = element.try_as<Control>()) {
-                        if (saved.useSystemFocusVisualsToken) {
-                            control.UnregisterPropertyChangedCallback(
-                                Control::UseSystemFocusVisualsProperty(),
-                                saved.useSystemFocusVisualsToken);
-                        }
-                        control.UseSystemFocusVisuals(
-                            saved.originalUseSystemFocusVisuals);
-                    }
+                if (saved.useSystemFocusVisualsToken) {
+                    control.UnregisterPropertyChangedCallback(
+                        Control::UseSystemFocusVisualsProperty(),
+                        saved.useSystemFocusVisualsToken);
                 }
                 if (saved.primaryThicknessToken) {
-                    element.UnregisterPropertyChangedCallback(
+                    control.UnregisterPropertyChangedCallback(
                         FrameworkElement::FocusVisualPrimaryThicknessProperty(),
                         saved.primaryThicknessToken);
                 }
                 if (saved.secondaryThicknessToken) {
-                    element.UnregisterPropertyChangedCallback(
+                    control.UnregisterPropertyChangedCallback(
                         FrameworkElement::
                             FocusVisualSecondaryThicknessProperty(),
                         saved.secondaryThicknessToken);
                 }
-                element.FocusVisualPrimaryThickness(
-                    saved.originalPrimaryThickness);
-                element.FocusVisualSecondaryThickness(
-                    saved.originalSecondaryThickness);
+                if (saved.hadLocalUseSystemFocusVisuals) {
+                    control.UseSystemFocusVisuals(
+                        saved.originalUseSystemFocusVisuals);
+                } else {
+                    control.ClearValue(
+                        Control::UseSystemFocusVisualsProperty());
+                }
+                if (saved.hadLocalPrimaryThickness) {
+                    control.FocusVisualPrimaryThickness(
+                        saved.originalPrimaryThickness);
+                } else {
+                    control.ClearValue(
+                        FrameworkElement::
+                            FocusVisualPrimaryThicknessProperty());
+                }
+                if (saved.hadLocalSecondaryThickness) {
+                    control.FocusVisualSecondaryThickness(
+                        saved.originalSecondaryThickness);
+                } else {
+                    control.ClearValue(
+                        FrameworkElement::
+                            FocusVisualSecondaryThicknessProperty());
+                }
             } catch (...) {
             }
         }
@@ -3801,7 +3834,7 @@ bool ApplyToFrame(FrameworkElement const& frame, HWND knownTaskbarWnd = nullptr)
     double hoverRadius = toDip(hoverCornerRadiusSetting);
     g_hoverRadiusDip = hoverRadius;
     ApplyHoverShapesRecursive(rootGrid, record, hoverRadius, false);
-    HideStartButtonFocusVisualRecursive(rootGrid, record);
+    HideStartButtonFocusVisual(rootGrid, record);
     if (trayElement) {
         ApplyHoverShapesRecursive(trayElement, record, hoverRadius, true);
     }
@@ -3985,7 +4018,9 @@ void RefreshTaskButtonVisuals(FrameworkElement const& button) {
             RestoreMultiWindowHighlights(buttonHighlights);
 
             HideMultiWindowVisualsRecursive(button, record);
-            HideStartButtonFocusVisualRecursive(button, record);
+            if (IsStartButtonElement(button)) {
+                HideControlFocusVisualsRecursive(button, record);
+            }
             return;
         }
     } catch (...) {
