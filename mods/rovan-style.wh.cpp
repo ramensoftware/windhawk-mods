@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              rovan-style
-// @name            Rovan Style
+// @name            Rovan Window Placement
 // @description     Moves and resizes the windows of selected programs to a set position and size when they open.
 // @version         1.0
 // @author          Roey Qian
@@ -13,11 +13,11 @@
 
 // ==WindhawkModReadme==
 /*
-# Rovan Style
+# Rovan Window Placement
 
 ## Overview
 
-**Rovan Style** is a [Windhawk](https://windhawk.net/) window layout mod that automatically positions and resizes application windows. When a window of a matching program appears, it is moved to the configured position and size, optionally followed by native Windows vertical maximization, with a separate rule for each program.
+**Rovan Window Placement** is a [Windhawk](https://windhawk.net/) window layout mod that automatically positions and resizes application windows. When a window of a matching program appears, it is moved to the configured position and size, optionally followed by native Windows vertical maximization, with a separate rule for each program.
 
 ## Options
 
@@ -44,11 +44,22 @@ The mod is injected through Windhawk's default `*` target process scope, but it 
 
 With *Vertical maximize* turned on, Windows controls the top and bottom edges of the window, while X and the width still follow the rule, and Y and the height are kept as the restore position. It uses native Windows vertical maximization, which requires Windows 10, version 1903 or later. When that isn't possible, the normal layout is kept.
 
+## Compared with Window Rules
+
+[Window Rules](https://windhawk.net/mods/window-rules) also moves and resizes the windows of selected programs when they open. It runs from Windhawk's own process, and it can also match windows by class and title, target a monitor, and set opacity and always-on-top. If you need those features, use Window Rules. Rovan Window Placement differs in these ways:
+
+- It runs inside each matching program, so it also adjusts the windows of elevated programs.
+- It can enter native Windows vertical maximization after applying the layout.
+- It keeps correcting the layout during a configurable startup correction period, for programs that restore their own saved layout after opening.
+- It can send move/size begin and end notifications, so programs that save their layout after a manual drag also save the adjusted one.
+- It restores maximized or snapped windows before applying a rule.
+
 ## Notes
 
 - Keep Windhawk's default `*` target process scope, and make sure Windhawk can load into the program. Regular installations use a service, while portable mode may require administrator rights for elevated programs.
 - A rule with an invalid position or size format is skipped, so windows are never moved by mistake.
 - For modern apps, enter the exe that actually owns the window, because some apps use a host process.
+- Every main window of a matching program gets the same position and size, so new windows of a multi-window program, such as a browser, open on top of each other.
 - The secure desktop, protected programs, programs that block mod loading, exclusive fullscreen and a program's own minimum or maximum size limits may still prevent adjustment.
 - Whether a program actually saves the adjusted layout is up to the program itself, even with *Compatibility with programs' position/size saving* turned on.
 - Disabling the mod stops monitoring, and adjusted windows keep their current position and size instead of returning to their original layout.
