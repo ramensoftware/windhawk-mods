@@ -67,9 +67,17 @@ those from the menu by their name.
 
 Added items are written to `HKEY_CURRENT_USER\Software\Classes\.ext\ShellNew`
 and removed again when you remove them from the settings or disable the mod.
-For an extension that has no file type yet, the mod also registers a file type
-with the name you entered; it is removed together with the item. An existing
-`ShellNew` key of your own is never overwritten.
+For an extension that has no file type, the mod also registers one,
+`NewMenu.ext`, with the name you entered; it is removed together with the
+item, or as soon as a program registers its own file type for the extension.
+An existing `ShellNew` key of your own is never overwritten.
+
+These keys are volatile: if Explorer crashes and the mod can't remove them,
+Windows removes them when you sign out. Only the default value of
+`HKEY_CURRENT_USER\Software\Classes\.ext` (`NewMenu.ext`), and the `.ext` key
+if the mod created it, can remain in that case. The mod also clears Explorer's
+cache of the New menu when it starts, when the settings change and when it
+stops.
 
 Open and Save dialogs of other programs also have a New menu. There, hidden
 items still show. Added items show too, except items that rename an existing
@@ -146,6 +154,8 @@ file type: their name can only be shown in Explorer.
   $name:tr-TR: Öğe ekle
 */
 // ==/WindhawkModSettings==
+
+#include <windhawk_utils.h>
 
 #include <windows.h>
 #include <winternl.h>
@@ -289,10 +299,7 @@ static SRWLOCK g_loggedLock = SRWLOCK_INIT;
 constexpr PCWSTR kBuiltInItemsWithoutKey[] = {L".txt"};
 
 static std::wstring GetStringSetting(const std::wstring& name) {
-    PCWSTR value = Wh_GetStringSetting(name.c_str());
-    std::wstring r = value ? value : L"";
-    Wh_FreeStringSetting(value);
-    return r;
+    return WindhawkUtils::StringSetting::make(name.c_str()).get();
 }
 
 static std::wstring IndexedName(PCWSTR array, int index, PCWSTR field) {
@@ -328,9 +335,13 @@ constexpr int kMaxArrayItems = 256;
 
 static Settings LoadSettings() {
     Settings s;
+    // Both lists end at the first entry without a key or extension.
     for (int i = 0; i < kMaxArrayItems; i++) {
-        std::wstring key =
-            NormalizeKey(GetStringSetting(IndexedName(L"items", i, L"key")));
+        std::wstring raw = GetStringSetting(IndexedName(L"items", i, L"key"));
+        if (Trim(raw).empty()) {
+            break;
+        }
+        std::wstring key = NormalizeKey(raw);
         if (key.empty()) {
             continue;
         }
@@ -340,9 +351,13 @@ static Settings LoadSettings() {
     s.showUnlisted = Wh_GetIntSetting(L"showUnlisted") != 0;
 
     for (int i = 0; i < kMaxArrayItems; i++) {
+        std::wstring raw =
+            GetStringSetting(IndexedName(L"newItems", i, L"extension"));
+        if (Trim(raw).empty()) {
+            break;
+        }
         AddedItem item;
-        item.ext = NormalizeKey(
-            GetStringSetting(IndexedName(L"newItems", i, L"extension")));
+        item.ext = NormalizeKey(raw);
         if (item.ext.size() < 2 || item.ext[0] != L'.' ||
             s.addedExts.contains(item.ext)) {
             continue;
@@ -593,8 +608,8 @@ static NTSTATUS FilterOpen(PHANDLE keyHandle, POBJECT_ATTRIBUTES attributes,
     return status;
 }
 
-using NtOpenKey_t = NTSTATUS(NTAPI*)(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES);
-static NtOpenKey_t NtOpenKey_Original;
+using NtOpenKey_t = NTSTATUS NTAPI(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES);
+static NtOpenKey_t* NtOpenKey_Original;
 static NTSTATUS NTAPI NtOpenKey_Hook(PHANDLE keyHandle,
                                      ACCESS_MASK desiredAccess,
                                      POBJECT_ATTRIBUTES objectAttributes) {
@@ -604,8 +619,8 @@ static NTSTATUS NTAPI NtOpenKey_Hook(PHANDLE keyHandle,
 }
 
 using NtOpenKeyEx_t =
-    NTSTATUS(NTAPI*)(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES, ULONG);
-static NtOpenKeyEx_t NtOpenKeyEx_Original;
+    NTSTATUS NTAPI(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES, ULONG);
+static NtOpenKeyEx_t* NtOpenKeyEx_Original;
 static NTSTATUS NTAPI NtOpenKeyEx_Hook(PHANDLE keyHandle,
                                        ACCESS_MASK desiredAccess,
                                        POBJECT_ATTRIBUTES objectAttributes,
@@ -641,8 +656,7 @@ static bool IsHiddenMenuText(PCWSTR text) {
     return hidden;
 }
 
-using InsertMenuItemW_t = BOOL(WINAPI*)(HMENU, UINT, BOOL, LPCMENUITEMINFOW);
-static InsertMenuItemW_t InsertMenuItemW_Original;
+static decltype(&InsertMenuItemW) InsertMenuItemW_Original;
 static BOOL WINAPI InsertMenuItemW_Hook(HMENU menu, UINT item, BOOL byPosition,
                                         LPCMENUITEMINFOW info) {
     void* returnAddress = __builtin_return_address(0);
@@ -664,8 +678,7 @@ static BOOL WINAPI InsertMenuItemW_Hook(HMENU menu, UINT item, BOOL byPosition,
 // resource references, so the mod resolves its own format.
 constexpr std::wstring_view kMenuTextPrefix = L"@new-menu:";
 
-using SHLoadIndirectString_t = HRESULT(WINAPI*)(PCWSTR, PWSTR, UINT, void**);
-static SHLoadIndirectString_t SHLoadIndirectString_Original;
+static decltype(&SHLoadIndirectString) SHLoadIndirectString_Original;
 static HRESULT WINAPI SHLoadIndirectString_Hook(PCWSTR source, PWSTR output,
                                                 UINT outputSize,
                                                 void** reserved) {
@@ -685,60 +698,29 @@ static HRESULT WINAPI SHLoadIndirectString_Hook(PCWSTR source, PWSTR output,
 // ============================================================================
 // Added items: ShellNew keys written to HKCU\Software\Classes
 // ============================================================================
+//
+// The mod keeps no record of what it wrote: what is its own is marked in the
+// registry of the current user.
+// - <ext>\ShellNew is the mod's if it has the value kOwnerValue.
+// - The file type NewMenu<ext> is the mod's.
+// - The default value of <ext> is the mod's while it is NewMenu<ext>.
+// The ShellNew key and the file type are volatile, so they are gone after
+// signing out even if the mod could not remove them.
 
-// What the mod created for an added item, so it only ever removes its own.
-struct CreatedKey {
-    std::wstring ext;
-    bool createdExtKey = false;  // HKCU\Software\Classes\<ext>
-    bool setDefault = false;     // its default value (the ProgID)
-    std::wstring progId;         // HKCU\Software\Classes\<ProgID>, if created
-};
-
-// Stored as one line per item: "<ext>|<createdExtKey>|<setDefault>|<progId>".
-static std::vector<CreatedKey> LoadCreatedKeys() {
-    std::vector<CreatedKey> keys;
-    WCHAR buffer[8192];
-    size_t len = Wh_GetStringValue(L"createdKeys", buffer, ARRAYSIZE(buffer));
-    std::wstring_view s(buffer, wcsnlen(buffer, std::min(len, ARRAYSIZE(buffer) - 1)));
-    while (!s.empty()) {
-        size_t nl = s.find(L'\n');
-        std::wstring_view line = s.substr(0, nl);
-        s = nl == std::wstring_view::npos ? std::wstring_view()
-                                          : s.substr(nl + 1);
-        std::vector<std::wstring_view> fields;
-        while (true) {
-            size_t bar = line.find(L'|');
-            fields.push_back(line.substr(0, bar));
-            if (bar == std::wstring_view::npos) {
-                break;
-            }
-            line.remove_prefix(bar + 1);
-        }
-        if (fields.size() != 4 || fields[0].size() < 2 ||
-            fields[0][0] != L'.') {
-            continue;
-        }
-        keys.push_back({std::wstring(fields[0]), fields[1] == L"1",
-                        fields[2] == L"1", std::wstring(fields[3])});
-    }
-    return keys;
-}
-
-static void SaveCreatedKeys(const std::vector<CreatedKey>& keys) {
-    std::wstring s;
-    for (const auto& k : keys) {
-        s += k.ext + L"|" + (k.createdExtKey ? L"1" : L"0") + L"|" +
-             (k.setDefault ? L"1" : L"0") + L"|" + k.progId + L"\n";
-    }
-    if (s.empty()) {
-        Wh_DeleteValue(L"createdKeys");
-    } else {
-        Wh_SetStringValue(L"createdKeys", s.c_str());
-    }
-}
+constexpr PCWSTR kOwnerValue = L"WindhawkNewMenu";
+constexpr std::wstring_view kOwnProgIdPrefix = L"NewMenu.";
 
 static std::wstring ClassesPath(const std::wstring& name) {
     return L"Software\\Classes\\" + name;
+}
+
+static std::wstring OwnProgId(const std::wstring& ext) {
+    return L"NewMenu" + ext;
+}
+
+static bool ValueExists(HKEY root, const std::wstring& path, PCWSTR value) {
+    return RegGetValueW(root, path.c_str(), value, RRF_RT_ANY, nullptr,
+                        nullptr, nullptr) == ERROR_SUCCESS;
 }
 
 static bool KeyIsEmpty(const std::wstring& path) {
@@ -765,6 +747,23 @@ static void DeleteKeyTree(const std::wstring& path) {
     }
 }
 
+// Creates a key in HKCU, or opens it if it exists. Missing parent keys are
+// created with the same option, so they must exist before a volatile key is
+// created.
+static bool CreateUserKey(const std::wstring& path, bool isVolatile) {
+    HKEY key;
+    LONG r = RegCreateKeyExW(
+        HKEY_CURRENT_USER, path.c_str(), 0, nullptr,
+        isVolatile ? REG_OPTION_VOLATILE : REG_OPTION_NON_VOLATILE, KEY_WRITE,
+        nullptr, &key, nullptr);
+    if (r != ERROR_SUCCESS) {
+        Wh_Log(L"Could not create HKCU\\%s: error %ld", path.c_str(), r);
+        return false;
+    }
+    RegCloseKey(key);
+    return true;
+}
+
 static bool SetRegString(const std::wstring& path, PCWSTR name,
                          const std::wstring& value, DWORD type = REG_SZ) {
     return RegSetKeyValueW(HKEY_CURRENT_USER, path.c_str(), name, type,
@@ -773,84 +772,156 @@ static bool SetRegString(const std::wstring& path, PCWSTR name,
            ERROR_SUCCESS;
 }
 
-// Returns whether file associations changed.
-static bool RemoveCreatedKey(const CreatedKey& k) {
-    std::wstring extPath = ClassesPath(k.ext);
-    DeleteKeyTree(extPath + L"\\ShellNew");
-    if (k.setDefault &&
-        GetRegString(HKEY_CURRENT_USER, extPath, nullptr) == k.progId) {
-        RegDeleteKeyValueW(HKEY_CURRENT_USER, extPath.c_str(), nullptr);
-    }
-    if (!k.progId.empty()) {
-        DeleteKeyTree(ClassesPath(k.progId));
-    }
-    if (k.createdExtKey && KeyIsEmpty(extPath)) {
-        RegDeleteKeyW(HKEY_CURRENT_USER, extPath.c_str());
-    }
-    return k.setDefault || !k.progId.empty();
+static bool IsOwnShellNewKey(const std::wstring& ext) {
+    return ValueExists(HKEY_CURRENT_USER, ClassesPath(ext) + L"\\ShellNew",
+                       kOwnerValue);
 }
 
-// Windows only lists an extension in the New menu if it has a file type
-// (ProgID). Registers one for extensions that have none. Returns whether
-// file associations changed.
-static bool EnsureFileType(const AddedItem& item, CreatedKey* k) {
-    std::wstring extPath = ClassesPath(item.ext);
-    std::wstring progId = GetRegString(HKEY_CLASSES_ROOT, item.ext, nullptr);
-    bool changed = false;
-    if (progId.empty() || k->setDefault) {
-        progId = L"NewMenu" + item.ext;
-        if (GetRegString(HKEY_CURRENT_USER, extPath, nullptr) != progId) {
-            SetRegString(extPath, nullptr, progId);
-            changed = true;
+// Extensions the mod wrote something for, in lowercase.
+static std::vector<std::wstring> FindOwnExtensions() {
+    std::unordered_set<std::wstring> exts;
+    HKEY classes;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Classes", 0,
+                      KEY_ENUMERATE_SUB_KEYS, &classes) != ERROR_SUCCESS) {
+        return {};
+    }
+    WCHAR buffer[256];
+    for (DWORD i = 0;; i++) {
+        DWORD len = ARRAYSIZE(buffer);
+        LONG r = RegEnumKeyExW(classes, i, buffer, &len, nullptr, nullptr,
+                               nullptr, nullptr);
+        if (r == ERROR_MORE_DATA) {
+            continue;
         }
-        k->setDefault = true;
+        if (r != ERROR_SUCCESS) {
+            break;
+        }
+        std::wstring name = ToLower(std::wstring_view(buffer, len));
+        if (name.starts_with(ToLower(kOwnProgIdPrefix))) {
+            exts.insert(name.substr(kOwnProgIdPrefix.size() - 1));
+        } else if (name.size() > 1 && name[0] == L'.' &&
+                   (IsOwnShellNewKey(name) ||
+                    ToLower(GetRegString(HKEY_CURRENT_USER, ClassesPath(name),
+                                         nullptr)) ==
+                        ToLower(OwnProgId(name)))) {
+            exts.insert(name);
+        }
     }
-    if (k->progId.empty() && KeyExists(HKEY_CLASSES_ROOT, progId)) {
-        return changed;
-    }
-    // The mod owns this file type, so the item's name is the type's name,
-    // which every program shows.
-    std::wstring name = item.name;
-    if (name.empty()) {
-        name = FriendlyTypeName(item.ext);
-    }
-    if (GetRegString(HKEY_CURRENT_USER, ClassesPath(progId), nullptr) != name) {
-        SetRegString(ClassesPath(progId), nullptr, name);
+    RegCloseKey(classes);
+    return std::vector<std::wstring>(exts.begin(), exts.end());
+}
+
+// Removes the mod's file type of an extension. Returns whether file
+// associations changed.
+static bool RemoveOwnFileType(const std::wstring& ext) {
+    std::wstring extPath = ClassesPath(ext);
+    std::wstring progIdPath = ClassesPath(OwnProgId(ext));
+    bool changed = false;
+    if (ToLower(GetRegString(HKEY_CURRENT_USER, extPath, nullptr)) ==
+        ToLower(OwnProgId(ext))) {
+        RegDeleteKeyValueW(HKEY_CURRENT_USER, extPath.c_str(), nullptr);
         changed = true;
     }
-    k->progId = progId;
+    if (KeyExists(HKEY_CURRENT_USER, progIdPath)) {
+        DeleteKeyTree(progIdPath);
+        changed = true;
+    }
     return changed;
 }
 
-static bool WriteShellNewKey(const AddedItem& item, const CreatedKey& k) {
-    std::wstring shellNewPath = ClassesPath(item.ext) + L"\\ShellNew";
-    // Start from an empty key, so values of an older version of the item,
-    // such as a template that was removed, don't remain.
-    RegDeleteTreeW(HKEY_CURRENT_USER, shellNewPath.c_str());
-    HKEY key;
-    LONG r = RegCreateKeyExW(HKEY_CURRENT_USER, shellNewPath.c_str(), 0,
-                             nullptr, 0, KEY_WRITE, nullptr, &key, nullptr);
-    if (r != ERROR_SUCCESS) {
-        Wh_Log(L"Could not create HKCU\\%s: error %ld", shellNewPath.c_str(),
-               r);
+// Removes everything the mod wrote for an extension. Returns whether file
+// associations changed.
+static bool RemoveOwnKeys(const std::wstring& ext) {
+    std::wstring extPath = ClassesPath(ext);
+    bool removed = false;
+    if (IsOwnShellNewKey(ext)) {
+        DeleteKeyTree(extPath + L"\\ShellNew");
+        removed = true;
+    }
+    bool changed = RemoveOwnFileType(ext);
+    if ((removed || changed) && KeyIsEmpty(extPath)) {
+        RegDeleteKeyW(HKEY_CURRENT_USER, extPath.c_str());
+    }
+    return changed;
+}
+
+// Windows only lists an extension in the New menu if it has a file type
+// (ProgID). For an extension without one, the mod registers its own,
+// NewMenu<ext>, and lets it go as soon as another file type is registered.
+// Returns whether file associations changed.
+static bool EnsureFileType(const AddedItem& item, bool* ownsType) {
+    std::wstring extPath = ClassesPath(item.ext);
+    std::wstring ownProgId = OwnProgId(item.ext);
+    std::wstring userProgId = GetRegString(HKEY_CURRENT_USER, extPath, nullptr);
+    std::wstring machineProgId =
+        GetRegString(HKEY_LOCAL_MACHINE, extPath, nullptr);
+    bool userIsOwn = ToLower(userProgId) == ToLower(ownProgId);
+
+    if (!userProgId.empty() && !userIsOwn) {
+        // A file type of the user, or of a program installed for the user.
+        if (!KeyExists(HKEY_CLASSES_ROOT, userProgId)) {
+            Wh_Log(L"File type %s of %s doesn't exist, the item may not show",
+                   userProgId.c_str(), item.ext.c_str());
+        }
+        *ownsType = false;
+    } else {
+        *ownsType = machineProgId.empty() ||
+                    !KeyExists(HKEY_CLASSES_ROOT, machineProgId);
+    }
+    if (!*ownsType) {
+        return RemoveOwnFileType(item.ext);
+    }
+
+    bool changed = false;
+    // The mod's file type has the item's name, which every program shows.
+    std::wstring progIdPath = ClassesPath(ownProgId);
+    if (!KeyExists(HKEY_CURRENT_USER, progIdPath)) {
+        if (!CreateUserKey(progIdPath, true)) {
+            return false;
+        }
+        changed = true;
+    }
+    if (item.name.empty()) {
+        if (ValueExists(HKEY_CURRENT_USER, progIdPath, nullptr)) {
+            RegDeleteKeyValueW(HKEY_CURRENT_USER, progIdPath.c_str(), nullptr);
+            changed = true;
+        }
+    } else if (GetRegString(HKEY_CURRENT_USER, progIdPath, nullptr) !=
+               item.name) {
+        SetRegString(progIdPath, nullptr, item.name);
+        changed = true;
+    }
+    if (!userIsOwn && CreateUserKey(extPath, false) &&
+        SetRegString(extPath, nullptr, ownProgId)) {
+        changed = true;
+    }
+    return changed;
+}
+
+static bool WriteShellNewKey(const AddedItem& item, bool ownsType) {
+    std::wstring extPath = ClassesPath(item.ext);
+    std::wstring shellNewPath = extPath + L"\\ShellNew";
+    // Start from a new key, so values of an older version of the item, such
+    // as a template that was removed, don't remain.
+    DeleteKeyTree(shellNewPath);
+    if (!CreateUserKey(extPath, false) || !CreateUserKey(shellNewPath, true)) {
         return false;
     }
-    RegCloseKey(key);
 
-    bool ok;
+    bool ok = SetRegString(shellNewPath, kOwnerValue, L"1");
     if (!item.templatePath.empty()) {
         if (GetFileAttributesW(item.templatePath.c_str()) ==
             INVALID_FILE_ATTRIBUTES) {
             Wh_Log(L"Template of %s not found: %s", item.ext.c_str(),
                    item.templatePath.c_str());
         }
-        ok = SetRegString(shellNewPath, L"FileName", item.templatePath);
+        ok = SetRegString(shellNewPath, L"FileName", item.templatePath) && ok;
     } else {
-        ok = SetRegString(shellNewPath, L"NullFile", L"");
+        ok = SetRegString(shellNewPath, L"NullFile", L"") && ok;
     }
-    // The name of a file type the mod registered is the type's own name.
-    // Other types get it through MenuText, which only Explorer resolves.
-    if (!item.name.empty() && k.progId.empty()) {
+    // The name of the mod's file type is the type's own name. Other types get
+    // it through MenuText, which only Explorer resolves.
+    if (!item.name.empty() && !ownsType) {
         ok = SetRegString(shellNewPath, L"MenuText",
                           std::wstring(kMenuTextPrefix) + item.name) &&
              ok;
@@ -866,48 +937,34 @@ static bool WriteShellNewKey(const AddedItem& item, const CreatedKey& k) {
 // Brings the registry in line with the "Add items" setting.
 static void SyncAddedItems(const std::vector<AddedItem>& added) {
     BypassScope bypass;
-    std::vector<CreatedKey> previous = LoadCreatedKeys();
-    std::vector<CreatedKey> current;
     bool associationsChanged = false;
 
-    for (const auto& k : previous) {
+    for (const auto& ext : FindOwnExtensions()) {
         bool wanted = std::any_of(added.begin(), added.end(), [&](const auto& a) {
-            return a.ext == k.ext;
+            return a.ext == ext;
         });
         if (!wanted) {
-            associationsChanged |= RemoveCreatedKey(k);
-            Wh_Log(L"Removed added item %s", k.ext.c_str());
+            associationsChanged |= RemoveOwnKeys(ext);
+            Wh_Log(L"Removed added item %s", ext.c_str());
         }
     }
 
     for (const auto& item : added) {
-        auto prev = std::find_if(previous.begin(), previous.end(),
-                                 [&](const auto& k) { return k.ext == item.ext; });
         std::wstring extPath = ClassesPath(item.ext);
-        CreatedKey k;
-        if (prev != previous.end()) {
-            k = *prev;
-        } else {
-            if (KeyExists(HKEY_CURRENT_USER, extPath + L"\\ShellNew")) {
-                Wh_Log(L"Not adding %s: HKCU\\%s\\ShellNew already exists and "
-                       L"was not created by the mod",
-                       item.ext.c_str(), extPath.c_str());
-                continue;
-            }
-            k.ext = item.ext;
-            k.createdExtKey = !KeyExists(HKEY_CURRENT_USER, extPath);
+        if (KeyExists(HKEY_CURRENT_USER, extPath + L"\\ShellNew") &&
+            !IsOwnShellNewKey(item.ext)) {
+            Wh_Log(L"Not adding %s: HKCU\\%s\\ShellNew already exists and "
+                   L"was not created by the mod",
+                   item.ext.c_str(), extPath.c_str());
+            continue;
         }
-        associationsChanged |= EnsureFileType(item, &k);
-        // Record the item before writing it, so it is removed later even if
-        // writing fails halfway.
-        current.push_back(k);
-        SaveCreatedKeys(current);
-        if (WriteShellNewKey(item, k)) {
+        bool ownsType = false;
+        associationsChanged |= EnsureFileType(item, &ownsType);
+        if (WriteShellNewKey(item, ownsType)) {
             Wh_Log(L"Added item %s", item.ext.c_str());
         }
     }
 
-    SaveCreatedKeys(current);
     if (associationsChanged) {
         SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
     }
@@ -916,10 +973,9 @@ static void SyncAddedItems(const std::vector<AddedItem>& added) {
 static void RemoveAllAddedItems() {
     BypassScope bypass;
     bool associationsChanged = false;
-    for (const auto& k : LoadCreatedKeys()) {
-        associationsChanged |= RemoveCreatedKey(k);
+    for (const auto& ext : FindOwnExtensions()) {
+        associationsChanged |= RemoveOwnKeys(ext);
     }
-    SaveCreatedKeys({});
     if (associationsChanged) {
         SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
     }
@@ -972,22 +1028,24 @@ BOOL Wh_ModInit() {
     Wh_Log(L">");
     g_isMainProcess = IsMainExplorerProcess();
 
+    // All of these are loaded in Explorer already.
     HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
-    HMODULE user32 = LoadLibraryW(L"user32.dll");
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
     g_ntQueryKey = (NtQueryKey_t)GetProcAddress(ntdll, "NtQueryKey");
-    void* ntOpenKey = (void*)GetProcAddress(ntdll, "NtOpenKey");
-    void* ntOpenKeyEx = (void*)GetProcAddress(ntdll, "NtOpenKeyEx");
-    void* insertMenuItem =
-        user32 ? (void*)GetProcAddress(user32, "InsertMenuItemW") : nullptr;
+    auto ntOpenKey = (NtOpenKey_t*)GetProcAddress(ntdll, "NtOpenKey");
+    auto ntOpenKeyEx = (NtOpenKeyEx_t*)GetProcAddress(ntdll, "NtOpenKeyEx");
+    auto insertMenuItem =
+        user32 ? (decltype(&InsertMenuItemW))GetProcAddress(user32,
+                                                            "InsertMenuItemW")
+               : nullptr;
     // shell32 calls the kernelbase implementation (through
     // api-ms-win-core-string); shlwapi has a separate copy, used on older
     // Windows versions.
-    void* loadIndirectString = nullptr;
+    decltype(&SHLoadIndirectString) loadIndirectString = nullptr;
     for (PCWSTR dll : {L"kernelbase.dll", L"shlwapi.dll"}) {
-        HMODULE module = LoadLibraryW(dll);
-        if (module &&
-            (loadIndirectString =
-                 (void*)GetProcAddress(module, "SHLoadIndirectString"))) {
+        HMODULE module = GetModuleHandleW(dll);
+        if (module && (loadIndirectString = (decltype(&SHLoadIndirectString))
+                           GetProcAddress(module, "SHLoadIndirectString"))) {
             break;
         }
     }
@@ -997,20 +1055,21 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    ApplySettings();
-
-    if (!Wh_SetFunctionHook(ntOpenKey, (void*)NtOpenKey_Hook,
-                            (void**)&NtOpenKey_Original) ||
-        !Wh_SetFunctionHook(ntOpenKeyEx, (void*)NtOpenKeyEx_Hook,
-                            (void**)&NtOpenKeyEx_Original) ||
-        !Wh_SetFunctionHook(insertMenuItem, (void*)InsertMenuItemW_Hook,
-                            (void**)&InsertMenuItemW_Original) ||
-        !Wh_SetFunctionHook(loadIndirectString,
-                            (void*)SHLoadIndirectString_Hook,
-                            (void**)&SHLoadIndirectString_Original)) {
+    if (!WindhawkUtils::SetFunctionHook(ntOpenKey, NtOpenKey_Hook,
+                                        &NtOpenKey_Original) ||
+        !WindhawkUtils::SetFunctionHook(ntOpenKeyEx, NtOpenKeyEx_Hook,
+                                        &NtOpenKeyEx_Original) ||
+        !WindhawkUtils::SetFunctionHook(insertMenuItem, InsertMenuItemW_Hook,
+                                        &InsertMenuItemW_Original) ||
+        !WindhawkUtils::SetFunctionHook(loadIndirectString,
+                                        SHLoadIndirectString_Hook,
+                                        &SHLoadIndirectString_Original)) {
         Wh_Log(L"Hooking failed");
         return FALSE;
     }
+
+    // Writes added items, so it runs only once init can no longer fail.
+    ApplySettings();
     return TRUE;
 }
 
