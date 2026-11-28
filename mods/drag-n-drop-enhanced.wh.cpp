@@ -23,7 +23,7 @@ A lightweight, native Direct2D + WIC + OLE2 **Drag & Drop Shelf & Optional `Win 
 
 ## 📸 Screenshots & Demo / Hình minh họa & Video Demo
 
-**🎬 Video Demo:**
+**🎬 Demo:**
 
 ![Drag n Drop Enhanced Demo](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-resources/main/dragndrop/videodemo.gif)
 
