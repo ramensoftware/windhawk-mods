@@ -15,8 +15,22 @@
 /*
 # FocusGlass
 
-An independent Windhawk Tool Mod which applies a macOS-inspired blurred backdrop
-behind the active application window when it overlaps another application window.
+A macOS-inspired focus effect. When the active application window overlaps
+another application window, everything behind the active window is blurred with
+a real GPU Gaussian blur, a soft shadow is drawn around the active window, and
+the active window itself stays sharp and fully usable. The overlay is
+click-through, so it never intercepts mouse or keyboard input.
+
+## How this differs from Background Dimmer
+
+Background Dimmer de-emphasizes background content with a tint, pattern or image
+layer. FocusGlass does something different: it blurs the real content behind the
+active window. That needs continuous Windows Graphics Capture of the primary
+monitor and Direct3D 11 GPU rendering, which has a different resource cost and
+different trade-offs from a conventional dimming layer. Users who only want
+dimming shouldn't have to pay for screen capture, so FocusGlass is offered as a
+separate mod rather than as another style of an existing one. The final decision
+is up to the Windhawk maintainers.
 
 ## Features
 
@@ -24,52 +38,68 @@ behind the active application window when it overlaps another application window
 - DirectComposition premultiplied-alpha overlay.
 - Blur only when a lower-z-order application window overlaps the active window.
   Side-by-side windows stay sharp.
-- Rounded active-window cutout, clear taskbars and owned popups, plus a fixed
-  30-pixel top safe area reserved for desktop menu bars.
-- Soft foreground shadow.
-- Click-through overlay and screen-capture exclusion.
-- Tray icon and global hotkeys.
+- About 7% darkening of the blurred backdrop and a soft foreground shadow.
+- Rounded active-window cutout. Taskbars, popups owned by the active window and
+  a fixed 30-pixel top safe area (for desktop menu bars) stay sharp.
+- Click-through overlay, excluded from screen capture.
+- Tray icon (restored automatically if Explorer restarts) and optional hotkeys.
 
 ## Controls
 
-- Tray left-click or Ctrl+Alt+B: pause/resume.
-- Tray right-click: blur controls.
-- Ctrl+Alt+Up / Ctrl+Alt+Down: adjust blur strength (1–5).
+- Tray left-click: pause/resume.
+- Tray right-click: increase/decrease blur, pause/resume.
+- Optional hotkeys (see Settings):
+  - Ctrl+Alt+B: pause/resume.
+  - Ctrl+Alt+Up / Ctrl+Alt+Down: increase/decrease blur strength (1-5).
 - Disable or unload the mod from Windhawk to stop it.
 
-The mod runs as a dedicated `windhawk.exe` Tool Mod process on Windhawk 1.7.3.
-It doesn't inject the renderer into Explorer. Windhawk controls process startup
-and shutdown; no separate Startup shortcut is needed.
+The tray menu always works, even when all hotkeys are disabled.
 
 ## Settings
 
-**Blur strength on startup** chooses the initial level (1–5). The tray menu and
-hotkeys can adjust it for the current run. **Start paused** controls whether
-capture starts immediately when Windhawk loads the mod.
+- **Blur strength on startup** (1-5): the initial level. The tray menu and
+  hotkeys change the level for the current run.
+- **Start paused**: applies only when the mod loads. Changing any setting later
+  never pauses or resumes a running blur.
+- **Enable pause/resume hotkey** (default: on): Ctrl+Alt+B.
+- **Enable blur strength hotkeys** (default: off): Ctrl+Alt+Up/Down. They are
+  off by default because Ctrl+Alt+Up/Down is the default multi-cursor shortcut
+  in VS Code. They are registered only while the blur is active and released
+  while it is paused.
 
-## Compatibility and limitations
+A hotkey that another program already uses is skipped and the reason is written
+to the Windhawk log.
 
-- Intended for Windows 10 version 2004 or later and Windows 11.
-- Validated by the author on Windows 11 with Windhawk 1.7.3 stable.
-- Tested by the author with the x86 `windhawk.exe` host on Windhawk 1.7.3.
-  Other host architectures have not yet been verified.
-- The blur currently captures the primary monitor only.
-- Restart the mod after changing the display topology or display resolution.
-- Requires a GPU driver supporting Direct3D 11, DirectComposition and Windows
-  Graphics Capture.
+## How it works
 
-## Startup troubleshooting
-
-The mod must be allowed to load into `windhawk.exe`. If you have configured a
-restrictive global Process exclusion list in Windhawk, add `windhawk.exe` to the
-Process inclusion list so the Tool Mod launcher can start.
+The mod runs as a dedicated `windhawk.exe` tool-mod process and doesn't inject
+into Explorer or any other program. Windhawk starts and stops it; no separate
+startup entry is needed.
 
 ## Privacy
 
-Desktop frames are captured and processed locally. The mod does not save captured
-frames to disk or transmit them over the network. Installing it through Windhawk
-is self-contained: the standalone `FocusGlass.exe` and development repository
-are not required.
+Desktop frames are processed locally on the GPU. They are never saved to disk
+and never sent over the network.
+
+## Limitations
+
+- Only the primary monitor is captured.
+- After a display configuration change the blur stops and needs a restart of
+  the mod (disable and re-enable it).
+- The 30-pixel top safe area is fixed.
+- The overlay and window detection run at normal user privilege, so behavior
+  with windows of elevated (administrator) programs can be limited by Windows
+  UIPI rules.
+- Windows Graphics Capture is used continuously while the blur is active, which
+  uses some GPU and power. Pause the blur when you don't need it.
+- On Windows 10 builds where the capture border can't be disabled, Windows may
+  draw its own border around the captured monitor.
+
+## Compatibility
+
+Windows 10 version 2004 or later and Windows 11, with a GPU and driver that
+support Direct3D 11, DirectComposition and Windows Graphics Capture. Validated
+by the author on Windows 11 with Windhawk 1.7.3.
 */
 // ==/WindhawkModReadme==
 
@@ -80,7 +110,13 @@ are not required.
   $description: Initial GPU blur level from 1 (lightest) to 5 (strongest).
 - StartPaused: false
   $name: Start paused
-  $description: Start the tool without capturing the desktop until resumed.
+  $description: Start without capturing the desktop. Applies only when the mod loads; use the tray icon or the hotkey to resume.
+- EnableToggleHotkey: true
+  $name: Enable pause/resume hotkey (Ctrl+Alt+B)
+  $description: Turn off if another program needs this shortcut.
+- EnableBlurStrengthHotkeys: false
+  $name: Enable blur strength hotkeys (Ctrl+Alt+Up / Ctrl+Alt+Down)
+  $description: Off by default because these shortcuts are used for multi-cursor editing in VS Code. Registered only while the blur is active.
 */
 // ==/WindhawkModSettings==
 
@@ -244,9 +280,7 @@ namespace focusglass
             m_context->PSSetShaderResources(0, 1, &nullView);
             m_context->OMSetRenderTargets(0, nullptr, nullptr);
 
-            const HRESULT presentResult = m_swapChain->Present(1, 0);
-            if (FAILED(presentResult))
-                FOCUSGLASS_CHECK_HRESULT(presentResult);
+            FOCUSGLASS_CHECK_HRESULT(m_swapChain->Present(1, 0));
         }
 
     private:
@@ -731,6 +765,8 @@ namespace
     std::atomic<bool> g_refreshMessagePending{ false };
     std::atomic<int> g_configuredBlurLevel{ kInitialBlurLevel };
     std::atomic<bool> g_configuredStartPaused{ false };
+    std::atomic<bool> g_enableToggleHotkey{ true };
+    std::atomic<bool> g_enableBlurStrengthHotkeys{ false };
     std::atomic<bool> g_appStartSucceeded{ false };
     HANDLE g_appReadyEvent = nullptr;
     HANDLE g_appThread = nullptr;
@@ -744,6 +780,12 @@ namespace
             std::memory_order_release);
         g_configuredStartPaused.store(
             Wh_GetIntSetting(L"StartPaused") != 0,
+            std::memory_order_release);
+        g_enableToggleHotkey.store(
+            Wh_GetIntSetting(L"EnableToggleHotkey") != 0,
+            std::memory_order_release);
+        g_enableBlurStrengthHotkeys.store(
+            Wh_GetIntSetting(L"EnableBlurStrengthHotkeys") != 0,
             std::memory_order_release);
     }
 
@@ -759,8 +801,9 @@ namespace
             return true;
 
         const DWORD error = GetLastError();
-        Log(std::wstring(L"Could not register ") + description +
-            L" (Win32 error " + std::to_wstring(error) + L").");
+        Log(std::wstring(L"Could not register the ") + description +
+            L" (Win32 error " + std::to_wstring(error) +
+            L"). Another program may already use this shortcut.");
         return false;
     }
 
@@ -1184,18 +1227,16 @@ namespace
         {
             m_instance = instance;
             m_monitor = GetPrimaryMonitor();
+
+            // Explorer broadcasts this message whenever it (re)creates the
+            // taskbar, for example after a crash or restart.
+            m_taskbarCreatedMessage = RegisterWindowMessageW(L"TaskbarCreated");
+
             RegisterHostWindow();
             RegisterOverlayWindow();
 
             if (!SetWindowDisplayAffinity(m_overlay, kWdaExcludeFromCapture))
                 throw std::runtime_error("Windows could not exclude the overlay from screen capture.");
-
-            RegisterAppHotKey(m_host, kHotkeyToggle, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, 'B',
-                L"Ctrl+Alt+B pause/resume hotkey");
-            RegisterAppHotKey(m_host, kHotkeyIncreaseBlur, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, VK_UP,
-                L"Ctrl+Alt+Up blur-increase hotkey");
-            RegisterAppHotKey(m_host, kHotkeyDecreaseBlur, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, VK_DOWN,
-                L"Ctrl+Alt+Down blur-decrease hotkey");
 
             m_foregroundHook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
                 nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
@@ -1210,7 +1251,7 @@ namespace
             AddTrayIcon();
             if (g_configuredStartPaused.load(std::memory_order_acquire))
             {
-                UpdateTrayTip(L"FocusGlass - paused (Ctrl+Alt+B to resume)");
+                UpdateTrayTip(L"FocusGlass - paused (resume from the tray menu)");
             }
             else
             {
@@ -1218,6 +1259,11 @@ namespace
                 if (!m_enabled)
                     throw std::runtime_error("FocusGlass could not initialize its capture or GPU compositor.");
             }
+
+            // Registers the hotkeys that the settings ask for. Toggle() has
+            // already done this when it started the blur; this call is a no-op
+            // in that case.
+            UpdateHotkeys();
 
             Log(L"FocusGlass Windhawk Tool Mod started. GPU Gaussian blur and DirectComposition are active.");
             g_appStartSucceeded.store(true, std::memory_order_release);
@@ -1275,6 +1321,14 @@ namespace
             }
             if (!self) return DefWindowProcW(hwnd, message, wParam, lParam);
 
+            // The registered TaskbarCreated message is not a constant, so it
+            // can't be a case label.
+            if (self->m_taskbarCreatedMessage != 0 && message == self->m_taskbarCreatedMessage)
+            {
+                self->OnTaskbarCreated();
+                return 0;
+            }
+
             switch (message)
             {
             case WM_HOTKEY:
@@ -1301,12 +1355,13 @@ namespace
                 self->RenderLatest();
                 return 0;
             case kSettingsChangedMessage:
+                // Settings never pause or resume a running blur: "Start paused"
+                // applies only when the mod loads.
                 self->m_blurLevel->store(
                     g_configuredBlurLevel.load(std::memory_order_acquire),
                     std::memory_order_relaxed);
                 self->m_layoutDirty = true;
-                if ((!g_configuredStartPaused.load(std::memory_order_acquire)) != self->m_enabled)
-                    self->Toggle();
+                self->UpdateHotkeys();
                 return 0;
             case kErrorMessage:
                 self->HideOverlay();
@@ -1314,6 +1369,7 @@ namespace
                 self->m_compositor.reset();
                 if (self->m_capture) self->m_capture->Stop();
                 self->m_capture.reset();
+                self->UpdateHotkeys();
                 self->UpdateTrayTip(L"FocusGlass - stopped after capture error");
                 return 0;
             case WM_DISPLAYCHANGE:
@@ -1326,6 +1382,7 @@ namespace
                 self->m_compositor.reset();
                 if (self->m_capture) self->m_capture->Stop();
                 self->m_capture.reset();
+                self->UpdateHotkeys();
                 Log(L"Display configuration changed. Restart FocusGlass to reinitialize capture safely.");
                 self->UpdateTrayTip(L"FocusGlass - restart required after display change");
                 return 0;
@@ -1383,7 +1440,9 @@ namespace
             g_overlayWindow = m_overlay;
         }
 
-        void AddTrayIcon()
+        // Adds the notification-area icon with the current status tooltip.
+        // m_trayIconAdded reflects whether Windows actually accepted the icon.
+        bool AddTrayIcon()
         {
             m_tray = {};
             m_tray.cbSize = sizeof(m_tray);
@@ -1392,16 +1451,71 @@ namespace
             m_tray.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
             m_tray.uCallbackMessage = kTrayMessage;
             m_tray.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
-            wcscpy_s(m_tray.szTip, L"FocusGlass - active (Ctrl+Alt+B to pause)");
-            Shell_NotifyIconW(NIM_ADD, &m_tray);
+            wcsncpy_s(m_tray.szTip, m_trayTip.c_str(), _TRUNCATE);
+
+            bool added = Shell_NotifyIconW(NIM_ADD, &m_tray) != FALSE;
+            if (!added)
+            {
+                // The icon may still exist (for example a spurious
+                // TaskbarCreated); updating it proves that it is there.
+                added = Shell_NotifyIconW(NIM_MODIFY, &m_tray) != FALSE;
+            }
+
+            m_trayIconAdded = added;
+            if (!added)
+                Log(L"Could not add the notification-area icon; it will be retried when the taskbar is created.");
+            return added;
         }
 
+        void OnTaskbarCreated()
+        {
+            Log(L"The taskbar was created again; restoring the notification-area icon.");
+            m_trayIconAdded = false;
+            AddTrayIcon();
+        }
+
+        // Remembers the status text and shows it on the icon when the icon exists.
         void UpdateTrayTip(const wchar_t* tip)
         {
-            if (!m_tray.hWnd) return;
+            m_trayTip = tip;
+            if (!m_trayIconAdded) return;
             m_tray.uFlags = NIF_TIP;
-            wcsncpy_s(m_tray.szTip, tip, _TRUNCATE);
+            wcsncpy_s(m_tray.szTip, m_trayTip.c_str(), _TRUNCATE);
             Shell_NotifyIconW(NIM_MODIFY, &m_tray);
+        }
+
+        void SyncHotkey(bool& registered, bool wanted, UINT id, UINT virtualKey,
+            const wchar_t* description)
+        {
+            if (wanted && !registered)
+            {
+                registered = RegisterAppHotKey(m_host, id,
+                    MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, virtualKey, description);
+            }
+            else if (!wanted && registered)
+            {
+                UnregisterHotKey(m_host, id);
+                registered = false;
+            }
+        }
+
+        // Makes the registered hotkeys match the settings and the blur state:
+        // the pause/resume hotkey follows its setting, and the blur-strength
+        // hotkeys are held only while the blur is active.
+        void UpdateHotkeys()
+        {
+            if (!m_host) return;
+
+            const bool wantToggle = g_enableToggleHotkey.load(std::memory_order_acquire);
+            const bool wantStrength = m_enabled &&
+                g_enableBlurStrengthHotkeys.load(std::memory_order_acquire);
+
+            SyncHotkey(m_toggleHotkeyRegistered, wantToggle, kHotkeyToggle, 'B',
+                L"Ctrl+Alt+B pause/resume hotkey");
+            SyncHotkey(m_increaseHotkeyRegistered, wantStrength, kHotkeyIncreaseBlur, VK_UP,
+                L"Ctrl+Alt+Up blur-increase hotkey");
+            SyncHotkey(m_decreaseHotkeyRegistered, wantStrength, kHotkeyDecreaseBlur, VK_DOWN,
+                L"Ctrl+Alt+Down blur-decrease hotkey");
         }
 
         void ShowTrayMenu()
@@ -1413,8 +1527,8 @@ namespace
             const int level = m_blurLevel->load(std::memory_order_relaxed);
             const UINT increaseFlags = MF_STRING | (level >= kMaxBlurLevel ? MF_GRAYED : 0);
             const UINT decreaseFlags = MF_STRING | (level <= kMinBlurLevel ? MF_GRAYED : 0);
-            AppendMenuW(menu, increaseFlags, kMenuIncreaseBlur, L"Increase blur  (Ctrl+Alt+Up)");
-            AppendMenuW(menu, decreaseFlags, kMenuDecreaseBlur, L"Decrease blur  (Ctrl+Alt+Down)");
+            AppendMenuW(menu, increaseFlags, kMenuIncreaseBlur, L"Increase blur");
+            AppendMenuW(menu, decreaseFlags, kMenuDecreaseBlur, L"Decrease blur");
             AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
             AppendMenuW(menu, MF_STRING, kMenuToggle, m_enabled ? L"Pause focus blur" : L"Resume focus blur");
             HideOverlay();
@@ -1437,9 +1551,12 @@ namespace
             }
 
             m_blurLevel->store(next, std::memory_order_relaxed);
-            const std::wstring status = L"FocusGlass - " + std::to_wstring(next) +
-                L"/5 blur (Ctrl+Alt+Up/Down)";
-            UpdateTrayTip(status.c_str());
+            if (m_enabled)
+            {
+                const std::wstring status = L"FocusGlass - " + std::to_wstring(next) +
+                    L"/5 blur active";
+                UpdateTrayTip(status.c_str());
+            }
 
             const std::wstring message = L"Blur strength: " + std::to_wstring(next) + L"/5";
             ShowBlurNotification(message.c_str());
@@ -1449,7 +1566,7 @@ namespace
 
         void ShowBlurNotification(const wchar_t* message)
         {
-            if (!m_tray.hWnd) return;
+            if (!m_trayIconAdded) return;
             NOTIFYICONDATAW notification = m_tray;
             notification.uFlags = NIF_INFO;
             wcscpy_s(notification.szInfoTitle, L"FocusGlass");
@@ -1468,7 +1585,8 @@ namespace
                 m_compositor.reset();
                 if (m_capture) m_capture->Stop();
                 m_capture.reset();
-                UpdateTrayTip(L"FocusGlass - paused (Ctrl+Alt+B to resume)");
+                UpdateHotkeys();
+                UpdateTrayTip(L"FocusGlass - paused (click the icon to resume)");
                 return;
             }
 
@@ -1483,7 +1601,8 @@ namespace
                     m_monitor.width, m_monitor.height);
                 m_enabled = true;
                 ShowOverlay();
-                UpdateTrayTip(L"FocusGlass - GPU blur active (Ctrl+Alt+B to pause)");
+                UpdateHotkeys();
+                UpdateTrayTip(L"FocusGlass - GPU blur active (click the icon to pause)");
             }
             catch (const std::exception& e)
             {
@@ -1492,8 +1611,9 @@ namespace
                 m_capture.reset();
                 m_enabled = false;
                 HideOverlay();
+                UpdateHotkeys();
                 Log(std::wstring(L"Could not resume GPU blur: ") + winrt::to_hstring(e.what()).c_str());
-                UpdateTrayTip(L"FocusGlass - could not resume; see log");
+                UpdateTrayTip(L"FocusGlass - could not resume; see the Windhawk log");
             }
             catch (...)
             {
@@ -1502,8 +1622,9 @@ namespace
                 m_capture.reset();
                 m_enabled = false;
                 HideOverlay();
+                UpdateHotkeys();
                 Log(L"Could not resume GPU blur due to an unknown error.");
-                UpdateTrayTip(L"FocusGlass - could not resume; see log");
+                UpdateTrayTip(L"FocusGlass - could not resume; see the Windhawk log");
             }
         }
 
@@ -1585,7 +1706,8 @@ namespace
                 m_compositor.reset();
                 if (m_capture) m_capture->Stop();
                 m_capture.reset();
-                UpdateTrayTip(L"FocusGlass - stopped after GPU error; see log");
+                UpdateHotkeys();
+                UpdateTrayTip(L"FocusGlass - stopped after GPU error; see the Windhawk log");
             }
             catch (const std::exception& e)
             {
@@ -1595,7 +1717,8 @@ namespace
                 m_compositor.reset();
                 if (m_capture) m_capture->Stop();
                 m_capture.reset();
-                UpdateTrayTip(L"FocusGlass - stopped after GPU error; see log");
+                UpdateHotkeys();
+                UpdateTrayTip(L"FocusGlass - stopped after GPU error; see the Windhawk log");
             }
         }
 
@@ -1611,10 +1734,14 @@ namespace
             if (m_locationHook) UnhookWinEvent(m_locationHook);
             if (m_windowStateHook) UnhookWinEvent(m_windowStateHook);
             g_refreshMessagePending.store(false, std::memory_order_release);
-            UnregisterHotKey(m_host, kHotkeyToggle);
-            UnregisterHotKey(m_host, kHotkeyIncreaseBlur);
-            UnregisterHotKey(m_host, kHotkeyDecreaseBlur);
-            if (m_tray.hWnd) Shell_NotifyIconW(NIM_DELETE, &m_tray);
+            if (m_toggleHotkeyRegistered) UnregisterHotKey(m_host, kHotkeyToggle);
+            if (m_increaseHotkeyRegistered) UnregisterHotKey(m_host, kHotkeyIncreaseBlur);
+            if (m_decreaseHotkeyRegistered) UnregisterHotKey(m_host, kHotkeyDecreaseBlur);
+            m_toggleHotkeyRegistered = false;
+            m_increaseHotkeyRegistered = false;
+            m_decreaseHotkeyRegistered = false;
+            if (m_trayIconAdded) Shell_NotifyIconW(NIM_DELETE, &m_tray);
+            m_trayIconAdded = false;
             if (m_overlay) DestroyWindow(m_overlay);
             if (m_host) DestroyWindow(m_host);
             g_overlayWindow = nullptr;
@@ -1630,6 +1757,12 @@ namespace
         HWINEVENTHOOK m_locationHook{};
         HWINEVENTHOOK m_windowStateHook{};
         NOTIFYICONDATAW m_tray{};
+        UINT m_taskbarCreatedMessage{};
+        bool m_trayIconAdded{ false };
+        std::wstring m_trayTip{ L"FocusGlass" };
+        bool m_toggleHotkeyRegistered{ false };
+        bool m_increaseHotkeyRegistered{ false };
+        bool m_decreaseHotkeyRegistered{ false };
         std::unique_ptr<focusglass::GpuCompositor> m_compositor;
         WindowLayout m_cachedLayout{};
         HWND m_cachedForegroundWindow{};
@@ -1645,13 +1778,10 @@ namespace
 }
 
 
-void FocusGlassDebugTrace(const std::wstring& message);
-
 namespace
 {
     DWORD WINAPI FocusGlassWorkerThread(LPVOID)
     {
-        FocusGlassDebugTrace(L"Dedicated worker thread entered.");
         bool apartmentInitialized = false;
         try
         {
@@ -1661,31 +1791,25 @@ namespace
             SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
             winrt::init_apartment(winrt::apartment_type::multi_threaded);
             apartmentInitialized = true;
-            FocusGlassDebugTrace(L"WinRT MTA apartment initialized.");
 
             App app;
-            FocusGlassDebugTrace(L"Starting desktop capture and GPU compositor.");
             app.Run(GetModuleHandleW(nullptr), g_appReadyEvent);
-            FocusGlassDebugTrace(L"App.Run returned.");
         }
         catch (const winrt::hresult_error& error)
         {
-            FocusGlassDebugTrace(std::wstring(L"Startup HRESULT exception: ") + error.message().c_str());
-            Log(std::wstring(L"FocusGlass startup failed: ") + error.message().c_str());
+            Log(std::wstring(L"Startup failed: ") + error.message().c_str());
             if (g_appReadyEvent)
                 SetEvent(g_appReadyEvent);
         }
         catch (const std::exception& error)
         {
-            FocusGlassDebugTrace(std::wstring(L"Startup exception: ") + winrt::to_hstring(error.what()).c_str());
-            Log(std::wstring(L"FocusGlass startup failed: ") + winrt::to_hstring(error.what()).c_str());
+            Log(std::wstring(L"Startup failed: ") + winrt::to_hstring(error.what()).c_str());
             if (g_appReadyEvent)
                 SetEvent(g_appReadyEvent);
         }
         catch (...)
         {
-            FocusGlassDebugTrace(L"Startup failed with an unknown exception.");
-            Log(L"FocusGlass startup failed with an unknown error.");
+            Log(L"Startup failed with an unknown error.");
             if (g_appReadyEvent)
                 SetEvent(g_appReadyEvent);
         }
@@ -1713,36 +1837,29 @@ namespace
 
 BOOL WhTool_ModInit()
 {
-    FocusGlassDebugTrace(L"WhTool_ModInit entered in dedicated process.");
+    Wh_Log(L">");
     LoadWindhawkSettings();
     g_appStartSucceeded.store(false, std::memory_order_release);
     g_appReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_appReadyEvent)
     {
-        FocusGlassDebugTrace(L"CreateEvent failed with Win32 error " + std::to_wstring(GetLastError()) + L".");
-        Wh_Log(L"FocusGlass: CreateEvent failed with error %lu", GetLastError());
+        Wh_Log(L"CreateEvent failed with error %lu", GetLastError());
         return FALSE;
     }
 
     g_appThread = CreateThread(nullptr, 0, FocusGlassWorkerThread, nullptr, 0, &g_appThreadId);
     if (!g_appThread)
     {
-        FocusGlassDebugTrace(L"CreateThread for renderer failed.");
-        Wh_Log(L"FocusGlass: CreateThread failed with error %lu", GetLastError());
+        Wh_Log(L"CreateThread failed with error %lu", GetLastError());
         CloseWorkerHandles();
         return FALSE;
     }
 
-    FocusGlassDebugTrace(L"Waiting up to 20 seconds for renderer initialization.");
     const DWORD waitResult = WaitForSingleObject(g_appReadyEvent, 20000);
-    FocusGlassDebugTrace(L"Renderer startup wait finished: waitResult=" +
-        std::to_wstring(waitResult) + L", success=" +
-        std::to_wstring(g_appStartSucceeded.load(std::memory_order_acquire) ? 1 : 0) + L".");
     if (waitResult != WAIT_OBJECT_0 ||
         !g_appStartSucceeded.load(std::memory_order_acquire))
     {
-        FocusGlassDebugTrace(L"Renderer startup did not complete successfully; stopping worker.");
-        Wh_Log(L"FocusGlass: the renderer did not report a successful startup.");
+        Wh_Log(L"The renderer did not report a successful startup (wait result %lu)", waitResult);
         const HWND hostWindow = g_hostWindow.load(std::memory_order_acquire);
         if (hostWindow)
             PostMessageW(hostWindow, WM_CLOSE, 0, 0);
@@ -1754,12 +1871,12 @@ BOOL WhTool_ModInit()
         return FALSE;
     }
 
-    FocusGlassDebugTrace(L"WhTool_ModInit completed successfully; renderer is ready.");
     return TRUE;
 }
 
 void WhTool_ModSettingsChanged()
 {
+    Wh_Log(L">");
     LoadWindhawkSettings();
     const HWND hostWindow = g_hostWindow.load(std::memory_order_acquire);
     if (hostWindow)
@@ -1768,6 +1885,7 @@ void WhTool_ModSettingsChanged()
 
 void WhTool_ModUninit()
 {
+    Wh_Log(L">");
     const HWND hostWindow = g_hostWindow.load(std::memory_order_acquire);
     if (hostWindow)
         PostMessageW(hostWindow, WM_CLOSE, 0, 0);
@@ -1779,208 +1897,192 @@ void WhTool_ModUninit()
         DWORD waitResult = WaitForSingleObject(g_appThread, 10000);
         if (waitResult == WAIT_TIMEOUT)
         {
-            Wh_Log(L"FocusGlass: graceful shutdown timed out; requesting message-loop exit.");
+            Wh_Log(L"Graceful shutdown timed out; requesting message-loop exit.");
             if (g_appThreadId)
                 PostThreadMessageW(g_appThreadId, WM_QUIT, 0, 0);
             waitResult = WaitForSingleObject(g_appThread, 5000);
         }
         if (waitResult == WAIT_TIMEOUT)
-            Wh_Log(L"FocusGlass: worker thread did not stop before the Windhawk host exits.");
+            Wh_Log(L"Worker thread did not stop before the Windhawk host exits.");
     }
 
     CloseWorkerHandles();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Windhawk 1.7.3 Tool Mod launcher implementation.
-// Keep this compatibility block for stable Windhawk 1.7.3. Windhawk 2.0 has
-// native Tool Mod support, but its header isn't available to the 1.7.3 compiler.
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
 
-bool g_isToolModProcessLauncher = false;
-HANDLE g_toolModProcessMutex = nullptr;
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
 
-void FocusGlassDebugTrace(const std::wstring& message)
-{
-    Wh_Log(L"%s", message.c_str());
-}
-
-void WINAPI EntryPoint_Hook()
-{
-    Wh_Log(L"FocusGlass Tool Mod worker entry point");
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
     ExitThread(0);
 }
 
-BOOL Wh_ModInit()
-{
-    FocusGlassDebugTrace(L"Wh_ModInit entered. Command line: " + std::wstring(GetCommandLineW()));
-    DWORD sessionId = 0;
-    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0)
-    {
-        FocusGlassDebugTrace(L"Skipping Session 0 process.");
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
         return FALSE;
     }
 
     bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
-    int argc = 0;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-    if (!argv)
-    {
-        FocusGlassDebugTrace(L"CommandLineToArgvW failed.");
-        Wh_Log(L"FocusGlass: CommandLineToArgvW failed.");
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
     }
 
-    for (int i = 1; i < argc; ++i)
-    {
+    for (int i = 1; i < argc; i++) {
         if (wcscmp(argv[i], L"-service") == 0 ||
             wcscmp(argv[i], L"-service-start") == 0 ||
-            wcscmp(argv[i], L"-service-stop") == 0)
-        {
+            wcscmp(argv[i], L"-service-stop") == 0) {
             isExcluded = true;
             break;
         }
     }
 
-    for (int i = 1; i < argc - 1; ++i)
-    {
-        if (wcscmp(argv[i], L"-tool-mod") == 0)
-        {
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
             isToolModProcess = true;
-            isCurrentToolModProcess = wcscmp(argv[i + 1], WH_MOD_ID) == 0;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
             break;
         }
     }
 
     LocalFree(argv);
-    FocusGlassDebugTrace(L"Process classification: excluded=" +
-        std::to_wstring(isExcluded ? 1 : 0) + L", toolMod=" +
-        std::to_wstring(isToolModProcess ? 1 : 0) + L", focusglassWorker=" +
-        std::to_wstring(isCurrentToolModProcess ? 1 : 0) + L".");
-    if (isExcluded)
-    {
-        FocusGlassDebugTrace(L"Skipping Windhawk service process.");
+
+    if (isExcluded) {
         return FALSE;
     }
 
-    if (isCurrentToolModProcess)
-    {
-        g_toolModProcessMutex = CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-        if (!g_toolModProcessMutex)
-        {
-            FocusGlassDebugTrace(L"Worker failed to create its single-instance mutex.");
-            Wh_Log(L"FocusGlass: CreateMutex failed.");
-            ExitProcess(1);
-        }
-        if (GetLastError() == ERROR_ALREADY_EXISTS)
-        {
-            FocusGlassDebugTrace(L"A FocusGlass Tool Mod worker already exists.");
-            Wh_Log(L"FocusGlass Tool Mod process is already running.");
-            ExitProcess(1);
-        }
-        if (!WhTool_ModInit())
-        {
-            FocusGlassDebugTrace(L"WhTool_ModInit returned FALSE; worker is exiting.");
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
         }
 
-        auto* dosHeader = reinterpret_cast<IMAGE_DOS_HEADER*>(GetModuleHandleW(nullptr));
-        auto* ntHeaders = reinterpret_cast<IMAGE_NT_HEADERS*>(
-            reinterpret_cast<BYTE*>(dosHeader) + dosHeader->e_lfanew);
-        const DWORD entryPointRva = ntHeaders->OptionalHeader.AddressOfEntryPoint;
-        void* entryPoint = reinterpret_cast<BYTE*>(dosHeader) + entryPointRva;
-        Wh_SetFunctionHook(entryPoint, reinterpret_cast<void*>(EntryPoint_Hook), nullptr);
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
     }
 
-    if (isToolModProcess)
+    if (isToolModProcess) {
         return FALSE;
+    }
 
     g_isToolModProcessLauncher = true;
-    FocusGlassDebugTrace(L"Launcher instance initialized; waiting for Wh_ModAfterInit.");
     return TRUE;
 }
 
-void Wh_ModAfterInit()
-{
-    if (!g_isToolModProcessLauncher)
-    {
-        FocusGlassDebugTrace(L"Wh_ModAfterInit called in worker/non-launcher process; no spawn required.");
-        return;
-    }
-    FocusGlassDebugTrace(L"Wh_ModAfterInit entered; attempting to launch dedicated worker.");
-
-    WCHAR currentProcessPath[MAX_PATH]{};
-    const DWORD pathLength = GetModuleFileNameW(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath));
-    if (pathLength == 0 || pathLength >= ARRAYSIZE(currentProcessPath))
-    {
-        FocusGlassDebugTrace(L"GetModuleFileName failed in launcher.");
-        Wh_Log(L"FocusGlass: GetModuleFileName failed.");
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
         return;
     }
 
-    WCHAR commandLine[MAX_PATH + 128]{};
-    if (swprintf_s(commandLine, ARRAYSIZE(commandLine), L"\"%s\" -tool-mod \"%s\"",
-        currentProcessPath, WH_MOD_ID) < 0)
-    {
-        FocusGlassDebugTrace(L"Failed to format the dedicated worker command line.");
-        Wh_Log(L"FocusGlass: failed to format the Tool Mod command line.");
-        return;
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
     }
 
-    HMODULE kernelModule = GetModuleHandleW(L"kernelbase.dll");
-    if (!kernelModule)
-        kernelModule = GetModuleHandleW(L"kernel32.dll");
-    if (!kernelModule)
-    {
-        FocusGlassDebugTrace(L"Could not find kernelbase.dll or kernel32.dll.");
-        Wh_Log(L"FocusGlass: kernelbase/kernel32 module was not found.");
-        return;
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
     }
 
     using CreateProcessInternalW_t = BOOL(WINAPI*)(
-        HANDLE, LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES,
-        WINBOOL, DWORD, LPVOID, LPCWSTR, LPSTARTUPINFOW, LPPROCESS_INFORMATION, PHANDLE);
-    auto createProcessInternal = reinterpret_cast<CreateProcessInternalW_t>(
-        GetProcAddress(kernelModule, "CreateProcessInternalW"));
-    if (!createProcessInternal)
-    {
-        FocusGlassDebugTrace(L"CreateProcessInternalW export was not found.");
-        Wh_Log(L"FocusGlass: CreateProcessInternalW was not found.");
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
         return;
     }
 
-    STARTUPINFOW startupInfo{};
-    startupInfo.cb = sizeof(startupInfo);
-    startupInfo.dwFlags = STARTF_FORCEOFFFEEDBACK;
-    PROCESS_INFORMATION processInfo{};
-    if (!createProcessInternal(nullptr, currentProcessPath, commandLine, nullptr, nullptr,
-        FALSE, NORMAL_PRIORITY_CLASS, nullptr, nullptr, &startupInfo, &processInfo, nullptr))
-    {
-        const DWORD error = GetLastError();
-        FocusGlassDebugTrace(L"CreateProcessInternalW failed with Win32 error " +
-            std::to_wstring(error) + L".");
-        Wh_Log(L"FocusGlass: failed to launch dedicated Tool Mod process (error %lu).", error);
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
         return;
     }
 
-    FocusGlassDebugTrace(L"Dedicated worker process created. PID=" +
-        std::to_wstring(processInfo.dwProcessId) + L". Command line: " + commandLine);
-    CloseHandle(processInfo.hProcess);
-    CloseHandle(processInfo.hThread);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
 }
 
-void Wh_ModSettingsChanged()
-{
-    if (!g_isToolModProcessLauncher)
-        WhTool_ModSettingsChanged();
-}
-
-void Wh_ModUninit()
-{
-    if (g_isToolModProcessLauncher)
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
         return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
 
     WhTool_ModUninit();
     ExitProcess(0);
