@@ -37,7 +37,8 @@ by name.
 
 A folder inside a mini folder opens in the same panel. Go back with the arrow
 button, the Backspace key or the back button of the mouse. If there are more
-items than fit on the screen, scroll with the mouse wheel.
+items than fit on the screen, scroll with the mouse wheel or the Page Up and
+Page Down keys.
 
 If a folder has its own icon (Properties > Customize > Change Icon), the tile
 on the taskbar shows that icon instead of the four small icons. This can be
@@ -366,7 +367,10 @@ bool UpdateAutoFolders() {
     return true;
 }
 
-void LoadSettings() {
+// scanAutoFolders: false in Wh_ModInit, which runs on Explorer's own thread
+// while Explorer starts, so it must not read the disk. The popup thread adds
+// the automatic folders a moment later (kTimerAutoScan).
+void LoadSettings(bool scanAutoFolders) {
     Settings s;
     for (int i = 0; i < 64; i++) {
         std::wstring n = WindhawkUtils::StringSetting::make(L"folders[%d].name", i).get();
@@ -399,7 +403,7 @@ void LoadSettings() {
     s.autoAdd = Wh_GetIntSetting(L"autoAdd") != 0;
     s.autoRoot = ExpandEnv(L"%USERPROFILE%\\TaskbarFolders");
     s.folderIcon = Wh_GetIntSetting(L"folderIcon") != 0;
-    s.folders = BuildFolderList(s);
+    s.folders = scanAutoFolders ? BuildFolderList(s) : s.listed;
 
     WindhawkUtils::StringSetting position = WindhawkUtils::StringSetting::make(L"position");
     s.mode = wcscmp(position.get(), L"right") == 0   ? kPosEnd
@@ -869,7 +873,9 @@ bool g_backupTriggerNeeded = true;
 // taskbar thread to do something later, without sending it a message: a sent
 // message can arrive in the middle of the taskbar's own work.
 std::mutex g_uiQueueMutex;
-winrt::Windows::System::DispatcherQueue g_uiQueue{nullptr};
+// Released with `g_uiQueue = nullptr;` in Wh_ModUninit. No destructor at
+// process exit: the taskbar thread is already gone then.
+[[clang::no_destroy]] winrt::Windows::System::DispatcherQueue g_uiQueue{nullptr};
 
 FrameState* FindFrameState(FrameworkElement const& frame) {
     for (auto& s : g_frames) {
@@ -1917,8 +1923,10 @@ void PopupShow(int folder, POINT anchor, bool force, bool keepPlace = false) {
 }
 
 // Shows a subfolder (or the parent folder) inside the panel.
-void PopupNavigate(const std::wstring& dir) {
-    g_popup.dir = dir;
+// dir is a copy: the caller may pass a string from g_popup.items, which
+// PopupLayout frees.
+void PopupNavigate(std::wstring dir) {
+    g_popup.dir = std::move(dir);
     g_popup.hover = kHitNone;
     PopupLayout(GetSettings().columns, true);
 }
@@ -2181,7 +2189,9 @@ void PopupAddFiles() {
     PopupShow(folder, anchor, true, true);
 }
 
-void PopupOpenItem(const std::wstring& path) {
+// path is a copy: ShellExecuteExW can handle window messages, and one of them
+// may free g_popup.items.
+void PopupOpenItem(std::wstring path) {
     PopupHide();
     SHELLEXECUTEINFOW sei{sizeof(sei)};
     sei.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
@@ -2610,7 +2620,7 @@ void TriggerTaskbarLayout() {
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
-    LoadSettings();
+    LoadSettings(false);
 
     if (HMODULE module = GetTaskbarViewModuleHandle()) {
         g_taskbarViewHooked = true;
@@ -2649,10 +2659,6 @@ void Wh_ModUninit() {
 
     g_unloading = true;
 
-    if (HWND ui = GetTaskbarUiWnd()) {
-        RunFromWindowThread(ui, [](PVOID) { RemoveAllPanels(); }, nullptr);
-    }
-
     // No time limit: a callback that is still queued on the taskbar thread
     // points into this mod. The taskbar thread never waits for this thread.
     while (g_pendingDispatch > 0) {
@@ -2665,6 +2671,13 @@ void Wh_ModUninit() {
     // stopped.
     while (g_pendingDispatch > 0) {
         Sleep(20);
+    }
+
+    // Removes the panels. Also a fence: the taskbar thread handles this sent
+    // message only after it has left, and released, the last queued callback,
+    // so none of this mod's code is still running there when the mod unloads.
+    if (HWND ui = GetTaskbarUiWnd()) {
+        RunFromWindowThread(ui, [](PVOID) { RemoveAllPanels(); }, nullptr);
     }
 
     std::lock_guard<std::mutex> lock(g_uiQueueMutex);
@@ -2684,7 +2697,8 @@ void ApplyFolderListChange() {
 void Wh_ModSettingsChanged() {
     Wh_Log(L">");
 
-    LoadSettings();
+    // Not Explorer's thread, so the disk may be read here.
+    LoadSettings(true);
 
     if (g_popupWnd) {
         // Hides the panel and starts or stops watching TaskbarFolders.
