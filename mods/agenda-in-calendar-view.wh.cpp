@@ -2,7 +2,7 @@
 // @id              agenda-in-calendar-view
 // @name            Agenda in Calendar View
 // @description     Show events in the calendar of the Notification Centre, like in Windows 10
-// @version         1.5
+// @version         1.4
 // @author          lonfro
 // @github          https://github.com/lonfro
 // @include         ShellExperienceHost.exe
@@ -66,9 +66,7 @@ Setting a maximum height (before it starts scrolling):
     - If events can't be fetched (e.g. no internet connection), previously-fetched events are shown.
     - You can click the Refresh button in the calendar header at any time to force a refresh.
 - The mod resiliently accepts errors; if you have a problem, enable logging.
-- The mod connects to remote calendar sources over internet, when:
-    - the calendar pane is opened (unless the time between fetches duration hasn't elapsed yet);
-    - the refresh button is pressed
+- For each source that is an `http://` or `https://` URL, the mod downloads that URL (a plain GET; nothing else is sent) when the notification centre opens, at most once per *Minimum time between fetches*, and whenever you click Refresh. It contacts no other servers. Use local `.ics` files if you don't want any network access.
 
 ## FAQ
 **Updating from v1.2 or earlier:**
