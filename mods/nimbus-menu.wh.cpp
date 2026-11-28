@@ -35,7 +35,8 @@ Replaces the Windows taskbar with a light dock, one per monitor, with its own St
 * Its own Start: pinned apps, all apps, recent downloads, app search, files (with [Everything](https://www.voidtools.com) or Windows Search) and Windows Settings pages. Compact or wide search.
 * A search that understands you: no accents needed, initials ("vsc" finds Visual Studio Code), one typo ("spotfy"), common nicknames ("cmd", "calc"), and what you open most comes first.
 * A search that does things: sums ("12*3,5"), units ("10 km em mi", "100 f to c"), open windows by their title, and commands: "lock", "sleep", "timer 10m", "note buy bread", "empty recycle bin" (Windows asks first). Enter copies a result.
-* Keyboard in Start: arrows, Tab and Enter in every tab. Power: restart and shut down ask for a second click; right-click a power button for sign out, hibernate and restart to advanced options.
+* It also opens what Win+R opens: a folder ("%appdata%", "C:\Games"), a program or tool by its file name ("services.msc", "appwiz.cpl"), a link ("ms-settings:display"). To run a command with arguments, or one that is a plain word, put ">" in front: ">cmd /k ipconfig", ">regedit". Without the ">", plain words are searched as apps and files first, and a command that happens to match is only offered at the end of the list.
+* Keyboard in Start: arrows, Tab and Enter in every tab. Power: restart and shut down ask for a second click; right-click a power button for sign out, hibernate and restart to advanced options (Windows' own screens, where safe mode is: Troubleshoot › Advanced options › Startup Settings › 4, or 5 with networking).
 * Right-click menus like Windows': an app's recent files (its jump list), open file location, copy path, and End task on the dock (when it's on in Windows, or always).
 * Unread notifications as a number on each app's dock icon; it goes when the app comes to the front.
 * The Windows key opens Nimbus' Start over any window (administrator ones too) and in games. Ctrl+Esc still opens Windows' Start. An optional shortcut (Alt+Space or Ctrl+Space) can open it too.
@@ -45,7 +46,7 @@ Replaces the Windows taskbar with a light dock, one per monitor, with its own St
 * Run as administrator, from the right-click menu of the dock and of Start.
 * The sound panel shows where sound is coming out: a small bar moves under each output and app that's playing.
 * Grid sound panel: every app on every output, with the volume and the sound at each crossing.
-* If the bar's process crashes, Windows' taskbar comes back right away and Nimbus reopens by itself.
+* If the bar's process crashes or freezes, Windows' taskbar comes back right away and Nimbus reopens by itself.
 * Tray: the icons of the apps running in the background, beside the status area. Inline with arrows, behind one button (pin the ones you want outside), or in a grid or list panel. Clicks go to the app itself, like on the taskbar; the middle button pins.
 * Control center: one dock button opens do not disturb, Bluetooth, night light, shortcuts (project, cast, captions, accessibility), each monitor's brightness, sound and power, and any other item you put there. Each item opens its full panel inside it, and it scrolls on small screens. Every item can be in the dock, the control center and Start at once, or off.
 * Bluetooth: turn it on and off, see paired devices with their battery, connect and disconnect headsets and speakers.
@@ -58,7 +59,7 @@ Replaces the Windows taskbar with a light dock, one per monitor, with its own St
 * Guided setup: a few questions set everything up (it opens by itself the first time; Settings → Guided setup brings it back). Everything can be changed later in Settings.
 * Follows Windows' high contrast and "Animation effects" off.
 * Per-monitor settings: format, auto-hide, what shows, only that monitor's windows. Each monitor keeps its own, even when the monitors change order.
-* The dock runs in its own Windhawk process and hides when a game or video is in full screen. Explorer only gets three small hooks: the Windows key, Win+N, and passing the tray icons on to the dock (it never waits on the dock).
+* The dock runs in its own Windhawk process and hides when a game or video is in full screen. Explorer gets three small hooks (the Windows key, Win+N, and passing the tray icons on to the dock; it never waits on the dock) and a guard. The guard checks every few seconds that the bar's process is alive, answers and still has its docks. If it crashed, or froze or lost its docks for about 25 seconds, the guard ends that process, gives Windows' taskbar (and the notification banners) back and starts Nimbus again. It ends and starts only Windhawk's own program, the one the bar noted when it started. After three times in 5 minutes it leaves Windows' taskbar and starts nothing for 10 minutes.
 * The text is in English, or in Portuguese when Windows is in Portuguese.
 
 ### How to use
@@ -88,6 +89,8 @@ Replaces the Windows taskbar with a light dock, one per monitor, with its own St
 * Ctrl+V (or "Paste") with the shelf open: a copied picture becomes a .png, text becomes a .txt, copied files come in as they are. Those pasted files move when dragged out, and are deleted when the mod stops if still on the shelf.
 * Right-click an item: Open, Show in folder, Copy, Remove.
 * Drop or paste (Ctrl+V) a link: a direct file link is downloaded by Nimbus. For a video, audio or pictures on a site (YouTube, TikTok, Instagram, ImagePond…), turn on Settings → Shelf → "Download videos and pictures from sites" and install the programs (see below). A card shows the progress; × cancels. Download only what you have the right to.
+* Pasting with a single link on the clipboard downloads it at once, with no question. Don't paste a one-time link (a sign-in or password-reset link): the download uses it up.
+* A downloaded file is like a pasted one: it's deleted when the mod stops or updates if it's still on the shelf. Drag out what you want to keep.
 
 **Help and suggestions:** [github.com/igoredm/nimbus-menu](https://github.com/igoredm/nimbus-menu) (ask for help, report a bug or suggest an idea).
 
@@ -101,12 +104,18 @@ Nimbus replaces part of Windows, so a few of its actions are Windows settings. H
 | Each app's **"Show notification banners"** switch (Settings › System › Notifications) | Only if you turn on "Hide Windows' own banners" and confirm (off by default) | Every app's original value is saved before anything is switched off (nothing is switched off if that backup can't be saved). Put back when the option goes off, when the mod stops, on sign-out or shutdown, and by the Explorer part when the mod is turned off. |
 | Night light, power plan and mode, each monitor's brightness (DDC/CI), Bluetooth and Wi-Fi on or off, volume, keyboard language | Only when you click them, like in Windows' quick settings | They're your choices, so they stay as you set them (the same as when you change them in Windows). |
 | The default sound output (and the one for calls), and an app's own output (complete sound panel only, off by default) | Only when you drag an app or click Default or Calls on an output. These use the same parts of Windows its Sound settings use, which Microsoft doesn't document | Windows keeps them, as when set in Settings › Sound › Volume mixer (its "Reset" puts every app back on the default). An app on a second output is a copy Nimbus plays: it stops with ×, when the app closes, or when Nimbus stops. An app that picks its own outputs (TeamSpeak, Discord) is muted on the one you take it off. Those mutes are undone when Nimbus stops and done again when it starts. Going back to the simple panel puts back what Nimbus changed (each app's output as it was, copies off, those mutes undone), also later for an app that wasn't running; an output chosen in Windows' own mixer stays. A copy plays slightly behind, so two outputs in the same room sound doubled. |
+| An app's **volume on one output** (complete and Grid sound panels: click the app's dot on an output) | Only when you move that slider | On the app's own output it is the app's volume in Windows' Volume mixer: Windows keeps it for that app, as when set there, and it stays when the mod stops. On a second output it's the volume of Nimbus' copy, kept by Nimbus. |
+| **Screen layouts**: which monitors are on, the main one, each one's position and resolution | Only when you apply a layout you saved (Settings, the dock, the control center or Start) | The layout is applied without being saved, and Nimbus asks to keep it, for 15 seconds. Windows saves it only after OK. With Cancel or no answer, Windows goes back to the layout it had saved. If Nimbus closes before the answer, nothing was saved: Windows returns to its saved layout at the next restart or monitor change. A layout you kept stays, like one set in Windows' Display settings. |
 
-**Downloads** (optional, off by default except direct file links): with "Videos and pictures on sites" on, a link dropped on the shelf runs [yt-dlp](https://github.com/yt-dlp/yt-dlp) or [gallery-dl](https://github.com/mikf/gallery-dl) hidden (installed by you, e.g. `winget install yt-dlp.yt-dlp` and `winget install mikf.gallery-dl`; Nimbus never downloads a program), into the shelf's folder, with at most two hours per download; FFmpeg and deno are used when installed. "Use the browser's sign-in" (off by default) lets them read that browser's cookies. Downloaded files carry Windows' "came from the internet" mark.
+Nimbus adds nothing to Windows' boot menu or boot configuration: "Restart to advanced options" is Windows' own restart (`shutdown /r /o`).
+
+**Network: direct links.** A link to a file that you drop on the shelf, or paste there with Ctrl+V (a single link on the clipboard counts), is downloaded by Nimbus itself, at once. It sends one plain GET to that address, with a browser's user agent and no cookies, through the system's proxy, and follows redirects (never from HTTPS to HTTP); the part of the link after "#" is not sent. A download stops at 8 GB, after two hours, or when the connection stalls for a minute. Because the request goes out as soon as you paste, a one-time link (a sign-in or password-reset link) gets used up. This is on whenever the shelf is on: the only way to turn direct links off is to turn the shelf off (Settings → Shelf). The file goes to the shelf's folder in the mod's storage with Windows' "came from the internet" mark, and is deleted when the mod stops or updates if it's still on the shelf.
+
+**Downloads from sites** (optional, off by default): with "Videos and pictures on sites" on, a link dropped on the shelf runs [yt-dlp](https://github.com/yt-dlp/yt-dlp) or [gallery-dl](https://github.com/mikf/gallery-dl) hidden (installed by you, e.g. `winget install yt-dlp.yt-dlp` and `winget install mikf.gallery-dl`; Nimbus never downloads yt-dlp or gallery-dl), into the shelf's folder, with at most two hours per download and at most 25 files from a channel or playlist link; a download that fails or is cut off leaves nothing on the shelf; FFmpeg and deno are used when installed. "Use the browser's sign-in" (off by default) lets them read that browser's cookies. Downloaded files carry Windows' "came from the internet" mark, and are deleted when the mod stops or updates if still on the shelf.
 
 **BatteryHub** (optional, off by default): with "Read USB receivers with BatteryHub" on (Settings → Items), Nimbus runs [BatteryHub](https://github.com/ferloom/Wireless-Device-Battery-Monitor) (installed separately: the original C++ BatteryHub, version 1.1 or newer; the original repository is offline for now and the link goes to its Rust recode, which doesn't have `--json` yet) hidden every 5 minutes with `--json`, only to read the batteries of USB receivers; it closes by itself, at most after 20 seconds. Turn it off in the Devices panel or in Settings › Status area.
 
-Nimbus' own data (settings, notes, pins, the shelf's pasted and downloaded files) stays in the mod's storage, in a folder only your account can open. If the Windows taskbar ever stays hidden, turn the mod off or restart Explorer.
+Nimbus' own data (settings, notes, pins, the shelf's pasted and downloaded files, its log and the copy of your settings kept before an import) stays in the mod's storage, in a folder only your account can open. If the Windows taskbar ever stays hidden, turn the mod off or restart Explorer.
 
 ---
 
@@ -119,7 +128,8 @@ Troca a barra de tarefas do Windows por uma dock leve, uma por monitor, com Inic
 * Iniciar próprio: fixados, todos os apps, baixados recentes, busca de apps, arquivos (com o [Everything](https://www.voidtools.com) ou a busca do Windows) e telas das Configurações do Windows. Busca compacta ou larga.
 * Uma busca que entende: sem precisar de acento, por iniciais ("vsc" acha o Visual Studio Code), com uma letra errada ("spotfy"), apelidos comuns ("cmd", "calc", "zap"), e o que você mais abre vem primeiro.
 * Uma busca que faz coisas: contas ("12*3,5"), unidades ("10 km em mi", "100 f em c"), janelas abertas pelo título, e comandos: "bloquear", "suspender", "timer 10m", "nota comprar pão", "esvaziar lixeira" (o Windows pergunta antes). O Enter copia um resultado.
-* Teclado no Iniciar: setas, Tab e Enter em todas as abas. Energia: reiniciar e desligar pedem um segundo clique; o botão direito num botão de energia tem sair da conta, hibernar e reiniciar nas opções avançadas.
+* Ela também abre o que o Win+R abre: uma pasta ("%appdata%", "C:\Jogos"), um programa ou ferramenta pelo nome do arquivo ("services.msc", "appwiz.cpl"), um link ("ms-settings:display"). Para rodar um comando com argumentos, ou um que é uma palavra comum, ponha ">" na frente: ">cmd /k ipconfig", ">regedit". Sem o ">", palavras comuns são procuradas primeiro como apps e arquivos, e um comando que por acaso combine só aparece no fim da lista.
+* Teclado no Iniciar: setas, Tab e Enter em todas as abas. Energia: reiniciar e desligar pedem um segundo clique; o botão direito num botão de energia tem sair da conta, hibernar e reiniciar nas opções avançadas (as telas do próprio Windows, onde fica o modo de segurança: Solucionar problemas › Opções avançadas › Configurações de inicialização › 4, ou 5 com internet).
 * Menus do botão direito como os do Windows: os arquivos recentes do app (a lista de saltos), abrir o local do arquivo, copiar caminho e Finalizar tarefa na dock (quando está ligado no Windows, ou sempre).
 * Avisos não lidos como um número no ícone de cada app na dock; some quando o app vem para a frente.
 * A tecla Windows abre o Iniciar do Nimbus em qualquer janela (até de administrador) e em jogos. Ctrl+Esc continua abrindo o Iniciar do Windows. Um atalho opcional (Alt+Espaço ou Ctrl+Espaço) também pode abrir.
@@ -129,7 +139,7 @@ Troca a barra de tarefas do Windows por uma dock leve, uma por monitor, com Inic
 * Executar como administrador, no botão direito da dock e do Iniciar.
 * O painel de Som mostra onde está saindo som: uma barrinha mexe embaixo de cada saída e app que está tocando.
 * Painel de som Grade: cada app em cada saída, com o volume e o som em cada cruzamento.
-* Se o processo da barra cair, a barra do Windows volta na hora e o Nimbus reabre sozinho.
+* Se o processo da barra cair ou travar, a barra do Windows volta na hora e o Nimbus reabre sozinho.
 * Bandeja: os ícones dos programas em segundo plano, ao lado da área de status. Lado a lado com setas, atrás de um botão (fixe fora os que quiser), ou num painel em grade ou lista. Os cliques vão para o próprio programa, como na barra; o botão do meio fixa.
 * Central: um botão na dock abre não incomodar, Bluetooth, luz noturna, atalhos (projetar, transmitir, legendas, acessibilidade), o brilho de cada monitor, som e energia, e qualquer outro item que você puser lá. Cada item abre o painel completo dentro dela, e ela rola em telas pequenas. Cada item pode ficar na dock, na Central e no Iniciar ao mesmo tempo, ou desligado.
 * Bluetooth: ligar e desligar, ver os aparelhos pareados com a bateria, conectar e desconectar fones e caixas de som.
@@ -142,7 +152,7 @@ Troca a barra de tarefas do Windows por uma dock leve, uma por monitor, com Inic
 * Configuração guiada: umas perguntas rápidas deixam tudo pronto (abre sozinho na primeira vez; Ajustes → Configuração guiada traz de volta). Tudo pode ser mudado depois nos Ajustes.
 * Segue o alto contraste do Windows e os "Efeitos de animação" desligados.
 * Ajustes por monitor: formato, esconder sozinha, o que aparece, só as janelas daquele monitor. Cada monitor guarda os seus, mesmo se a ordem dos monitores mudar.
-* A dock roda num processo próprio do Windhawk e some quando um jogo ou vídeo está em tela cheia. No Explorador entram só três ganchos pequenos: o da tecla Windows, o do Win+N e o que passa os ícones da bandeja para a dock (ele nunca espera a dock).
+* A dock roda num processo próprio do Windhawk e some quando um jogo ou vídeo está em tela cheia. No Explorador entram três ganchos pequenos (o da tecla Windows, o do Win+N e o que passa os ícones da bandeja para a dock; ele nunca espera a dock) e um vigia. O vigia confere a cada poucos segundos se o processo da barra está vivo, respondendo e com as docks. Se ele caiu, ou travou ou ficou sem dock por uns 25 segundos, o vigia encerra esse processo, devolve a barra do Windows (e as faixas de notificação) e abre o Nimbus de novo. Ele só encerra e abre o programa do próprio Windhawk, o que a barra anotou quando abriu. Depois de três vezes em 5 minutos, deixa a barra do Windows e não abre nada por 10 minutos.
 * Os textos ficam em inglês, ou em português quando o Windows está em português.
 
 ### Como usar
@@ -171,6 +181,8 @@ Troca a barra de tarefas do Windows por uma dock leve, uma por monitor, com Inic
 * Ctrl+V (ou "Colar") com a prateleira aberta: uma imagem copiada vira .png, um texto vira .txt, arquivos copiados entram como estão. Esses arquivos colados são movidos ao arrastar, e apagados quando o mod para se ainda estiverem na prateleira.
 * Botão direito num item: Abrir, Mostrar na pasta, Copiar, Remover.
 * Solte ou cole (Ctrl+V) um link: um link direto de arquivo o Nimbus baixa. Para vídeo, áudio ou imagens de um site (YouTube, TikTok, Instagram, ImagePond…), ligue Ajustes → Prateleira → "Baixar vídeos e imagens de sites" e instale os programas (veja abaixo). Um cartão mostra o andamento; o × cancela. Baixe só o que você tem direito.
+* Colar com um único link copiado baixa na hora, sem perguntar. Não cole um link de uso único (de login ou de redefinir senha): o download gasta ele.
+* Um arquivo baixado é como um colado: é apagado quando o mod para ou atualiza, se ainda estiver na prateleira. Arraste para fora o que quiser guardar.
 
 **Ajuda e sugestões:** [github.com/igoredm/nimbus-menu](https://github.com/igoredm/nimbus-menu) (peça ajuda, avise de um bug ou mande uma ideia).
 
@@ -184,12 +196,18 @@ O Nimbus substitui uma parte do Windows, então algumas ações dele são config
 | O botão **"Mostrar faixas de notificação"** de cada app (Configurações › Sistema › Notificações) | Só se você ligar "Esconder os avisos do Windows" e confirmar (desligado por padrão) | O valor original de cada app é salvo antes de qualquer coisa ser desligada (se o backup não puder ser salvo, nada é desligado). Volta quando a opção é desligada, quando o mod para, ao sair da conta ou desligar o PC, e pela parte do Explorador quando o mod é desligado. |
 | Luz noturna, plano e modo de energia, brilho de cada monitor (DDC/CI), Bluetooth e Wi-Fi ligado ou desligado, volume, idioma do teclado | Só quando você clica, como nas Configurações rápidas do Windows | São escolhas suas, então ficam como você deixou (igual a mudar pelo Windows). |
 | A saída de som padrão (e a das chamadas), e a saída de cada app (só no painel de som completo, desligado por padrão) | Só quando você arrasta um app ou clica em Padrão ou Chamadas numa saída. Usam as mesmas partes do Windows que as Configurações de som usam, que a Microsoft não documenta | O Windows guarda, como em Configurações › Som › Mixer de volume (o "Redefinir" de lá volta todos os apps para a padrão). Um app numa segunda saída é uma cópia que o Nimbus toca: para no ×, quando o app fecha ou quando o Nimbus para. Um app que escolhe as próprias saídas (TeamSpeak, Discord) fica mudo na saída de onde você tira ele. Esses mudos saem quando o Nimbus para e voltam quando ele liga. Voltar para o painel simples desfaz o que o Nimbus mudou (a saída de cada app como era, sem cópias e sem esses mudos), também depois para um app que estava fechado; a saída escolhida no mixer do próprio Windows fica. A cópia toca um pouco atrasada, então duas saídas na mesma sala soam dobradas. |
+| O **volume de um app numa saída** (painéis de som completo e Grade: clique na bolinha do app numa saída) | Só quando você mexe nesse controle | Na saída do próprio app, é o volume dele no Mixer de volume do Windows: o Windows guarda para aquele app, como quando se muda por lá, e fica quando o mod para. Numa segunda saída, é o volume da cópia do Nimbus, guardado pelo Nimbus. |
+| **Arranjos de telas**: quais monitores ligam, o principal, a posição e a resolução de cada um | Só quando você aplica um arranjo que salvou (nos Ajustes, na dock, na Central ou no Iniciar) | O arranjo é aplicado sem ser salvo, e o Nimbus pergunta se é para manter, por 15 segundos. O Windows só salva depois do OK. Com Cancelar ou sem resposta, o Windows volta ao arranjo que tinha salvo. Se o Nimbus fechar antes da resposta, nada foi salvo: o Windows volta ao arranjo salvo na próxima vez que o PC reiniciar ou os monitores mudarem. Um arranjo mantido fica, como um feito nas Configurações de vídeo do Windows. |
 
-**Downloads** (opcional, desligado por padrão, menos o link direto de arquivo): com "Vídeos e imagens de sites" ligado, um link solto na prateleira abre o [yt-dlp](https://github.com/yt-dlp/yt-dlp) ou o [gallery-dl](https://github.com/mikf/gallery-dl) escondido (instalados por você, por exemplo `winget install yt-dlp.yt-dlp` e `winget install mikf.gallery-dl`; o Nimbus nunca baixa programa), na pasta da prateleira, com no máximo duas horas por download; o FFmpeg e o deno são usados quando instalados. "Usar o login do navegador" (desligado por padrão) deixa eles lerem os cookies desse navegador. Os arquivos baixados levam a marca de "veio da internet" do Windows.
+O Nimbus não põe nada no menu de inicialização nem na configuração de inicialização do Windows: "Reiniciar nas opções avançadas" é o reinício do próprio Windows (`shutdown /r /o`).
+
+**Rede: links diretos.** Um link de arquivo que você solta na prateleira, ou cola nela com Ctrl+V (um único link copiado já vale), o próprio Nimbus baixa, na hora. Ele manda um GET simples para aquele endereço, com o user agent de um navegador e sem cookies, pelo proxy do sistema, e segue redirecionamentos (nunca de HTTPS para HTTP); a parte do link depois do "#" não é enviada. Um download para em 8 GB, depois de duas horas, ou quando a conexão fica parada por um minuto. Como o pedido sai assim que você cola, um link de uso único (de login ou de redefinir senha) é gasto. Isso vale sempre que a prateleira está ligada: o único jeito de desligar os links diretos é desligar a prateleira (Ajustes → Prateleira). O arquivo vai para a pasta da prateleira no armazenamento do mod, com a marca de "veio da internet" do Windows, e é apagado quando o mod para ou atualiza, se ainda estiver na prateleira.
+
+**Downloads de sites** (opcional, desligado por padrão): com "Vídeos e imagens de sites" ligado, um link solto na prateleira abre o [yt-dlp](https://github.com/yt-dlp/yt-dlp) ou o [gallery-dl](https://github.com/mikf/gallery-dl) escondido (instalados por você, por exemplo `winget install yt-dlp.yt-dlp` e `winget install mikf.gallery-dl`; o Nimbus nunca baixa o yt-dlp nem o gallery-dl), na pasta da prateleira, com no máximo duas horas por download e no máximo 25 arquivos de um link de canal ou playlist; um download que falha ou é cortado não deixa nada na prateleira; o FFmpeg e o deno são usados quando instalados. "Usar o login do navegador" (desligado por padrão) deixa eles lerem os cookies desse navegador. Os arquivos baixados levam a marca de "veio da internet" do Windows, e são apagados quando o mod para ou atualiza, se ainda estiverem na prateleira.
 
 **BatteryHub** (opcional, desligado por padrão): com "Ler receptores USB com o BatteryHub" ligado (Ajustes → Itens), o Nimbus abre o [BatteryHub](https://github.com/ferloom/Wireless-Device-Battery-Monitor) (instalado à parte: o BatteryHub original em C++, versão 1.1 ou mais nova; o repositório original está fora do ar e o link vai para a versão reescrita em Rust, que ainda não tem o `--json`) escondido a cada 5 minutos com `--json`, só para ler as baterias de receptores USB; ele fecha sozinho, no máximo em 20 segundos. Desligue no painel Dispositivos ou em Ajustes › Área de status.
 
-Os dados do próprio Nimbus (ajustes, notas, fixados, os arquivos colados e baixados na prateleira) ficam no armazenamento do mod, numa pasta que só a sua conta abre. Se a barra do Windows ficar escondida, desligue o mod ou reinicie o Explorador.
+Os dados do próprio Nimbus (ajustes, notas, fixados, os arquivos colados e baixados na prateleira, o registro dele e a cópia dos ajustes feita antes de uma importação) ficam no armazenamento do mod, numa pasta que só a sua conta abre. Se a barra do Windows ficar escondida, desligue o mod ou reinicie o Explorador.
 */
 // ==/WindhawkModReadme==
 
@@ -251,6 +269,7 @@ Os dados do próprio Nimbus (ajustes, notas, fixados, os arquivos colados e baix
 using Microsoft::WRL::ComPtr;
 static void MediaSetOn(bool on);
 static bool g_trayForced = false;  // a monitor in complete mode shows the tray, even with it off in general
+static bool g_devForced = false, g_privForced = false;  // (the same for the devices and the in-use items)
 static std::atomic<bool> g_devHubOn{false};  // (the "Use BatteryHub" setting, read by the devices worker)
 static void DevSetOn(bool on);
 static void PrivSetOn(bool on);
@@ -684,8 +703,10 @@ void LoadSettings() {
     g_trayForced = forced(L"bandeja");
     MediaSetOn(g_set.extraPlace[6] != 0 || forced(L"player"));
     g_devHubOn = CfgInt(L"devHub") != 0;
-    DevSetOn(g_set.extraPlace[7] != 0 || forced(L"dispositivos"));
-    PrivSetOn(g_set.extraPlace[8] != 0 || forced(L"privacidade"));
+    g_devForced = forced(L"dispositivos");
+    g_privForced = forced(L"privacidade");
+    DevSetOn(g_set.extraPlace[7] != 0 || g_devForced);
+    PrivSetOn(g_set.extraPlace[8] != 0 || g_privForced);
     std::wstring tint = str(L"tintColor", L"");
     g_set.customTint = false;
     const wchar_t* s = tint.c_str();
@@ -742,6 +763,14 @@ static const TelasCache& TelasCached() {
 }
 static bool g_selfRestart = false;  // the bar ends with kSelfRestartCode so the guard opens it again (see DockHealth)
 constexpr DWORD kSelfRestartCode = 0x4E520001;
+// Is the Explorer part loaded? Its guard holds this event open while it runs (ExGuardStart). Without it nothing
+// opens Nimbus again after it ends itself, so the bar doesn't (see DockHealth) or says so first (an import).
+constexpr wchar_t kGuardSign[] = L"Local\\NimbusMenu_Guard";
+static bool GuardLoaded() {
+    HANDLE e = OpenEventW(SYNCHRONIZE, FALSE, kGuardSign);
+    if (e) CloseHandle(e);
+    return e != nullptr;
+}
 constexpr UINT_PTR TIMER_DOCKS_LATE = 0x4E53;  // the docks made again a while after Explorer restarted (signing in)  // the next docks rebuild follows Explorer restarting or the monitors changing (to the log)
 
 ComPtr<ID2D1Factory> g_d2d;
@@ -1005,13 +1034,25 @@ static std::wstring AumidProgram(const std::wstring& aumid) {
     return out;
 }
 
+// On the network (a share, or a drive mapped to one): never looked at on the bar's own thread (while typing, or
+// once a minute for the pins), an offline one would hang it. Answered from the text and the drive's kind, without touching the path.
+static bool PathOnNetwork(const std::wstring& p) {
+    if (!p.compare(0, 2, L"\\\\") || !p.compare(0, 2, L"//")) return true;
+    if (p.size() < 2 || p[1] != L':') return false;
+    wchar_t root[4] = {p[0], L':', L'\\', 0};
+    return GetDriveTypeW(root) == DRIVE_REMOTE;
+}
+
 // Apps that update themselves into a new folder each version (Discord, Slack, Teams classic: "...\app-1.0.9269\
 // Discord.exe"): a pinned program whose folder is gone → the same file in the newest app-* folder next to it.
 static std::wstring SquirrelCurrent(const std::wstring& path) {
-    if (path.empty() || GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES) return path;
+    // (asked once a minute for every pinned program, on the bar's thread: only a path with an "app-" folder is
+    // looked at, and never one on the network)
+    if (path.empty()) return path;
     std::wstring low = Lower(path);
     size_t at = low.rfind(L"\\app-");
-    if (at == std::wstring::npos) return path;
+    if (at == std::wstring::npos || PathOnNetwork(path)) return path;
+    if (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES) return path;
     size_t end = path.find(L'\\', at + 1);
     if (end == std::wstring::npos) return path;
     std::wstring parent = path.substr(0, at), rest = path.substr(end);
@@ -1171,7 +1212,7 @@ static bool IsTaskWindow(HWND hwnd) {
 void LoadPins();
 void SavePins();
 static bool IsTempProgram(const std::wstring& exe);
-static void NimbusLog(const char* what);
+static void NimbusLog(const char* what, HANDLE stop = nullptr);
 
 static App MakeStartApp() {
     App a;
@@ -1727,7 +1768,8 @@ void SavePins() {
 // reserving screen space (maximized windows would stop above an invisible bar otherwise). Explorer
 // saves auto-hide in the user's profile, so the original state is kept in mod storage the first time
 // it is changed (<SID>_autoHideOrig) and given back when the mod stops, also after an unclean exit:
-// by the next start of the bar, or by the explorer.exe part when the mod is turned off.
+// by the guard in Explorer as soon as the bar's process dies, by the next start of the bar, or by the
+// explorer.exe part when the mod is turned off. With no dock configured on any monitor, nothing is hidden.
 
 bool g_taskbarHidden = false;
 
@@ -1738,34 +1780,55 @@ static void ForEachTaskbar(void (*fn)(HWND)) {
     while ((s = FindWindowExW(nullptr, s, L"Shell_SecondaryTrayWnd", nullptr)) != nullptr) fn(s);
 }
 
-static void TurnOnTaskbarAutoHide() {
+// Is Windows' taskbar there and answering? Without it (Explorer still starting, or restarting) ABM_GETSTATE
+// answers 0, the same as "auto-hide off" (on Windows 11 a taskbar with auto-hide off answers 0 too, so that
+// answer alone can't tell): the note of the original state is deleted only after a taskbar that answered.
+static bool TaskbarAnswers() {
+    if (!FindWindowW(L"Shell_TrayWnd", nullptr)) return false;
+    APPBARDATA pos = {sizeof(pos)};
+    return SHAppBarMessage(ABM_GETTASKBARPOS, &pos) != 0;
+}
+
+// False while there's no taskbar to set it on (tried again by the caller).
+static bool TurnOnTaskbarAutoHide() {
+    if (!FindWindowW(L"Shell_TrayWnd", nullptr)) return false;
     APPBARDATA abd = {sizeof(abd)};
     UINT state = (UINT)SHAppBarMessage(ABM_GETSTATE, &abd);
-    if (state & ABS_AUTOHIDE) return;  // already on (by the user, or by us before an unclean exit)
+    if (!FindWindowW(L"Shell_TrayWnd", nullptr)) return false;  // (it went meanwhile: that 0 wasn't its state)
+    if (state & ABS_AUTOHIDE) return true;  // already on (by the user, or by us before an unclean exit)
     std::wstring key = UKey(L"autoHideOrig");
     if (Wh_GetIntValue(key.c_str(), -1) < 0) Wh_SetIntValue(key.c_str(), (int)state);
     abd.lParam = state | ABS_AUTOHIDE;
     SHAppBarMessage(ABM_SETSTATE, &abd);
+    return true;
 }
 
 // Gives the taskbar back its own auto-hide setting, if this mod changed it. Safe to call from any
-// process of the user and more than once.
-static void RestoreTaskbarAutoHide() {
+// process of the user and more than once. With a stop event (the guard in Explorer), it gives up as soon
+// as the event is set.
+static void RestoreTaskbarAutoHide(HANDLE stop = nullptr) {
     std::wstring key = UKey(L"autoHideOrig");
     int orig = Wh_GetIntValue(key.c_str(), -1);
     if (orig < 0) return;
-    // The note goes only once Windows took it: if the taskbar was busy (restarting, an Explorer still starting),
-    // the next start or stop tries again, instead of leaving auto-hide on with nothing to say it was Nimbus'.
+    // The note goes only once Windows took it, from a taskbar that is there and answered: if it was busy or
+    // not made yet (restarting, an Explorer still starting), the next start or stop tries again, instead of
+    // leaving auto-hide on with nothing to say it was Nimbus'.
     for (int i = 0; i < 10; i++) {
+        if (stop) {
+            if (WaitForSingleObject(stop, i ? 100 : 0) == WAIT_OBJECT_0) return;
+        } else if (i) {
+            Sleep(100);
+        }
+        if (!TaskbarAnswers()) continue;
         APPBARDATA abd = {sizeof(abd)};
         abd.lParam = (LPARAM)orig;
         SHAppBarMessage(ABM_SETSTATE, &abd);
         APPBARDATA q = {sizeof(q)};
-        if (((UINT)SHAppBarMessage(ABM_GETSTATE, &q) & ABS_AUTOHIDE) == ((UINT)orig & ABS_AUTOHIDE)) {
+        UINT now = (UINT)SHAppBarMessage(ABM_GETSTATE, &q);
+        if (TaskbarAnswers() && (now & ABS_AUTOHIDE) == ((UINT)orig & ABS_AUTOHIDE)) {
             Wh_DeleteValue(key.c_str());
             return;
         }
-        Sleep(100);
     }
     Wh_Log(L"taskbar: auto-hide not given back yet (tried again later)");
 }
@@ -1775,10 +1838,9 @@ static void ShowTaskbarWindows() {
 }
 
 void HideTaskbars() {
-    if (!g_taskbarHidden) {
-        TurnOnTaskbarAutoHide();
-        g_taskbarHidden = true;
-    }
+    // (no taskbar yet: nothing is hidden or noted, and the next call tries again)
+    if (!g_taskbarHidden && !TurnOnTaskbarAutoHide()) return;
+    g_taskbarHidden = true;
     ForEachTaskbar([](HWND h) {
         if (IsWindowVisible(h)) ShowWindowAsync(h, SW_HIDE);
     });
@@ -2759,22 +2821,34 @@ static int SndCopyAt(DWORD pid, const std::wstring& dev) {
     return -1;
 }
 static std::vector<std::wstring> SndList(const wchar_t* name);
+// While a slider is being dragged the new volumes wait here ("path|output|" -> volume): storage is written once,
+// when the button is let go (SndCopyVolFlush), not on every step of the drag.
+static std::unordered_map<std::wstring, float> g_sndCopyVolPending;
+static bool FlyDragging();
 static float SndCopyVolSaved(const std::wstring& path, const std::wstring& dev) {
     std::wstring pre = path + L"|" + dev + L"|";
+    if (auto it = g_sndCopyVolPending.find(pre); it != g_sndCopyVolPending.end()) return it->second;
     for (auto& x : SndList(L"sound.copyVol"))
         if (x.compare(0, pre.size(), pre) == 0) return std::clamp((float)_wtof(x.c_str() + pre.size()), 0.0f, 1.0f);
     return 1.0f;
 }
-static void SndCopyVolSave(const std::wstring& path, const std::wstring& dev, float v) {
+static void SndCopyVolFlush() {
+    if (g_sndCopyVolPending.empty()) return;
     auto list = SndList(L"sound.copyVol");
-    std::wstring pre = path + L"|" + dev + L"|";
-    list.erase(std::remove_if(list.begin(), list.end(), [&](const std::wstring& x) { return x.compare(0, pre.size(), pre) == 0; }), list.end());
-    if (v < 0.995f) {
-        wchar_t num[16];
-        swprintf_s(num, L"%.2f", v);
-        list.push_back(pre + num);
+    for (auto& [pre, v] : g_sndCopyVolPending) {
+        list.erase(std::remove_if(list.begin(), list.end(), [&](const std::wstring& x) { return x.compare(0, pre.size(), pre) == 0; }), list.end());
+        if (v < 0.995f) {
+            wchar_t num[16];
+            swprintf_s(num, L"%.2f", v);
+            list.push_back(pre + num);
+        }
     }
+    g_sndCopyVolPending.clear();
     StoreItems(L"sound.copyVol", list);
+}
+static void SndCopyVolSave(const std::wstring& path, const std::wstring& dev, float v) {
+    g_sndCopyVolPending[path + L"|" + dev + L"|"] = v;
+    if (!FlyDragging()) SndCopyVolFlush();  // (the wheel, a click: saved at once)
 }
 static void SndCopyStart(DWORD pid, const std::wstring& dev) {
     if (!SndCanCopy() || SndCopyAt(pid, dev) >= 0) return;
@@ -2852,7 +2926,10 @@ static void SndMeterOpen(SndMeterCap& c) {
     ComPtr<IAudioClient> cl;
     SndActivated* h = new SndActivated();
     ComPtr<IActivateAudioInterfaceAsyncOperation> op;
-    if (SUCCEEDED(activate(L"VAD\\Process_Loopback", __uuidof(IAudioClient), &pv, h, &op)) && WaitForSingleObject(h->done, 2000) == WAIT_OBJECT_0) {
+    // (the wait also ends when the worker is told to stop: the panel closed)
+    HANDLE waits[2] = {h->done, g_sndMeter.stop};
+    if (SUCCEEDED(activate(L"VAD\\Process_Loopback", __uuidof(IAudioClient), &pv, h, &op)) &&
+        WaitForMultipleObjects(2, waits, FALSE, 2000) == WAIT_OBJECT_0) {
         HRESULT hr = E_FAIL;
         ComPtr<IUnknown> unk;
         if (SUCCEEDED(op->GetActivateResult(&hr, &unk)) && SUCCEEDED(hr) && unk) unk.As(&cl);
@@ -2952,7 +3029,9 @@ static void SndMeterEnd(DWORD wait) {
     g_sndMeter.peaks.clear();
 }
 static void SndMeterBegin() {
-    if (g_sndMeter.thread && WaitForSingleObject(g_sndMeter.stop, 0) == WAIT_OBJECT_0) SndMeterEnd(800);
+    // (an old worker still closing: looked at, never waited for. This runs on every frame of the panel, and a
+    // wait here froze it; the bars start on the frame after that worker is gone)
+    if (g_sndMeter.thread && WaitForSingleObject(g_sndMeter.stop, 0) == WAIT_OBJECT_0) SndMeterEnd(0);
     if (g_sndMeter.thread || !SndCanCopy()) return;
     g_sndMeter.stop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (g_sndMeter.stop) g_sndMeter.thread = CreateThread(nullptr, 0, SndMeterThread, nullptr, 0, nullptr);
@@ -4130,14 +4209,12 @@ static bool TrayIsPinned(const TrayIcon& t) {
 std::unordered_map<std::wstring, std::vector<std::wstring>> g_trayPinMon;
 static void LoadTrayPinMon() {
     g_trayPinMon.clear();
-    std::vector<wchar_t> b(32768);
-    if (!Wh_GetStringValue((UserPrefix() + L"tray.pinMon").c_str(), b.data(), b.size())) return;
-    std::wstring v = b.data();
-    size_t a = 0;
-    while (a < v.size()) {
-        size_t e = v.find(L'\n', a);
-        if (e == std::wstring::npos) e = v.size();
-        std::wstring line = v.substr(a, e - a);
+    // One value per pinned icon, "key<Tab>id,id" (StoreItems). Before it was a single value with a line break
+    // between icons, which the portable Windhawk's INI file cuts at the first line: LoadItems moves that one
+    // over, once.
+    std::vector<std::wstring> lines;
+    LoadItems(L"tray.pinMon", L'\n', lines);
+    for (auto& line : lines) {
         size_t t = line.find(L'\t');
         if (t != std::wstring::npos) {
             std::vector<std::wstring> ids;
@@ -4151,18 +4228,18 @@ static void LoadTrayPinMon() {
             }
             if (!ids.empty()) g_trayPinMon[line.substr(0, t)] = ids;
         }
-        a = e + 1;
     }
 }
 static void SaveTrayPinMon() {
-    std::wstring v;
+    std::vector<std::wstring> lines;
     for (auto& [key, ids] : g_trayPinMon) {
         if (ids.empty()) continue;
-        v += key + L"\t";
+        std::wstring v = key + L"\t";
         for (size_t i = 0; i < ids.size(); i++) v += (i ? L"," : L"") + ids[i];
-        v += L"\n";
+        lines.push_back(std::move(v));
     }
-    Wh_SetStringValue((UserPrefix() + L"tray.pinMon").c_str(), v.c_str());
+    std::sort(lines.begin(), lines.end());  // (the map has no order: the same icons, the same values, nothing rewritten)
+    StoreItems(L"tray.pinMon", lines);
 }
 // The monitors on now, by id.
 static std::vector<std::wstring> MonIdsNow() {
@@ -4996,7 +5073,9 @@ static std::vector<StatItem> TrayItems(const Dock& d) {
     if (!DockShowsTray(d)) {
         // The tray in the control center or Start: the icons pinned to this dock still show here (like only
         // Teams), unless this dock leaves the tray out on purpose (complete mode).
-        if (DockStatMode(&d.cfg, -1) < 0 || !TrayOn()) return v;
+        // With the tray off in general and on only because another monitor forces it, there is no tray
+        // elsewhere for these to stand in for: nothing here.
+        if (DockStatMode(&d.cfg, -1) < 0 || g_set.trayPlace == 0) return v;
         for (int i : TrayPinnedList(&d.cfg.monId)) add(StTrayIcon, slot, i);
         return v;
     }
@@ -6183,7 +6262,7 @@ static bool WakeFromTray(const App& a) {
             Sleep(900);
             Find now = l->scan(l->exe);
             if (now.shown > l->shown || !now.hidden) return 0;
-            ShowWindow(now.hidden, IsIconic(now.hidden) ? SW_RESTORE : SW_SHOW);
+            ShowWindowAsync(now.hidden, IsIconic(now.hidden) ? SW_RESTORE : SW_SHOW);  // (never waits on a hung app)
             SetForegroundWindow(now.hidden);
             Wh_Log(L"launch: the app didn't answer its tray icon; its window was shown");
             return 0;
@@ -6195,10 +6274,12 @@ static bool WakeFromTray(const App& a) {
     return false;
 }
 
-static void Launch(const App& a) {
+// `plain`: a click on an app with no window (or "Open" in its menu). Only then is an app sitting in the tray
+// woken from there; "New window" and the middle click always start it.
+static void Launch(const App& a, bool plain = false) {
     g_launch[a.key] = GetTickCount();
     for (auto* d : g_docks) Animate(*d);
-    if (WakeFromTray(a)) return;
+    if (plain && WakeFromTray(a)) return;
     std::wstring target;
     std::wstring exe = a.exe, packaged = a.aumid.empty() ? PackagedAumid(exe) : L"";
     if (!a.lnk.empty()) target = a.lnk;
@@ -6262,7 +6343,7 @@ static void ClickApp(Dock& d, App& a) {
         if (justLaunched) return;
         g_clickLaunched = a.key;
         g_clickLaunchedAt = now;
-        Launch(a);
+        Launch(a, true);
         return;
     }
     if (justLaunched) {  // (its window just appeared: bring it, never minimize it)
@@ -6488,9 +6569,16 @@ static std::wstring ImplicitAppId(const std::wstring& exe) {
                                              &FOLDERID_RoamingAppData, &FOLDERID_Profile};
     for (auto* id : folders) {
         PWSTR path = nullptr;
-        if (FAILED(SHGetKnownFolderPath(*id, KF_FLAG_DONT_VERIFY, nullptr, &path)) || !path) continue;
-        std::wstring dir = path;
-        CoTaskMemFree(path);
+        std::wstring dir;
+        if (SUCCEEDED(SHGetKnownFolderPath(*id, KF_FLAG_DONT_VERIFY, nullptr, &path)) && path) dir = path;
+        if (path) CoTaskMemFree(path);
+        // (a 32-bit process, Windhawk 1.7's tool, isn't given the 64-bit Program Files: the environment has it)
+        if (dir.empty() && id == &FOLDERID_ProgramFilesX64) {
+            wchar_t pf[MAX_PATH];
+            DWORD n = GetEnvironmentVariableW(L"ProgramW6432", pf, MAX_PATH);
+            if (n && n < MAX_PATH) dir = pf;
+        }
+        if (dir.empty()) continue;
         if (dir.back() != L'\\') dir += L'\\';
         if (exe.size() > dir.size() && !_wcsnicmp(exe.c_str(), dir.c_str(), dir.size())) {
             wchar_t g[64] = {};
@@ -6612,7 +6700,7 @@ static void ShowMenu(Dock& d, int elem, POINT screen) {
     if (cmd == 5) LaunchAdmin(admin);
     for (auto& x : g_apps) {
         if (x.key != key) continue;
-        if (cmd == 1) Launch(x);
+        if (cmd == 1) Launch(x, wins.empty());  // ("Open" with no window; "New window" otherwise)
         if (cmd == 3) for (HWND h : wins) PostMessageW(h, WM_SYSCOMMAND, SC_CLOSE, 0);
         if (cmd == 4) EndTask(wins);
         break;
@@ -7030,6 +7118,9 @@ struct QuickHit {
     std::wstring title, sub;
     bool strong = false;   // (a sum, a conversion or a command: chosen first; a window isn't)
     std::function<void()> run;
+    // A "Run:" guess from plain words (no extension, no ">"): listed after the apps and the files, and with
+    // `pick` (it has arguments) never the one Enter takes by default: only when arrowed to or clicked.
+    bool low = false, pick = false;
 };
 
 struct StartMenu {
@@ -7451,6 +7542,7 @@ static void OnEverythingReply(const COPYDATASTRUCT* cds) {
         f.launch = f.path + L"\\" + f.name;
         g_start.files.push_back(std::move(f));
     }
+    if (g_start.sel < 0 && !g_start.files.empty()) g_start.sel = 0;  // (nothing was chosen: only a "Run:" guess was there)
     RenderStart();
 }
 
@@ -7802,7 +7894,15 @@ static void UpdateSearch() {
         SetTimer(g_start.hwnd, TIMER_START_WIDE, 15, nullptr);
     }
     // (a sum or a command is chosen first; a window that matches comes after the apps)
-    g_start.sel = !g_start.quick.empty() && (g_start.quick[0].strong || g_start.appHits.empty()) ? 0 : (int)g_start.quick.size();
+    // (a low "Run:" guess is after everything: taken by default only when nothing else was found, and one with
+    // arguments not even then, see QuickHit)
+    {
+        int top = 0;
+        for (auto& qh : g_start.quick)
+            if (!qh.low) top++;
+        g_start.sel = top && (g_start.quick[0].strong || g_start.appHits.empty()) ? 0 : top;
+        if (!top && g_start.appHits.empty() && g_start.setHits.empty() && !g_start.quick.empty() && g_start.quick[0].pick) g_start.sel = -1;
+    }
     KillTimer(g_start.hwnd, TIMER_SEARCH);
     if (g_start.query.size() >= 2) SetTimer(g_start.hwnd, TIMER_SEARCH, 120, nullptr);
     else g_start.files.clear();
@@ -7860,92 +7960,8 @@ static void LaunchItem(const StartItem& it) {
     ShellExecuteW(nullptr, it.setting ? nullptr : L"open", target.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 }
 
-// "Reiniciar no modo de segurança": a copy of this Windows' boot entry with safe mode on, hidden from
-// the boot menu and picked for the next start only (bcdedit /bootsequence), so the start after that is
-// normal again by itself: nothing to undo, and no way to get stuck in safe mode. bcdedit needs an
-// administrator, so it asks (UAC). The copy from the last time is deleted first.
-static std::wstring Base64Utf16(const std::wstring& t) {
-    static const char* k = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    std::string b;
-    for (wchar_t c : t) {
-        b.push_back((char)(c & 0xFF));
-        b.push_back((char)((c >> 8) & 0xFF));
-    }
-    std::wstring o;
-    for (size_t i = 0; i < b.size(); i += 3) {
-        unsigned v = (unsigned char)b[i] << 16;
-        if (i + 1 < b.size()) v |= (unsigned char)b[i + 1] << 8;
-        if (i + 2 < b.size()) v |= (unsigned char)b[i + 2];
-        o += (wchar_t)k[(v >> 18) & 63];
-        o += (wchar_t)k[(v >> 12) & 63];
-        o += i + 1 < b.size() ? (wchar_t)k[(v >> 6) & 63] : L'=';
-        o += i + 2 < b.size() ? (wchar_t)k[v & 63] : L'=';
-    }
-    return o;
-}
-static DWORD WINAPI SafeModeThread(LPVOID p) {
-    bool net = p != nullptr;  // "com internet": safe mode with networking
-    std::wstring ask =
-        std::wstring(net ? L2(L"O PC vai reiniciar no modo de segurança com internet só desta vez",
-                              L"The PC will restart in safe mode with networking this once")
-                         : L2(L"O PC vai reiniciar no modo de segurança só desta vez", L"The PC will restart in safe mode this once")) +
-        L2(L": na próxima vez que ligar, ele volta ao normal sozinho.\n\n"
-           L"O Windows vai pedir permissão de administrador. No modo de segurança o Nimbus não roda (a barra do Windows aparece), "
-           L"e pode ser que peça a senha da conta em vez do PIN.\n\n"
-           L"Se o disco tiver BitLocker (criptografia do dispositivo), o Windows pode pedir a chave de recuperação ao ligar. "
-           L"Antes de continuar, confira se você tem essa chave (fica na sua conta Microsoft: aka.ms/myrecoverykey).\n\n"
-           L"Salve o que estiver aberto. Reiniciar agora?",
-           L": the next time it starts, it's back to normal by itself.\n\n"
-           L"Windows will ask for administrator permission. Nimbus doesn't run in safe mode (the Windows taskbar shows), "
-           L"and it may ask for the account password instead of the PIN.\n\n"
-           L"If the drive uses BitLocker (device encryption), Windows may ask for the recovery key when it starts. "
-           L"Before you go on, make sure you have that key (it's in your Microsoft account: aka.ms/myrecoverykey).\n\n"
-           L"Save your work. Restart now?");
-    if (MessageBoxW(nullptr, ask.c_str(), L"Nimbus Menu", MB_OKCANCEL | MB_ICONINFORMATION | MB_TOPMOST | MB_SETFOREGROUND) != IDOK)
-        return 0;
-    std::wstring script =
-        L"$ErrorActionPreference='Stop';$d='Nimbus Menu - modo de seguranca';"
-        L"try{"
-        L"foreach($b in ((bcdedit /enum osloader /v) -join \"`n\") -split \"`n`n\"){"
-        L"if($b -like \"*$d*\" -and $b -match '\\{[0-9a-fA-F-]{36}\\}'){bcdedit /delete $matches[0] /f | Out-Null}};"
-        L"$o=(bcdedit /copy '{current}' /d $d) -join ' ';"
-        L"if($LASTEXITCODE -ne 0 -or $o -notmatch '\\{[0-9a-fA-F-]{36}\\}'){exit 2};$g=$matches[0];"
-        L"bcdedit /set $g safeboot SAFEMODE | Out-Null;if($LASTEXITCODE -ne 0){bcdedit /delete $g /f | Out-Null;exit 3};"
-        L"bcdedit /displayorder $g /remove | Out-Null;"
-        L"bcdedit /bootsequence $g | Out-Null;if($LASTEXITCODE -ne 0){bcdedit /delete $g /f | Out-Null;exit 4};"
-        L"shutdown.exe /r /t 0;exit 0"
-        L"}catch{exit 5}";
-    script.replace(script.find(L"SAFEMODE"), 8, net ? L"network" : L"minimal");
-    std::wstring args = L"-NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand " + Base64Utf16(script);
-    wchar_t ps[MAX_PATH];
-    GetSystemDirectoryW(ps, MAX_PATH);
-    wcscat_s(ps, L"\\WindowsPowerShell\\v1.0\\powershell.exe");
-    SHELLEXECUTEINFOW ei = {sizeof(ei)};
-    ei.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
-    ei.lpVerb = L"runas";
-    ei.lpFile = ps;
-    ei.lpParameters = args.c_str();
-    ei.nShow = SW_HIDE;
-    if (!ShellExecuteExW(&ei) || !ei.hProcess) {
-        NimbusLog("modo de seguranca: permissao de administrador negada");
-        return 0;
-    }
-    WaitForSingleObject(ei.hProcess, 60000);
-    DWORD code = 1;
-    GetExitCodeProcess(ei.hProcess, &code);
-    CloseHandle(ei.hProcess);
-    if (code != 0) {
-        char line[96];
-        sprintf_s(line, "modo de seguranca: bcdedit falhou (codigo %lu)", code);
-        NimbusLog(line);
-        MessageBoxW(nullptr,
-                    L2(L"Não deu pra preparar o modo de segurança. Use \"Reiniciar nas opções avançadas\": Solução de problemas › Opções avançadas › Configurações de inicialização › Reiniciar › 4.",
-                       L"Couldn't set up safe mode. Use \"Restart to advanced options\": Troubleshoot › Advanced options › Startup Settings › Restart › 4."),
-                    L"Nimbus Menu", MB_OK | MB_ICONWARNING | MB_TOPMOST | MB_SETFOREGROUND);
-    }
-    return 0;
-}
-
+// Safe mode has no item of its own: "Restart to advanced options" (shutdown /r /o) reaches it through Windows'
+// own screens, and nothing is written to the boot configuration. The power menu says where it is from there.
 static void Power(int which) {
     switch (which) {
         case 4:
@@ -7981,10 +7997,6 @@ static void Power(int which) {
         case 8:
             ShellExecuteW(nullptr, L"open", L"shutdown.exe", L"/r /o /t 0", nullptr, SW_HIDE);
             break;
-        case 9:  // (on its own thread: it asks first, then waits for the UAC prompt)
-        case 10:
-            if (HANDLE t = CreateThread(nullptr, 0, SafeModeThread, which == 10 ? (LPVOID)1 : nullptr, 0, nullptr)) CloseHandle(t);
-            break;
     }
 }
 
@@ -8007,9 +8019,11 @@ static void PowerMenu(POINT pt) {
     if (CanHibernate()) AppendMenuW(m, MF_STRING, 1 + 7, L2(L"Hibernar", L"Hibernate"));
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(m, MF_STRING, 1 + 2, Tr(S_Restart));
-    AppendMenuW(m, MF_STRING, 1 + 9, L2(L"Reiniciar no modo de segurança", L"Restart in safe mode"));
-    AppendMenuW(m, MF_STRING, 1 + 10, L2(L"Reiniciar no modo de segurança com internet", L"Restart in safe mode with networking"));
     AppendMenuW(m, MF_STRING, 1 + 8, L2(L"Reiniciar nas opções avançadas", L"Restart to advanced options"));
+    // (a line to read, not to click: where safe mode is on the screens that restart leads to)
+    AppendMenuW(m, MF_STRING | MF_GRAYED, 0,
+                L2(L"Modo de segurança: Solucionar problemas › Opções avançadas › Configurações de inicialização › 4 (ou 5 com internet)",
+                   L"Safe mode: Troubleshoot › Advanced options › Startup Settings › 4 (or 5 with networking)"));
     AppendMenuW(m, MF_STRING, 1 + 3, Tr(S_ShutDown));
     g_start.menuOpen = true;
     int cmd = TrackPopupMenuEx(m, TPM_RETURNCMD | TPM_NONOTIFY | TPM_BOTTOMALIGN, pt.x, pt.y, g_start.hwnd, nullptr);
@@ -8403,8 +8417,8 @@ static void RenderStartFrame() {
             rt->DrawTextW(t, (UINT32)wcslen(t), s.small.Get(), D2D1::RectF(pad + SS(4), y, listRight, y + SS(22)), sub.Get());
             y += SS(24);
         };
-        for (size_t i = 0; i < s.quick.size(); i++) {
-            if (y + SS(50) > listBottom) break;
+        // (the low ones, "Run:" guesses from plain words, are drawn after the files: see QuickHit)
+        auto quickRow = [&](size_t i) {
             auto& q = s.quick[i];
             D2D1_RECT_F r = D2D1::RectF(pad, y, listRight, y + SS(48));
             int idx = (int)s.rows.size();
@@ -8418,8 +8432,13 @@ static void RenderStartFrame() {
                           sub.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
             y += SS(52);
             k++;
+        };
+        size_t quickTop = 0;
+        for (; quickTop < s.quick.size() && !s.quick[quickTop].low; quickTop++) {
+            if (y + SS(50) > listBottom) break;
+            quickRow(quickTop);
         }
-        if (!s.quick.empty()) y += SS(4);
+        if (quickTop) y += SS(4);
         if (s.appHits.empty()) {
             sectionTitle(Tr(S_Apps));
             rt->DrawTextW(Tr(S_NoApps), (UINT32)wcslen(Tr(S_NoApps)), s.small.Get(), D2D1::RectF(pad + SS(4), y, listRight, y + SS(24)), sub.Get());
@@ -8455,7 +8474,9 @@ static void RenderStartFrame() {
                 D2D1_RECT_F r = D2D1::RectF(pad, y, listRight, y + SS(42));
                 int idx = (int)s.rows.size();
                 s.rows.push_back({r, RowAction, nullptr, ActExplorerSearch});
-                rt->FillRoundedRectangle(D2D1::RoundedRect(r, SS(14), SS(14)), (s.hover == idx || k == s.sel) ? cardHi.Get() : card.Get());
+                // (with a low quick result after it, that place in the arrows' order is the result's, not this row's)
+                bool rowSel = k == s.sel && quickTop == s.quick.size();
+                rt->FillRoundedRectangle(D2D1::RoundedRect(r, SS(14), SS(14)), (s.hover == idx || rowSel) ? cardHi.Get() : card.Get());
                 rt->DrawTextW(L"", 1, s.glyphs.Get(), D2D1::RectF(r.left + SS(16), r.top, r.left + SS(40), r.bottom), sub.Get());
                 std::wstring label = Tr(S_SearchFilesPre) + s.query + Tr(S_SearchFilesPost);
                 rt->DrawTextW(label.c_str(), (UINT32)label.size(), s.font.Get(),
@@ -8489,6 +8510,16 @@ static void RenderStartFrame() {
                 drawRow(f, D2D1::RectF(pad, y, listRight, y + SS(48)), k == s.sel, true, k);
                 y += SS(52);
                 k++;
+            }
+        }
+        {  // The low quick results, last. Their place in the arrows' order doesn't depend on what fit above.
+            size_t low = 0;
+            while (low < s.quick.size() && !s.quick[low].low) low++;
+            k = (int)(low + s.appHits.size() + s.setHits.size() + s.files.size());
+            if (low < s.quick.size()) y += SS(6);
+            for (; low < s.quick.size(); low++) {
+                if (y + SS(50) > listBottom) break;
+                quickRow(low);
             }
         }
         // Wide search: the chosen item, big, with what can be done with it.
@@ -8968,8 +8999,23 @@ static void CopyTextSel(HWND hwnd) {
     SetClipboardText(hwnd, s.query.c_str() + a, n);
 }
 
+// How many quick results come before the apps (the rest, the low ones, come after the files).
+static int QuickTop() {
+    int n = 0;
+    for (auto& q : g_start.quick)
+        if (!q.low) n++;
+    return n;
+}
+// The quick result at this place of the list, or -1.
+static int QuickAtSel(int sel) {
+    int top = QuickTop();
+    if (sel < 0) return -1;
+    if (sel < top) return sel;
+    int after = top + (int)(g_start.appHits.size() + g_start.setHits.size() + g_start.files.size());
+    return sel >= after && sel - after + top < (int)g_start.quick.size() ? sel - after + top : -1;
+}
 static StartItem* SelectedResult() {
-    int k = (int)g_start.quick.size();
+    int k = QuickTop();
     for (auto* a : g_start.appHits) if (k++ == g_start.sel) return a;
     for (auto* st : g_start.setHits) if (k++ == g_start.sel) return st;
     for (auto& f : g_start.files) if (k++ == g_start.sel) return &f;
@@ -9503,8 +9549,8 @@ LRESULT CALLBACK StartProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                         StartActivateFocus(hwnd);
                         return 0;
                     }
-                    if (s.sel >= 0 && s.sel < (int)s.quick.size()) {
-                        RunStartAction(100 + s.sel);
+                    if (int qi = QuickAtSel(s.sel); qi >= 0) {
+                        RunStartAction(100 + qi);
                     } else if (StartItem* it = SelectedResult()) {
                         StartItem copy = *it;
                         CloseStart(true);
@@ -9524,6 +9570,7 @@ LRESULT CALLBACK StartProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     }
                     int total = (int)(s.quick.size() + s.appHits.size() + s.files.size() + s.setHits.size());
                     if (total) {
+                        if (s.sel < 0) s.sel = wp == VK_DOWN ? -1 : 0;  // (nothing chosen yet: the first, or the last)
                         s.sel = (s.sel + (wp == VK_DOWN ? 1 : total - 1)) % total;
                         RenderStart();
                     }
@@ -11126,6 +11173,7 @@ static void SaveShelf() {
 }
 
 static bool InShelfDir(const std::wstring& path);
+static void DlSweepLeftovers();
 static void LoadShelf() {
     g_shelf.clear();
     std::vector<std::wstring> lines;
@@ -11342,6 +11390,21 @@ static std::wstring ExtOf(const std::wstring& name) {
     return dot == std::wstring::npos || name.size() - dot > 6 ? L"" : Lower(name.substr(dot));
 }
 
+// A downloaded file is never left as something the shell follows by itself (a shortcut, a library, a search
+// connector: showing its icon is enough to reach a server): those get ".txt" at the end. The whole last
+// extension is looked at, whatever its length.
+static std::wstring NoShortcutName(const std::wstring& name) {
+    static const wchar_t* exts[] = {L".url", L".lnk", L".scf", L".pif", L".website", L".library-ms", L".searchconnector-ms",
+                                    L".search-ms", L".appref-ms", L".appcontent-ms", L".settingcontent-ms", L".contact"};
+    if (!_wcsicmp(name.c_str(), L"desktop.ini")) return name + L".txt";  // (it restyles the folder it sits in)
+    size_t dot = name.find_last_of(L'.');
+    if (dot == std::wstring::npos) return name;
+    std::wstring ext = Lower(name.substr(dot));
+    for (auto e : exts)
+        if (ext == e) return name + L".txt";
+    return name;
+}
+
 static bool DirectExt(const std::wstring& ext) {
     static const wchar_t* exts[] = {L".png", L".jpg", L".jpeg", L".gif", L".webp", L".bmp", L".avif", L".heic", L".svg", L".ico",
                                     L".pdf", L".zip", L".7z", L".rar", L".tar", L".gz", L".mp4", L".webm", L".mkv", L".mov",
@@ -11510,6 +11573,7 @@ static bool DlDirectRun(DlJob* j) {
     std::wstring full = j->url;
     if (!WinHttpCrackUrl(full.c_str(), 0, 0, &uc)) return DlFail(j, L2(L"Link inválido.", L"Not a valid link.")), false;
     std::wstring obj = std::wstring(path) + (uc.lpszExtraInfo ? std::wstring(uc.lpszExtraInfo, uc.dwExtraInfoLength) : L"");
+    if (size_t frag = obj.find(L'#'); frag != std::wstring::npos) obj.resize(frag);  // (the fragment is the browser's, never sent)
     HINTERNET ses = WinHttpOpen(L"Mozilla/5.0 (Windows NT 10.0; Win64; x64)", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
                                 WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (!ses) return DlFail(j, L2(L"Sem conexão.", L"No connection.")), false;
@@ -11556,7 +11620,7 @@ static bool DlDirectRun(DlJob* j) {
     }
     name = SafeName(name.empty() ? L"download" : name);
     if (ExtOf(name).empty()) name += ExtForType(ct);
-    if (ExtOf(name) == L".url" || ExtOf(name) == L".lnk" || ExtOf(name) == L".scf") name += L".txt";  // (never a shortcut)
+    name = NoShortcutName(name);
     file = j->dir + L"\\" + name;
     AcquireSRWLockExclusive(&j->lock);
     j->title = name;
@@ -11570,9 +11634,32 @@ static bool DlDirectRun(DlJob* j) {
     ULONGLONG total = 0, got = 0;
     std::wstring len = HeaderOf(req, WINHTTP_QUERY_CONTENT_LENGTH);
     if (!len.empty()) total = _wcstoui64(len.c_str(), nullptr, 10);
+    // Limits (a link may be a stream that never ends): 8 GB, two hours like the tools, and no more than a minute
+    // under about 1 KB/s.
+    constexpr ULONGLONG kMaxBytes = 8ULL << 30, kSlowBytes = 64 * 1024;
+    constexpr DWORD kMaxMs = 2 * 60 * 60 * 1000, kSlowMs = 60 * 1000;
+    auto tooBig = [&] { DlFail(j, L2(L"Grande demais (mais de 8 GB).", L"Too big (over 8 GB).")); };
+    if (total > kMaxBytes) {
+        tooBig();
+        return done();
+    }
+    DWORD began = GetTickCount(), slowAt = began;
+    ULONGLONG slowGot = 0;
     std::vector<char> buf(64 * 1024);
     for (;;) {
         if (j->stop) return done();
+        DWORD tick = GetTickCount();
+        if (tick - began > kMaxMs) {
+            DlFail(j, L2(L"Demorou demais.", L"It took too long."));
+            return done();
+        }
+        if (tick - slowAt > kSlowMs) {
+            if (got - slowGot < kSlowBytes) {
+                DlFail(j, L2(L"A conexão ficou parada.", L"The connection stalled."));
+                return done();
+            }
+            slowAt = tick, slowGot = got;
+        }
         DWORD n = 0;
         if (!WinHttpReadData(req, buf.data(), (DWORD)buf.size(), &n)) {
             DlFail(j, L2(L"A conexão caiu.", L"The connection dropped."));
@@ -11585,6 +11672,10 @@ static bool DlDirectRun(DlJob* j) {
             return done();
         }
         got += n;
+        if (got > kMaxBytes) {
+            tooBig();
+            return done();
+        }
         if (total) j->pct = (int)std::min<ULONGLONG>(99, got * 100 / total);
         DlPost(j);
     }
@@ -11652,7 +11743,9 @@ static bool DlToolRun(DlJob* j) {
         if (!cookies.empty()) cmd += L" --cookies-from-browser " + cookies;
     } else {
         std::wstring ff = ToolExe(L"ffmpeg");
-        cmd += L" --newline --no-playlist --no-mtime --windows-filenames --no-part -o " +
+        // (--no-playlist doesn't hold back a channel or a playlist link: those stop at 25 files, which yt-dlp
+        // reports with the exit code 101, see below)
+        cmd += L" --newline --no-playlist --max-downloads 25 --no-mtime --windows-filenames --no-part -o " +
                Quote(j->dir + L"\\%(title).100B.%(ext)s");
         if (!ff.empty()) cmd += L" --ffmpeg-location " + Quote(ff.substr(0, ff.find_last_of(L'\\')));
         // (YouTube now asks a JavaScript puzzle: yt-dlp solves it with deno, when it's there)
@@ -11773,6 +11866,7 @@ static bool DlToolRun(DlJob* j) {
     Wh_Log(L"download: ended (%lu)", exitCode);
     if (j->stop) return false;
     if (cut) return DlFail(j, L2(L"Demorou demais.", L"It took too long.")), false;
+    if (!images && exitCode == 101) exitCode = 0;  // (--max-downloads reached: every file it got is whole)
     if (exitCode != 0 && !lastErr.empty()) {
         std::wstring l = Lower(lastErr);
         std::wstring m = lastErr.size() > 160 ? lastErr.substr(0, 160) + L"…" : lastErr;
@@ -11901,6 +11995,27 @@ static void DlRemoveDir(const std::wstring& dir) {
     RemoveDirectoryW(dir.c_str());
 }
 
+// Work folders of downloads the bar didn't see the end of (it was closed or it crashed meanwhile): removed when
+// the bar starts, before any download of this run exists. One bar per user, and the shelf's folder is per user.
+static void DlSweepLeftovers() {
+    std::wstring shelf = ShelfDirPath();
+    if (shelf.empty() || !g_dl.empty()) return;
+    std::vector<std::wstring> dirs;
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((shelf + L"\\dl-*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return;
+    do {
+        // (exactly "dl-<process>-<job>", all digits: an album's folder is named after its site and could start alike)
+        unsigned a = 0, b = 0;
+        int used = 0;
+        bool ours = swscanf(fd.cFileName, L"dl-%9u-%9u%n", &a, &b, &used) == 2 && used > 0 && !fd.cFileName[used];
+        if (ours && (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && !(fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT))
+            dirs.push_back(shelf + L"\\" + fd.cFileName);
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    for (auto& d : dirs) DlRemoveDir(d);
+}
+
 // Downloaded files carry the internet mark, like a browser's ("this came from the internet").
 static void MarkFromInternet(const std::wstring& path, const std::wstring& url) {
     std::wstring ads = path + L":Zone.Identifier";
@@ -11954,13 +12069,13 @@ static std::wstring DlCollect(DlJob* j) {
         // (the folder keeps its pictures flat)
         CreateDirectoryW(to.c_str(), nullptr);
         for (auto& f : files) {
-            std::wstring n = f.substr(f.find_last_of(L'\\') + 1);
+            std::wstring n = NoShortcutName(f.substr(f.find_last_of(L'\\') + 1));
             MoveFileExW(f.c_str(), FreeName(to, n).c_str(), MOVEFILE_COPY_ALLOWED);
         }
         if (ShelfAdd(to, true)) added++, first = to;
     } else {
         for (auto& f : files) {
-            std::wstring n = f.substr(f.find_last_of(L'\\') + 1);
+            std::wstring n = NoShortcutName(f.substr(f.find_last_of(L'\\') + 1));  // (before the shelf reads its icon)
             std::wstring to = FreeName(shelf, n);
             if (MoveFileExW(f.c_str(), to.c_str(), MOVEFILE_COPY_ALLOWED) && ShelfAdd(to, true)) {
                 if (!added) first = to;
@@ -12021,6 +12136,16 @@ static void DlMessage(int id) {
         if (j->phase == DlChoose) {  // (a page yt-dlp may know: waits for video or audio)
             DlRemoveDir(j->dir);
             j->dir.clear();
+        } else if (!j->ok && j->mode != 2 && j->kind != DlDirect && j->kind != DlUnknown) {
+            // yt-dlp failed or was cut off: what it left has its final name but isn't whole (--no-part), so
+            // none of it goes to the shelf. (gallery-dl's own failures still give the pictures it finished.)
+            DlRemoveDir(j->dir);
+            j->dir.clear();
+            j->phase = DlFailed;
+            AcquireSRWLockExclusive(&j->lock);
+            if (j->msg.empty()) j->msg = L2(L"O download não terminou.", L"The download didn't finish.");
+            ReleaseSRWLockExclusive(&j->lock);
+            DlNotify(j, L"");
         } else {
             std::wstring got = DlCollect(j);
             DlNotify(j, j->phase == DlRun ? got : L"");
@@ -12851,7 +12976,8 @@ static const NotifApp& NotifAppOf(const std::wstring& aumid) {
             auto str = [&](const wchar_t* v) {
                 wchar_t b[MAX_PATH * 2] = {};
                 DWORD sz = sizeof(b) - sizeof(wchar_t);
-                if (RegGetValueW(k, nullptr, v, RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ, nullptr, b, &sz)) return std::wstring();
+                // (RRF_RT_REG_SZ alone: it also reads a REG_EXPAND_SZ, expanded; with both types it always failed)
+                if (RegGetValueW(k, nullptr, v, RRF_RT_REG_SZ, nullptr, b, &sz)) return std::wstring();
                 return std::wstring(b);
             };
             std::wstring dn = str(L"DisplayName"), iu = str(L"IconUri");
@@ -13115,6 +13241,11 @@ static void MuteBanners() {
 }
 
 static void RestoreBanners() {
+    // Always from storage: the guard in Explorer restores more than once in a session, and the bar, opened
+    // again, saved a new backup meanwhile. What this process last knew of the stored list is dropped too, so the
+    // save at the end really empties what's stored.
+    g_bannersLoaded = false;
+    g_storedItems.erase(L"notif.banners");
     LoadBanners();
     for (auto& b : g_banners) {
         HKEY k;
@@ -14792,14 +14923,29 @@ struct Calc {
     }
 };
 
-// The decimal mark: "1,5" and "1.5" are both one and a half; with both, the last one is the decimal mark.
+// The decimal mark, decided number by number ("1,5*2.5" is 1.5 times 2.5): "1,5" and "1.5" are both one and a
+// half; with both marks in a number the last one is the decimal mark ("1.234,5", "1,234.5"); the same mark
+// more than once groups thousands ("1.000.000").
 static std::wstring NumNormalize(std::wstring t) {
-    size_t c = t.rfind(L','), d = t.rfind(L'.');
-    wchar_t thou = c != std::wstring::npos && d != std::wstring::npos ? (c > d ? L'.' : L',') : 0;
     std::wstring o;
-    for (wchar_t ch : t) {
-        if (ch == thou) continue;
-        o += ch == L',' ? L'.' : ch;
+    for (size_t i = 0; i < t.size();) {
+        if (!iswdigit(t[i]) && t[i] != L',' && t[i] != L'.') {
+            o += t[i++];
+            continue;
+        }
+        size_t e = i;
+        while (e < t.size() && (iswdigit(t[e]) || t[e] == L',' || t[e] == L'.')) e++;
+        std::wstring num = t.substr(i, e - i);
+        i = e;
+        size_t c = num.rfind(L','), d = num.rfind(L'.');
+        size_t commas = std::count(num.begin(), num.end(), L','), dots = std::count(num.begin(), num.end(), L'.');
+        wchar_t thou = 0, both = 0;
+        if (commas && dots) thou = c > d ? L'.' : L',';
+        else if (commas > 1 || dots > 1) both = 1;  // (only grouping marks: no decimal part)
+        for (wchar_t ch : num) {
+            if (ch == thou || (both && !iswdigit(ch))) continue;
+            o += ch == L',' ? L'.' : ch;
+        }
     }
     return o;
 }
@@ -14897,6 +15043,37 @@ static void SleepNow() {
         if (auto fn = (Fn)GetProcAddress(m, "SetSuspendState")) fn(FALSE, FALSE, FALSE);
 }
 
+// Where a typed program name is looked for: Windows' folders and the PATH, without the entries on the network
+// and the relative ones (SearchPath with its own list would try the current folder and every PATH entry, an
+// offline share among them, on each key). Built again every half minute.
+static const std::wstring& RunSearchPath() {
+    static std::wstring list;
+    static DWORD at = 0;
+    if (!list.empty() && GetTickCount() - at < 30000) return list;
+    at = GetTickCount();
+    list.clear();
+    wchar_t dir[MAX_PATH];
+    UINT n = GetSystemDirectoryW(dir, MAX_PATH);
+    if (n && n < MAX_PATH) list = dir;
+    n = GetWindowsDirectoryW(dir, MAX_PATH);
+    if (n && n < MAX_PATH) list += std::wstring(list.empty() ? L"" : L";") + dir;
+    std::vector<wchar_t> path(32768);
+    DWORD got = GetEnvironmentVariableW(L"PATH", path.data(), (DWORD)path.size());
+    if (got && got < path.size()) {
+        std::wstring all(path.data(), got);
+        for (size_t a = 0; a < all.size();) {
+            size_t b = all.find(L';', a);
+            if (b == std::wstring::npos) b = all.size();
+            std::wstring e = all.substr(a, b - a);
+            a = b + 1;
+            if (e.size() >= 2 && e.front() == L'"' && e.back() == L'"') e = e.substr(1, e.size() - 2);
+            bool full = e.size() >= 3 && iswalpha(e[0]) && e[1] == L':' && (e[2] == L'\\' || e[2] == L'/');
+            if (full && !PathOnNetwork(e)) list += L";" + e;
+        }
+    }
+    return list;
+}
+
 static std::vector<QuickHit> QuickFind(const std::wstring& raw) {
     std::vector<QuickHit> out;
     std::wstring q = raw;
@@ -14931,8 +15108,8 @@ static std::vector<QuickHit> QuickFind(const std::wstring& raw) {
             bool ok = false, dir = true;
             if (!p.empty() && p.find(L'%') == std::wstring::npos) {
                 // (a network path or a network drive isn't checked here: it could hang the menu while typing)
-                wchar_t root[4] = {p[0], L':', L'\\', 0};
-                bool remote = unc || (p.size() >= 2 && p[1] == L':' && GetDriveTypeW(root) == DRIVE_REMOTE);
+                // (asked of the expanded path: "%appdata%" may be a redirected profile on a share)
+                bool remote = unc || PathOnNetwork(p);
                 if (shell || remote) {
                     ok = true;
                 } else {
@@ -14946,19 +15123,27 @@ static std::vector<QuickHit> QuickFind(const std::wstring& raw) {
                                true, [p] { ShellExecuteW(nullptr, L"open", p.c_str(), nullptr, nullptr, SW_SHOWNORMAL); }});
         }
     }
-    // A Win+R command: "regedit", "services.msc", "cmd /k ipconfig", "appwiz.cpl", "ms-settings:display",
-    // a site. Found like Win+R finds it (the PATH, then App Paths); with arguments or an extension it's
-    // chosen first, a bare word only when no app matches (typing "notepad" still gets the app).
-    if (q[0] != L'%' && q[0] != L'~') {  // (those are paths, above)
+    // A Win+R command: "services.msc", "appwiz.cpl", "ms-settings:display", a site, ">cmd /k ipconfig",
+    // ">regedit". Found like Win+R finds it (the PATH, then App Paths). It is chosen first only when the text
+    // says it is a command: ">" in front, a first word with an extension, or a link. Plain words ("where is my
+    // file", "code review") that happen to start with a program's name stay a guess, listed after the apps
+    // and the files, and with arguments never what Enter takes by itself.
+    std::wstring rq = q;  // (the query for this part: without the ">")
+    bool asked = rq[0] == L'>';
+    if (asked) {
+        rq.erase(0, 1);
+        while (!rq.empty() && rq.front() == L' ') rq.erase(0, 1);
+    }
+    if (!rq.empty() && rq[0] != L'%' && rq[0] != L'~') {  // (those are paths, above)
         std::wstring tok, args;
-        if (q[0] == L'"') {
-            size_t e = q.find(L'"', 1);
-            tok = q.substr(1, e == std::wstring::npos ? std::wstring::npos : e - 1);
-            if (e != std::wstring::npos) args = q.substr(e + 1);
+        if (rq[0] == L'"') {
+            size_t e = rq.find(L'"', 1);
+            tok = rq.substr(1, e == std::wstring::npos ? std::wstring::npos : e - 1);
+            if (e != std::wstring::npos) args = rq.substr(e + 1);
         } else {
-            size_t e = q.find(L' ');
-            tok = q.substr(0, e);
-            if (e != std::wstring::npos) args = q.substr(e + 1);
+            size_t e = rq.find(L' ');
+            tok = rq.substr(0, e);
+            if (e != std::wstring::npos) args = rq.substr(e + 1);
         }
         while (!args.empty() && args.front() == L' ') args.erase(0, 1);
         std::wstring ftok = FoldText(tok);
@@ -14978,22 +15163,34 @@ static std::vector<QuickHit> QuickFind(const std::wstring& raw) {
                 RegCloseKey(k);
                 if (known) target = tok;
             }
+        } else if (asked && tok.size() >= 3 && ((iswalpha(tok[0]) && tok[1] == L':' && tok[2] == L'\\') || !tok.compare(0, 2, L"\\\\"))) {
+            // ">C:\tools\x.exe -v": a full path with arguments (without them it is a path, above)
+            if (PathOnNetwork(tok) || GetFileAttributesW(tok.c_str()) != INVALID_FILE_ATTRIBUTES) target = show = tok;
         } else if (tok.size() >= 2 && tok.find_first_of(L"\\/:*?<>|") == std::wstring::npos) {
             wchar_t found[MAX_PATH];
             bool hasExt = tok.find(L'.') != std::wstring::npos;
-            if (hasExt && SearchPathW(nullptr, tok.c_str(), nullptr, MAX_PATH, found, nullptr)) target = found;
+            const std::wstring& where = RunSearchPath();  // (local folders only)
+            // (a result of MAX_PATH or more is the size it would need: nothing was written to `found`)
+            auto look = [&](const wchar_t* ext) {
+                DWORD len = SearchPathW(where.c_str(), tok.c_str(), ext, MAX_PATH, found, nullptr);
+                return len && len < MAX_PATH;
+            };
+            if (hasExt && look(nullptr)) target = found;
             for (const wchar_t* ext : {L".exe", L".msc", L".cpl", L".com", L".bat", L".cmd"}) {
                 if (!target.empty() || hasExt) break;
-                if (SearchPathW(nullptr, tok.c_str(), ext, MAX_PATH, found, nullptr)) target = found;
+                if (look(ext)) target = found;
             }
             if (target.empty()) {  // (App Paths: "chrome", "excel", "winword")
                 std::wstring key = L"Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\" + tok + (hasExt ? L"" : L".exe");
                 for (HKEY root : {HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE}) {
                     DWORD sz = sizeof(found);
-                    if (RegGetValueW(root, key.c_str(), nullptr, RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ, nullptr, found, &sz) == ERROR_SUCCESS) {
+                    // (RRF_RT_REG_SZ also takes a REG_EXPAND_SZ and expands it; asking for both types without
+                    // RRF_NOEXPAND is refused as an invalid parameter)
+                    if (RegGetValueW(root, key.c_str(), nullptr, RRF_RT_REG_SZ, nullptr, found, &sz) == ERROR_SUCCESS) {
                         std::wstring p = found;
                         if (p.size() >= 2 && p.front() == L'"') p = p.substr(1, p.find(L'"', 1) - 1);
-                        if (GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                        // (one on the network is taken as it is: not looked at while typing)
+                        if (!p.empty() && (PathOnNetwork(p) || GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES)) {
                             target = p;
                             break;
                         }
@@ -15003,13 +15200,15 @@ static std::vector<QuickHit> QuickFind(const std::wstring& raw) {
             show = target;
         }
         if (!target.empty()) {
-            bool strong = !args.empty() || url || colon != std::wstring::npos || tok.find(L'.') != std::wstring::npos;
-            std::wstring title = std::wstring(L2(L"Executar: ", L"Run: ")) + q;
+            bool strong = asked || url || colon != std::wstring::npos || tok.find(L'.') != std::wstring::npos;
+            std::wstring title = std::wstring(L2(L"Executar: ", L"Run: ")) + rq;
             std::wstring sub = url ? std::wstring(L2(L"Enter abre no navegador", L"Enter opens it in the browser"))
                                    : show.empty() ? std::wstring(L2(L"Enter abre", L"Enter opens")) : show;
             out.push_back({(wchar_t)(url ? 0xE774 : 0xE756), title, sub, strong, [target, args] {
                                ShellExecuteW(nullptr, L"open", target.c_str(), args.empty() ? nullptr : args.c_str(), nullptr, SW_SHOWNORMAL);
                            }});
+            out.back().low = !strong;
+            out.back().pick = !strong && !args.empty();
         }
     }
     // Commands (Portuguese or English).
@@ -15043,6 +15242,7 @@ static std::vector<QuickHit> QuickFind(const std::wstring& raw) {
             wchar_t ch = t[k];
             if (iswdigit(ch)) {
                 cur = cur * 10 + (ch - L'0');
+                if (cur > 100000) ok = false;  // (past a day in any unit: stop before the numbers overflow)
                 any = true;
             } else if (ch == L'h') {
                 mins += cur * 60;
@@ -15058,6 +15258,7 @@ static std::vector<QuickHit> QuickFind(const std::wstring& raw) {
             } else if (ch != L' ') {
                 ok = false;
             }
+            if (mins > 24 * 60) ok = false;
         }
         mins += cur;
         if (ok && any && mins > 0 && mins <= 24 * 60) {
@@ -15111,6 +15312,7 @@ static std::vector<QuickHit> QuickFind(const std::wstring& raw) {
             if (found >= 3) break;
         }
     }
+    std::stable_partition(out.begin(), out.end(), [](const QuickHit& h) { return !h.low; });
     return out;
 }
 
@@ -16745,7 +16947,9 @@ static void DevJoin(DWORD deadline) {
 // Everything known now: BatteryHub's first (it knows receivers), then Bluetooth, then Xbox, one per name.
 static std::vector<DevBattery> DevicesNow() {
     std::vector<DevBattery> v;
-    if (!ExtraPlace(StDevices)) return v;
+    // (off in general but forced on by one monitor: that dock still needs them; every other place asks for
+    // its own switch before calling this)
+    if (!ExtraPlace(StDevices) && !g_devForced) return v;
     AcquireSRWLockShared(&g_devs.lock);
     v = g_devs.hub;
     std::vector<DevBattery> xbox = g_devs.xbox;
@@ -16826,7 +17030,7 @@ struct PrivState {
 
 static std::vector<PrivUse> PrivNow() {
     std::vector<PrivUse> v;
-    if (!g_set.extraPlace[8]) return v;
+    if (!g_set.extraPlace[8] && !g_privForced) return v;  // (see DevicesNow)
     AcquireSRWLockShared(&g_priv.lock);
     v = g_priv.now;
     ReleaseSRWLockShared(&g_priv.lock);
@@ -17020,6 +17224,19 @@ static DWORD WINAPI PrivThread(LPVOID) {
 }
 
 static void PrivSetOn(bool on) {
+    if (on && g_priv.thread) {
+        // One told to stop that hadn't ended in time (see below): ended by now, a new one starts; still going,
+        // it is told to stay.
+        if (WaitForSingleObject(g_priv.thread, 0) == WAIT_OBJECT_0) {
+            CloseHandle(g_priv.thread);
+            if (g_priv.ev) CloseHandle(g_priv.ev);
+            g_priv.thread = g_priv.ev = nullptr;
+        } else {
+            AcquireSRWLockExclusive(&g_priv.lock);
+            g_priv.stop = false;
+            ReleaseSRWLockExclusive(&g_priv.lock);
+        }
+    }
     if (on && !g_priv.thread) {
         g_priv.stop = false;
         g_priv.ev = CreateEventW(nullptr, FALSE, FALSE, nullptr);
@@ -17030,7 +17247,9 @@ static void PrivSetOn(bool on) {
         g_priv.now.clear();
         ReleaseSRWLockExclusive(&g_priv.lock);
         SetEvent(g_priv.ev);
-        WaitForSingleObject(g_priv.thread, 2000);
+        // (not ended in time: it and the camera callback go on using the event, so both handles stay, as in
+        // JoinWorker; the next call here or PrivJoin closes them)
+        if (WaitForSingleObject(g_priv.thread, 2000) != WAIT_OBJECT_0) return;
         CloseHandle(g_priv.thread);
         CloseHandle(g_priv.ev);
         g_priv.thread = g_priv.ev = nullptr;
@@ -18913,6 +19132,7 @@ static void OpenFlyout(Dock& d, int kind, bool fromStart) {
     f.month = 0;
     f.pick = -1;
     f.dragging = false;
+    SndCopyVolFlush();
     f.mouse = {-1, -1};
     f.back = 0;
     f.panelScroll = f.panelMax = 0;
@@ -19044,6 +19264,7 @@ void CloseFlyout() {
     g_notesUi.autoOpened = false;
     g_notesUi.creating = false;
     f.dragging = false;
+    SndCopyVolFlush();
     ShowWindow(f.hwnd, SW_HIDE);
     HideBands(f.bands, f.bandRc);
     f.bmps.clear();
@@ -19078,6 +19299,7 @@ static int FlyHitAt(D2D1_POINT_2F p) {
     return -1;
 }
 
+static bool FlyDragging() { return g_fly.dragging; }
 static void FlySlide(float mx) {
     auto& h = g_fly.drag;
     if (h.slide && h.x1 > h.x0) h.slide(std::clamp((mx - h.x0) / (h.x1 - h.x0), 0.0f, 1.0f));
@@ -19266,6 +19488,7 @@ LRESULT CALLBACK FlyProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             }
             if (f.dragging) {
                 f.dragging = false;
+                SndCopyVolFlush();  // (a volume slider let go: saved now)
                 ReleaseCapture();
                 FlyRender();
                 return 0;
@@ -19358,6 +19581,7 @@ LRESULT CALLBACK FlyProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_CAPTURECHANGED:
             if ((HWND)lp != hwnd) {
                 f.dragging = false;
+                SndCopyVolFlush();
                 f.press = -1;
                 g_snd.panning = false;
                 if (g_snd.dragging) {
@@ -19546,6 +19770,7 @@ static void StatusInit() {
     ReadKeyboard();
     TrayInit();
     LoadShelf();
+    DlSweepLeftovers();
     NotifInit();
     LoadNotes();
     // The complete sound panel's mutes come back with the mod; in Simple, what's left goes back.
@@ -19912,13 +20137,44 @@ void DestroyDocks() {
     g_docks.clear();
 }
 
+// How many docks the settings ask for now: one per monitor with "Dock on this monitor" on (-1 while no monitor
+// answers: not known). The bar says it on its message window ("NimbusDocks", the count + 1) for the guard in
+// Explorer, which takes "no dock on screen" as a failure only when some are expected. With none asked for,
+// Windows' taskbar isn't hidden: the user would have nothing.
+int g_docksExpected = -1;
+static int DocksConfigured() {
+    MonScopeMigrate();
+    int seen[2] = {0, 0};  // monitors, docks
+    EnumDisplayMonitors(nullptr, nullptr, [](HMONITOR mon, HDC, LPRECT, LPARAM lp) WINAPI -> BOOL {
+        int* n = (int*)lp;
+        MONITORINFO mi = {sizeof(mi)};
+        if (!GetMonitorInfoW(mon, &mi)) return TRUE;
+        n[0]++;
+        if (LoadDockCfg(MonitorGroup(mon, mi.rcMonitor), MonitorIdentity(mon).id).enabled) n[1]++;
+        return TRUE;
+    }, (LPARAM)seen);
+    return seen[0] ? seen[1] : -1;
+}
+static void DocksExpect(int n) {
+    g_docksExpected = n;
+    if (!g_msgWnd) return;
+    if (n >= 0) SetPropW(g_msgWnd, L"NimbusDocks", (HANDLE)(INT_PTR)(n + 1));
+    else RemovePropW(g_msgWnd, L"NimbusDocks");
+}
+static bool HideTaskbarWanted() { return g_set.hideTaskbar && g_docksExpected != 0; }
+// Windows' taskbar hidden, or given back if this process hid it, as the settings and the docks ask.
+static void TaskbarSync() {
+    if (HideTaskbarWanted()) HideTaskbars();
+    else RestoreTaskbars();
+}
+
 void CreateDocks() {
     if (g_dockMenuDepth) {
         g_docksPending = true;  // rebuilt when the menu returns (see TrackDockMenu)
         return;
     }
     DestroyDocks();
-    MonScopeMigrate();
+    DocksExpect(DocksConfigured());
     EnumDisplayMonitors(nullptr, nullptr, [](HMONITOR mon, HDC, LPRECT, LPARAM) WINAPI -> BOOL {
         MONITORINFO mi = {sizeof(mi)};
         if (!GetMonitorInfoW(mon, &mi)) return TRUE;
@@ -19990,7 +20246,7 @@ void CreateDocks() {
         NimbusLog(line);
         lastMade = made, lastMonitors = monitors;
     }
-    if (!made && g_msgWnd && retries < 20) {
+    if (!made && g_docksExpected != 0 && g_msgWnd && retries < 20) {  // (not when no monitor has a dock by choice)
         retries++;
         SetTimer(g_msgWnd, TIMER_DOCKS, 3000, nullptr);
     } else if (made) {
@@ -20086,9 +20342,15 @@ static void EdgeWatch(Dock& d, POINT pt, DWORD now) {
         NimbusLog("vigia | docks refeitas por causa disso");
         SetTimer(g_msgWnd, TIMER_DOCKS, 100, nullptr);
     } else if (now - remadeAt < 2 * 60 * 1000 && !g_selfRestart) {
-        NimbusLog("vigia | a dock continua sem aparecer depois de refeita: reiniciando o Nimbus sozinho");
-        g_selfRestart = true;
-        PostMessageW(g_msgWnd, WM_APP_QUIT, 0, 0);
+        if (GuardLoaded()) {
+            NimbusLog("vigia | a dock continua sem aparecer depois de refeita: reiniciando o Nimbus sozinho");
+            g_selfRestart = true;
+            PostMessageW(g_msgWnd, WM_APP_QUIT, 0, 0);
+        } else if (now - remadeAt > 30 * 1000) {  // (nobody to open Nimbus again: it stays, and tries once more)
+            remadeAt = now;
+            NimbusLog("vigia | a dock continua sem aparecer; sem a parte do Explorer pra reabrir o Nimbus, as docks sao refeitas de novo");
+            SetTimer(g_msgWnd, TIMER_DOCKS, 100, nullptr);
+        }
     }
 }
 
@@ -20242,10 +20504,18 @@ static void DockHealth() {
     }
     // Still lost ~30 s after being made again: what turning Nimbus off and on fixes, Nimbus does itself.
     // The bar ends cleanly (Windows' taskbar back) and the guard opens it again.
+    // Without the Explorer part nothing would open it again: then the docks are made once more instead.
     if (badRuns >= 3 && remadeAt && now - remadeAt < 2 * 60 * 1000 && !g_selfRestart) {
-        NimbusLog("vigia | a dock continua sumida depois de refeita: reiniciando o Nimbus sozinho");
-        g_selfRestart = true;
-        PostMessageW(g_msgWnd, WM_APP_QUIT, 0, 0);
+        if (GuardLoaded()) {
+            NimbusLog("vigia | a dock continua sumida depois de refeita: reiniciando o Nimbus sozinho");
+            g_selfRestart = true;
+            PostMessageW(g_msgWnd, WM_APP_QUIT, 0, 0);
+        } else if (now - remadeAt > 30 * 1000) {
+            remadeAt = now;
+            badRuns = 0;
+            NimbusLog("vigia | a dock continua sumida; sem a parte do Explorer pra reabrir o Nimbus, as docks sao refeitas de novo");
+            SetTimer(g_msgWnd, TIMER_DOCKS, 100, nullptr);
+        }
     }
     bool trayUp = false;
     if (g_set.hideTaskbar && !g_docks.empty())
@@ -23222,7 +23492,8 @@ static void AlignAutoSync() {
 // plain switch. The search and the guided setup get each monitor's own switch, named by its monitor.
 static void DockOnRows(std::vector<SwRow>& rows) {
     if (g_sw.mons.empty()) LoadSwMonitors();
-    const wchar_t* why = L2(L"Desmarque para um monitor ficar sem dock.", L"Untick it to leave a monitor without a dock.");
+    const wchar_t* why = L2(L"Desmarque para um monitor ficar sem dock. Sem dock em nenhum monitor, a barra do Windows não é escondida.",
+                            L"Untick it to leave a monitor without a dock. With no dock on any monitor, Windows' taskbar isn't hidden.");
     if (g_swCollect) {
         for (int i = 0; i < (int)g_sw.mons.size(); i++) {
             if (g_sw.mons[i].who.id.empty()) continue;
@@ -24454,7 +24725,10 @@ static DWORD WINAPI TelaApplyThread(LPVOID arg) {
         sp.flags |= DISPLAYCONFIG_PATH_ACTIVE;
     }
     for (auto& m : modes) fix(m.adapterId);
-    const UINT32 flags = SDC_APPLY | SDC_USE_SUPPLIED_DISPLAY_CONFIG | SDC_SAVE_TO_DATABASE | SDC_ALLOW_CHANGES;
+    // Applied without saving: Windows' display database still holds the previous layout while the question is
+    // up, so if this process ends before the answer (the mod turned off, a restart of Nimbus, a sign-out) nothing
+    // is left saved. It's saved only on OK; otherwise Windows goes back to what its database has.
+    const UINT32 flags = SDC_APPLY | SDC_USE_SUPPLIED_DISPLAY_CONFIG | SDC_ALLOW_CHANGES;
     LONG r = SetDisplayConfig((UINT32)paths.size(), paths.data(), (UINT32)modes.size(), modes.data(), flags);
     if (r != ERROR_SUCCESS) {
         char line[96];
@@ -24473,8 +24747,17 @@ static DWORD WINAPI TelaApplyThread(LPVOID arg) {
                15);
     int a = MessageBoxW(nullptr, ask, L"Nimbus Menu", MB_OKCANCEL | MB_ICONQUESTION | MB_TOPMOST | MB_SETFOREGROUND);
     KillTimer(nullptr, t);
-    if (a != IDOK) {
-        SetDisplayConfig((UINT32)cur.size(), cur.data(), (UINT32)curModes.size(), curModes.data(), flags);
+    if (a == IDOK) {
+        r = SetDisplayConfig((UINT32)paths.size(), paths.data(), (UINT32)modes.size(), modes.data(), flags | SDC_SAVE_TO_DATABASE);
+        if (r != ERROR_SUCCESS) {
+            char line[96];
+            snprintf(line, sizeof(line), "telas | perfil mantido, mas o Windows nao salvou (erro %ld)", r);
+            NimbusLog(line);
+        }
+    } else {
+        r = SetDisplayConfig(0, nullptr, 0, nullptr, SDC_APPLY | SDC_USE_DATABASE_CURRENT);
+        // (if Windows has nothing saved for these monitors: what was on before the change, still unsaved)
+        if (r != ERROR_SUCCESS) SetDisplayConfig((UINT32)cur.size(), cur.data(), (UINT32)curModes.size(), curModes.data(), flags);
         NimbusLog("telas | voltou pra configuracao anterior");
     }
     TelasForget();
@@ -24652,15 +24935,21 @@ static void PageTelas(float& y, float x, float w) {
     Hint(y, x, w, L2(L"Salvar com os mesmos monitores e o mesmo principal atualiza o arranjo que já existe. Até 10 arranjos.",
                      L"Saving with the same monitors and the same main one updates the existing layout. Up to 10 layouts."),
          L"info.telasSave");
-    Hint(y, x, w, L2(L"Ao aplicar, o Windows espera 15 segundos pela confirmação e volta sozinho se ninguém confirmar.",
-                     L"On apply, Windows waits 15 seconds for confirmation and goes back by itself otherwise."),
+    Hint(y, x, w, L2(L"Ao aplicar, o Nimbus pergunta se é para manter e espera 15 segundos: sem resposta, volta sozinho ao arranjo anterior. O Windows só salva o arranjo depois do OK.",
+                     L"On apply, Nimbus asks whether to keep it and waits 15 seconds: with no answer, it goes back to the previous layout by itself. Windows saves the layout only after OK."),
          L"info.telasApply");
 }
 
 // ---- Export and import: the settings in a .nimbus file, to share or keep (Settings > About and backup). ----
 // Nimbus' values live in Windhawk's storage for the mod (the registry, under this user's prefix): all of them are
-// read from there. "Ajustes" is the look and the settings (no pinned apps, notes, reminders); "tudo" is a
-// full backup. Windows' banner switches saved by Nimbus never go (they're this PC's own, to put back).
+// read from there. Windhawk has no call to list a mod's values, and the names can't be listed from the code
+// without missing some (a setting per monitor, per status item, per list entry: a name left out would be a
+// setting silently missing from a backup), so the key is enumerated. To stay safe where that layout isn't the
+// one expected (portable Windhawk, another version): what was enumerated is checked against Windhawk's own
+// calls (BackupRead), and anything that doesn't match means no export, said to the user, never a wrong file.
+// "Ajustes" is the look and the settings (no pinned apps, notes, reminders); "tudo" is a
+// full backup. What Nimbus noted on this PC to put things back never goes, and is never taken from a file
+// (BackupLocal): on another PC, or after the user changed their mind in Windows, it would "restore" the wrong thing.
 static bool BackupStoreKey(HKEY& root, std::wstring& path) {
     wchar_t exe[MAX_PATH];
     GetModuleFileNameW(nullptr, exe, MAX_PATH);
@@ -24670,10 +24959,12 @@ static bool BackupStoreKey(HKEY& root, std::wstring& path) {
     wchar_t rk[260] = {};
     GetPrivateProfileStringW(L"Storage", L"RegistryKey", L"HKLM\\SOFTWARE\\Windhawk", rk, ARRAYSIZE(rk), ini.c_str());
     std::wstring k = rk;
-    root = HKEY_LOCAL_MACHINE;
-    if (!_wcsnicmp(k.c_str(), L"HKCU\\", 5)) root = HKEY_CURRENT_USER;
     size_t slash = k.find(L'\\');
     if (slash == std::wstring::npos) return false;
+    std::wstring hive = k.substr(0, slash);
+    if (!_wcsicmp(hive.c_str(), L"HKLM") || !_wcsicmp(hive.c_str(), L"HKEY_LOCAL_MACHINE")) root = HKEY_LOCAL_MACHINE;
+    else if (!_wcsicmp(hive.c_str(), L"HKCU") || !_wcsicmp(hive.c_str(), L"HKEY_CURRENT_USER")) root = HKEY_CURRENT_USER;
+    else return false;  // (a hive this doesn't know: no guess)
     path = k.substr(slash + 1) + L"\\Engine\\ModsWritable\\" + WH_MOD_ID + L"\\LocalStorage";
     return true;
 }
@@ -24683,8 +24974,21 @@ struct BackupVal {
     std::wstring s;
     DWORD i;
 };
+// This PC's own, left out of every export and import (an import doesn't delete them either): the taskbar's
+// auto-hide as it was, each app's banner switch as it was, the sound panel's routes, mutes and per-output
+// volumes (by this PC's output ids), the image the guard trusts, when the last import was (its undo copy is a
+// file on this PC), and where the guided setup stopped.
+static bool BackupLocal(const std::wstring& n) {
+    for (const wchar_t* list : {L"notif.banners", L"sound.routed", L"sound.muted", L"sound.copyVol"}) {
+        size_t len = wcslen(list);
+        if (!n.compare(0, len, list) && (n.size() == len || n[len] == L'.')) return true;
+    }
+    for (const wchar_t* one : {L"autoHideOrig", L"backup.lastImport", L"guard.exe", L"wizard.at", L"wizard.round"})
+        if (n == one) return true;
+    return false;
+}
 static bool BackupKeep(const std::wstring& n, bool all) {
-    if (!n.compare(0, 14, L"notif.banners.")) return false;
+    if (BackupLocal(n)) return false;
     if (all) return true;
     for (const wchar_t* pre : {L"cfg.", L"seen.", L"mon."})
         if (!n.compare(0, wcslen(pre), pre)) return true;
@@ -24695,8 +24999,11 @@ static bool BackupRead(std::vector<BackupVal>& out, bool all) {
     std::wstring path;
     if (!BackupStoreKey(root, path)) return false;
     HKEY k;
-    if (RegOpenKeyExW(root, path.c_str(), 0, KEY_READ, &k) != ERROR_SUCCESS) return false;
+    // (Windhawk keeps it in the 64-bit view; its tool process is 32-bit in 1.7.x)
+    if (RegOpenKeyExW(root, path.c_str(), 0, KEY_READ | KEY_WOW64_64KEY, &k) != ERROR_SUCCESS) return false;
     const std::wstring& pre = UserPrefix();
+    int mine = 0, checked = 0;
+    bool same = true;
     std::vector<wchar_t> name(16384);
     std::vector<BYTE> data(256 * 1024);
     for (DWORD i = 0;; i++) {
@@ -24706,15 +25013,30 @@ static bool BackupRead(std::vector<BackupVal>& out, bool all) {
         if (r != ERROR_SUCCESS) continue;
         std::wstring n(name.data(), nl);
         if (n.compare(0, pre.size(), pre)) continue;
+        std::wstring full = n;
         n = n.substr(pre.size());
+        mine++;
         if (!BackupKeep(n, all)) continue;
         BackupVal v{n, type == REG_DWORD, L"", 0};
         if (type == REG_DWORD && dl >= 4) v.i = *(DWORD*)data.data();
         else if (type == REG_SZ || type == REG_EXPAND_SZ) v.s.assign((wchar_t*)data.data(), wcsnlen((wchar_t*)data.data(), dl / sizeof(wchar_t)));
         else continue;
+        // The first few are read again through Windhawk: a different answer means this key isn't (or is no
+        // longer) where the mod's values really are.
+        if (checked < 12) {
+            checked++;
+            std::wstring got;
+            if (v.isInt) same = same && Wh_GetIntValue(full.c_str(), (int)~v.i) == (int)v.i;
+            else if (!v.s.empty()) same = same && ReadLong(full, got) && got == v.s;
+        }
         out.push_back(std::move(v));
     }
     RegCloseKey(k);
+    // (the bar notes its own image at every start, guard.exe: no value of this user here means the wrong place)
+    if (!mine || !same) {
+        out.clear();
+        return false;
+    }
     return true;
 }
 static std::string BackupUtf8(const std::wstring& w) {
@@ -24792,11 +25114,10 @@ static bool BackupParse(const std::wstring& file, std::vector<BackupVal>& vals, 
 static std::wstring g_importFile;  // put in after the bar closed (nothing it saves on the way out overwrites it)
 static bool g_importUndo = false;  // (it is the copy kept before the last import, going back in)
 // The copy of everything made right before a backup is opened: what "Undo the last import" puts back.
+// In this user's folder of the mod's storage (UserDir), so that it goes when the mod is removed.
 static std::wstring BackupSafePath() {
-    wchar_t dir[MAX_PATH];
-    ExpandEnvironmentStringsW(L"%LOCALAPPDATA%\\Nimbus Menu", dir, MAX_PATH);
-    CreateDirectoryW(dir, nullptr);
-    return std::wstring(dir) + L"\\antes-de-importar.nimbus";
+    std::wstring dir = UserDir(true);
+    return dir.empty() ? L"" : dir + L"\\antes-de-importar.nimbus";
 }
 // The file the last export wrote: its row says where it is and opens the folder, until the page changes.
 static std::wstring g_exportDone;
@@ -24829,6 +25150,11 @@ static void BackupImportNow() {
     snprintf(line, sizeof(line), "backup | %s: %zu valores (%s)", g_importUndo ? "importação desfeita" : "importado", vals.size(), all ? "tudo" : "ajustes");
     NimbusLog(line);
 }
+// An import ends the bar and counts on the Explorer part to open it again (see GuardLoaded).
+static std::wstring BackupNoGuardNote() {
+    return L2(L"\n\nA parte do Nimbus no Explorer não está carregada agora, então ele não reabre sozinho depois: desligue e ligue o mod no Windhawk para ele voltar.",
+              L"\n\nNimbus' part in Explorer isn't loaded right now, so it won't reopen by itself afterwards: turn the mod off and on in Windhawk to bring it back.");
+}
 static std::wstring BackupDialog(bool save, const wchar_t* defName) {
     wchar_t file[MAX_PATH] = {};
     if (defName) wcscpy_s(file, defName);
@@ -24858,7 +25184,8 @@ static void BackupExport(bool all) {
         SwInvalidate();
         return;
     }
-    MessageBoxW(g_sw.hwnd, L2(L"Não deu para exportar (o Windhawk portátil guarda os ajustes de outro jeito).", L"Couldn't export (portable Windhawk keeps settings another way)."),
+    MessageBoxW(g_sw.hwnd, L2(L"Não deu para exportar: o arquivo não pôde ser gravado, ou este Windhawk guarda os ajustes de um jeito que o Nimbus não lê (o portátil, por exemplo).",
+                              L"Couldn't export: the file couldn't be written, or this Windhawk keeps settings in a way Nimbus can't read (the portable one, for example)."),
                 L"Nimbus Menu", MB_OK | MB_ICONWARNING);
 }
 static void BackupImport() {
@@ -24870,16 +25197,29 @@ static void BackupImport() {
         MessageBoxW(g_sw.hwnd, L2(L"Esse arquivo não é um ajuste do Nimbus.", L"This file isn't Nimbus settings."), L"Nimbus Menu", MB_OK | MB_ICONWARNING);
         return;
     }
-    // A copy of everything of now first, to go back.
-    std::wstring safe = BackupSafePath();
-    BackupWriteFile(safe, true);
+    // A copy of everything of now first, to go back. Written aside: it takes the place of the copy "Undo the last
+    // import" uses only when the import is confirmed (a cancelled one leaves that copy as it was).
+    std::wstring safe = BackupSafePath(), fresh = safe.empty() ? L"" : safe + L".novo";
+    bool copied = !fresh.empty() && BackupWriteFile(fresh, true);
+    if (!copied && !fresh.empty()) DeleteFileW(fresh.c_str());
     std::wstring ask = std::wstring(all ? L2(L"Esse é um backup completo: troca os ajustes, os fixados, as notas e os lembretes pelos do arquivo.",
                                                 L"This is a full backup: it replaces the settings, pinned apps, notes and reminders with the file's.")
                                         : L2(L"Troca os ajustes pelos do arquivo (os fixados, notas e lembretes ficam).",
                                              L"Replaces the settings with the file's (pinned apps, notes and reminders stay).")) +
-                       L2(L"\n\nO Nimbus reinicia para carregar. Uma cópia de agora fica em:\n", L"\n\nNimbus restarts to load them. A copy of now is kept in:\n") + safe +
-                       L2(L"\n\nRestaurar este backup?", L"\n\nRestore this backup?");
-    if (MessageBoxW(g_sw.hwnd, ask.c_str(), L"Nimbus Menu", MB_OKCANCEL | MB_ICONQUESTION) != IDOK) return;
+                       (copied ? L2(L"\n\nO Nimbus reinicia para carregar. Uma cópia de agora fica em:\n", L"\n\nNimbus restarts to load them. A copy of now is kept in:\n") + safe
+                               : std::wstring(L2(L"\n\nO Nimbus reinicia para carregar. ATENÇÃO: não deu para guardar uma cópia de agora, então esta importação não vai poder ser desfeita.",
+                                                 L"\n\nNimbus restarts to load them. WARNING: a copy of now couldn't be saved, so this import can't be undone."))) +
+                       (GuardLoaded() ? L"" : BackupNoGuardNote()) + L2(L"\n\nRestaurar este backup?", L"\n\nRestore this backup?");
+    if (MessageBoxW(g_sw.hwnd, ask.c_str(), L"Nimbus Menu", MB_OKCANCEL | (copied ? MB_ICONQUESTION : MB_ICONWARNING | MB_DEFBUTTON2)) != IDOK) {
+        if (copied) DeleteFileW(fresh.c_str());
+        return;
+    }
+    if (copied && !MoveFileExW(fresh.c_str(), safe.c_str(), MOVEFILE_REPLACE_EXISTING)) {
+        DeleteFileW(fresh.c_str());
+        copied = false;
+    }
+    // (no copy of now: an older one must not be offered as the undo of this import)
+    if (!copied && !safe.empty()) DeleteFileW(safe.c_str());
     g_importFile = f;
     g_importUndo = false;
     NimbusLog("backup | importando: o Nimbus reinicia");
@@ -24890,6 +25230,10 @@ static void BackupImport() {
 static void BackupImportUndo() {
     std::wstring safe = BackupSafePath();
     if (GetFileAttributesW(safe.c_str()) == INVALID_FILE_ATTRIBUTES) return;
+    if (!GuardLoaded() &&
+        MessageBoxW(g_sw.hwnd, (std::wstring(L2(L"O Nimbus fecha para desfazer a importação.", L"Nimbus closes to undo the import.")) + BackupNoGuardNote()).c_str(),
+                    L"Nimbus Menu", MB_OKCANCEL | MB_ICONWARNING) != IDOK)
+        return;
     g_importFile = safe;
     g_importUndo = true;
     NimbusLog("backup | desfazendo a importação: o Nimbus reinicia");
@@ -25141,13 +25485,113 @@ static void PageMonitores(float& y, float x, float w) {
     }
 }
 
-// ---- The mod's log: %LOCALAPPDATA%\Nimbus Menu\registro.txt, one "yyyy-MM-dd HH:mm:ss | ..." line per event.
-// Lines older than two days go on each write and each read; Settings → About shows the latest.
+// ---- The mod's log: registro.txt in this user's folder of the mod's storage (UserDir; the same folder from the
+// bar's process and from Explorer, removed with the mod), one "yyyy-MM-dd HH:mm:ss | ..." line per event.
+// A line is one append at the end of the file. Lines older than two days (and anything over the size cap)
+// go when the bar starts, or when the file passes the cap; Settings → About shows the latest two days.
 static std::wstring NimbusLogPath(bool makeDir = false) {
-    wchar_t dir[MAX_PATH];
-    if (!ExpandEnvironmentStringsW(L"%LOCALAPPDATA%\\Nimbus Menu", dir, MAX_PATH)) return L"";
-    if (makeDir) CreateDirectoryW(dir, nullptr);
-    return std::wstring(dir) + L"\\registro.txt";
+    std::wstring dir = UserDir(makeDir);
+    return dir.empty() ? L"" : dir + L"\\registro.txt";
+}
+// Over this size the log is rewritten down to half of it (the oldest lines go), whatever their age.
+constexpr LONGLONG kLogCap = 256 * 1024;
+// One write at the end of the file: no read, no rewrite, nothing from the heap (the crash filter uses it too).
+// Appends from the bar and from Explorer don't cut each other.
+static bool NimbusLogAppendRaw(const wchar_t* path, const char* text, DWORD len, LONGLONG* sizeAfter = nullptr) {
+    HANDLE a = CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (a == INVALID_HANDLE_VALUE) return false;
+    DWORD w = 0;
+    bool ok = WriteFile(a, text, len, &w, nullptr) && w == len;
+    if (sizeAfter) {
+        LARGE_INTEGER sz = {};
+        *sizeAfter = GetFileSizeEx(a, &sz) ? sz.QuadPart : 0;
+    }
+    CloseHandle(a);
+    return ok;
+}
+// Until 2.1 was reviewed, the log and the copy kept before an import were in %LOCALAPPDATA%\Nimbus Menu, which
+// nothing removes with the mod. At the bar's start they're moved to the mod's storage (copied, so they take that
+// folder's permissions; the old lines of the log go before the ones already written there), and the old folder
+// goes if nothing else is in it. Nothing to do once that folder is gone.
+static void MoveOldDataFolder() {
+    wchar_t old[MAX_PATH];
+    DWORD n = ExpandEnvironmentStringsW(L"%LOCALAPPDATA%\\Nimbus Menu", old, MAX_PATH);
+    if (!n || n > MAX_PATH || GetFileAttributesW(old) == INVALID_FILE_ATTRIBUTES) return;
+    std::wstring from = old, to = UserDir(true);
+    if (to.empty()) return;
+    auto readAll = [](const std::wstring& p, std::string& out) {
+        HANDLE h = CreateFileW(p.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
+        if (h == INVALID_HANDLE_VALUE) return false;
+        char buf[4096];
+        DWORD got = 0;
+        while (ReadFile(h, buf, sizeof(buf), &got, nullptr) && got) out.append(buf, got);
+        CloseHandle(h);
+        return true;
+    };
+    std::wstring oldLog = from + L"\\registro.txt", newLog = to + L"\\registro.txt";
+    if (GetFileAttributesW(oldLog.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        HANDLE mx = CreateMutexW(nullptr, FALSE, L"Local\\NimbusMenu_Log");
+        if (mx) WaitForSingleObject(mx, 2000);
+        bool moved = CopyFileW(oldLog.c_str(), newLog.c_str(), TRUE) != 0;
+        if (!moved && GetLastError() == ERROR_FILE_EXISTS) {  // (the Explorer part already wrote to the new one)
+            std::string a, b;
+            if (readAll(oldLog, a) && readAll(newLog, b)) {
+                if (!a.empty() && a.back() != '\n') a += "\r\n";
+                a += b;
+                HANDLE h = CreateFileW(newLog.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, 0, nullptr);
+                if (h != INVALID_HANDLE_VALUE) {
+                    DWORD w = 0;
+                    moved = WriteFile(h, a.data(), (DWORD)a.size(), &w, nullptr) && w == a.size();
+                    CloseHandle(h);
+                }
+            }
+        }
+        if (moved) DeleteFileW(oldLog.c_str());
+        if (mx) {
+            ReleaseMutex(mx);
+            CloseHandle(mx);
+        }
+    }
+    std::wstring oldCopy = from + L"\\antes-de-importar.nimbus", newCopy = to + L"\\antes-de-importar.nimbus";
+    if (GetFileAttributesW(oldCopy.c_str()) != INVALID_FILE_ATTRIBUTES)
+        // (one already in the new place was made after this one: it stays)
+        if (CopyFileW(oldCopy.c_str(), newCopy.c_str(), TRUE) || GetLastError() == ERROR_FILE_EXISTS) DeleteFileW(oldCopy.c_str());
+    // 2.0's crash notes ("dd/MM HH:mm:ss | ...", no year): their lines go to the log with the year of the file's
+    // last write, where the two-day rule decides what stays. Then the file goes.
+    std::wstring oldFalls = from + L"\\quedas.txt";
+    WIN32_FILE_ATTRIBUTE_DATA fa = {};
+    if (GetFileAttributesExW(oldFalls.c_str(), GetFileExInfoStandard, &fa)) {
+        std::string all, out;
+        SYSTEMTIME utc = {}, when = {};
+        bool timed = FileTimeToSystemTime(&fa.ftLastWriteTime, &utc) && SystemTimeToTzSpecificLocalTime(nullptr, &utc, &when);
+        if (timed && fa.nFileSizeHigh == 0 && fa.nFileSizeLow < 64 * 1024 && readAll(oldFalls, all)) {
+            for (size_t i = 0; i < all.size();) {
+                size_t e = all.find('\n', i);
+                std::string l = all.substr(i, e == std::string::npos ? std::string::npos : e - i);
+                i = e == std::string::npos ? all.size() : e + 1;
+                if (!l.empty() && l.back() == '\r') l.pop_back();
+                unsigned D, M, h, m, sec;
+                int used = 0;
+                if (sscanf(l.c_str(), "%2u/%2u %2u:%2u:%2u%n", &D, &M, &h, &m, &sec, &used) != 5 || used <= 0) continue;
+                // (a note from December read in January is last year's)
+                unsigned Y = when.wYear - (M > when.wMonth ? 1 : 0);
+                char head[32];
+                snprintf(head, sizeof(head), "%04u-%02u-%02u %02u:%02u:%02u", Y, M, D, h, m, sec);
+                out += head + l.substr((size_t)used) + "\r\n";
+            }
+        }
+        if (!out.empty()) {
+            HANDLE mx = CreateMutexW(nullptr, FALSE, L"Local\\NimbusMenu_Log");
+            DWORD got = mx ? WaitForSingleObject(mx, 2000) : WAIT_FAILED;
+            NimbusLogAppendRaw(newLog.c_str(), out.data(), (DWORD)out.size());
+            if (mx) {
+                if (got == WAIT_OBJECT_0 || got == WAIT_ABANDONED) ReleaseMutex(mx);
+                CloseHandle(mx);
+            }
+        }
+        DeleteFileW(oldFalls.c_str());
+    }
+    RemoveDirectoryW(old);  // (only when empty)
 }
 static ULONGLONG NimbusNow100ns() {
     FILETIME ft;
@@ -25165,40 +25609,46 @@ static bool NimbusLogLineTime(const std::string& l, ULONGLONG& out) {  // (local
     out = ((ULONGLONG)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
     return true;
 }
-// Reads the log, drops what's older than two days (and lines without a date), rewrites it if that changed.
-static std::vector<std::string> NimbusLogLoad(const char* append = nullptr) {
+// Reads the log and returns its lines of the last two days (lines without a date are left out). The file itself
+// is only rewritten with `trim`: without the old lines, and cut down to half the cap when it's over that. That is
+// done when the bar starts and when an append leaves the file over the cap, never on a plain read or write.
+static std::vector<std::string> NimbusLogLoad(bool trim = false) {
     std::vector<std::string> keep;
-    std::wstring p = NimbusLogPath(append != nullptr);
+    std::wstring p = NimbusLogPath(false);
     if (p.empty()) return keep;
-    HANDLE mx = CreateMutexW(nullptr, FALSE, L"Local\\NimbusMenu_Log");
-    if (mx) WaitForSingleObject(mx, 2000);
-    std::string all;
-    HANDLE h = CreateFileW(p.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
-    if (h != INVALID_HANDLE_VALUE) {
-        char buf[4096];
-        DWORD n = 0;
-        while (ReadFile(h, buf, sizeof(buf), &n, nullptr) && n) all.append(buf, n);
-        CloseHandle(h);
-    } else if (GetLastError() != ERROR_FILE_NOT_FOUND && GetLastError() != ERROR_PATH_NOT_FOUND) {
-        // There but unreadable now (an editor or an antivirus holding it): never rewritten from nothing,
-        // the new line is only appended.
-        if (append) {
-            HANDLE a = CreateFileW(p.c_str(), FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_ALWAYS, 0, nullptr);
-            if (a != INVALID_HANDLE_VALUE) {
-                std::string l = std::string(append) + "\r\n";
-                DWORD w = 0;
-                WriteFile(a, l.data(), (DWORD)l.size(), &w, nullptr);
-                CloseHandle(a);
-            }
-        }
+    HANDLE mx = nullptr;
+    bool held = false;
+    if (trim) {  // (a rewrite must not cross an append from the other process)
+        mx = CreateMutexW(nullptr, FALSE, L"Local\\NimbusMenu_Log");
+        DWORD got = mx ? WaitForSingleObject(mx, 2000) : WAIT_FAILED;
+        held = got == WAIT_OBJECT_0 || got == WAIT_ABANDONED;
+        if (!held) trim = false;  // (busy: the next start trims)
+    }
+    auto done = [&] {
         if (mx) {
-            ReleaseMutex(mx);
+            if (held) ReleaseMutex(mx);
             CloseHandle(mx);
         }
+    };
+    std::string all;
+    HANDLE h = CreateFileW(p.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (h == INVALID_HANDLE_VALUE) {  // (not there, or held by an editor or an antivirus: never rewritten from nothing)
+        done();
         return keep;
     }
+    LARGE_INTEGER size = {};
+    GetFileSizeEx(h, &size);
+    if (size.QuadPart > kLogCap * 4) {  // (far over the cap: only its end is worth reading)
+        LARGE_INTEGER to;
+        to.QuadPart = size.QuadPart - kLogCap * 4;
+        SetFilePointerEx(h, to, nullptr, FILE_BEGIN);
+    }
+    char buf[4096];
+    DWORD n = 0;
+    while (ReadFile(h, buf, sizeof(buf), &n, nullptr) && n) all.append(buf, n);
+    CloseHandle(h);
     const ULONGLONG cut = NimbusNow100ns() - 2ULL * 24 * 3600 * 10000000ULL;
-    size_t total = 0;
+    size_t total = 0, bytes = 0;
     for (size_t i = 0; i < all.size();) {
         size_t e = all.find('\n', i);
         std::string l = all.substr(i, e == std::string::npos ? std::string::npos : e - i);
@@ -25207,35 +25657,66 @@ static std::vector<std::string> NimbusLogLoad(const char* append = nullptr) {
         if (l.empty()) continue;
         total++;
         ULONGLONG t;
-        if (NimbusLogLineTime(l, t) && t >= cut) keep.push_back(l);
+        if (NimbusLogLineTime(l, t) && t >= cut) {
+            bytes += l.size() + 2;
+            keep.push_back(l);
+        }
     }
-    if (append) keep.push_back(append);
-    if (append || keep.size() != total) {
-        std::string out;
-        for (auto& l : keep) out += l + "\r\n";
-        if (keep.empty()) {
-            DeleteFileW(p.c_str());
-        } else {
-            h = CreateFileW(p.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, 0, nullptr);
-            if (h != INVALID_HANDLE_VALUE) {
-                DWORD w = 0;
-                WriteFile(h, out.data(), (DWORD)out.size(), &w, nullptr);
-                CloseHandle(h);
+    if (trim) {
+        size_t first = 0;
+        if ((LONGLONG)bytes > kLogCap)
+            for (; first < keep.size() && (LONGLONG)bytes > kLogCap / 2; first++) bytes -= keep[first].size() + 2;
+        if (first) keep.erase(keep.begin(), keep.begin() + first);
+        if (keep.size() != total || size.QuadPart > kLogCap * 4) {
+            if (keep.empty()) {
+                DeleteFileW(p.c_str());
+            } else {
+                std::string out;
+                out.reserve(bytes);
+                for (auto& l : keep) out += l + "\r\n";
+                h = CreateFileW(p.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, 0, nullptr);
+                if (h != INVALID_HANDLE_VALUE) {
+                    DWORD w = 0;
+                    WriteFile(h, out.data(), (DWORD)out.size(), &w, nullptr);
+                    CloseHandle(h);
+                }
             }
         }
     }
-    if (mx) {
-        ReleaseMutex(mx);
-        CloseHandle(mx);
-    }
+    done();
     return keep;
 }
-static void NimbusLog(const char* what) {
+// One line appended. With a stop event (the guard in Explorer): nothing is waited for or written once it's set.
+static void NimbusLog(const char* what, HANDLE stop) {
+    if (stop && WaitForSingleObject(stop, 0) == WAIT_OBJECT_0) return;
+    std::wstring p = NimbusLogPath(true);
+    if (p.empty()) return;
     SYSTEMTIME t;
     GetLocalTime(&t);
-    char line[400];
-    snprintf(line, sizeof(line), "%04u-%02u-%02u %02u:%02u:%02u | %s", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond, what);
-    NimbusLogLoad(line);
+    char line[420];
+    int len = snprintf(line, sizeof(line) - 2, "%04u-%02u-%02u %02u:%02u:%02u | %s", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond, what);
+    if (len < 0) return;
+    len = std::min(len, (int)sizeof(line) - 3);
+    line[len++] = '\r', line[len++] = '\n';
+    // (the mutex only keeps an append away from a rewrite; when it can't be had in time the line is written anyway)
+    HANDLE mx = CreateMutexW(nullptr, FALSE, L"Local\\NimbusMenu_Log");
+    bool held = false;
+    if (mx) {
+        HANDLE both[2] = {mx, stop};
+        DWORD got = WaitForMultipleObjects(stop ? 2 : 1, both, FALSE, 2000);
+        if (got == WAIT_OBJECT_0 + 1) {  // (stopping: the mutex isn't held)
+            CloseHandle(mx);
+            return;
+        }
+        held = got == WAIT_OBJECT_0 || got == WAIT_ABANDONED_0;
+    }
+    LONGLONG size = 0;
+    NimbusLogAppendRaw(p.c_str(), line, (DWORD)len, &size);
+    if (mx) {
+        if (held) ReleaseMutex(mx);
+        CloseHandle(mx);
+    }
+    if (!stop && size > kLogCap) NimbusLogLoad(true);
 }
 
 // ---- The bar watching itself (all of it to the log) ----
@@ -25244,6 +25725,7 @@ static void NimbusLog(const char* what) {
 // dock vanishes), the memory, the handles; noted when they pass a step. A crash notes its code and place.
 static HANDLE g_barWatchStop = nullptr, g_barWatchThread = nullptr;
 static LPTOP_LEVEL_EXCEPTION_FILTER g_prevCrashFilter = nullptr;
+static wchar_t g_crashLogPath[MAX_PATH * 2] = {};  // (the log's path, noted at start: the filter can't build it)
 static LONG WINAPI BarCrashFilter(EXCEPTION_POINTERS* ep) {
     static LONG once = 0;
     if (ep && ep->ExceptionRecord && !InterlockedExchange(&once, 1)) {
@@ -25252,11 +25734,23 @@ static LONG WINAPI BarCrashFilter(EXCEPTION_POINTERS* ep) {
         wchar_t name[MAX_PATH] = L"?";
         if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)at, &mod) && mod)
             GetModuleFileNameW(mod, name, MAX_PATH);
+        // The heap may be broken here: everything on the stack, no lock, one append (see NimbusLogAppendRaw).
+        name[MAX_PATH - 1] = 0;
+        const wchar_t* base = name;
+        for (const wchar_t* c = name; *c; c++)
+            if (*c == L'\\' || *c == L'/') base = c + 1;
+        char file[80];
+        size_t fi = 0;
+        for (; base[fi] && fi < sizeof(file) - 1; fi++) file[fi] = base[fi] < 0x80 ? (char)base[fi] : '?';
+        file[fi] = 0;
+        SYSTEMTIME t;
+        GetLocalTime(&t);
         char line[400];
-        snprintf(line, sizeof(line), "barra | codigo 0x%08lX | erro dentro da barra em %ls+0x%llX (vai cair)",
-                 (unsigned long)ep->ExceptionRecord->ExceptionCode, PathFindFileNameW(name),
-                 (unsigned long long)((ULONG_PTR)at - (ULONG_PTR)mod));
-        NimbusLog(line);
+        int len = snprintf(line, sizeof(line),
+                           "%04u-%02u-%02u %02u:%02u:%02u | barra | codigo 0x%08lX | erro dentro da barra em %s+0x%llX (vai cair)\r\n",
+                           t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond, (unsigned long)ep->ExceptionRecord->ExceptionCode,
+                           file, (unsigned long long)((ULONG_PTR)at - (ULONG_PTR)mod));
+        if (len > 0 && g_crashLogPath[0]) NimbusLogAppendRaw(g_crashLogPath, line, (DWORD)std::min(len, (int)sizeof(line) - 1));
     }
     return g_prevCrashFilter ? g_prevCrashFilter(ep) : EXCEPTION_CONTINUE_SEARCH;
 }
@@ -25300,6 +25794,8 @@ static DWORD WINAPI BarWatchThread(LPVOID) {
     }
 }
 static void BarWatchStart() {
+    std::wstring log = NimbusLogPath(true);
+    if (log.size() < ARRAYSIZE(g_crashLogPath)) wcscpy_s(g_crashLogPath, log.c_str());
     g_prevCrashFilter = SetUnhandledExceptionFilter(BarCrashFilter);
     g_barWatchStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (g_barWatchStop) g_barWatchThread = CreateThread(nullptr, 0, BarWatchThread, nullptr, 0, nullptr);
@@ -25312,6 +25808,11 @@ static void BarWatchEnd() {
         while (MsgWaitForMultipleObjects(1, &g_barWatchThread, FALSE, std::max<LONG>(0, (LONG)(until - GetTickCount())), QS_SENDMESSAGE) == WAIT_OBJECT_0 + 1) {
             MSG m;
             PeekMessageW(&m, nullptr, 0, 0, PM_NOREMOVE | PM_QS_SENDMESSAGE);
+        }
+        // (still running after the wait: it goes on using the event, so both handles stay, as in JoinWorker)
+        if (WaitForSingleObject(g_barWatchThread, 0) != WAIT_OBJECT_0) {
+            SetUnhandledExceptionFilter(g_prevCrashFilter);
+            return;
         }
         CloseHandle(g_barWatchThread);
         g_barWatchThread = nullptr;
@@ -25440,10 +25941,10 @@ static void SobreLog(float& y, float x, float w) {
     int falls = 0;
     for (auto& l : log)
         if (l.find("| barra |") != std::string::npos) falls++;
-    logDesc = log.empty() ? std::wstring(L2(L"Nada registrado. O que passa de 2 dias se apaga sozinho.", L"Nothing logged. Anything older than 2 days is deleted by itself."))
+    logDesc = log.empty() ? std::wstring(L2(L"Nada registrado. O que passa de 2 dias sai sozinho quando o Nimbus abre.", L"Nothing logged. Anything older than 2 days is removed by itself when Nimbus starts."))
                           : (falls ? std::to_wstring(falls) + L2(L" queda(s) da barra nos últimos 2 dias.", L" bar crash(es) in the last 2 days.")
                                    : std::wstring(L2(L"Nenhuma queda da barra nos últimos 2 dias.", L"No bar crash in the last 2 days."))) +
-                                L2(L" Apaga sozinho depois de 2 dias.", L" Deleted by itself after 2 days.");
+                                L2(L" O que passa de 2 dias sai sozinho quando o Nimbus abre.", L" Anything older than 2 days is removed by itself when Nimbus starts.");
     Section(y, x, w, L2(L"Registro", L"Log"));
     Card({RButtons(L2(L"Registro do Nimbus", L"Nimbus log"), logDesc.c_str(),
                    {{L2(L"Abrir no Bloco de notas", L"Open in Notepad"), [] {
@@ -25525,9 +26026,10 @@ static void PageNovidades(float& y, float x, float w) {
           {L"Iniciar e busca", L"Start and search",
            {{L"A busca do Iniciar faz coisas: contas, unidades, janelas abertas, bloquear, suspender, timer, nota, esvaziar a lixeira.",
              L"Start's search does things: sums, units, open windows, lock, sleep, timer, note, empty the Recycle Bin."},
-            {L"A busca do Iniciar abre pastas e comandos do Executar: %appdata%, C:\\, regedit, ms-settings: e outros.",
-             L"Start's search opens folders and Run commands: %appdata%, C:\\, regedit, ms-settings: and more."},
-            {L"Reiniciar no modo de segurança (com ou sem internet) no menu de energia.", L"Restart in safe mode (with or without internet) in the power menu."}}},
+            {L"A busca do Iniciar abre pastas e comandos do Executar: %appdata%, C:\\, services.msc, ms-settings: e outros. Com > na frente roda um comando com argumentos (>cmd /k ipconfig).",
+             L"Start's search opens folders and Run commands: %appdata%, C:\\, services.msc, ms-settings: and more. With > in front it runs a command with arguments (>cmd /k ipconfig)."},
+            {L"O menu de energia mostra o caminho do modo de segurança a partir de \"Reiniciar nas opções avançadas\".",
+             L"The power menu shows the way to safe mode from \"Restart to advanced options\"."}}},
           {L"Itens", L"Items",
            {{L"Microfone e câmera em uso: um ponto no ícone deles; clique para ver qual app.", L"Microphone and camera in use: a dot on their icon; click it to see which app."}}},
           {L"Bandeja e notificações", L"Tray and notifications",
@@ -27794,7 +28296,7 @@ LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 StatusTick(second);
                 if (second) {
                     lastSecond = now;
-                    if (g_set.hideTaskbar) HideTaskbars();
+                    TaskbarSync();
                     if (DockScalesChanged()) SetTimer(hwnd, TIMER_DOCKS, 300, nullptr);
                     DockHealth();
                 }
@@ -27833,7 +28335,8 @@ LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 }
             } else if (wp == TIMER_DOCKS) {
                 KillTimer(hwnd, TIMER_DOCKS);
-                if (g_set.hideTaskbar) HideTaskbars();
+                DocksExpect(DocksConfigured());
+                TaskbarSync();
                 CreateDocks();
                 if (g_docksAfterEvent) {  // (after Explorer restarting or the monitors changing: how it came out)
                     g_docksAfterEvent = false;
@@ -28018,7 +28521,8 @@ LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             HidePreview();
             SetAccent(g_prev.hwnd, true, true);
             RebuildApps();
-            if (g_set.hideTaskbar) {
+            DocksExpect(DocksConfigured());
+            if (HideTaskbarWanted()) {
                 HideTaskbars();
             } else {
                 RestoreTaskbars();
@@ -28084,6 +28588,7 @@ LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             UnregisterHotKey(hwnd, 1);
             RemovePropW(hwnd, L"NimbusWinKey");
             RemovePropW(hwnd, L"NimbusWinN");
+            RemovePropW(hwnd, L"NimbusDocks");
             if (g_moveEndHook) UnhookWinEvent(g_moveEndHook);
             if (g_locationHook) UnhookWinEvent(g_locationHook);
             g_moveEndHook = g_locationHook = nullptr;
@@ -28181,8 +28686,21 @@ DWORD WINAPI UiThread(LPVOID) {
 
     g_shellHookMsg = RegisterWindowMessageW(L"SHELLHOOK");
     g_taskbarCreatedMsg = RegisterWindowMessageW(L"TaskbarCreated");
+    {  // This process' image, noted before its window exists: the only one the guard in Explorer ends and
+        // starts again (see ExGuardTrusted). Read the same way the guard reads it, so the two texts match.
+        wchar_t self[MAX_PATH * 2] = {};
+        DWORD n = ARRAYSIZE(self);
+        if (!QueryFullProcessImageNameW(GetCurrentProcess(), 0, self, &n)) {
+            n = GetModuleFileNameW(nullptr, self, ARRAYSIZE(self));
+            if (n >= ARRAYSIZE(self)) self[0] = 0;
+        }
+        std::wstring key = UKey(L"guard.exe");
+        if (self[0] && GetStr(key) != self) Wh_SetStringValue(key.c_str(), self);
+    }
     g_msgWnd = CreateWindowExW(WS_EX_TOOLWINDOW, L"NimbusMenu_Msg", L"", WS_POPUP, 0, 0, 0, 0, nullptr, nullptr,
                                g_module, nullptr);
+    MoveOldDataFolder();
+    NimbusLogLoad(true);  // (the only regular trim of the log: see NimbusLogLoad)
     {
         char line[64];
         snprintf(line, sizeof(line), "nimbus | aberto (%ls)", kVersion);
@@ -28195,11 +28713,13 @@ DWORD WINAPI UiThread(LPVOID) {
     RebuildApps();
     Wh_Log(L"start: pins=%d apps=%d", (int)g_pins.size(), (int)g_apps.size());
     for (auto& a : g_apps) Wh_Log(L"  app key=%s wins=%d pinned=%d", a.key.c_str(), (int)a.wins.size(), a.pinned);
-    if (g_set.hideTaskbar) {
+    DocksExpect(DocksConfigured());
+    if (HideTaskbarWanted()) {
         HideTaskbars();
     } else {
-        // The option may have been turned off while the bar wasn't running (after a crash): give the
-        // taskbar back its own auto-hide and show it. Nothing happens if this mod never changed it.
+        // The option may have been turned off while the bar wasn't running (after a crash), or no monitor has
+        // a dock: give the taskbar back its own auto-hide and show it. Nothing happens if this mod never
+        // changed it.
         RestoreTaskbarAutoHide();
         ShowTaskbarWindows();
     }
@@ -28676,8 +29196,45 @@ static void ExTrayStop() {
 
 // The guard (explorer.exe part). The bar's process exits with 0 when it stops normally, having restored
 // everything; any other end is a crash or a kill, and the taskbar would stay hidden. So: give it back at once,
-// then reopen Nimbus. Three deaths in 5 minutes: stop reopening and leave Windows' taskbar.
+// then reopen Nimbus. A bar that froze or lost its docks is ended by the guard, and that counts as a death too.
+// Three deaths in 5 minutes: Windows' taskbar stays and nothing is reopened for 10 minutes (a bar opened by
+// hand meanwhile still gets its taskbar back if it dies); then the count starts again.
+// Every wait in this thread ends on g_exGuardStop, and nothing is restored, logged or ended once it's set: the
+// thread must be gone before this code is unloaded from Explorer (ExGuardEnd waits for it without a limit).
 HANDLE g_exGuardStop = nullptr, g_exGuardThread = nullptr;
+HANDLE g_exGuardSign = nullptr;  // (kGuardSign, open while the guard runs: the bar asks before ending itself)
+
+static bool ExGuardStopped(DWORD ms = 0) { return WaitForSingleObject(g_exGuardStop, ms) == WAIT_OBJECT_0; }
+
+// The folder of the Windhawk loaded in this Explorer: its engine is <Windhawk>\Engine\<version>\<arch>\windhawk.dll.
+static std::wstring ExGuardWindhawkDir() {
+    wchar_t p[MAX_PATH * 2];
+    HMODULE engine = GetModuleHandleW(L"windhawk.dll");
+    DWORD n = engine ? GetModuleFileNameW(engine, p, ARRAYSIZE(p)) : 0;
+    if (!n || n >= ARRAYSIZE(p)) return L"";
+    std::wstring low = p;
+    CharLowerBuffW(low.data(), (DWORD)low.size());
+    size_t at = low.rfind(L"\\engine\\");
+    return at == std::wstring::npos ? L"" : std::wstring(p, at);
+}
+
+// Any program can make a window of the class NimbusMenu_Msg. The guard ends and starts again only Windhawk's own
+// image: named like Windhawk's host, in the folder of the Windhawk loaded here, and the very file the bar noted
+// in the mod's storage when it started ("guard.exe", see UiThread).
+static bool ExGuardTrusted(const std::wstring& exe) {
+    if (exe.empty()) return false;
+    const wchar_t* name = PathFindFileNameW(exe.c_str());
+    if (_wcsicmp(name, L"windhawk.exe") && _wcsicmp(name, L"windhawk-mod.exe")) return false;
+    if (_wcsicmp(GetStr(UKey(L"guard.exe")).c_str(), exe.c_str())) return false;
+    std::wstring dir = ExGuardWindhawkDir();
+    if (dir.empty()) {
+        static bool told = false;
+        if (!told) Wh_Log(L"guard: Windhawk's folder not found from Explorer, going by the noted image and its name");
+        told = true;
+        return true;
+    }
+    return name > exe.c_str() && (size_t)(name - exe.c_str()) == dir.size() + 1 && !_wcsnicmp(exe.c_str(), dir.c_str(), dir.size());
+}
 
 static bool ExGuardReopen(const std::wstring& exe) {
     bool own = !_wcsicmp(PathFindFileNameW(exe.c_str()), L"windhawk-mod.exe");
@@ -28699,40 +29256,67 @@ static bool ExGuardReopen(const std::wstring& exe) {
 static void ExGuardNote(DWORD code, const char* what) {
     char line[240];
     snprintf(line, sizeof(line), "barra | codigo 0x%08lX | %s", (unsigned long)code, what);
-    NimbusLog(line);
+    NimbusLog(line, g_exGuardStop);
+}
+
+// What a bar that didn't restore left behind. False when the mod is being turned off (ExplorerUninit restores
+// then, once this thread is gone).
+static bool ExGuardGiveBack() {
+    if (ExGuardStopped()) return false;
+    RestoreTaskbarAutoHide(g_exGuardStop);
+    if (ExGuardStopped()) return false;
+    ShowTaskbarWindows();
+    RestoreBanners();
+    return !ExGuardStopped();
 }
 
 static DWORD WINAPI ExGuardThread(LPVOID) {
     DWORD deaths[3] = {};
     int count = 0;
+    DWORD quietUntil = 0;  // after three deaths in 5 minutes: nothing is reopened until then (0: not in it)
     for (;;) {
         DWORD pid = 0;
         if (HWND w = FindWindowW(L"NimbusMenu_Msg", nullptr)) GetWindowThreadProcessId(w, &pid);
-        HANDLE proc = pid ? OpenProcess(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid) : nullptr;
+        // (PROCESS_TERMINATE from the start: if the bar has to be ended, it's through this handle, which
+        // can't turn into another process the way its number can)
+        HANDLE proc = pid ? OpenProcess(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE, FALSE, pid) : nullptr;
         if (!proc) {
-            if (WaitForSingleObject(g_exGuardStop, 2000) == WAIT_OBJECT_0) return 0;
+            if (ExGuardStopped(2000)) return 0;
             continue;
         }
         wchar_t path[MAX_PATH * 2];
         DWORD len = ARRAYSIZE(path);
         std::wstring exe = QueryFullProcessImageNameW(proc, 0, path, &len) ? path : L"";
+        // Someone else's process behind that window: never ended, never started. Only the taskbar is given
+        // back when it ends (that changes nothing when Nimbus had nothing to put back).
+        const bool own = ExGuardTrusted(exe);
+        if (!own) Wh_Log(L"guard: the window's process isn't Windhawk's noted image (%s): only watched", exe.c_str());
         HANDLE waits[2] = {g_exGuardStop, proc};
         // While it runs, every 5 s: does it still answer, and is there a dock while Windows' taskbar is hidden?
         // A bar that froze or lost its docks stays alive and leaves nothing on screen; after ~25 s of that it's
-        // noted, ended and reopened like a crash.
+        // noted, ended and reopened like a crash. "No dock" counts only when the bar says it expects some
+        // ("NimbusDocks" on its window: the count + 1; with none configured it doesn't hide the taskbar either).
         DWORD r;
         int hung = 0, nodock = 0;
         const char* why = nullptr;
         for (;;) {
             r = WaitForMultipleObjects(2, waits, FALSE, 5000);
             if (r != WAIT_TIMEOUT) break;
-            if (GetSystemMetrics(SM_SHUTTINGDOWN)) continue;
+            if (!own || GetSystemMetrics(SM_SHUTTINGDOWN)) continue;
             HWND msg = FindWindowW(L"NimbusMenu_Msg", nullptr);
             DWORD mpid = 0;
             if (msg) GetWindowThreadProcessId(msg, &mpid);
             if (mpid != pid) continue;
-            DWORD_PTR res = 0;
-            hung = SendMessageTimeoutW(msg, WM_NULL, 0, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 4000, &res) ? 0 : hung + 1;
+            // The ping, ~4 s in all, in short slices: the stop event is seen within half a second.
+            bool answered = false;
+            for (int i = 0; i < 8 && !answered; i++) {
+                DWORD_PTR res = 0;
+                answered = SendMessageTimeoutW(msg, WM_NULL, 0, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 500, &res) != 0;
+                if (!answered && WaitForMultipleObjects(2, waits, FALSE, 0) != WAIT_TIMEOUT) break;
+            }
+            if (WaitForMultipleObjects(2, waits, FALSE, 0) != WAIT_TIMEOUT) continue;  // (stopping, or it ended: seen above)
+            hung = answered ? 0 : hung + 1;
+            const int expected = (int)(INT_PTR)GetPropW(msg, L"NimbusDocks") - 1;  // (-1: not said yet)
             HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
             struct Docks {
                 DWORD pid;
@@ -28746,58 +29330,65 @@ static DWORD WINAPI ExGuardThread(LPVOID) {
                 if (p == d->pid && GetClassNameW(h, cls, ARRAYSIZE(cls)) && !wcscmp(cls, L"NimbusMenu_Content")) d->n++;
                 return TRUE;
             }, (LPARAM)&dk);
-            nodock = (dk.n == 0 && tray && !IsWindowVisible(tray)) ? nodock + 1 : 0;
-            if (hung >= 5) why = "travou (sem responder ~25 s); barra do Windows devolvida, reabrindo";
-            else if (nodock >= 5) why = "ficou sem dock (~25 s) com a barra do Windows escondida; reabrindo";
+            nodock = (expected > 0 && dk.n == 0 && tray && !IsWindowVisible(tray)) ? nodock + 1 : 0;
+            if (hung >= 5) why = "travou (sem responder ~25 s); encerrada, barra do Windows devolvida";
+            else if (nodock >= 5) why = "ficou sem dock (~25 s) com a barra do Windows escondida; encerrada, barra do Windows devolvida";
             if (why) break;
         }
-        if (why) {
-            Wh_Log(L"guard: %S", why);
-            ExGuardNote(0, why);
-            RestoreTaskbarAutoHide();
-            ShowTaskbarWindows();
-            RestoreBanners();
-            if (HANDLE kill = OpenProcess(PROCESS_TERMINATE, FALSE, pid)) {
-                TerminateProcess(kill, 0xC0DEDEAD);
-                CloseHandle(kill);
-            }
-            WaitForSingleObject(proc, 5000);
-            CloseHandle(proc);
-            if (WaitForSingleObject(g_exGuardStop, 1500) == WAIT_OBJECT_0) return 0;
-            if (!FindWindowW(L"NimbusMenu_Msg", nullptr) && !exe.empty()) ExGuardReopen(exe);
-            if (WaitForSingleObject(g_exGuardStop, 3000) == WAIT_OBJECT_0) return 0;
-            continue;
-        }
         DWORD code = 0;
-        GetExitCodeProcess(proc, &code);
-        CloseHandle(proc);
-        if (r != WAIT_OBJECT_0 + 1) return 0;
-        if (GetSystemMetrics(SM_SHUTTINGDOWN)) continue;
-        if (code == 0) {
-            // A normal end restored everything. But if nothing turned Nimbus off (this part would be ending too)
-            // and Windows' taskbar is still hidden, it ended some other way: give the taskbar back, don't reopen.
-            if (WaitForSingleObject(g_exGuardStop, 1500) == WAIT_OBJECT_0) return 0;
-            HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
-            if (FindWindowW(L"NimbusMenu_Msg", nullptr) || !tray || IsWindowVisible(tray)) continue;
-            ExGuardNote(code, "fechou sem devolver a barra do Windows");
-            RestoreTaskbarAutoHide();
-            ShowTaskbarWindows();
-            RestoreBanners();
-            continue;
+        const char* what = why;
+        if (why) {
+            if (ExGuardStopped()) {
+                CloseHandle(proc);
+                return 0;
+            }
+            // Ended first, restored after: a bar still alive could hide the taskbar again in between.
+            Wh_Log(L"guard: %S", why);
+            TerminateProcess(proc, 0xC0DEDEAD);
+            r = WaitForMultipleObjects(2, waits, FALSE, 5000);
+            CloseHandle(proc);
+            if (r == WAIT_OBJECT_0) return 0;
+        } else {
+            GetExitCodeProcess(proc, &code);
+            CloseHandle(proc);
+            if (r != WAIT_OBJECT_0 + 1) return 0;
+            if (GetSystemMetrics(SM_SHUTTINGDOWN)) continue;
+            if (code == 0) {
+                // A normal end restored everything. But if nothing turned Nimbus off (this part would be ending
+                // too) and Windows' taskbar is still hidden, it ended some other way: give the taskbar back,
+                // don't reopen.
+                if (ExGuardStopped(1500)) return 0;
+                HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
+                if (FindWindowW(L"NimbusMenu_Msg", nullptr) || !tray || IsWindowVisible(tray)) continue;
+                ExGuardNote(code, "fechou sem devolver a barra do Windows");
+                if (!ExGuardGiveBack()) return 0;
+                continue;
+            }
+            Wh_Log(L"guard: the bar's process ended with 0x%08X", code);
+            if (!own) {
+                if (!ExGuardGiveBack()) return 0;
+                continue;
+            }
+            what = code == kSelfRestartCode ? "reiniciada pelo proprio Nimbus; reabrindo" : "caiu; barra do Windows devolvida";
         }
-        Wh_Log(L"guard: the bar's process ended with 0x%08X", code);
-        ExGuardNote(code, code == kSelfRestartCode ? "reiniciada pelo proprio Nimbus; reabrindo" : "caiu; barra do Windows devolvida, reabrindo");
-        RestoreTaskbarAutoHide();
-        ShowTaskbarWindows();
-        RestoreBanners();
+        if (ExGuardStopped()) return 0;
+        ExGuardNote(code, what);
+        if (!ExGuardGiveBack()) return 0;
         // (the mod may be being turned off: then this wait ends and nothing reopens)
-        if (WaitForSingleObject(g_exGuardStop, 1500) == WAIT_OBJECT_0) return 0;
+        if (ExGuardStopped(1500)) return 0;
         if (FindWindowW(L"NimbusMenu_Msg", nullptr)) continue;  // (Windhawk already reopened it)
         DWORD now = GetTickCount();
+        if (quietUntil) {
+            if ((LONG)(now - quietUntil) < 0) continue;  // (still in the 10 minutes: the taskbar is back, that's all)
+            quietUntil = 0;
+            count = 0;
+        }
         if (count == 3 && now - deaths[0] < 5 * 60 * 1000) {
-            Wh_Log(L"guard: three deaths in 5 minutes, leaving Windows' taskbar");
-            WaitForSingleObject(g_exGuardStop, INFINITE);
-            return 0;
+            Wh_Log(L"guard: three deaths in 5 minutes, leaving Windows' taskbar for 10 minutes");
+            NimbusLog("vigia | tres quedas em 5 minutos: a barra do Windows fica e o Nimbus nao reabre sozinho pelos proximos 10 minutos",
+                      g_exGuardStop);
+            quietUntil = (now + 10 * 60 * 1000) | 1;
+            continue;
         }
         if (count == 3) {
             deaths[0] = deaths[1];
@@ -28805,22 +29396,27 @@ static DWORD WINAPI ExGuardThread(LPVOID) {
             count = 2;
         }
         deaths[count++] = now;
-        if (!exe.empty()) ExGuardReopen(exe);
-        if (WaitForSingleObject(g_exGuardStop, 3000) == WAIT_OBJECT_0) return 0;  // (time for its window to appear)
+        ExGuardReopen(exe);
+        if (ExGuardStopped(3000)) return 0;  // (time for its window to appear)
     }
 }
 
 static void ExGuardStart() {
     g_exGuardStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (g_exGuardStop) g_exGuardThread = CreateThread(nullptr, 0, ExGuardThread, nullptr, 0, nullptr);
+    if (g_exGuardThread) g_exGuardSign = CreateEventW(nullptr, TRUE, FALSE, kGuardSign);
 }
 
 static void ExGuardEnd() {
+    if (g_exGuardSign) {
+        CloseHandle(g_exGuardSign);
+        g_exGuardSign = nullptr;
+    }
     if (g_exGuardStop) SetEvent(g_exGuardStop);
     if (g_exGuardThread) {
-        // (each of its waits ends on the stop event; the longest step left is a few seconds: the thread must
-        // be gone before this code is unloaded from Explorer)
-        WaitForSingleObject(g_exGuardThread, 15000);
+        // (each of its waits ends on the stop event, and it restores, logs and ends nothing once that is set:
+        // the thread must be gone before this code is unloaded from Explorer)
+        WaitForSingleObject(g_exGuardThread, INFINITE);
         CloseHandle(g_exGuardThread);
         g_exGuardThread = nullptr;
     }
@@ -28936,7 +29532,9 @@ void WhTool_ModUninit() {
 // Currently, other callbacks are not supported.
 //
 // Nimbus Menu: the only change is the explorer.exe dispatch at the top of each
-// callback (the Windows key hook, see ExplorerInit).
+// callback. In Explorer the mod is something else: the Windows key and Win+N
+// hooks, the tray icons passed on to the dock, and the guard that watches, ends
+// and reopens the bar's process (see ExplorerInit).
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
