@@ -145,9 +145,9 @@ constexpr int kAnimStep = 10;                  // alpha units per fast tick
 // Registered message used to ask the window's own thread to update its timer.
 UINT g_timerControlMsg = 0;
 
-// Global low-level mouse hook to catch the wheel even when it is handled by a
+// Thread-scoped mouse hook to catch the wheel even when it is handled by a
 // Chromium child window (Chrome_RenderWidgetHostHWND) instead of the main
-// window we subclass.
+// window we subclass. It only sees events of the Yandex Music UI thread.
 HHOOK g_mouseHook = nullptr;
 UINT g_mouseHookControlMsg = 0;
 
@@ -456,40 +456,38 @@ void RestoreWindow(HWND hwnd, const OriginalWindowState& state) {
     }
 }
 
-// Low-level mouse hook: catches the wheel anywhere in our window.
+// Thread-scoped mouse hook: catches the wheel for all windows of this
+// (Yandex Music UI) thread — including the Chromium child window
+// (Chrome_RenderWidgetHostHWND) — without affecting other processes.
 LRESULT CALLBACK MouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode >= 0 && wParam == WM_MOUSEWHEEL) {
-        const auto* ms = reinterpret_cast<const MSLLHOOKSTRUCT*>(lParam);
-        if (ms && g_settings.wheelOpacityEnabled && !g_unloading &&
-            (GetAsyncKeyState(VK_CONTROL) & 0x8000)) {
-            short delta = static_cast<short>(HIWORD(ms->mouseData));
-            if (delta != 0) {
-                HWND under = WindowFromPoint(ms->pt);
-                HWND topLevel = under ? GetAncestor(under, GA_ROOT) : nullptr;
+    if (nCode == HC_ACTION && wParam == WM_MOUSEWHEEL &&
+        g_settings.wheelOpacityEnabled && !g_unloading &&
+        (GetKeyState(VK_CONTROL) & 0x8000)) {
+        const auto* ms = reinterpret_cast<const MOUSEHOOKSTRUCTEX*>(lParam);
+        short delta = static_cast<short>(HIWORD(ms->mouseData));
+        HWND topLevel = ms->hwnd ? GetAncestor(ms->hwnd, GA_ROOT) : nullptr;
 
-                bool tracked = false;
-                {
-                    std::lock_guard<std::mutex> lock(g_windowsMutex);
-                    tracked = topLevel && g_trackedWindows.count(topLevel) != 0;
-                }
+        bool tracked = false;
+        {
+            std::lock_guard<std::mutex> lock(g_windowsMutex);
+            tracked = topLevel && g_trackedWindows.count(topLevel) != 0;
+        }
 
-                if (tracked) {
-                    int newAlpha = g_settings.alpha;
-                    int step = g_settings.wheelOpacityStep;
-                    newAlpha += (delta > 0) ? step : -step;
-                    if (newAlpha < 50) newAlpha = 50;
-                    if (newAlpha > 255) newAlpha = 255;
-                    if (newAlpha != g_settings.alpha) {
-                        Wh_Log(L"Wheel opacity: %d -> %d", g_settings.alpha, newAlpha);
-                        g_settings.alpha = newAlpha;
-                        ApplyTargetAlpha(topLevel);
-                    }
-                    return 1;
-                }
+        if (tracked && delta != 0) {
+            int newAlpha = g_settings.alpha;
+            int step = g_settings.wheelOpacityStep;
+            newAlpha += (delta > 0) ? step : -step;
+            if (newAlpha < 50) newAlpha = 50;
+            if (newAlpha > 255) newAlpha = 255;
+            if (newAlpha != g_settings.alpha) {
+                Wh_Log(L"Wheel opacity: %d -> %d", g_settings.alpha, newAlpha);
+                g_settings.alpha = newAlpha;
+                ApplyTargetAlpha(topLevel);
             }
+            return 1;
         }
     }
-    return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
+    return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
 LRESULT CALLBACK WindowSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
@@ -501,17 +499,17 @@ LRESULT CALLBACK WindowSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
         return 1;
     }
 
-    // Mouse hook control message: install/remove the low-level mouse hook on
-    // the window's own thread (it must run on a thread with a message loop).
+    // Mouse hook control message: install/remove the thread-scoped mouse hook
+    // on the window's own thread. WH_MOUSE with the current thread id sees all
+    // mouse messages this thread retrieves (for all of its windows), with no
+    // effect on other processes.
     if (uMsg == g_mouseHookControlMsg) {
         if (wParam) {
             if (!g_mouseHook) {
-                // The hook procedure lives in the current process, so hMod
-                // may be NULL for a global low-level hook.
-                g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, MouseHookProc,
-                                                nullptr, 0);
+                g_mouseHook = SetWindowsHookExW(WH_MOUSE, MouseHookProc,
+                                                nullptr, GetCurrentThreadId());
                 if (!g_mouseHook) {
-                    Wh_Log(L"SetWindowsHookEx(WH_MOUSE_LL) failed, error %d",
+                    Wh_Log(L"SetWindowsHookEx(WH_MOUSE) failed, error %d",
                            (int)GetLastError());
                 }
             }
