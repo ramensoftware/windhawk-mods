@@ -10,7 +10,37 @@
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
-/*...*/
+/*
+# Yandex Music Transparency
+
+Adds configurable transparency for the Yandex Music desktop application.
+
+## Features
+
+- Custom opacity for active and inactive windows
+- Optional full opacity while the mouse hovers over the window
+- Optional 100% opacity when the window is maximized or fullscreen (alpha)
+- Optional idle fade: the window smoothly fades after a period of inactivity
+- Optional mouse wheel opacity: hold Ctrl and scroll to adjust transparency on
+  the fly
+- Smooth animated transitions between opacity levels (can be disabled)
+- Automatically enforces transparency even if the app tries to remove `WS_EX_LAYERED`
+
+## Universal for Chromium apps
+
+This mod is universal: it works with any Chromium / Electron application
+(the main window class is `Chrome_WidgetWin_1`). Although it is tailored for
+Yandex Music by default, you can apply the same persistent transparency to
+other Chromium/Electron apps by adding their executable names in the mod's
+**Advanced** tab under **Custom process inclusion list**.
+
+## Notes
+
+- Only the main application window (class `Chrome_WidgetWin_1`) is modified
+- Auxiliary Electron processes (`--type=*`) are ignored
+- Windows that already use `LWA_COLORKEY` are not modified
+
+*/
 // ==/WindhawkModReadme==
 
 // ==WindhawkModChangelog==
@@ -38,7 +68,35 @@
 // ==/WindhawkModChangelog==
 
 // ==WindhawkModSettings==
-/*...*/
+/*
+- Alpha: 220
+  $name: Active window opacity
+  $description: Opacity level of the active window (50-255)
+- InactiveAlpha: 170
+  $name: Inactive window opacity
+  $description: Opacity level of the inactive window. Set to 0 to use the active alpha value (50-255)
+- OpaqueOnHover: false
+  $name: Fully opaque on hover
+  $description: Make the window fully opaque while the mouse hovers over it
+- OpaqueWhenMaximized: false
+  $name: Fully opaque when maximized (alpha)
+  $description: alpha v1.2.9 - Make the window 100% opaque when it is maximized or fullscreen
+- SmoothTransitions: true
+  $name: Smooth transitions
+  $description: Animate opacity changes instead of applying them instantly.
+- IdleFadeTimeout: 0
+  $name: Idle fade timeout
+  $description: Seconds of inactivity before the window fades to IdleFadeAlpha (0 disables)
+- IdleFadeAlpha: 100
+  $name: Idle fade opacity
+  $description: Opacity used when idle (50-255)
+- WheelOpacityEnabled: false
+  $name: Mouse wheel opacity
+  $description: Hold Ctrl and scroll over the window to adjust opacity on the fly
+- WheelOpacityStep: 10
+  $name: Mouse wheel step
+  $description: Opacity change per wheel step (1-50)
+*/
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
