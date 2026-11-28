@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              agenda-in-calendar-view
 // @name            Agenda in Calendar View
-// @description     Show .ics events in the calendar of the Notification Centre, like in Windows 10
-// @version         1.3
+// @description     Show events in the calendar of the Notification Centre, like in Windows 10
+// @version         1.4
 // @author          lonfro
 // @github          https://github.com/lonfro
 // @include         ShellExperienceHost.exe
@@ -20,7 +20,7 @@
 
 This mod brings the Windows 10-style agenda to Windows 11, allowing you to quickly and conveniently view your events from the Notification Centre.
 
-It supports `.ics` files from both local and remote locations, including Google Calendar and Outlook.
+It supports `.ics` files from both local and remote locations, including Google, Outlook, and Apple Calendar.
 
 ## Details
 ![event](https://i.imgur.com/EkWnp1c.png)
@@ -32,7 +32,6 @@ The details shown include:
 - Starting and ending time
 - URL
 
-
 ## Additional features
 **Additional features include:**
 
@@ -43,6 +42,7 @@ Keyboard navigation:
 Multiple sources:
 
 - You can add multiple sources, and assign colours to individual sources to help differentiate them
+- Choose **None** to omit that source from calendar density bars and use the normal event border.
 
 Customising whether the calendar is shown inline or as a popup:
 
@@ -60,21 +60,12 @@ Setting a maximum height (before it starts scrolling):
 
 ![scrollViewer](https://i.imgur.com/c9i40PA.png)
 
-Configurable number of weeks in calendar view:
-
-- Choose how many weeks (between 2 and 8) to show when the inline calendar is expanded.
-
 
 ## Notes
 - Events are refreshed every time the notification pane is opened.
     - If events can't be fetched (e.g. no internet connection), previously-fetched events are shown.
     - You can click the Refresh button in the calendar header at any time to force a refresh.
 - The mod resiliently accepts errors; if you have a problem, enable logging.
-- The creation of this mod was assisted by AI:
-    - Sadly, I do not have experience with C++/Windhawk;
-    - However, I do have experience with WinUI (as I have created several WinUI apps in C#);
-    - As a result, the controls used *(inc. CalendarDatePicker, Border, Grid, TextBlock)* were manually structured, but the underlying implementation was generated using AI.
-
 
 ## FAQ
 **Updating from v1.2 or earlier:**
@@ -93,7 +84,20 @@ Configurable number of weeks in calendar view:
 4) Publish your calendar under the "Publish a calendar" section
 5) Copy the `.ics` link to this mod's settings
 
+**How do I sync my Apple Calendar?**
+
+For an iCloud calendar that updates automatically:
+
+1. Open [iCloud Calendar](https://www.icloud.com/calendar/) and sign in.
+2. In the sidebar, open the calendar's information button:
+[guide](https://i.imgur.com/nhx1xco.png)
+3. Turn on **Public Calendar**, copy the link, then press "Save":
+[guide](https://i.imgur.com/hYYBGNX.png)
+4. Replace the `webcal://` prefix with `https://` - it should look like: ```https://p180-caldav.icloud.com/published/2/...```
+5. Paste the resulting URL into a calendar source in the mod settings.
+
 **My local `.ics` file does not work!**
+
 - First try going to its Properties in File Explorer, and ticking "Unblock".
 - If that doesn't work, grant read permissions on your file to AppContainers by running:
 
@@ -104,13 +108,6 @@ Configurable number of weeks in calendar view:
   This allows `ShellExperienceHost.exe` and `ShellHost.exe`, which host the calendar pane, to access your calendar file.
 
    *Note: `*S-1-15-2-1` grants read permissions to ALL APPLICATION PACKAGES (all UWP/packaged apps).*
-
-**When my list of events is long, and the inline calendar is expanded, it becomes too tall for the screen!**
-- Set a maximum height for the agenda list in the mod settings.
-- You can specify different maximum heights for when the inline calendar is expanded and when it is collapsed. This way, you can limit the height only when the calendar is expanded.
-- If the calendar pane fits within the screen, but is touching the bottom (misaligned downwards), reduce the maximum height by incremental amounts until it shifts back upwards to the correct position.
-
-![fix](https://i.imgur.com/9zRoO6I.png)
 */
 // ==/WindhawkModReadme==
 
@@ -126,6 +123,7 @@ Configurable number of weeks in calendar view:
       $name: Colour
       $options:
       - default: Default
+      - none: None
       - red: Red
       - green: Green
       - blue: Blue
@@ -144,6 +142,11 @@ Configurable number of weeks in calendar view:
   $name: Hide completed events
   $description: |
     Hide events upon completion time. Events without ending times are hidden on the next day.
+- maxDescriptionLines: 0
+  $name: Max number of lines in description
+  $description: |
+    Maximum number of lines that are shown in an event's description. If the description is longer than this limit, a "Show more" button will reveal the entire description.
+    Set to 0 to disable this limit.
 - groupingMode: inline
   $name: Calendar pane mode
   $description: |
@@ -230,10 +233,12 @@ Configurable number of weeks in calendar view:
 #include <atomic>
 #include <chrono>
 #include <limits>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -252,6 +257,7 @@ Configurable number of weeks in calendar view:
 #include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
+#include <winrt/Windows.UI.Xaml.Documents.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.h>
@@ -270,6 +276,7 @@ namespace wg = winrt::Windows::Globalization;
 namespace wadt = winrt::Windows::ApplicationModel::DataTransfer;
 namespace wux = winrt::Windows::UI::Xaml;
 namespace wuxc = winrt::Windows::UI::Xaml::Controls;
+namespace wuxd = winrt::Windows::UI::Xaml::Documents;
 namespace wuxi = winrt::Windows::UI::Xaml::Input;
 namespace wuxm = winrt::Windows::UI::Xaml::Media;
 namespace wuc = winrt::Windows::UI::Core;
@@ -461,6 +468,7 @@ struct ModSettings {
     std::vector<std::wstring> sourcePaths;
     bool applyColorsOnEventBorders{true};
     bool hideCompletedEvents{false};
+    int maxDescriptionLines{};
     bool isCalendarAboveAgenda{true};
     bool isButtonsAboveAgenda{true};
     bool isInlineCalendarMode{true};
@@ -1171,6 +1179,7 @@ void LoadSettings() {
 
     g_settings.applyColorsOnEventBorders = Wh_GetIntSetting(L"applyColorsOnEventBorders") != 0;
     g_settings.hideCompletedEvents = Wh_GetIntSetting(L"hideCompletedEvents") != 0;
+    g_settings.maxDescriptionLines = std::max(0, Wh_GetIntSetting(L"maxDescriptionLines"));
 
     auto calPos = WindhawkUtils::StringSetting::make(L"calendarPosition");
     g_settings.isCalendarAboveAgenda = !(calPos.get() && wcscmp(calPos.get(), L"below") == 0);
@@ -2052,12 +2061,30 @@ namespace {
     SYSTEMTIME m_currentFilterDate{};
     winrt::event_token m_calendarViewSelectionChangedToken{};
     winrt::event_token m_calendarViewDayItemChangingToken{};
+    winrt::event_token m_calendarViewPreviewKeyDownToken{};
     winrt::event_token m_dateBtnClickToken{};
     bool m_isUpdatingCalendarSelection{false};
     winrt::event_token m_prevBtnToken{};
     winrt::event_token m_nextBtnToken{};
     winrt::event_token m_refreshBtnToken{};
     winrt::event_token m_rootGridThemeChangedToken{};
+
+    struct FlyoutViewport {
+        wuxc::Grid calendar{nullptr};
+        wuxc::Grid content{nullptr};
+        wuxc::Grid outer{nullptr};
+        wuxc::Grid notifications{nullptr};
+        wuxc::Grid banner{nullptr};
+        wux::Thickness calendarMargin{};
+        std::optional<wf::IInspectable> savedMargin;
+        std::optional<wf::IInspectable> savedNotificationVisibility;
+        std::optional<wf::IInspectable> savedNotificationMinimum;
+        double notificationMinimumBeforeLimit{};
+        double notificationBannerHeight{};
+        HWND window{};
+    };
+    [[clang::no_destroy]] std::optional<FlyoutViewport> g_flyoutViewport;
+    winrt::event_token g_flyoutViewportToken{};
     [[clang::no_destroy]] wux::FrameworkElement m_focusSessionControl{nullptr};
     int64_t m_focusSessionVisibilityToken{0};
     [[clang::no_destroy]] wuxc::ScrollViewer m_hostScrollViewer{nullptr};
@@ -2107,6 +2134,13 @@ void OnDatePickerDateChanged(wf::IReference<wf::DateTime> const& newDate);
 void ResetDatePickerToToday();
 void DispatchUpdateEvents();
 void UpdateMaxHeight(int maxHeight);
+std::vector<HWND> GetCoreWnds();
+
+namespace {
+void RestoreNotificationViewportMinimum();
+void RestoreFlyoutViewport();
+void UpdateFlyoutViewport(wf::IInspectable const&, wf::IInspectable const&);
+}
 void ReplaceCalendarContent(wuxc::ScrollViewer const& host);
 void HandleFocusSessionControl(wux::FrameworkElement const& element);
 void WalkVisualTree(winrt::Windows::UI::Xaml::DependencyObject const& root);
@@ -2146,6 +2180,7 @@ void UnregisterFocusSessionControl() {
 
 void ApplyNotificationCenterCollapsedState(bool collapsed) {
     m_isNotificationCenterCollapsed = collapsed;
+    try { RestoreNotificationViewportMinimum(); } catch (...) {}
 
     try {
         if (m_notificationCenterGrid) {
@@ -2358,6 +2393,191 @@ void RestoreNotificationCenterCollapse() {
     } catch (...) {}
 }
 
+namespace {
+
+constexpr double kDescriptionOpacity = 0.7;
+constexpr wchar_t kShowMoreLabel[] = L"Show\u00A0more";
+
+wuxd::Hyperlink MakeDescriptionLink(PCWSTR labelText) {
+    auto label = wuxd::Run();
+    label.Text(labelText);
+    auto link = wuxd::Hyperlink();
+    // XAML supplies the theme foreground for normal, hover and pressed states.
+    link.UnderlineStyle(wuxd::UnderlineStyle::None);
+    link.Inlines().Append(label);
+    return link;
+}
+
+wuxd::Run MakeDescriptionRun(wuxc::TextBlock const& text, winrt::hstring const& content) {
+    auto run = wuxd::Run();
+    run.Text(content);
+    if (auto foreground = text.Foreground().try_as<wuxm::SolidColorBrush>()) {
+        auto brush = wuxm::SolidColorBrush(foreground.Color());
+        brush.Opacity(foreground.Opacity() * kDescriptionOpacity);
+        run.Foreground(brush);
+    }
+    return run;
+}
+
+std::wstring DescriptionPreview(std::wstring_view description, size_t length) {
+    // Keep a UTF-16 surrogate pair together and put the link after visible text.
+    while (length > 0 &&
+           (std::iswspace(description[length - 1]) ||
+            (description[length - 1] >= 0xD800 && description[length - 1] <= 0xDBFF))) {
+        --length;
+    }
+    std::wstring preview(description.substr(0, length));
+    if (!preview.empty()) {
+        preview += L"\u2060\u2026\u00A0";
+    }
+    return preview;
+}
+
+bool FitsDescriptionLines(wuxc::TextBlock const& probe, wf::Size available, int maxLines) {
+    probe.MaxLines(maxLines);
+    probe.Measure(available);
+    const float limitedHeight = probe.DesiredSize().Height;
+    probe.MaxLines(0);
+    probe.Measure(available);
+    return probe.DesiredSize().Height <= limitedHeight + 0.01f;
+}
+
+struct EventDescription {
+    wuxc::TextBlock text{nullptr};
+    wuxd::Hyperlink showMore{nullptr};
+    wuxd::Hyperlink showLess{nullptr};
+    wux::FrameworkElement::SizeChanged_revoker resizeRevoker;
+    wuxd::Hyperlink::Click_revoker showMoreRevoker;
+    wuxd::Hyperlink::Click_revoker showLessRevoker;
+    std::wstring fullText;
+    int maxLines{};
+    float lastWidth{};
+    bool expanded{};
+
+    void ShowPlainText() {
+        text.Inlines().Clear();
+        text.Opacity(kDescriptionOpacity);
+        text.Text(winrt::hstring(fullText));
+    }
+
+    void ToggleExpanded() {
+        expanded = !expanded;
+        if (expanded) {
+            text.MaxLines(0);
+            text.Opacity(1);
+            auto inlines = text.Inlines();
+            inlines.Clear();
+            inlines.Append(MakeDescriptionRun(text, winrt::hstring(fullText)));
+            inlines.Append(wuxd::LineBreak());
+            inlines.Append(showLess);
+        } else {
+            text.MaxLines(maxLines);
+            ShowPlainText();
+            lastWidth = 0;
+            UpdatePreview(static_cast<float>(text.ActualWidth()));
+        }
+    }
+
+    void UpdatePreview(float width) {
+        if (expanded || width <= 0 || width == lastWidth) return;
+        lastWidth = width;
+
+        // Measure both plain and linked text with the card's actual typography and width.
+        auto probe = wuxc::TextBlock();
+        probe.FontFamily(text.FontFamily());
+        probe.FontSize(text.FontSize());
+        probe.FontStretch(text.FontStretch());
+        probe.FontStyle(text.FontStyle());
+        probe.FontWeight(text.FontWeight());
+        probe.CharacterSpacing(text.CharacterSpacing());
+        probe.Language(text.Language());
+        probe.FlowDirection(text.FlowDirection());
+        probe.TextReadingOrder(text.TextReadingOrder());
+        probe.IsTextScaleFactorEnabled(text.IsTextScaleFactorEnabled());
+        probe.IsTextSelectionEnabled(text.IsTextSelectionEnabled());
+        probe.TextWrapping(text.TextWrapping());
+
+        const wf::Size available{width, std::numeric_limits<float>::infinity()};
+        probe.Text(winrt::hstring(fullText));
+        if (FitsDescriptionLines(probe, available, maxLines)) {
+            ShowPlainText();
+            return;
+        }
+
+        auto prefix = wuxd::Run();
+        probe.Inlines().Clear();
+        probe.Inlines().Append(prefix);
+        probe.Inlines().Append(MakeDescriptionLink(kShowMoreLabel));
+
+        // Find a prefix whose last visible line can also hold the inline link.
+        size_t first = 0;
+        size_t last = fullText.size() - 1;
+        while (first < last) {
+            const size_t middle = first + (last - first + 1) / 2;
+            prefix.Text(winrt::hstring(DescriptionPreview(fullText, middle)));
+            if (FitsDescriptionLines(probe, available, maxLines)) {
+                first = middle;
+            } else {
+                last = middle - 1;
+            }
+        }
+
+        text.Opacity(1);
+        auto inlines = text.Inlines();
+        inlines.Clear();
+        inlines.Append(MakeDescriptionRun(text, winrt::hstring(DescriptionPreview(fullText, first))));
+        inlines.Append(showMore);
+    }
+};
+
+[[clang::no_destroy]] std::optional<std::vector<std::shared_ptr<EventDescription>>> g_eventDescriptions;
+
+wuxc::TextBlock CreateEventDescription(std::wstring fullText, int maxLines) {
+    auto text = wuxc::TextBlock();
+    text.Opacity(kDescriptionOpacity);
+    text.TextWrapping(wux::TextWrapping::Wrap);
+    text.IsTextSelectionEnabled(true);
+    text.Text(winrt::hstring(fullText));
+    if (maxLines <= 0) return text;
+
+    text.MaxLines(maxLines);
+    auto description = std::make_shared<EventDescription>();
+    description->text = text;
+    description->showMore = MakeDescriptionLink(kShowMoreLabel);
+    description->showLess = MakeDescriptionLink(L"Show less");
+    description->fullText = std::move(fullText);
+    description->maxLines = maxLines;
+    std::weak_ptr<EventDescription> weakDescription = description;
+    description->resizeRevoker = text.SizeChanged(winrt::auto_revoke,
+        [weakDescription](auto const&, wux::SizeChangedEventArgs const& args) {
+            if (auto description = weakDescription.lock()) {
+                try {
+                    description->UpdatePreview(args.NewSize().Width);
+                } catch (...) {
+                    Wh_Log(L"Could not measure event description");
+                }
+            }
+        });
+    auto toggleExpanded = [weakDescription](auto const&, auto const&) {
+        if (auto description = weakDescription.lock()) {
+            try {
+                description->ToggleExpanded();
+            } catch (...) {
+                Wh_Log(L"Could not toggle event description");
+            }
+        }
+    };
+    description->showMoreRevoker = description->showMore.Click(winrt::auto_revoke, toggleExpanded);
+    description->showLessRevoker = description->showLess.Click(winrt::auto_revoke, toggleExpanded);
+    if (!g_eventDescriptions) {
+        g_eventDescriptions.emplace();
+    }
+    g_eventDescriptions->push_back(std::move(description));
+    return text;
+}
+
+}  // namespace
+
 void RestoreCalendarContent() {
     DWORD owner = g_ownerThreadId.load();
     if (owner != 0 && owner != GetCurrentThreadId()) {
@@ -2366,7 +2586,9 @@ void RestoreCalendarContent() {
 
     RevokeLayoutUpdated();
     UnregisterFocusSessionControl();
+    RestoreFlyoutViewport();
     RestoreNotificationCenterCollapse();
+    g_eventDescriptions.reset();
 
     if (m_focusSessionControl) {
         try {
@@ -2405,6 +2627,10 @@ void RestoreCalendarContent() {
         if (m_calendarView && m_calendarViewDayItemChangingToken.value != 0) {
             m_calendarView.CalendarViewDayItemChanging(m_calendarViewDayItemChangingToken);
             m_calendarViewDayItemChangingToken = {};
+        }
+        if (m_calendarView && m_calendarViewPreviewKeyDownToken.value != 0) {
+            m_calendarView.PreviewKeyDown(m_calendarViewPreviewKeyDownToken);
+            m_calendarViewPreviewKeyDownToken = {};
         }
         if (m_rootGrid && m_rootGridThemeChangedToken.value != 0) {
             m_rootGrid.ActualThemeChanged(m_rootGridThemeChangedToken);
@@ -2476,6 +2702,7 @@ void RestoreCalendarContent() {
 
 void PopulateItemsControl(std::vector<CalendarEvent> const& events) {
     if (!m_itemsControl) return;
+    g_eventDescriptions.reset();
     m_itemsControl.Items().Clear();
 
     if (events.empty()) {
@@ -2517,8 +2744,8 @@ void PopulateItemsControl(std::vector<CalendarEvent> const& events) {
         border.Padding(wux::Thickness{8, 6, 8, 6});
         border.CornerRadius(GetStandardCornerRadius());
         border.Background(GetCardBackgroundBrush());
-        if (applyBorders) {
-            std::wstring colChoice = FindSourceColour(g_settings.sources, ev.source);
+        std::wstring colChoice = applyBorders ? FindSourceColour(g_settings.sources, ev.source) : L"none";
+        if (_wcsicmp(colChoice.c_str(), L"none") != 0) {
             auto color = GetColorForPreset(colChoice, dark, m_rootGrid);
             border.BorderBrush(wuxm::SolidColorBrush(color));
         } else {
@@ -2528,66 +2755,51 @@ void PopulateItemsControl(std::vector<CalendarEvent> const& events) {
 
         auto eventGrid = wuxc::Grid();
 
-        wuxc::ColumnDefinition col0{};
-        if (timeColumnWidth > 0) {
-            col0.Width(wux::GridLength{(double)timeColumnWidth, wux::GridUnitType::Pixel});
-        } else {
-            col0.Width(wux::GridLength{0, wux::GridUnitType::Auto});
+        if (!ev.isAllDay) {
+            wuxc::ColumnDefinition timeWidth{};
+            timeWidth.Width(timeColumnWidth > 0
+                ? wux::GridLength{static_cast<double>(timeColumnWidth), wux::GridUnitType::Pixel}
+                : wux::GridLength{0, wux::GridUnitType::Auto});
+            eventGrid.ColumnDefinitions().Append(timeWidth);
+
+            auto timeColumn = wuxc::StackPanel();
+            timeColumn.VerticalAlignment(wux::VerticalAlignment::Center);
+            timeColumn.Margin(wux::Thickness{0, 0, 8, 0});
+
+            WCHAR buf[64];
+            auto startTimeTb = wuxc::TextBlock();
+            startTimeTb.IsTextSelectionEnabled(true);
+            if (GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, TIME_NOSECONDS, &ev.startLocal, nullptr, buf, ARRAYSIZE(buf)) != 0) {
+                startTimeTb.Text(winrt::hstring(buf));
+            }
+            timeColumn.Children().Append(startTimeTb);
+
+            if (ev.hasEnd && GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, TIME_NOSECONDS, &ev.endLocal, nullptr, buf, ARRAYSIZE(buf)) != 0) {
+                auto endTimeTb = wuxc::TextBlock();
+                endTimeTb.Text(winrt::hstring(buf));
+                endTimeTb.Opacity(0.7);
+                endTimeTb.IsTextSelectionEnabled(true);
+                timeColumn.Children().Append(endTimeTb);
+            }
+            eventGrid.Children().Append(timeColumn);
         }
-        eventGrid.ColumnDefinitions().Append(col0);
 
-        wuxc::ColumnDefinition col1{};
-        col1.Width(wux::GridLength{1, wux::GridUnitType::Star});
-        eventGrid.ColumnDefinitions().Append(col1);
+        wuxc::ColumnDefinition detailsWidth{};
+        detailsWidth.Width(wux::GridLength{1, wux::GridUnitType::Star});
+        const uint32_t detailsIndex = eventGrid.ColumnDefinitions().Size();
+        eventGrid.ColumnDefinitions().Append(detailsWidth);
 
-        wuxc::RowDefinition row0{};
-        row0.Height(wux::GridLength{0, wux::GridUnitType::Auto});
-        eventGrid.RowDefinitions().Append(row0);
-
-        wuxc::RowDefinition row1{};
-        row1.Height(wux::GridLength{0, wux::GridUnitType::Auto});
-        eventGrid.RowDefinitions().Append(row1);
-
-        auto startTimeTb = wuxc::TextBlock();
-        startTimeTb.Margin(wux::Thickness{0, 0, 8, 0});
-        startTimeTb.VerticalAlignment(wux::VerticalAlignment::Center);
-        startTimeTb.IsTextSelectionEnabled(true);
-        wuxc::Grid::SetRow(startTimeTb, 0);
-        wuxc::Grid::SetColumn(startTimeTb, 0);
-        eventGrid.Children().Append(startTimeTb);
+        auto detailsColumn = wuxc::StackPanel();
+        detailsColumn.VerticalAlignment(wux::VerticalAlignment::Top);
+        wuxc::Grid::SetColumn(detailsColumn, detailsIndex);
+        eventGrid.Children().Append(detailsColumn);
 
         auto nameTb = wuxc::TextBlock();
         nameTb.Text(winrt::hstring(ev.name));
         nameTb.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
         nameTb.TextWrapping(wux::TextWrapping::Wrap);
-        nameTb.VerticalAlignment(wux::VerticalAlignment::Center);
         nameTb.IsTextSelectionEnabled(true);
-        wuxc::Grid::SetRow(nameTb, 0);
-        wuxc::Grid::SetColumn(nameTb, 1);
-        eventGrid.Children().Append(nameTb);
-
-        auto endTimeTb = wuxc::TextBlock();
-        endTimeTb.Margin(wux::Thickness{0, 0, 8, 0});
-        endTimeTb.VerticalAlignment(wux::VerticalAlignment::Center);
-        endTimeTb.IsTextSelectionEnabled(true);
-        wuxc::Grid::SetRow(endTimeTb, 1);
-        wuxc::Grid::SetColumn(endTimeTb, 0);
-        eventGrid.Children().Append(endTimeTb);
-
-        if (ev.isAllDay) {
-            startTimeTb.Text(L"All");
-            endTimeTb.Text(L"Day");
-            endTimeTb.Opacity(0.8);
-        } else {
-            WCHAR buf[64];
-            if (GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, TIME_NOSECONDS, &ev.startLocal, nullptr, buf, ARRAYSIZE(buf)) != 0) {
-                startTimeTb.Text(winrt::hstring(buf));
-            }
-            if (ev.hasEnd && GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, TIME_NOSECONDS, &ev.endLocal, nullptr, buf, ARRAYSIZE(buf)) != 0) {
-                endTimeTb.Text(winrt::hstring(buf));
-            }
-            endTimeTb.Opacity(0.7);
-        }
+        detailsColumn.Children().Append(nameTb);
 
         std::wstring displayLocation = ev.location;
         if (!ev.url.empty() && displayLocation == ev.url) {
@@ -2603,10 +2815,9 @@ void PopulateItemsControl(std::vector<CalendarEvent> const& events) {
             detailsText = ev.notes;
         }
 
-        auto createLinkButton = [&](const std::wstring& url, bool inSeparateRow) {
+        auto createLinkButton = [](const std::wstring& url) {
             auto linkBtn = wuxc::HyperlinkButton();
             linkBtn.Padding(wux::Thickness{0, 0, 0, 0});
-            linkBtn.Margin(inSeparateRow ? wux::Thickness{0, 2, 0, 0} : wux::Thickness{0, 0, 0, 0});
             linkBtn.HorizontalAlignment(wux::HorizontalAlignment::Left);
             linkBtn.VerticalAlignment(wux::VerticalAlignment::Center);
 
@@ -2636,36 +2847,18 @@ void PopulateItemsControl(std::vector<CalendarEvent> const& events) {
             return linkBtn;
         };
 
-        if (!detailsText.empty()) {
-            auto detailsTb = wuxc::TextBlock();
-            detailsTb.Text(winrt::hstring(detailsText));
-            detailsTb.Opacity(0.7);
-            detailsTb.TextWrapping(wux::TextWrapping::Wrap);
-            detailsTb.VerticalAlignment(wux::VerticalAlignment::Center);
-            detailsTb.IsTextSelectionEnabled(true);
-            wuxc::Grid::SetRow(detailsTb, 1);
-            wuxc::Grid::SetColumn(detailsTb, 1);
-            eventGrid.Children().Append(detailsTb);
+        const bool hasDetails = !detailsText.empty();
+        if (hasDetails) {
+            detailsColumn.Children().Append(
+                CreateEventDescription(std::move(detailsText), g_settings.maxDescriptionLines));
+        }
 
-            if (!ev.url.empty()) {
-                wuxc::RowDefinition row2{};
-                row2.Height(wux::GridLength{0, wux::GridUnitType::Auto});
-                eventGrid.RowDefinitions().Append(row2);
-
-                auto linkBtn = createLinkButton(ev.url, true);
-                wuxc::Grid::SetRow(linkBtn, 2);
-                wuxc::Grid::SetColumn(linkBtn, 1);
-                eventGrid.Children().Append(linkBtn);
+        if (!ev.url.empty()) {
+            auto linkBtn = createLinkButton(ev.url);
+            if (hasDetails) {
+                linkBtn.Margin(wux::Thickness{0, 2, 0, 0});
             }
-        } else if (!ev.url.empty()) {
-            auto linkBtn = createLinkButton(ev.url, false);
-            wuxc::Grid::SetRow(linkBtn, 1);
-            wuxc::Grid::SetColumn(linkBtn, 1);
-            eventGrid.Children().Append(linkBtn);
-        } else {
-            if (!ev.hasEnd && !ev.isAllDay) {
-                endTimeTb.Visibility(wux::Visibility::Collapsed);
-            }
+            detailsColumn.Children().Append(linkBtn);
         }
 
         border.Child(eventGrid);
@@ -2819,17 +3012,21 @@ std::vector<winrt::Windows::UI::Color> ComputeDensityColorsForDate(wf::DateTime 
         events = FilterEventsForDate(g_allParsedEvents, stLocal);
     }
     std::vector<winrt::Windows::UI::Color> colors;
-    if (!events.empty()) {
-        size_t count = std::min<size_t>(events.size(), (size_t)10);
-        colors.reserve(count);
-        for (size_t i = 0; i < count; ++i) {
-            std::wstring colChoice = FindSourceColour(g_settings.sources, events[i].source);
-            colors.push_back(GetColorForPreset(colChoice, dark, fe ? fe : (wux::FrameworkElement)m_rootGrid));
+    constexpr size_t maxDensityBars = 10;
+    colors.reserve(std::min(events.size(), maxDensityBars));
+    for (const auto& event : events) {
+        std::wstring colChoice = FindSourceColour(g_settings.sources, event.source);
+        if (_wcsicmp(colChoice.c_str(), L"none") == 0) {
+            continue;
         }
-        // WinUI CalendarViewDayItem stacks density bars from bottom to top,
-        // so reverse to ensure earliest events appear on top.
-        std::reverse(colors.begin(), colors.end());
+        colors.push_back(GetColorForPreset(colChoice, dark, fe ? fe : (wux::FrameworkElement)m_rootGrid));
+        if (colors.size() == maxDensityBars) {
+            break;
+        }
     }
+    // WinUI CalendarViewDayItem stacks density bars from bottom to top,
+    // so reverse to ensure earliest events appear on top.
+    std::reverse(colors.begin(), colors.end());
     return colors;
 }
 
@@ -3087,6 +3284,326 @@ void UpdateMaxHeight(int maxHeight) {
     }
 }
 
+namespace {
+
+double VerticalThickness(wux::Thickness const& t) {
+    return t.Top + t.Bottom;
+}
+
+double DesiredHeightWithoutMargin(wux::FrameworkElement const& element) {
+    return std::max(0.0, element.DesiredSize().Height - VerticalThickness(element.Margin()));
+}
+
+void RestoreViewportProperty(wux::DependencyObject const& element,
+                             wux::DependencyProperty const& property,
+                             std::optional<wf::IInspectable>& saved) {
+    if (!saved) return;
+    if (*saved == wux::DependencyProperty::UnsetValue()) {
+        element.ClearValue(property);
+    } else {
+        element.SetValue(property, *saved);
+    }
+    saved.reset();
+}
+
+double FlyoutViewportHeight(wux::XamlRoot const& root, HWND window) {
+    const double height = root.Size().Height;
+    const double scale = root.RasterizationScale();
+    MONITORINFO monitor{sizeof(MONITORINFO)};
+    if (window && scale > 0 &&
+        GetMonitorInfoW(MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST), &monitor)) {
+        return std::min(height, (monitor.rcWork.bottom - monitor.rcWork.top) / scale);
+    }
+    return height;
+}
+
+void FindFlyoutNotifications(FlyoutViewport& viewport) {
+    if (!viewport.notifications) {
+        for (auto const& child : viewport.content.Children()) {
+            if (auto grid = child.try_as<wuxc::Grid>(); grid && grid.Name() == L"NotificationCenterGrid") {
+                viewport.notifications = grid;
+                break;
+            }
+        }
+    }
+    if (viewport.notifications && !viewport.banner) {
+        for (auto const& child : viewport.notifications.Children()) {
+            if (auto grid = child.try_as<wuxc::Grid>(); grid && grid.Name() == L"NotificationCenterTopBanner") {
+                viewport.banner = grid;
+                break;
+            }
+        }
+    }
+}
+
+double NotificationBannerHeight(FlyoutViewport const& viewport, double scale) {
+    if (!viewport.banner) return 0;
+    const double height = std::max(viewport.banner.ActualHeight(), viewport.banner.MinHeight());
+    if (height <= 0) return 0;
+    const auto border = viewport.notifications.BorderThickness();
+    const auto padding = viewport.notifications.Padding();
+    const auto roundUp = [scale](double value) { return std::ceil(value * scale) / scale; };
+    return roundUp(height + VerticalThickness(viewport.banner.Margin())) +
+           roundUp(border.Top + padding.Top) + roundUp(border.Bottom + padding.Bottom) +
+           VerticalThickness(viewport.notifications.Margin());
+}
+
+struct FlyoutHeightBudget {
+    double notificationsSpace;
+    double agendaMaxHeight;
+    double calendarTopMargin;
+    double calendarBottomMargin;
+    bool hideNotifications;
+};
+
+FlyoutHeightBudget MeasureFlyoutBudget(double viewportHeight, double topInset, double bottomInset,
+                                      double calendarTopMargin, double calendarBottomMargin,
+                                      double calendarChrome, double agendaExtent, double agendaLimit,
+                                      double notificationBannerHeight, bool notificationsPresent) {
+    double calendarRoom = viewportHeight - topInset - bottomInset -
+                          calendarTopMargin - calendarBottomMargin - calendarChrome;
+    const double notificationsSpace = calendarRoom - std::min(agendaExtent, agendaLimit);
+    const bool hideNotifications = notificationsPresent && notificationBannerHeight > 0 &&
+                                   notificationsSpace < notificationBannerHeight;
+    if (!notificationsPresent || hideNotifications) {
+        // Replace the inter-panel gap with equal outer padding when only the calendar is visible.
+        const double edge = std::max(topInset, bottomInset + calendarBottomMargin);
+        calendarTopMargin = edge - topInset;
+        calendarBottomMargin = edge - bottomInset;
+        calendarRoom = viewportHeight - 2 * edge - calendarChrome;
+    }
+    return {notificationsSpace, std::clamp(calendarRoom, 0.0, agendaLimit),
+            calendarTopMargin, calendarBottomMargin, hideNotifications};
+}
+
+void RestoreNotificationViewportMinimum() {
+    if (g_flyoutViewport && g_flyoutViewport->notifications) {
+        RestoreViewportProperty(g_flyoutViewport->notifications, wux::FrameworkElement::MinHeightProperty(),
+                                g_flyoutViewport->savedNotificationMinimum);
+    }
+}
+
+void RestoreFlyoutViewport() {
+    if (g_flyoutViewportToken.value != 0 && m_rootGrid) {
+        try { m_rootGrid.LayoutUpdated(g_flyoutViewportToken); } catch (...) {}
+        g_flyoutViewportToken = {};
+    }
+    if (!g_flyoutViewport) return;
+    auto& viewport = *g_flyoutViewport;
+    try { RestoreNotificationViewportMinimum(); } catch (...) {}
+    if (viewport.notifications) {
+        try {
+            RestoreViewportProperty(viewport.notifications, wux::UIElement::VisibilityProperty(),
+                                    viewport.savedNotificationVisibility);
+        } catch (...) {}
+    }
+    try {
+        RestoreViewportProperty(viewport.calendar, wux::FrameworkElement::MarginProperty(), viewport.savedMargin);
+    } catch (...) {}
+    g_flyoutViewport.reset();
+}
+
+void UpdateFlyoutViewport(wf::IInspectable const&, wf::IInspectable const&) {
+    if (!m_hostScrollViewer || !m_eventsScrollViewer ||
+        g_ownerThreadId.load() != GetCurrentThreadId()) return;
+    try {
+        auto root = m_hostScrollViewer.XamlRoot();
+        if (!root || !root.IsHostVisible()) return;
+
+        if (!g_flyoutViewport) {
+            for (auto node = wuxm::VisualTreeHelper::GetParent(m_hostScrollViewer); node;
+                 node = wuxm::VisualTreeHelper::GetParent(node)) {
+                auto calendar = node.try_as<wuxc::Grid>();
+                if (!calendar || calendar.Name() != L"CalendarCenterGrid") continue;
+                auto content = wuxm::VisualTreeHelper::GetParent(calendar).try_as<wuxc::Grid>();
+                if (!content || content.Name() != L"RootContent") return;
+                auto& viewport = g_flyoutViewport.emplace();
+                viewport.calendar = calendar;
+                viewport.calendarMargin = calendar.Margin();
+                viewport.content = content;
+                viewport.outer = wuxm::VisualTreeHelper::GetParent(content).try_as<wuxc::Grid>();
+                for (HWND window : GetCoreWnds()) {
+                    if (GetWindowThreadProcessId(window, nullptr) == GetCurrentThreadId()) {
+                        viewport.window = window;
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+        if (!g_flyoutViewport) return;
+        auto& viewport = *g_flyoutViewport;
+        FindFlyoutNotifications(viewport);
+
+        const bool expanded = m_calendarView && m_calendarView.Visibility() == wux::Visibility::Visible;
+        const int configuredMax = expanded ? GetMaxHeightExpandedSetting() : GetMaxHeightCollapsedSetting();
+        const double agendaLimit = configuredMax > 0 ? configuredMax : std::numeric_limits<double>::infinity();
+        const auto marginProperty = wux::FrameworkElement::MarginProperty();
+        const auto visibilityProperty = wux::UIElement::VisibilityProperty();
+        if (m_hostScrollViewer.Visibility() != wux::Visibility::Visible ||
+            viewport.calendar.ActualHeight() <= 0 || m_eventsScrollViewer.ExtentHeight() <= 0) {
+            RestoreViewportProperty(viewport.calendar, marginProperty, viewport.savedMargin);
+            RestoreNotificationViewportMinimum();
+            if (viewport.notifications) {
+                RestoreViewportProperty(viewport.notifications, visibilityProperty,
+                                        viewport.savedNotificationVisibility);
+            }
+            if (m_eventsScrollViewer.MaxHeight() != agendaLimit) m_eventsScrollViewer.MaxHeight(agendaLimit);
+            return;
+        }
+
+        const auto contentMargin = viewport.content.Margin();
+        const auto contentPadding = viewport.content.Padding();
+        double topInset = contentMargin.Top + contentPadding.Top;
+        double bottomInset = contentMargin.Bottom + contentPadding.Bottom;
+        if (viewport.outer) {
+            const auto margin = viewport.outer.Margin();
+            const auto padding = viewport.outer.Padding();
+            topInset += margin.Top + padding.Top;
+            bottomInset += margin.Bottom + padding.Bottom;
+        }
+
+        const double scale = root.RasterizationScale();
+        const double height = FlyoutViewportHeight(root, viewport.window);
+        if (scale <= 0 || height <= 0) return;
+        // Use measured sizes so space left over from the hidden notification row
+        // isn't counted against the banner when the agenda gets shorter.
+        const double calendarChrome = std::max(0.0, DesiredHeightWithoutMargin(viewport.calendar) -
+                                                    DesiredHeightWithoutMargin(m_eventsScrollViewer));
+        const double agendaExtent = m_eventsScrollViewer.ExtentHeight() +
+                                    VerticalThickness(m_eventsScrollViewer.Padding()) +
+                                    VerticalThickness(m_eventsScrollViewer.BorderThickness());
+        const bool notificationsPresent = viewport.notifications &&
+            (viewport.savedNotificationVisibility || viewport.notifications.Visibility() == wux::Visibility::Visible);
+        if (!viewport.savedNotificationVisibility) {
+            const double bannerHeight = NotificationBannerHeight(viewport, scale);
+            if (bannerHeight > 0) viewport.notificationBannerHeight = bannerHeight;
+        }
+        const auto& margin = viewport.calendarMargin;
+        const auto budget = MeasureFlyoutBudget(height, topInset, bottomInset, margin.Top, margin.Bottom,
+            calendarChrome, agendaExtent, agendaLimit, viewport.notificationBannerHeight, notificationsPresent);
+
+        if (budget.calendarTopMargin != margin.Top || budget.calendarBottomMargin != margin.Bottom) {
+            if (!viewport.savedMargin) viewport.savedMargin = viewport.calendar.ReadLocalValue(marginProperty);
+            const auto current = viewport.calendar.Margin();
+            if (current.Top != budget.calendarTopMargin || current.Bottom != budget.calendarBottomMargin) {
+                viewport.calendar.Margin({current.Left, budget.calendarTopMargin, current.Right, budget.calendarBottomMargin});
+            }
+        } else {
+            RestoreViewportProperty(viewport.calendar, marginProperty, viewport.savedMargin);
+        }
+
+        if (auto notifications = viewport.notifications) {
+            if (budget.hideNotifications) {
+                if (!viewport.savedNotificationVisibility) {
+                    viewport.savedNotificationVisibility = notifications.ReadLocalValue(visibilityProperty);
+                }
+                if (notifications.Visibility() != wux::Visibility::Collapsed) {
+                    notifications.Visibility(wux::Visibility::Collapsed);
+                }
+            } else {
+                RestoreViewportProperty(notifications, visibilityProperty, viewport.savedNotificationVisibility);
+            }
+
+            const double space = budget.notificationsSpace - VerticalThickness(notifications.Margin());
+            const double nativeMinimum = viewport.savedNotificationMinimum
+                ? viewport.notificationMinimumBeforeLimit : notifications.MinHeight();
+            if (notificationsPresent && !budget.hideNotifications && space > 0 && nativeMinimum > space) {
+                if (!viewport.savedNotificationMinimum) {
+                    viewport.savedNotificationMinimum = notifications.ReadLocalValue(wux::FrameworkElement::MinHeightProperty());
+                    viewport.notificationMinimumBeforeLimit = nativeMinimum;
+                }
+                if (notifications.MinHeight() != 0) notifications.MinHeight(0);
+            } else {
+                RestoreNotificationViewportMinimum();
+            }
+        }
+
+        // Fit on a physical pixel boundary to avoid clipping the final row at fractional DPI.
+        const double maxHeight = std::floor(budget.agendaMaxHeight * scale + 1e-6) / scale;
+        if (m_eventsScrollViewer.MaxHeight() != maxHeight) m_eventsScrollViewer.MaxHeight(maxHeight);
+    } catch (...) {}
+}
+
+bool ShouldHandleAgendaArrowShortcut() {
+    if (!GetKeyboardShortcutsSetting() || (m_datePicker && m_datePicker.IsCalendarOpen())) return false;
+    if (!m_calendarView || m_calendarView.Visibility() != wux::Visibility::Visible) return true;
+
+    // Leave arrow navigation to CalendarView when it contains the focused control.
+    auto root = m_calendarView.XamlRoot();
+    if (!root) return true;
+    for (auto node = wuxi::FocusManager::GetFocusedElement(root).try_as<wux::DependencyObject>();
+         node; node = wuxm::VisualTreeHelper::GetParent(node)) {
+        if (node == m_calendarView) return false;
+    }
+    return true;
+}
+
+wuxc::CalendarViewDayItem FindCalendarDayItem(wux::DependencyObject const& root,
+                                             SYSTEMTIME const& date) {
+    if (auto item = root.try_as<wuxc::CalendarViewDayItem>()) {
+        if (CompareDateOnly(WinRtDateTimeToLocalSystemTime(item.Date()), date) == 0) return item;
+        return nullptr;
+    }
+
+    const int count = wuxm::VisualTreeHelper::GetChildrenCount(root);
+    for (int i = 0; i < count; ++i) {
+        if (auto item = FindCalendarDayItem(wuxm::VisualTreeHelper::GetChild(root, i), date)) {
+            return item;
+        }
+    }
+    return nullptr;
+}
+
+void ChangeSelectedDayFromShortcut(int deltaDays) {
+    ChangeSelectedDay(deltaDays);
+
+    try {
+        if (m_calendarView && m_calendarView.Visibility() == wux::Visibility::Visible &&
+            m_calendarView.DisplayMode() == wuxc::CalendarViewDisplayMode::Month) {
+            auto day = FindCalendarDayItem(m_calendarView, m_currentFilterDate);
+            if (!day) {
+                // A date outside the realized range may need a layout pass after SetDisplayDate.
+                m_calendarView.UpdateLayout();
+                day = FindCalendarDayItem(m_calendarView, m_currentFilterDate);
+            }
+            if (day && day.Focus(wux::FocusState::Keyboard)) return;
+        }
+
+        if (m_dateButton) {
+            m_dateButton.Focus(wux::FocusState::Keyboard);
+        } else if (m_datePicker) {
+            m_datePicker.Focus(wux::FocusState::Keyboard);
+        }
+    } catch (...) {}
+}
+
+void OnCalendarPreviewKeyDown(wf::IInspectable const&, wuxi::KeyRoutedEventArgs const& args) {
+    const auto key = args.Key();
+    if (key != ws::VirtualKey::Left && key != ws::VirtualKey::Right) return;
+    if (GetKeyState(VK_SHIFT) < 0 || GetKeyState(VK_CONTROL) < 0 || GetKeyState(VK_MENU) < 0) return;
+
+    // Keep the agenda and keyboard focus in sync once the shortcut has focused the selected day.
+    auto day = args.OriginalSource().try_as<wuxc::CalendarViewDayItem>();
+    if (!day || CompareDateOnly(WinRtDateTimeToLocalSystemTime(day.Date()), m_currentFilterDate) != 0) return;
+    args.Handled(true);
+    ChangeSelectedDayFromShortcut(key == ws::VirtualKey::Left ? -1 : 1);
+}
+
+}  // namespace
+
+constexpr wchar_t kInlineCalendarExpandedValue[] = L"inlineCalendarExpanded";
+
+void UpdateInlineCalendarLayout() {
+    const bool expanded = m_calendarView.Visibility() == wux::Visibility::Visible;
+    wuxc::ToolTipService::SetToolTip(
+        m_dateButton, winrt::box_value(expanded ? L"Hide calendar" : L"Show calendar"));
+    if (m_headerGrid && IsCalendarAboveAgenda() && IsButtonsAboveAgenda()) {
+        m_headerGrid.Margin(wux::Thickness{12, expanded ? 2.0 : 10.0, 12, 0});
+    }
+    UpdateMaxHeight(expanded ? GetMaxHeightExpandedSetting() : GetMaxHeightCollapsedSetting());
+}
+
 void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
     if (!host) return;
     DWORD currentThread = GetCurrentThreadId();
@@ -3102,6 +3619,7 @@ void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
 
     try {
         if (m_hostScrollViewer && m_hostScrollViewer != host) {
+            RestoreFlyoutViewport();
             try {
                 if (m_originalCalendarContent) m_hostScrollViewer.Content(m_originalCalendarContent);
                 m_hostScrollViewer.VerticalScrollBarVisibility(m_originalVerticalScrollBarVisibility);
@@ -3128,11 +3646,6 @@ void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
             m_eventsScrollViewer.HorizontalScrollBarVisibility(wuxc::ScrollBarVisibility::Disabled);
             m_eventsScrollViewer.Content(m_itemsControl);
         }
-
-        int maxHeight = GetMaxHeightCollapsedSetting();
-        if (maxHeight > 0) m_eventsScrollViewer.MaxHeight((double)maxHeight);
-        else m_eventsScrollViewer.MaxHeight(std::numeric_limits<double>::infinity());
-        m_eventsScrollViewer.Height(std::numeric_limits<double>::quiet_NaN());
 
         auto onCalendarDayItemChanging = [](auto const&, wuxc::CalendarViewDayItemChangingEventArgs const& args) {
             if (args.InRecycleQueue())
@@ -3174,8 +3687,6 @@ void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
                 m_dateButton.HorizontalContentAlignment(wux::HorizontalAlignment::Stretch);
                 m_dateButton.VerticalAlignment(wux::VerticalAlignment::Center);
                 m_dateButton.Margin(wux::Thickness{0, 0, 0, 6});
-                wuxc::ToolTipService::SetToolTip(m_dateButton, winrt::box_value(L"Show calendar"));
-
                 m_dateButtonText = wuxc::TextBlock();
                 m_dateButtonText.Text(FormatFilterDate(m_currentFilterDate));
                 m_dateButtonText.VerticalAlignment(wux::VerticalAlignment::Center);
@@ -3184,27 +3695,13 @@ void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
 
                 m_dateBtnClickToken = m_dateButton.Click([](wf::IInspectable const&, wux::RoutedEventArgs const&) {
                     if (!m_calendarView) return;
-                    bool calAbove = IsCalendarAboveAgenda();
-                    bool btnAbove = IsButtonsAboveAgenda();
-                    if (m_calendarView.Visibility() == wux::Visibility::Visible) {
-                        m_calendarView.Visibility(wux::Visibility::Collapsed);
-                        wuxc::ToolTipService::SetToolTip(m_dateButton, winrt::box_value(L"Show calendar"));
-                        // When calendar collapses and header sits directly below it, restore top margin
-                        if (calAbove && btnAbove) {
-                            if (m_headerGrid) m_headerGrid.Margin(wux::Thickness{12, 10, 12, 0});
-                        }
-                        UpdateMaxHeight(GetMaxHeightCollapsedSetting());
-                    } else {
-                        m_calendarView.Visibility(wux::Visibility::Visible);
-                        wuxc::ToolTipService::SetToolTip(m_dateButton, winrt::box_value(L"Hide calendar"));
-                        // When calendar expands above header, tighten header top margin
-                        if (calAbove && btnAbove) {
-                            if (m_headerGrid) m_headerGrid.Margin(wux::Thickness{12, 2, 12, 0});
-                        }
-                        try {
-                            m_calendarView.NumberOfWeeksInView(GetNumberOfWeeksInViewSetting());
-                        } catch (...) {}
-                        UpdateMaxHeight(GetMaxHeightExpandedSetting());
+                    const bool expanded = m_calendarView.Visibility() != wux::Visibility::Visible;
+                    m_calendarView.Visibility(expanded ? wux::Visibility::Visible : wux::Visibility::Collapsed);
+                    if (!Wh_SetIntValue(kInlineCalendarExpandedValue, expanded ? 1 : 0)) {
+                        Wh_Log(L"Could not save inline calendar state");
+                    }
+                    UpdateInlineCalendarLayout();
+                    if (expanded) {
                         RefreshCalendarView();
                     }
                 });
@@ -3223,7 +3720,8 @@ void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
                     m_calendarView.NumberOfWeeksInView(GetNumberOfWeeksInViewSetting());
                 } catch (...) {}
                 m_calendarView.SelectionMode(wuxc::CalendarViewSelectionMode::Single);
-                m_calendarView.Visibility(wux::Visibility::Collapsed);
+                const bool expanded = Wh_GetIntValue(kInlineCalendarExpandedValue, 0) != 0;
+                m_calendarView.Visibility(expanded ? wux::Visibility::Visible : wux::Visibility::Collapsed);
                 m_calendarViewSelectionChangedToken = m_calendarView.SelectedDatesChanged([](wuxc::CalendarView const& cv, wuxc::CalendarViewSelectedDatesChangedEventArgs const& args) {
                     if (args.AddedDates().Size() > 0) {
                         OnCalendarViewSelectedDatesChanged(args.AddedDates().GetAt(0));
@@ -3236,6 +3734,9 @@ void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
             }
             if (m_calendarView && m_calendarViewDayItemChangingToken.value == 0) {
                 m_calendarViewDayItemChangingToken = m_calendarView.CalendarViewDayItemChanging(onCalendarDayItemChanging);
+            }
+            if (GetKeyboardShortcutsSetting() && m_calendarViewPreviewKeyDownToken.value == 0) {
+                m_calendarViewPreviewKeyDownToken = m_calendarView.PreviewKeyDown(OnCalendarPreviewKeyDown);
             }
         } else {
             if (!m_datePicker) {
@@ -3318,10 +3819,9 @@ void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
             );
             m_prevDayAccel.IsEnabled(GetKeyboardShortcutsSetting());
             m_prevDayAccel.Invoked([](wuxi::KeyboardAccelerator const&, wuxi::KeyboardAcceleratorInvokedEventArgs const& args) {
-                if (!GetKeyboardShortcutsSetting()) return;
-                if (m_calendarView && m_calendarView.Visibility() == wux::Visibility::Visible) return;
-                if (m_datePicker && m_datePicker.IsCalendarOpen()) return;
-                ChangeSelectedDay(-1); args.Handled(true);
+                if (!ShouldHandleAgendaArrowShortcut()) return;
+                args.Handled(true);
+                ChangeSelectedDayFromShortcut(-1);
             });
             m_prevDayButton.KeyboardAccelerators().Append(m_prevDayAccel);
         }
@@ -3345,10 +3845,9 @@ void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
             );
             m_nextDayAccel.IsEnabled(GetKeyboardShortcutsSetting());
             m_nextDayAccel.Invoked([](wuxi::KeyboardAccelerator const&, wuxi::KeyboardAcceleratorInvokedEventArgs const& args) {
-                if (!GetKeyboardShortcutsSetting()) return;
-                if (m_calendarView && m_calendarView.Visibility() == wux::Visibility::Visible) return;
-                if (m_datePicker && m_datePicker.IsCalendarOpen()) return;
-                ChangeSelectedDay(1); args.Handled(true);
+                if (!ShouldHandleAgendaArrowShortcut()) return;
+                args.Handled(true);
+                ChangeSelectedDayFromShortcut(1);
             });
             m_nextDayButton.KeyboardAccelerators().Append(m_nextDayAccel);
         }
@@ -3472,6 +3971,12 @@ void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
             });
         }
 
+        if (isInline) {
+            UpdateInlineCalendarLayout();
+        } else {
+            UpdateMaxHeight(GetMaxHeightCollapsedSetting());
+        }
+
         SYSTEMTIME today; GetLocalTime(&today); m_currentFilterDate = today;
         std::vector<CalendarEvent> currentEvents;
         { std::lock_guard<std::mutex> lock(g_eventsMutex); currentEvents = FilterEventsForDate(g_allParsedEvents, today); }
@@ -3499,6 +4004,9 @@ void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
         host.VerticalScrollBarVisibility(wuxc::ScrollBarVisibility::Disabled);
         host.HorizontalScrollBarVisibility(wuxc::ScrollBarVisibility::Disabled);
         host.Content(m_rootGrid);
+        if (g_flyoutViewportToken.value == 0) {
+            g_flyoutViewportToken = m_rootGrid.LayoutUpdated(UpdateFlyoutViewport);
+        }
         RevokeLayoutUpdated();
         OnCalendarOpened();
     } catch (...) {}
