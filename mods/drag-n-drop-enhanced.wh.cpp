@@ -7,8 +7,7 @@
 // @version         2.0.1.0
 // @author          caotu2005
 // @github          https://github.com/caotu2005
-// @include         explorer.exe
-// @architecture    x86-64
+// @include         windhawk.exe
 // @compilerOptions -DWIN32_LEAN_AND_MEAN -ld2d1 -ldwrite -ldwmapi -lgdi32 -luser32 -lshell32 -lshlwapi -lole32 -loleaut32 -lwindowscodecs -luuid -lwinmm
 // ==/WindhawkMod==
 
@@ -16,51 +15,76 @@
 /*
 # Drag n Drop Enhanced for Windows 10 and 11
 
-A lightweight, native Direct2D + WIC + OLE2 **Drag & Drop Shelf & Optional `Win + V` Clipboard Hub** for **Windows 10 and Windows 11**, featuring **both macOS (Dropover / Yoink / Notch)** and **Windows Fluent** visual themes.
+A lightweight, native Direct2D + WIC + OLE2 **Drag & Drop Shelf & Optional `Win + V` Clipboard Hub** for **Windows 10 and Windows 11**, featuring **both macOS (Dropover / Yoink / Notch)** and **Windows Fluent** visual themes. Runs as an isolated **Windhawk Tool Mod** (`windhawk.exe`) with zero hooks into `explorer.exe`.
 
 > ℹ️ **Compatibility Note (Smart App Control) / Lưu ý tương thích:**
-> - **🌐 English:** Like all Windhawk mods, this mod is compiled locally into an unsigned `.dll` file and loaded into `explorer.exe`. If Windows **Smart App Control** is active on your PC, Windows will block the compiled `.dll` and the mod will not load.
-> - **🇻🇳 Tiếng Việt:** Giống như mọi bản mod trên Windhawk, mod này được biên dịch cục bộ thành tệp `.dll` không có chữ ký số để nạp vào `explorer.exe`. Nếu máy đang bật **Smart App Control (Kiểm soát Ứng dụng Thông minh)**, Windows sẽ chặn tệp `.dll` này khiến mod không thể hoạt động.
+> - **🌐 English:** Like all Windhawk mods, this mod is compiled locally into an unsigned `.dll` file and loaded into `windhawk.exe`. If Windows **Smart App Control** is active on your PC, Windows will block the compiled `.dll` and the mod will not load.
+> - **🇻🇳 Tiếng Việt:** Giống như mọi bản mod trên Windhawk, mod này được biên dịch cục bộ thành tệp `.dll` không có chữ ký số để nạp vào `windhawk.exe`. Nếu máy đang bật **Smart App Control (Kiểm soát Ứng dụng Thông minh)**, Windows sẽ chặn tệp `.dll` này khiến mod không thể hoạt động.
+
+## 📸 Screenshots & Demo / Hình minh họa & Video Demo
+
+**🎬 Demo:**
+
+![Drag n Drop Enhanced Demo](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-resources/main/dragndrop/videodemo.gif)
+
+**Drop Shelf & Quick Look Image Preview (macOS / Windows Fluent):**
+
+![Drag n Drop Shelf & Quick Look Preview](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-resources/main/dragndrop/dragndrop.png)
+
+**Top-Center Animated Mini Bar:**
+
+![Top-Center Mini Bar](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-resources/main/dragndrop/topcenterminibar.png)
+
+**Live Copy / Cut / Paste Alert Island:**
+
+![Copy Paste Alert Island](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-resources/main/dragndrop/copypaste.png)
 
 ---
 
 ## 🌐 Features (English)
 
+- **Isolated Tool Mod Architecture:**
+  - Runs in a dedicated `windhawk.exe` tool process instead of injecting into `explorer.exe`, keeping the Windows shell stable and preserving staged items across Explorer restarts.
 - **Dual Native Themes (macOS & Windows Fluent):**
-  - **macOS Style:** Frosted vibrancy glass, macOS System Blue (`#0A84FF`), and left-side **traffic-light dots** (Red = Clear & Close, Yellow = Minimize to Taskbar, Green/Amber = Pin).
+  - **macOS Style:** Frosted vibrancy glass, macOS System Blue (`#0A84FF`), and left-side **traffic-light dots** (Red = Clear & Close, Yellow = Minimize to Top Mini Bar, Green/Amber = Pin).
   - **Windows Fluent Style:** Adaptive Windows accent color, crisp Fluent corners, and right-side **Windows caption buttons** (Pin, Minimize `—`, Close `✕` with red hover).
-  - You can also mix and match the **Window Button Style** independently (Auto / macOS / Windows).
+  - Mix and match the **Window Button Style** independently (Auto / macOS / Windows).
 - **Minimize to Animated Top-Center Mini Bar:**
-  - Click **Minimize** to collapse the shelf into a compact live status pill directly on your **Windows 10 / 11 Taskbar** (supports Bottom, Top, Left, and Right edges).
-  - **Click** the taskbar pill to restore the shelf, **drag straight out** from the pill to drop all staged items without even reopening the shelf, or **drop new items directly onto the pill**.
+  - Click **Minimize** when items are staged to collapse the shelf into a compact animated mini bar at the top edge of the work area (automatically avoiding a top taskbar).
+  - **Click** to restore the shelf, **drag straight out** to drop all staged items without reopening, or **drop new items directly onto the bar**. Automatically hides once all Drag & Drop items are dragged out.
 - **Drag & Drop Anything (Files, Folders, Images, Text & URLs):**
-  - **Files & Folders (`CF_HDROP`):** Stage single or multiple files/folders with native shell icons and live size totals.
-  - **Browser & App Images (`FileContents` / `PNG` / `CF_DIB`):** Drag images directly from Chrome, Edge, Firefox, Paint, or Word with real WIC rounded thumbnails; dragging out exposes `CF_HDROP` + `PNG` + `CF_DIB` simultaneously.
+  - **Files & Folders (`CF_HDROP`):** Stage single or multiple files/folders with native shell icons, category filters, reveal-in-Explorer, and inline audio playback.
+  - **Browser & App Images (`FileContents` / `PNG` / `CF_DIB`):** Drag images directly from Chrome, Edge, Firefox, Paint, or Word with WIC rounded thumbnails and Quick Look preview (with fullscreen lightbox); dragging out exposes `CF_HDROP` + `PNG` + `CF_DIB` simultaneously.
   - **Selected Text & Web Links (`CF_UNICODETEXT` / `UniformResourceLocatorW`):** Stage text snippets or URLs and drop them into any editor, browser, or chat app.
-  - **1-Click Clipboard Import:** Paste screenshots, images, files, or text directly onto the shelf.
-- **Optional `Win + V` Clipboard History Replacement:**
-  - Enable **Replace `Win + V`** in settings to intercept `Win + V` cleanly and open the **Clipboard History** tab right beside your cursor (while automatically skipping password-manager protected entries).
-  - **Click** any history entry to paste it into your previous window, or **drag** any history entry straight into another app!
-- **macOS-Inspired Triggers:**
-  - **Auto-Summon on File Drag**, **Shake-to-Summon** near cursor, **Screen Edge-Bump** while dragging text/images, and **`Alt + Shift + D`** global toggle hotkey.
+  - **Live Copy / Cut / Paste Alerts:** Non-blocking toast notifications for Copy, Cut, and Paste actions, respecting both `ExcludeClipboardContentFromMonitorProcessing` and `CanIncludeInClipboardHistory = 0` so protected/password content is never previewed.
+- **Optional `Win + V` Clipboard History Replacement (Off by Default):**
+  - Enable **Replace `Win + V`** in settings to intercept `Win + V` cleanly and open the **Clipboard History** tab right beside your cursor (with 10–100 configurable history slots and category filters).
+  - **Storage Note:** Staged browser/app images, virtual files, and images saved in Clipboard History (while `Replace Win + V` is enabled) are temporarily stored as files inside this mod's Windhawk storage folder (`staged/`) while they remain on the shelf or in history, and are automatically cleared when removed, unloaded, or on next startup.
+- **30 Global Languages:** Automatically detects your Windows display language across 30 major languages (including English, Vietnamese, Chinese, Spanish, French, German, Japanese, Korean, Portuguese, Russian, Arabic, Hindi, Indonesian, Turkish, and more), or select any language manually in Settings.
+- **Flexible Triggers:**
+  - **Auto-Summon on File Drag**, **Shake-to-Summon** near cursor, **Screen Edge-Bump** while dragging text/images, and an optional **`Alt + Shift + D`** global toggle hotkey (**off by default** so it does not override `Alt + Shift + D` in apps such as Microsoft Word).
 
 ---
 
 ## 🇻🇳 Tính năng chính (Tiếng Việt)
 
+- **Chạy độc lập dạng Tool Mod:**
+  - Chạy trong tiến trình `windhawk.exe` riêng biệt thay vì chèn vào `explorer.exe`, giúp Explorer luôn ổn định và không mất tệp đang ghim khi khởi động lại Explorer.
 - **Giao diện kép macOS & Thuần Windows Fluent:**
-  - **Phong cách macOS:** Kính mờ Vibrancy, xanh dương macOS (`#0A84FF`) và bộ **nút đèn giao thông bên trái** (Đỏ = Xóa & Đóng, Vàng = Thu nhỏ xuống Taskbar, Cam/Ghim = Ghim kệ).
-  - **Phong cách Windows Fluent:** Tự động lấy màu nhấn (Accent Color) thật của Windows, bo góc Fluent sắc nét và bộ **nút đóng mở chuẩn Windows bên phải** (Ghim, Thu nhỏ `—`, Đóng `✕` đỏ khi rê chuột).
+  - **Phong cách macOS:** Kính mờ Vibrancy, xanh dương macOS (`#0A84FF`) và bộ **nút đèn giao thông bên trái** (Đỏ = Xóa & Đóng, Vàng = Thu gọn lên thanh mini bar, Cam/Ghim = Ghim kệ).
+  - **Phong cách Windows Fluent:** Tự động lấy màu nhấn (Accent Color) thật của Windows, bo góc Fluent sắc nét và bộ **nút đóng mở chuẩn Windows bên phải** (Ghim, Thu gọn `—`, Đóng `✕` đỏ khi rê chuột).
   - Có thể chọn riêng kiểu nút đóng/mở (Tự động / Kiểu macOS / Kiểu Windows).
-- **Thu nhỏ thành Thanh Bar Động ở Mép Trên:**
-  - Bấm **Thu nhỏ** để kệ biến thành một viên thuốc trạng thái nhỏ gọn nằm ngay trên thanh **Taskbar Windows 10 & 11** (hỗ trợ cả 4 cạnh Dưới, Trên, Trái, Phải), hiển thị trực tiếp số lượng mục đang ghim.
-  - **Bấm vào viên thuốc** để bung lại kệ, **kéo thẳng từ viên thuốc** để thả toàn bộ tệp ra ứng dụng đích mà không cần mở lại, hoặc **thả thêm tệp/ảnh trực tiếp lên viên thuốc**.
-- **Kéo thả mọi nội dung (Tệp, Thư mục, Hình ảnh, Văn bản & URL):**
-  - Kéo thả tệp/thư mục (`CF_HDROP`), hình ảnh trực tiếp từ Chrome/Edge/Word/Paint (`FileContents` / `PNG` / `CF_DIB`), văn bản bôi đen và liên kết URL (`CF_UNICODETEXT` / `UniformResourceLocatorW`), kèm nút dán nhanh từ Clipboard.
-- **Tùy chọn thay thế `Win + V` (Lịch sử Clipboard thông minh):**
-  - Bật **Thay thế phím tắt `Win + V`** trong Cài đặt để chặn bảng `Win + V` mặc định và mở tab **Lịch sử Clipboard** ngay cạnh con trỏ (tự động bỏ qua mật khẩu được bảo vệ từ trình quản lý mật khẩu).
-  - **Bấm vào mục bất kỳ** để tự động dán vào cửa sổ đang làm việc, hoặc **kéo thẳng mục đó** thả sang ứng dụng khác!
-- **Gọi kệ linh hoạt:** Tự hiện khi kéo tệp, **Lắc chuột để gọi**, **Chạm mép màn hình (Edge-Bump)** khi kéo ảnh/văn bản, hoặc nhấn **`Alt + Shift + D`**.
+- **Thu gọn thành Thanh Mini Bar Động ở Mép Trên:**
+  - Bấm **Thu gọn** khi có mục trên kệ để biến kệ thành thanh trạng thái nhỏ gọn ở giữa mép trên vùng làm việc (tự né Taskbar trên).
+  - **Bấm** để mở lại kệ, **kéo thẳng ra ngoài** để thả toàn bộ mục mà không cần mở lại, hoặc **thả thêm tệp/ảnh trực tiếp lên thanh**. Tự động trượt ẩn khi không còn mục nào trong Drag & Drop.
+- **Kéo thả mọi nội dung & Thông báo Sao chép / Dán:**
+  - Hỗ trợ tệp/thư mục (`CF_HDROP`), hình ảnh từ trình duyệt/ứng dụng (`FileContents` / `PNG` / `CF_DIB`), văn bản, URL, lọc theo loại (`Tất cả / Văn bản / Ảnh / Tệp / Nhạc`), xem trước ảnh toàn màn hình, mở thư mục chứa tệp và phát nhạc trực tiếp.
+  - Thông báo nổi khi Sao chép / Cắt / Dán tự động bỏ qua nội dung bảo mật (`ExcludeClipboardContentFromMonitorProcessing` và `CanIncludeInClipboardHistory = 0`).
+- **Tùy chọn thay thế `Win + V` (Mặc định tắt):**
+  - Bật **Thay thế `Win + V`** trong Cài đặt để dùng tab **Lịch sử Clipboard** tích hợp (lưu 10–100 mục).
+  - **Lưu ý lưu trữ:** Hình ảnh kéo từ trình duyệt/ứng dụng, tệp ảo và hình ảnh trong Lịch sử Clipboard (khi bật `Thay thế Win + V`) được lưu tạm dạng tệp trong thư mục lưu trữ riêng của mod (`staged/`), và tự động xóa khi gỡ mục, tắt mod hoặc lần khởi chạy kế tiếp.
+- **Hỗ trợ 30 ngôn ngữ toàn cầu:** Tự động nhận diện ngôn ngữ Windows trên 30 ngôn ngữ thông dụng nhất (mặc định đầy đủ Tiếng Việt, Tiếng Anh cùng Trung, Nhật, Hàn, Pháp, Đức, Tây Ban Nha, Nga, Ả Rập, Hindi, Thái, Indonesia...) hoặc chọn thủ công trong Cài đặt.
+- **Gọi kệ linh hoạt:** Tự hiện khi kéo tệp, **Lắc chuột để gọi**, **Chạm mép màn hình (Edge-Bump)**, và tùy chọn phím tắt toàn cục **`Alt + Shift + D`** (**mặc định tắt** để tránh trùng phím chèn ngày trong Microsoft Word).
 
 ---
 
@@ -72,6 +96,74 @@ A lightweight, native Direct2D + WIC + OLE2 **Drag & Drop Shelf & Optional `Win 
 
 // ==WindhawkModSettings==
 /*
+- language: auto
+  $name: Display Language (30 Languages)
+  $name:vi-VN: Ngôn ngữ hiển thị (30 ngôn ngữ)
+  $options:
+  - auto: System Default (Auto-Detect 30 Languages)
+  - en: English
+  - vi: Tiếng Việt
+  - zh_cn: 简体中文
+  - zh_tw: 繁體中文
+  - es: Español
+  - fr: Français
+  - de: Deutsch
+  - ja: 日本語
+  - ko: 한국어
+  - pt: Português
+  - ru: Русский
+  - it: Italiano
+  - ar: العربية
+  - hi: हिन्दी
+  - id: Bahasa Indonesia
+  - tr: Türkçe
+  - pl: Polski
+  - nl: Nederlands
+  - th: ไทย
+  - uk: Українська
+  - sv: Svenska
+  - cs: Čeština
+  - ro: Română
+  - hu: Magyar
+  - el: Ελληνικά
+  - he: עברית
+  - da: Dansk
+  - fi: Suomi
+  - no: Norsk
+  - ms: Bahasa Melayu
+  $options:vi-VN:
+  - auto: Tự động theo hệ thống (30 ngôn ngữ)
+  - en: English
+  - vi: Tiếng Việt
+  - zh_cn: 简体中文
+  - zh_tw: 繁體中文
+  - es: Español
+  - fr: Français
+  - de: Deutsch
+  - ja: 日本語
+  - ko: 한국어
+  - pt: Português
+  - ru: Русский
+  - it: Italiano
+  - ar: العربية
+  - hi: हिन्दी
+  - id: Bahasa Indonesia
+  - tr: Türkçe
+  - pl: Polski
+  - nl: Nederlands
+  - th: ไทย
+  - uk: Українська
+  - sv: Svenska
+  - cs: Čeština
+  - ro: Română
+  - hu: Magyar
+  - el: Ελληνικά
+  - he: עברית
+  - da: Dansk
+  - fi: Suomi
+  - no: Norsk
+  - ms: Bahasa Melayu
+
 - triggerGroup:
   - triggerMode: both
     $name: Shelf Activation Mode
@@ -113,10 +205,10 @@ A lightweight, native Direct2D + WIC + OLE2 **Drag & Drop Shelf & Optional `Win 
     - high: "Cao (Lắc nhẹ là hiện)"
     - medium: "Trung bình (Cân bằng)"
     - low: "Thấp (Lắc rõ mới hiện)"
-  - enableGlobalHotkey: true
-    $name: "Enable Global Toggle Hotkey (Alt + Shift + D)"
-    $name:vi-VN: "Bật phím tắt gọi/ẩn nhanh kệ (Alt + Shift + D)"
-  - replaceWinV: true
+  - enableGlobalHotkey: false
+    $name: "Enable Global Toggle Hotkey (Alt + Shift + D; off by default to avoid Word conflict)"
+    $name:vi-VN: "Bật phím tắt gọi/ẩn nhanh kệ (Alt + Shift + D; mặc định tắt để tránh trùng phím Word)"
+  - replaceWinV: false
     $name: "Replace Windows + V with Built-in Clipboard History & Drag Hub (Win+V Enhanced)"
     $name:vi-VN: "Thay thế Windows + V bằng Lịch sử Clipboard & Kéo-thả tích hợp (Win+V Enhanced)"
   - maxClipboardHistory: 30
@@ -204,17 +296,6 @@ A lightweight, native Direct2D + WIC + OLE2 **Drag & Drop Shelf & Optional `Win 
     - auto: Tự động theo Windows / Nền
     - dark: Giao diện Tối
     - light: Giao diện Sáng
-  - language: auto
-    $name: Display Language
-    $name:vi-VN: Ngôn ngữ hiển thị
-    $options:
-    - auto: System Default
-    - vi: Tiếng Việt
-    - en: English
-    $options:vi-VN:
-    - auto: Tự động theo hệ thống
-    - vi: Tiếng Việt
-    - en: English
   $name: 3. macOS & Windows Appearance
   $name:vi-VN: 3. Giao diện macOS & Windows
 */
@@ -274,7 +355,7 @@ enum class UiStyle { MacOs, Windows };
 enum class ButtonStyle { Auto, MacOs, Windows };
 enum class GlassStyle { MacOsFrosted, LiquidClear, SolidSoft };
 enum class ColorMode { Auto, Dark, Light };
-enum class UiLang { Auto, Vi, En };
+enum class UiLang : int { Auto, En, Vi, ZhCn, ZhTw, Es, Fr, De, Ja, Ko, Pt, Ru, It, Ar, Hi, Id, Tr, Pl, Nl, Th, Uk, Sv, Cs, Ro, Hu, El, He, Da, Fi, No, Ms };
 enum class ActiveTab { Shelf, ClipboardHistory };
 enum class CategoryFilter { All, Text, Image, File, Audio };
 enum class AlertIslandPosition { Auto, Top, Bottom };
@@ -309,14 +390,12 @@ static ModSettings       g_settings;
 static std::atomic<bool> g_running{false};
 static std::atomic<bool> g_unloading{false};
 static std::atomic<bool> g_settingsDirty{false};
-static HANDLE            g_uiReadyEvent = nullptr;
 static std::atomic<bool> g_replaceWinVAtomic{true};
 static std::atomic<bool> g_enableCopyPasteAlertAtomic{true};
 static std::atomic<ULONGLONG> g_lastCutKeyTick{0};
 static bool              g_systemLightTheme = false;
 static D2D1_COLOR_F      g_winAccentColor = D2D1::ColorF(0.00f, 0.47f, 0.84f, 1.0f);
 
-static HANDLE g_singletonMutex = nullptr;
 static HANDLE g_uiThread       = nullptr;
 static DWORD  g_uiThreadId     = 0;
 static HANDLE g_kbdThread      = nullptr;
@@ -373,14 +452,174 @@ static std::wstring ToLowerStr(std::wstring s) {
     return s;
 }
 
-static bool ComputeUseVietnamese(UiLang lang) {
-    if (lang == UiLang::Vi) return true;
-    if (lang == UiLang::En) return false;
-    return PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_VIETNAMESE;
+static int ResolveActiveLangIndex(UiLang lang) {
+    if (lang != UiLang::Auto) {
+        return static_cast<int>(lang) - 1; // 0=En, 1=Vi, 2..29=extra 28 langs
+    }
+    LANGID lid = GetUserDefaultUILanguage();
+    WORD pri = PRIMARYLANGID(lid);
+    WORD sub = SUBLANGID(lid);
+    switch (pri) {
+        case 0x09: return 0;  // English
+        case 0x2a: return 1;  // Vietnamese
+        case 0x04: return (sub == 0x02 || sub == 0x04) ? 2 : 3; // Chinese Simplified vs Traditional
+        case 0x0a: return 4;  // Spanish
+        case 0x0c: return 5;  // French
+        case 0x07: return 6;  // German
+        case 0x11: return 7;  // Japanese
+        case 0x12: return 8;  // Korean
+        case 0x16: return 9;  // Portuguese
+        case 0x19: return 10; // Russian
+        case 0x10: return 11; // Italian
+        case 0x01: return 12; // Arabic
+        case 0x39: return 13; // Hindi
+        case 0x21: return 14; // Indonesian
+        case 0x1f: return 15; // Turkish
+        case 0x15: return 16; // Polish
+        case 0x13: return 17; // Dutch
+        case 0x1e: return 18; // Thai
+        case 0x22: return 19; // Ukrainian
+        case 0x1d: return 20; // Swedish
+        case 0x05: return 21; // Czech
+        case 0x18: return 22; // Romanian
+        case 0x0e: return 23; // Hungarian
+        case 0x08: return 24; // Greek
+        case 0x0d: return 25; // Hebrew
+        case 0x06: return 26; // Danish
+        case 0x0b: return 27; // Finnish
+        case 0x14: return 28; // Norwegian
+        case 0x3e: return 29; // Malay
+        default:   return 0;  // English fallback
+    }
 }
 
-static inline const wchar_t* PickText(bool vi, const wchar_t* viText, const wchar_t* enText) {
-    return vi ? viText : enText;
+static bool ComputeUseVietnamese(UiLang lang) {
+    return ResolveActiveLangIndex(lang) == 1;
+}
+
+static constexpr size_t kLocStringCount = 48;
+static constexpr const wchar_t* kLocEnKeys[kLocStringCount] = {
+    L"Folder",
+    L"Web Link",
+    L" chars",
+    L"Added from Clipboard",
+    L"Nothing new in Clipboard",
+    L"Copied to Clipboard",
+    L" item",
+    L" items",
+    L"Copied Image",
+    L"Copied Text",
+    L"Copied Files",
+    L"Pasted Image",
+    L"Pasted Text",
+    L"Pasted Files",
+    L"+ Drop",
+    L"Shelf",
+    L"Release to stage",
+    L"Drop files, images, text",
+    L"Or click paste from Clipboard",
+    L"Clipboard",
+    L"Drop Shelf",
+    L"Clipboard (Win+V)",
+    L"All",
+    L"Text",
+    L"Images",
+    L"Files",
+    L"Audio",
+    L"No items in this category",
+    L"Clipboard history is empty",
+    L"Drop files, images, or text here",
+    L"Click to paste • Drag to drop",
+    L"+ Drop to add more",
+    L"Drag item to target app",
+    L"Drag all (",
+    L" items) out",
+    L"Image",
+    L" file",
+    L" files",
+    L"Cut Files",
+    L"Protected content",
+    L"Private",
+    L"Cut Text",
+    L"Clipboard image",
+    L"Cut Image",
+    L"Shelf Pinned",
+    L"Shelf Unpinned",
+    L"Clipboard history cleared",
+    L"Shelf cleared"
+};
+
+static constexpr const wchar_t* kLocExtraTables[28][kLocStringCount] = {
+    // zh_cn (简体中文)
+    { L"文件夹", L"网页链接", L" 字符", L"已从剪贴板添加", L"剪贴板无新内容", L"已复制到剪贴板", L" 项", L" 项", L"已复制图片", L"已复制文本", L"已复制文件", L"已粘贴图片", L"已粘贴文本", L"已粘贴文件", L"+ 拖放", L"暂存架", L"松开以暂存", L"拖放文件、图片、文本", L"或点击从剪贴板粘贴", L"剪贴板", L"拖放架", L"剪贴板 (Win+V)", L"全部", L"文本", L"图片", L"文件", L"音频", L"此分类下暂无项目", L"剪贴板历史为空", L"将文件、图片或文本拖放到此处", L"点击粘贴 • 拖动放置", L"+ 拖放更多", L"将项目拖到目标应用", L"拖出全部 (", L" 项)", L"图片", L" 个文件", L" 个文件", L"已剪切文件", L"受保护内容", L"私密", L"已剪切文本", L"剪贴板图片", L"已剪切图片", L"已固定暂存架", L"已取消固定", L"已清空剪贴板历史", L"已清空暂存架" },
+    // zh_tw (繁體中文)
+    { L"資料夾", L"網頁連結", L" 字元", L"已從剪貼簿新增", L"剪貼簿無新內容", L"已複製到剪貼簿", L" 項", L" 項", L"已複製圖片", L"已複製文字", L"已複製檔案", L"已貼上圖片", L"已貼上文字", L"已貼上檔案", L"+ 拖放", L"暫存架", L"放開以暫存", L"拖放檔案、圖片、文字", L"或點擊從剪貼簿貼上", L"剪貼簿", L"拖放架", L"剪貼簿 (Win+V)", L"全部", L"文字", L"圖片", L"檔案", L"音訊", L"此分類下沒有項目", L"剪貼簿記錄為空", L"將檔案、圖片或文字拖放到此處", L"點擊貼上 • 拖曳放置", L"+ 拖放更多", L"將項目拖至目標應用程式", L"拖出全部 (", L" 項)", L"圖片", L" 個檔案", L" 個檔案", L"已剪下檔案", L"受保護內容", L"私密", L"已剪下文字", L"剪貼簿圖片", L"已剪下圖片", L"已釘選暫存架", L"已取消釘選", L"已清除剪貼簿記錄", L"已清空暫存架" },
+    // es (Español)
+    { L"Carpeta", L"Enlace web", L" caracteres", L"Añadido del portapapeles", L"Nada nuevo en el portapapeles", L"Copiado al portapapeles", L" elemento", L" elementos", L"Imagen copiada", L"Texto copiado", L"Archivos copiados", L"Imagen pegada", L"Texto pegado", L"Archivos pegados", L"+ Soltar", L"Estante", L"Suelta para guardar", L"Suelta archivos, imágenes o texto", L"O haz clic para pegar del portapapeles", L"Portapapeles", L"Estante", L"Portapapeles (Win+V)", L"Todo", L"Texto", L"Imágenes", L"Archivos", L"Audio", L"No hay elementos en esta categoría", L"El historial del portapapeles está vacío", L"Suelta archivos, imágenes o texto aquí", L"Clic para pegar • Arrastra para soltar", L"+ Soltar más", L"Arrastra al programa de destino", L"Arrastrar todo (", L" elementos)", L"Imagen", L" archivo", L" archivos", L"Archivos cortados", L"Contenido protegido", L"Privado", L"Texto cortado", L"Imagen del portapapeles", L"Imagen cortada", L"Estante fijado", L"Estante desfijado", L"Historial del portapapeles borrado", L"Estante vaciado" },
+    // fr (Français)
+    { L"Dossier", L"Lien web", L" car.", L"Ajouté depuis le presse-papiers", L"Rien de nouveau dans le presse-papiers", L"Copié dans le presse-papiers", L" élément", L" éléments", L"Image copiée", L"Texte copié", L"Fichiers copiés", L"Image collée", L"Texte collé", L"Fichiers collés", L"+ Déposer", L"Étagère", L"Relâchez pour déposer", L"Déposez fichiers, images ou texte", L"Ou cliquez pour coller du presse-papiers", L"Presse-papiers", L"Étagère", L"Presse-papiers (Win+V)", L"Tout", L"Texte", L"Images", L"Fichiers", L"Audio", L"Aucun élément dans cette catégorie", L"L'historique du presse-papiers est vide", L"Déposez des fichiers, images ou texte ici", L"Cliquez pour coller • Glissez pour déposer", L"+ Déposer plus", L"Glissez vers l'application cible", L"Tout glisser (", L" éléments)", L"Image", L" fichier", L" fichiers", L"Fichiers coupés", L"Contenu protégé", L"Privé", L"Texte coupé", L"Image du presse-papiers", L"Image coupée", L"Étagère épinglée", L"Étagère détachée", L"Historique du presse-papiers effacé", L"Étagère vidée" },
+    // de (Deutsch)
+    { L"Ordner", L"Weblink", L" Zeichen", L"Aus Zwischenablage hinzugefügt", L"Nichts Neues in der Zwischenablage", L"In Zwischenablage kopiert", L" Element", L" Elemente", L"Bild kopiert", L"Text kopiert", L"Dateien kopiert", L"Bild eingefügt", L"Text eingefügt", L"Dateien eingefügt", L"+ Ablegen", L"Ablage", L"Loslassen zum Ablegen", L"Dateien, Bilder oder Text ablegen", L"Oder aus Zwischenablage einfügen", L"Zwischenablage", L"Ablage", L"Zwischenablage (Win+V)", L"Alle", L"Text", L"Bilder", L"Dateien", L"Audio", L"Keine Elemente in dieser Kategorie", L"Zwischenablageverlauf ist leer", L"Dateien, Bilder oder Text hier ablegen", L"Klicken zum Einfügen • Ziehen zum Ablegen", L"+ Mehr ablegen", L"In Ziel-App ziehen", L"Alle ziehen (", L" Elemente)", L"Bild", L" Datei", L" Dateien", L"Dateien ausgeschnitten", L"Geschützter Inhalt", L"Privat", L"Text ausgeschnitten", L"Zwischenablage-Bild", L"Bild ausgeschnitten", L"Ablage angeheftet", L"Ablage gelöst", L"Zwischenablageverlauf geleert", L"Ablage geleert" },
+    // ja (日本語)
+    { L"フォルダー", L"Webリンク", L" 文字", L"クリップボードから追加", L"新しい項目はありません", L"クリップボードにコピーしました", L" 件", L" 件", L"画像をコピー", L"テキストをコピー", L"ファイルをコピー", L"画像を貼り付け", L"テキストを貼り付け", L"ファイルを貼り付け", L"+ ドロップ", L"シェルフ", L"離して一時保存", L"ファイル・画像・テキストをドロップ", L"またはクリップボードから貼り付け", L"クリップボード", L"ドロップシェルフ", L"クリップボード (Win+V)", L"すべて", L"テキスト", L"画像", L"ファイル", L"音声", L"このカテゴリに項目はありません", L"クリップボード履歴は空です", L"ここにファイル・画像・テキストをドロップ", L"クリックで貼り付け • ドラッグでドロップ", L"+ さらに追加", L"対象アプリへドラッグ", L"すべてドラッグ (", L" 件)", L"画像", L" 個", L" 個", L"ファイルを切り取り", L"保護されたコンテンツ", L"非公開", L"テキストを切り取り", L"クリップボード画像", L"画像を切り取り", L"シェルフを固定", L"固定を解除", L"クリップボード履歴を削除しました", L"シェルフを空にしました" },
+    // ko (한국어)
+    { L"폴더", L"웹 링크", L"자", L"클립보드에서 추가됨", L"클립보드에 새 항목 없음", L"클립보드에 복사됨", L"개", L"개", L"이미지 복사됨", L"텍스트 복사됨", L"파일 복사됨", L"이미지 붙여넣기", L"텍스트 붙여넣기", L"파일 붙여넣기", L"+ 놓기", L"선반", L"놓아서 보관", L"파일, 이미지, 텍스트 놓기", L"또는 클립보드에서 붙여넣기", L"클립보드", L"드롭 선반", L"클립보드 (Win+V)", L"전체", L"텍스트", L"이미지", L"파일", L"오디오", L"이 카테고리에 항목이 없습니다", L"클립보드 기록이 비어 있습니다", L"여기에 파일, 이미지 또는 텍스트를 놓으세요", L"클릭하여 붙여넣기 • 드래그하여 놓기", L"+ 더 놓기", L"대상 앱으로 드래그", L"모두 드래그 (", L"개)", L"이미지", L"개 파일", L"개 파일", L"파일 잘라내기", L"보호된 콘텐츠", L"비공개", L"텍스트 잘라내기", L"클립보드 이미지", L"이미지 잘라내기", L"선반 고정됨", L"선반 고정 해제", L"클립보드 기록을 모두 삭제했습니다", L"선반을 모두 비웠습니다" },
+    // pt (Português)
+    { L"Pasta", L"Link da Web", L" caract.", L"Adicionado da área de transferência", L"Nada novo na área de transferência", L"Copiado para a área de transferência", L" item", L" itens", L"Imagem copiada", L"Texto copiado", L"Arquivos copiados", L"Imagem colada", L"Texto colado", L"Arquivos colados", L"+ Soltar", L"Prateleira", L"Solte para guardar", L"Solte arquivos, imagens ou texto", L"Ou clique para colar da área de transferência", L"Área de transf.", L"Prateleira", L"Área de transf. (Win+V)", L"Tudo", L"Texto", L"Imagens", L"Arquivos", L"Áudio", L"Nenhum item nesta categoria", L"O histórico está vazio", L"Solte arquivos, imagens ou texto aqui", L"Clique para colar • Arraste para soltar", L"+ Soltar mais", L"Arraste para o aplicativo de destino", L"Arrastar tudo (", L" itens)", L"Imagem", L" arquivo", L" arquivos", L"Arquivos recortados", L"Conteúdo protegido", L"Privado", L"Texto recortado", L"Imagem da área de transf.", L"Imagem recortada", L"Prateleira fixada", L"Prateleira desafixada", L"Histórico limpo", L"Prateleira limpa" },
+    // ru (Русский)
+    { L"Папка", L"Веб-ссылка", L" симв.", L"Добавлено из буфера", L"В буфере нет нового", L"Скопировано в буфер", L" эл.", L" эл.", L"Изображение скопировано", L"Текст скопирован", L"Файлы скопированы", L"Изображение вставлено", L"Текст вставлен", L"Файлы вставлены", L"+ Бросить", L"Полка", L"Отпустите для добавления", L"Перетащите файлы, фото или текст", L"Или вставьте из буфера обмена", L"Буфер обмена", L"Полка", L"Буфер (Win+V)", L"Все", L"Текст", L"Фото", L"Файлы", L"Аудио", L"В этой категории пусто", L"История буфера обмена пуста", L"Перетащите файлы, фото или текст сюда", L"Клик — вставить • Перетащите — бросить", L"+ Добавить ещё", L"Перетащите в нужное окно", L"Перетащить все (", L" эл.)", L"Изображение", L" файл", L" файлов", L"Файлы вырезаны", L"Защищённый контент", L"Приватно", L"Текст вырезан", L"Изображение из буфера", L"Изображение вырезано", L"Полка закреплена", L"Полка откреплена", L"История буфера очищена", L"Полка очищена" },
+    // it (Italiano)
+    { L"Cartella", L"Link web", L" car.", L"Aggiunto dagli appunti", L"Nessuna novità negli appunti", L"Copiato negli appunti", L" elem.", L" elem.", L"Immagine copiata", L"Testo copiato", L"File copiati", L"Immagine incollata", L"Testo incollato", L"File incollati", L"+ Rilascia", L"Mensola", L"Rilascia per salvare", L"Trascina file, immagini o testo", L"O clicca per incollare dagli appunti", L"Appunti", L"Mensola", L"Appunti (Win+V)", L"Tutto", L"Testo", L"Immagini", L"File", L"Audio", L"Nessun elemento in questa categoria", L"Cronologia appunti vuota", L"Trascina qui file, immagini o testo", L"Clic per incollare • Trascina per rilasciare", L"+ Rilascia altro", L"Trascina nell'app di destinazione", L"Trascina tutto (", L" elem.)", L"Immagine", L" file", L" file", L"File tagliati", L"Contenuto protetto", L"Privato", L"Testo tagliato", L"Immagine appunti", L"Immagine tagliata", L"Mensola fissata", L"Mensola sbloccata", L"Cronologia appunti svuotata", L"Mensola svuotata" },
+    // ar (العربية)
+    { L"مجلد", L"رابط ويب", L" حرف", L"تمت الإضافة من الحافظة", L"لا جديد في الحافظة", L"تم النسخ إلى الحافظة", L" عنصر", L" عناصر", L"تم نسخ الصورة", L"تم نسخ النص", L"تم نسخ الملفات", L"تم لصق الصورة", L"تم لصق النص", L"تم لصق الملفات", L"+ إفلات", L"الرف", L"أفلت للحفظ", L"أفلت الملفات أو الصور أو النص", L"أو انقر للصق من الحافظة", L"الحافظة", L"رف الإفلات", L"الحافظة (Win+V)", L"الكل", L"نص", L"صور", L"ملفات", L"صوت", L"لا توجد عناصر في هذه الفئة", L"سجل الحافظة فارغ", L"أفلت الملفات أو الصور أو النص هنا", L"انقر للصق • اسحب للإفلات", L"+ إفلات المزيد", L"اسحب إلى التطبيق المطلوب", L"سحب الكل (", L" عناصر)", L"صورة", L" ملف", L" ملفات", L"تم قص الملفات", L"محتوى محمي", L"خاص", L"تم قص النص", L"صورة من الحافظة", L"تم قص الصورة", L"تم تثبيت الرف", L"تم إلغاء التثبيت", L"تم مسح سجل الحافظة", L"تم تفريغ الرف" },
+    // hi (हिन्दी)
+    { L"फ़ोल्डर", L"वेब लिंक", L" अक्षर", L"क्लिपबोर्ड से जोड़ा गया", L"क्लिपबोर्ड में कुछ नया नहीं", L"क्लिपबोर्ड पर कॉपी किया गया", L" आइटम", L" आइटम", L"छवि कॉपी की गई", L"टेक्स्ट कॉपी किया गया", L"फ़ाइलें कॉपी की गईं", L"छवि पेस्ट की गई", L"टेक्स्ट पेस्ट किया गया", L"फ़ाइलें पेस्ट की गईं", L"+ छोड़ें", L"शेल्फ़", L"रखने के लिए छोड़ें", L"फ़ाइलें, छवियाँ, टेक्स्ट छोड़ें", L"या क्लिपबोर्ड से पेस्ट करें", L"क्लिपबोर्ड", L"ड्रॉप शेल्फ़", L"क्लिपबोर्ड (Win+V)", L"सभी", L"टेक्स्ट", L"छवियाँ", L"फ़ाइलें", L"ऑडियो", L"इस श्रेणी में कोई आइटम नहीं", L"क्लिपबोर्ड इतिहास खाली है", L"फ़ाइलें, छवियाँ या टेक्स्ट यहाँ छोड़ें", L"पेस्ट करने के लिए क्लिक करें • ड्रैग करें", L"+ और जोड़ें", L"लक्ष्य ऐप में ड्रैग करें", L"सभी ड्रैग करें (", L" आइटम)", L"छवि", L" फ़ाइल", L" फ़ाइलें", L"फ़ाइलें कट की गईं", L"सुरक्षित सामग्री", L"निजी", L"टेक्स्ट कट किया गया", L"क्लिपबोर्ड छवि", L"छवि कट की गई", L"शेल्फ़ पिन किया गया", L"शेल्फ़ अनपिन किया गया", L"क्लिपबोर्ड इतिहास साफ़ किया गया", L"शेल्फ़ खाली किया गया" },
+    // id (Bahasa Indonesia)
+    { L"Folder", L"Tautan Web", L" karakter", L"Ditambahkan dari Clipboard", L"Tidak ada yang baru di Clipboard", L"Disalin ke Clipboard", L" item", L" item", L"Gambar Disalin", L"Teks Disalin", L"File Disalin", L"Gambar Ditempel", L"Teks Ditempel", L"File Ditempel", L"+ Lepas", L"Rak", L"Lepaskan untuk menyimpan", L"Lepas file, gambar, teks", L"Atau klik tempel dari Clipboard", L"Clipboard", L"Rak Lepas", L"Clipboard (Win+V)", L"Semua", L"Teks", L"Gambar", L"File", L"Audio", L"Tidak ada item di kategori ini", L"Riwayat clipboard kosong", L"Lepas file, gambar, atau teks di sini", L"Klik untuk tempel • Seret untuk lepas", L"+ Tambah lagi", L"Seret ke aplikasi tujuan", L"Seret semua (", L" item)", L"Gambar", L" file", L" file", L"File Dipotong", L"Konten terlindungi", L"Privat", L"Teks Dipotong", L"Gambar clipboard", L"Gambar Dipotong", L"Rak Disematkan", L"Sematkan Dilepas", L"Riwayat clipboard dihapus", L"Rak dikosongkan" },
+    // tr (Türkçe)
+    { L"Klasör", L"Web Bağlantısı", L" karakter", L"Panodan eklendi", L"Panoda yeni öğe yok", L"Panoya kopyalandı", L" öğe", L" öğe", L"Görsel Kopyalandı", L"Metin Kopyalandı", L"Dosyalar Kopyalandı", L"Görsel Yapıştırıldı", L"Metin Yapıştırıldı", L"Dosyalar Yapıştırıldı", L"+ Bırak", L"Raf", L"Eklemek için bırak", L"Dosya, görsel veya metin bırak", L"Veya panodan yapıştır", L"Pano", L"Bırakma Rafı", L"Pano (Win+V)", L"Tümü", L"Metin", L"Görsel", L"Dosya", L"Ses", L"Bu kategoride öğe yok", L"Pano geçmişi boş", L"Dosya, görsel veya metni buraya bırakın", L"Yapıştır için tıkla • Bırakmak için sürükle", L"+ Daha fazla bırak", L"Hedef uygulamaya sürükle", L"Tümünü sürükle (", L" öğe)", L"Görsel", L" dosya", L" dosya", L"Dosyalar Kesildi", L"Korumalı içerik", L"Gizli", L"Metin Kesildi", L"Pano görseli", L"Görsel Kesildi", L"Raf Sabitlendi", L"Sabitleme Kaldırıldı", L"Pano geçmişi temizlendi", L"Raf temizlendi" },
+    // pl (Polski)
+    { L"Folder", L"Link WWW", L" znaków", L"Dodano ze schowka", L"Brak nowych danych w schowku", L"Skopiowano do schowka", L" elem.", L" elem.", L"Skopiowano obraz", L"Skopiowano tekst", L"Skopiowano pliki", L"Wklejono obraz", L"Wklejono tekst", L"Wklejono pliki", L"+ Upuść", L"Półka", L"Puść, aby dodać", L"Upuść pliki, obrazy lub tekst", L"Lub kliknij, aby wkleić ze schowka", L"Schowek", L"Półka", L"Schowek (Win+V)", L"Wszystko", L"Tekst", L"Obrazy", L"Pliki", L"Audio", L"Brak elementów w tej kategorii", L"Historia schowka jest pusta", L"Upuść pliki, obrazy lub tekst tutaj", L"Kliknij, aby wkleić • Przeciągnij", L"+ Upuść więcej", L"Przeciągnij do aplikacji docelowej", L"Przeciągnij wszystko (", L" elem.)", L"Obraz", L" plik", L" plików", L"Wycięto pliki", L"Chroniona zawartość", L"Prywatne", L"Wycięto tekst", L"Obraz ze schowka", L"Wycięto obraz", L"Półka przypięta", L"Półka odpięta", L"Wyczyszczono historię schowka", L"Półka wyczyszczona" },
+    // nl (Nederlands)
+    { L"Map", L"Weblink", L" tekens", L"Toegevoegd van klembord", L"Niets nieuws op klembord", L"Gekopieerd naar klembord", L" item", L" items", L"Afbeelding gekopieerd", L"Tekst gekopieerd", L"Bestanden gekopieerd", L"Afbeelding geplakt", L"Tekst geplakt", L"Bestanden geplakt", L"+ Neerzetten", L"Plank", L"Loslaten om te bewaren", L"Sleep bestanden, afbeeldingen of tekst", L"Of klik om van klembord te plakken", L"Klembord", L"Dropplank", L"Klembord (Win+V)", L"Alles", L"Tekst", L"Foto's", L"Bestanden", L"Audio", L"Geen items in deze categorie", L"Klembordgeschiedenis is leeg", L"Sleep bestanden, foto's of tekst hierheen", L"Klik om te plakken • Sleep om neer te zetten", L"+ Meer toevoegen", L"Sleep naar doel-app", L"Alles slepen (", L" items)", L"Afbeelding", L" bestand", L" bestanden", L"Bestanden geknipt", L"Beveiligde inhoud", L"Privé", L"Tekst geknipt", L"Klembordafbeelding", L"Afbeelding geknipt", L"Plank vastgezet", L"Plank losgemaakt", L"Klembordgeschiedenis gewist", L"Plank geleegd" },
+    // th (ไทย)
+    { L"โฟลเดอร์", L"ลิงก์เว็บ", L" ตัวอักษร", L"เพิ่มจากคลิปบอร์ดแล้ว", L"ไม่มีข้อมูลใหม่ในคลิปบอร์ด", L"คัดลอกไปยังคลิปบอร์ดแล้ว", L" รายการ", L" รายการ", L"คัดลอกรูปภาพแล้ว", L"คัดลอกข้อความแล้ว", L"คัดลอกไฟล์แล้ว", L"วางรูปภาพแล้ว", L"วางข้อความแล้ว", L"วางไฟล์แล้ว", L"+ วาง", L"ชั้นวาง", L"ปล่อยเพื่อพักไฟล์", L"วางไฟล์ รูปภาพ หรือข้อความ", L"หรือคลิกวางจากคลิปบอร์ด", L"คลิปบอร์ด", L"ชั้นวางไฟล์", L"คลิปบอร์ด (Win+V)", L"ทั้งหมด", L"ข้อความ", L"รูปภาพ", L"ไฟล์", L"เสียง", L"ไม่มีรายการในหมวดหมู่นี้", L"ประวัติคลิปบอร์ดว่างเปล่า", L"วางไฟล์ รูปภาพ หรือข้อความที่นี่", L"คลิกเพื่อวาง • ลากเพื่อปล่อย", L"+ เพิ่มอีก", L"ลากไปยังแอปปลายทาง", L"ลากทั้งหมด (", L" รายการ)", L"รูปภาพ", L" ไฟล์", L" ไฟล์", L"ตัดไฟล์แล้ว", L"เนื้อหาที่ได้รับการปกป้อง", L"ส่วนตัว", L"ตัดข้อความแล้ว", L"รูปภาพจากคลิปบอร์ด", L"ตัดรูปภาพแล้ว", L"ปักหมุดชั้นวางแล้ว", L"เลิกปักหมุดแล้ว", L"ล้างประวัติคลิปบอร์ดแล้ว", L"ล้างชั้นวางแล้ว" },
+    // uk (Українська)
+    { L"Папка", L"Вебпосилання", L" симв.", L"Додано з буфера", L"У буфері немає нового", L"Скопійовано в буфер", L" ел.", L" ел.", L"Зображення скопійовано", L"Текст скопійовано", L"Файли скопійовано", L"Зображення вставлено", L"Текст вставлено", L"Файли вставлено", L"+ Кинути", L"Полиця", L"Відпустіть для додавання", L"Перетягніть файли, фото чи текст", L"Або вставте з буфера обміну", L"Буфер обміну", L"Полиця", L"Буфер (Win+V)", L"Усі", L"Текст", L"Фото", L"Файли", L"Аудіо", L"У цій категорії немає елементів", L"Історія буфера обміну порожня", L"Перетягніть файли, фото чи текст сюди", L"Клік — вставити • Перетягніть — кинути", L"+ Додати ще", L"Перетягніть у потрібну програму", L"Перетягнути все (", L" ел.)", L"Зображення", L" файл", L" файлів", L"Файли вирізано", L"Захищений вміст", L"Приватно", L"Текст вирізано", L"Зображення з буфера", L"Зображення вирізано", L"Полицю закріплено", L"Полицю відкріплено", L"Історію буфера очищено", L"Полицю очищено" },
+    // sv (Svenska)
+    { L"Mapp", L"Webblänk", L" tecken", L"Tillagd från urklipp", L"Inget nytt i urklipp", L"Kopierad till urklipp", L" objekt", L" objekt", L"Bild kopierad", L"Text kopierad", L"Filer kopierade", L"Bild inklistrad", L"Text inklistrad", L"Filer inklistrade", L"+ Släpp", L"Hylla", L"Släpp för att spara", L"Släpp filer, bilder eller text", L"Eller klistra in från urklipp", L"Urklipp", L"Släpphylla", L"Urklipp (Win+V)", L"Alla", L"Text", L"Bilder", L"Filer", L"Ljud", L"Inga objekt i denna kategori", L"Urklippshistoriken är tom", L"Släpp filer, bilder eller text här", L"Klicka för att klistra in • Dra för att släppa", L"+ Lägg till mer", L"Dra till målappen", L"Dra alla (", L" objekt)", L"Bild", L" fil", L" filer", L"Filer urklippta", L"Skyddat innehåll", L"Privat", L"Text urklippt", L"Urklippsbild", L"Bild urklippt", L"Hylla fäst", L"Hylla lossad", L"Urklippshistoriken rensad", L"Hyllan rensad" },
+    // cs (Čeština)
+    { L"Složka", L"Webový odkaz", L" znaků", L"Přidáno ze schránky", L"Ve schránce nic nového", L"Zkopírováno do schránky", L" pol.", L" pol.", L"Obrázek zkopírován", L"Text zkopírován", L"Soubory zkopírovány", L"Obrázek vložen", L"Text vložen", L"Soubory vloženy", L"+ Pustit", L"Polička", L"Pusťte pro uložení", L"Přetáhněte soubory, obrázky nebo text", L"Nebo klikněte pro vložení ze schránky", L"Schránka", L"Polička", L"Schránka (Win+V)", L"Vše", L"Text", L"Obrázky", L"Soubory", L"Audio", L"V této kategorii nic není", L"Historie schránky je prázdná", L"Sem přetáhněte soubory, obrázky nebo text", L"Kliknutím vložíte • Přetažením pustíte", L"+ Přidat další", L"Přetáhněte do cílové aplikace", L"Přetáhnout vše (", L" pol.)", L"Obrázek", L" soubor", L" souborů", L"Soubory vyjmuty", L"Chráněný obsah", L"Soukromé", L"Text vyjmut", L"Obrázek ze schránky", L"Obrázek vyjmut", L"Polička připnuta", L"Polička odepnuta", L"Historie schránky vymazána", L"Polička vyprázdněna" },
+    // ro (Română)
+    { L"Folder", L"Link web", L" caract.", L"Adăugat din clipboard", L"Nimic nou în clipboard", L"Copiat în clipboard", L" elem.", L" elem.", L"Imagine copiată", L"Text copiat", L"Fișiere copiate", L"Imagine lipită", L"Text lipit", L"Fișiere lipite", L"+ Plasează", L"Raft", L"Eliberează pentru salvare", L"Trage fișiere, imagini sau text", L"Sau apasă pentru a lipi din clipboard", L"Clipboard", L"Raft", L"Clipboard (Win+V)", L"Toate", L"Text", L"Imagini", L"Fișiere", L"Audio", L"Niciun element în această categorie", L"Istoricul clipboard este gol", L"Trage fișiere, imagini sau text aici", L"Clic pentru lipire • Trage pentru plasare", L"+ Adaugă mai multe", L"Trage în aplicația țintă", L"Trage toate (", L" elem.)", L"Imagine", L" fișier", L" fișiere", L"Fișiere decupate", L"Conținut protejat", L"Privat", L"Text decupat", L"Imagine din clipboard", L"Imagine decupată", L"Raft fixat", L"Raft eliberat", L"Istoricul clipboard a fost șters", L"Raftul a fost golit" },
+    // hu (Magyar)
+    { L"Mappa", L"Webhivatkozás", L" karakter", L"Vágólapról hozzáadva", L"Nincs új elem a vágólapon", L"Vágólapra másolva", L" elem", L" elem", L"Kép másolva", L"Szöveg másolva", L"Fájlok másolva", L"Kép beillesztve", L"Szöveg beillesztve", L"Fájlok beillesztve", L"+ Dobás", L"Polc", L"Engedd el a mentéshez", L"Húzz ide fájlokat, képeket, szöveget", L"Vagy illessz be a vágólapról", L"Vágólap", L"Polc", L"Vágólap (Win+V)", L"Mind", L"Szöveg", L"Képek", L"Fájlok", L"Hang", L"Nincs elem ebben a kategóriában", L"A vágólap előzménye üres", L"Húzz ide fájlokat, képeket vagy szöveget", L"Kattintás: beillesztés • Húzás: áthelyezés", L"+ Továbbiak hozzáadása", L"Húzd a célalkalmazásba", L"Összes húzása (", L" elem)", L"Kép", L" fájl", L" fájl", L"Fájlok kivágva", L"Védett tartalom", L"Privát", L"Szöveg kivágva", L"Vágólap kép", L"Kép kivágva", L"Polc rögzítve", L"Rögzítés feloldva", L"Vágólap előzménye törölve", L"Polc kiürítve" },
+    // el (Ελληνικά)
+    { L"Φάκελος", L"Σύνδεσμος", L" χαρ.", L"Προστέθηκε από το πρόχειρο", L"Τίποτα νέο στο πρόχειρο", L"Αντιγράφηκε στο πρόχειρο", L" στοιχ.", L" στοιχ.", L"Αντιγραφή εικόνας", L"Αντιγραφή κειμένου", L"Αντιγραφή αρχείων", L"Επικόλληση εικόνας", L"Επικόλληση κειμένου", L"Επικόλληση αρχείων", L"+ Απόθεση", L"Ράφι", L"Αφήστε για αποθήκευση", L"Σύρετε αρχεία, εικόνες ή κείμενο", L"Ή επικολλήστε από το πρόχειρο", L"Πρόχειρο", L"Ράφι", L"Πρόχειρο (Win+V)", L"Όλα", L"Κείμενο", L"Εικόνες", L"Αρχεία", L"Ήχος", L"Κανένα στοιχείο στην κατηγορία", L"Το ιστορικό προχείρου είναι κενό", L"Αποθέστε αρχεία, εικόνες ή κείμενο εδώ", L"Κλικ για επικόλληση • Σύρετε για απόθεση", L"+ Προσθήκη κι άλλων", L"Σύρετε στην εφαρμογή προορισμού", L"Σύρετε όλα (", L" στοιχ.)", L"Εικόνα", L" αρχείο", L" αρχεία", L"Αποκοπή αρχείων", L"Προστατευμένο", L"Ιδιωτικό", L"Αποκοπή κειμένου", L"Εικόνα προχείρου", L"Αποκοπή εικόνας", L"Καρφιτσώθηκε", L"Ξεκαρφιτσώθηκε", L"Το ιστορικό προχείρου διαγράφηκε", L"Το ράφι καθαρίστηκε" },
+    // he (עברית)
+    { L"תיקייה", L"קישור אינטרנט", L" תווים", L"נוסף מהלוח", L"אין תוכן חדש בלוח", L"הועתק ללוח", L" פריט", L" פריטים", L"התמונה הועתקה", L"הטקסט הועתק", L"הקבצים הועתקו", L"התמונה הודבקה", L"הטקסט הודבק", L"הקבצים הודבקו", L"+ שחרר", L"מדף", L"שחרר לשמירה", L"גרור קבצים, תמונות או טקסט", L"או לחץ להדבקה מהלוח", L"לוח", L"מדף גרירה", L"לוח (Win+V)", L"הכל", L"טקסט", L"תמונות", L"קבצים", L"שמע", L"אין פריטים בקטגוריה זו", L"היסטוריית הלוח ריקה", L"גרור לכאן קבצים, תמונות או טקסט", L"לחץ להדבקה • גרור לשחרור", L"+ הוסף עוד", L"גרור לאפליקציית היעד", L"גרור הכל (", L" פריטים)", L"תמונה", L" קובץ", L" קבצים", L"הקבצים נגזרו", L"תוכן מוגן", L"פרטי", L"הטקסט נגזר", L"תמונה מהלוח", L"התמונה נגזרה", L"המדף הוצמד", L"ההצמדה בוטלה", L"היסטוריית הלוח נוקתה", L"המדף נוקה" },
+    // da (Dansk)
+    { L"Mappe", L"Weblink", L" tegn", L"Tilføjet fra udklipsholder", L"Intet nyt i udklipsholder", L"Kopieret til udklipsholder", L" element", L" elementer", L"Billede kopieret", L"Tekst kopieret", L"Filer kopieret", L"Billede indsat", L"Tekst indsat", L"Filer indsat", L"+ Slip", L"Hylde", L"Slip for at gemme", L"Slip filer, billeder eller tekst", L"Eller klik for at indsætte fra udklipsholder", L"Udklipsholder", L"Sliphylde", L"Udklipsholder (Win+V)", L"Alle", L"Tekst", L"Billeder", L"Filer", L"Lyd", L"Ingen elementer i denne kategori", L"Udklipshistorikken er tom", L"Slip filer, billeder eller tekst her", L"Klik for at indsætte • Træk for at slippe", L"+ Tilføj flere", L"Træk til målappen", L"Træk alle (", L" elementer)", L"Billede", L" fil", L" filer", L"Filer klippet", L"Beskyttet indhold", L"Privat", L"Tekst klippet", L"Udklipsbillede", L"Billede klippet", L"Hylde fastgjort", L"Hylde frigjort", L"Udklipshistorik ryddet", L"Hylde ryddet" },
+    // fi (Suomi)
+    { L"Kansio", L"Verkkolinkki", L" merkkiä", L"Lisätty leikepöydältä", L"Ei uutta leikepöydällä", L"Kopioitu leikepöydälle", L" kohde", L" kohdetta", L"Kuva kopioitu", L"Teksti kopioitu", L"Tiedostot kopioitu", L"Kuva liitetty", L"Teksti liitetty", L"Tiedostot liitetty", L"+ Pudota", L"Hylly", L"Pudota tallentaaksesi", L"Pudota tiedostoja, kuvia tai tekstiä", L"Tai liitä leikepöydältä", L"Leikepöytä", L"Pudotushylly", L"Leikepöytä (Win+V)", L"Kaikki", L"Teksti", L"Kuvat", L"Tiedostot", L"Ääni", L"Ei kohteita tässä luokassa", L"Leikepöydän historia on tyhjä", L"Pudota tiedostoja, kuvia tai tekstiä tähän", L"Liitä napsauttamalla • Pudota vetämällä", L"+ Lisää kohteita", L"Vedä kohdesovellukseen", L"Vedä kaikki (", L" kohdetta)", L"Kuva", L" tiedosto", L" tiedostoa", L"Tiedostot leikattu", L"Suojattu sisältö", L"Yksityinen", L"Teksti leikattu", L"Leikepöytäkuva", L"Kuva leikattu", L"Hylly kiinnitetty", L"Kiinnitys poistettu", L"Leikepöydän historia tyhjennetty", L"Hylly tyhjennetty" },
+    // no (Norsk)
+    { L"Mappe", L"Nettlenke", L" tegn", L"Lagt til fra utklippstavle", L"Ingenting nytt på utklippstavlen", L"Kopiert til utklippstavle", L" element", L" elementer", L"Bilde kopiert", L"Tekst kopiert", L"Filer kopiert", L"Bilde limt inn", L"Tekst limt inn", L"Filer limt inn", L"+ Slipp", L"Hylle", L"Slipp for å lagre", L"Slipp filer, bilder eller tekst", L"Eller klikk for å lime inn fra utklippstavle", L"Utklippstavle", L"Slipphylle", L"Utklippstavle (Win+V)", L"Alle", L"Tekst", L"Bilder", L"Filer", L"Lyd", L"Ingen elementer i denne kategorien", L"Utklippshistorikken er tom", L"Slipp filer, bilder eller tekst her", L"Klikk for å lime inn • Dra for å slippe", L"+ Legg til flere", L"Dra til målappen", L"Dra alle (", L" elementer)", L"Bilde", L" fil", L" filer", L"Filer klippet ut", L"Beskyttet innhold", L"Privat", L"Tekst klippet ut", L"Utklippsbilde", L"Bilde klippet ut", L"Hylle festet", L"Hylle løsnet", L"Utklippshistorikk tømt", L"Hylle tømt" },
+    // ms (Bahasa Melayu)
+    { L"Folder", L"Pautan Web", L" aksara", L"Ditambah daripada Papan Keratan", L"Tiada kandungan baharu", L"Disalin ke Papan Keratan", L" item", L" item", L"Imej Disalin", L"Teks Disalin", L"Fail Disalin", L"Imej Ditampal", L"Teks Ditampal", L"Fail Ditampal", L"+ Lepas", L"Rak", L"Lepaskan untuk simpan", L"Lepas fail, imej, teks", L"Atau klik tampal daripada Papan Keratan", L"Papan Keratan", L"Rak Lepas", L"Papan Keratan (Win+V)", L"Semua", L"Teks", L"Imej", L"Fail", L"Audio", L"Tiada item dalam kategori ini", L"Sejarah papan keratan kosong", L"Lepas fail, imej atau teks di sini", L"Klik untuk tampal • Seret untuk lepas", L"+ Tambah lagi", L"Seret ke aplikasi sasaran", L"Seret semua (", L" item)", L"Imej", L" fail", L" fail", L"Fail Dipotong", L"Kandungan dilindungi", L"Peribadi", L"Teks Dipotong", L"Imej papan keratan", L"Imej Dipotong", L"Rak Disemat", L"Sematan Dibuka", L"Sejarah papan keratan dikosongkan", L"Rak dikosongkan" }
+};
+
+static const wchar_t* PickText(bool /*vi*/, const wchar_t* viText, const wchar_t* enText) {
+    int idx = ResolveActiveLangIndex(g_settings.lang);
+    if (idx == 0) return enText;
+    if (idx == 1) return viText;
+    if (idx >= 2 && idx < 30 && enText) {
+        for (size_t i = 0; i < kLocStringCount; ++i) {
+            if (wcscmp(enText, kLocEnKeys[i]) == 0) {
+                return kLocExtraTables[idx - 2][i];
+            }
+        }
+    }
+    return enText;
 }
 
 static bool UseMacTrafficButtons() {
@@ -512,9 +751,38 @@ static ModSettings ReadSettingsFromWindhawk() {
     else if (col == L"light") s.colorMode = ColorMode::Light;
     else s.colorMode = ColorMode::Auto;
 
-    std::wstring lang = readStr(L"appearanceGroup.language", L"auto");
-    if (lang == L"vi") s.lang = UiLang::Vi;
-    else if (lang == L"en") s.lang = UiLang::En;
+    std::wstring lang = readStr(L"language", L"");
+    if (lang.empty()) lang = readStr(L"appearanceGroup.language", L"auto");
+    if (lang == L"en") s.lang = UiLang::En;
+    else if (lang == L"vi") s.lang = UiLang::Vi;
+    else if (lang == L"zh_cn") s.lang = UiLang::ZhCn;
+    else if (lang == L"zh_tw") s.lang = UiLang::ZhTw;
+    else if (lang == L"es") s.lang = UiLang::Es;
+    else if (lang == L"fr") s.lang = UiLang::Fr;
+    else if (lang == L"de") s.lang = UiLang::De;
+    else if (lang == L"ja") s.lang = UiLang::Ja;
+    else if (lang == L"ko") s.lang = UiLang::Ko;
+    else if (lang == L"pt") s.lang = UiLang::Pt;
+    else if (lang == L"ru") s.lang = UiLang::Ru;
+    else if (lang == L"it") s.lang = UiLang::It;
+    else if (lang == L"ar") s.lang = UiLang::Ar;
+    else if (lang == L"hi") s.lang = UiLang::Hi;
+    else if (lang == L"id") s.lang = UiLang::Id;
+    else if (lang == L"tr") s.lang = UiLang::Tr;
+    else if (lang == L"pl") s.lang = UiLang::Pl;
+    else if (lang == L"nl") s.lang = UiLang::Nl;
+    else if (lang == L"th") s.lang = UiLang::Th;
+    else if (lang == L"uk") s.lang = UiLang::Uk;
+    else if (lang == L"sv") s.lang = UiLang::Sv;
+    else if (lang == L"cs") s.lang = UiLang::Cs;
+    else if (lang == L"ro") s.lang = UiLang::Ro;
+    else if (lang == L"hu") s.lang = UiLang::Hu;
+    else if (lang == L"el") s.lang = UiLang::El;
+    else if (lang == L"he") s.lang = UiLang::He;
+    else if (lang == L"da") s.lang = UiLang::Da;
+    else if (lang == L"fi") s.lang = UiLang::Fi;
+    else if (lang == L"no") s.lang = UiLang::No;
+    else if (lang == L"ms") s.lang = UiLang::Ms;
     else s.lang = UiLang::Auto;
 
     g_replaceWinVAtomic.store(s.replaceWinV, std::memory_order_relaxed);
@@ -555,11 +823,31 @@ static std::wstring FormatFileSizeCompact(uint64_t bytes) {
 }
 
 static std::wstring GetTempStagingDir() {
-    wchar_t tmpDir[MAX_PATH] = {};
-    if (GetTempPathW(MAX_PATH, tmpDir) == 0) return {};
-    std::wstring dir = std::wstring(tmpDir) + L"DragNDropEnhanced";
+    wchar_t baseDir[MAX_PATH] = {};
+    if (Wh_GetModStoragePath(baseDir, ARRAYSIZE(baseDir)) == 0 || !baseDir[0]) {
+        return {};
+    }
+    CreateDirectoryW(baseDir, nullptr);
+    std::wstring dir = std::wstring(baseDir) + L"\\staged";
     CreateDirectoryW(dir.c_str(), nullptr);
     return dir;
+}
+
+static void ClearStagingDirContents() {
+    std::wstring dir = GetTempStagingDir();
+    if (dir.empty()) return;
+    std::wstring pattern = dir + L"\\*";
+    WIN32_FIND_DATAW fd{};
+    HANDLE hFind = FindFirstFileW(pattern.c_str(), &fd);
+    if (hFind == INVALID_HANDLE_VALUE) return;
+    do {
+        if (wcscmp(fd.cFileName, L".") == 0 || wcscmp(fd.cFileName, L"..") == 0) continue;
+        if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0) {
+            std::wstring fullPath = dir + L"\\" + fd.cFileName;
+            DeleteFileW(fullPath.c_str());
+        }
+    } while (FindNextFileW(hFind, &fd));
+    FindClose(hFind);
 }
 
 static std::wstring SanitizeFileName(std::wstring name) {
@@ -805,7 +1093,7 @@ static bool SaveDibMemoryToPngFile(const BYTE* dibBytes, SIZE_T dibSize, const w
     if (!dibBytes || dibSize < sizeof(BITMAPINFOHEADER) || !outPath) return false;
     const auto* bih = reinterpret_cast<const BITMAPINFOHEADER*>(dibBytes);
     if (bih->biSize < sizeof(BITMAPINFOHEADER) || bih->biWidth <= 0 || bih->biHeight == 0) return false;
-    if (bih->biWidth > 16384 || std::abs(bih->biHeight) > 16384) return false;
+    if (bih->biWidth > 8192 || std::abs(bih->biHeight) > 8192 || (static_cast<uint64_t>(bih->biWidth) * static_cast<uint64_t>(std::abs(bih->biHeight))) > 33554432ULL) return false;
 
     UINT w = static_cast<UINT>(bih->biWidth);
     UINT h = static_cast<UINT>(std::abs(bih->biHeight));
@@ -2343,6 +2631,8 @@ static bool      g_draggingOut        = false;
 static bool      g_movingShelf        = false;
 static bool      g_hasCustomPos       = false;
 static POINT     g_customTopLeft      = {};
+static bool      g_hasLockedPos       = false;
+static POINT     g_lockedTopLeft      = {};
 static POINT     g_moveDragOffset     = {};
 static POINT     g_summonAnchorPt     = {};
 static bool      g_summonedByShake    = false;
@@ -2362,6 +2652,7 @@ static D2D1_RECT_F g_rcBtnPin{};
 static D2D1_RECT_F g_rcBtnPaste{};
 static D2D1_RECT_F g_rcBtnCopy{};
 static D2D1_RECT_F g_rcBtnReveal{};
+static D2D1_RECT_F g_rcBtnClearHist{};
 static D2D1_RECT_F g_rcTabShelf{};
 static D2D1_RECT_F g_rcTabClip{};
 static D2D1_RECT_F g_rcHeaderDrag{};
@@ -2482,8 +2773,16 @@ static TaskbarEdge DetectTaskbarEdgeOnMonitor(HMONITOR hMon, const MONITORINFO& 
 }
 
 static bool ComputeDesiredShelfRect(RECT& outRect, UINT& outDpi) {
-    POINT ptRef = g_summonedByShake ? g_summonAnchorPt : POINT{};
-    if (!g_summonedByShake) GetCursorPos(&ptRef);
+    POINT ptRef{};
+    if (g_hasCustomPos) {
+        ptRef = g_customTopLeft;
+    } else if (g_hasLockedPos) {
+        ptRef = g_lockedTopLeft;
+    } else if (g_summonedByShake) {
+        ptRef = g_summonAnchorPt;
+    } else {
+        GetCursorPos(&ptRef);
+    }
 
     HMONITOR hMon = MonitorFromPoint(ptRef, MONITOR_DEFAULTTONEAREST);
     MONITORINFO mi{ sizeof(mi) };
@@ -2536,6 +2835,9 @@ static bool ComputeDesiredShelfRect(RECT& outRect, UINT& outDpi) {
     if (g_hasCustomPos) {
         x = static_cast<int>(g_customTopLeft.x);
         y = static_cast<int>(g_customTopLeft.y);
+    } else if (g_hasLockedPos) {
+        x = static_cast<int>(g_lockedTopLeft.x);
+        y = static_cast<int>(g_lockedTopLeft.y);
     } else if (g_summonedByShake || g_settings.shelfPosition == ShelfPosition::NearCursor) {
         x = static_cast<int>(ptRef.x) + DpiScale(24, outDpi);
         y = static_cast<int>(ptRef.y) - cardH / 2;
@@ -2617,16 +2919,27 @@ static void StartShelfAnim() {
 
 static void ShowShelfAnimated(bool summonNearCursor, POINT cursorAnchor) {
     if (!g_shelfHwnd || !IsWindow(g_shelfHwnd)) return;
+    bool alreadyOpen = (g_shelfTargetOpen && g_shelfVisible && g_hasLockedPos);
     g_shelfMinimized = false;
     g_pillTargetOpen = false;
     g_pillAnim = 0.0f;
     if (g_pillHwnd && IsWindowVisible(g_pillHwnd)) {
         ShowWindow(g_pillHwnd, SW_HIDE);
     }
-    g_summonedByShake = summonNearCursor;
-    if (summonNearCursor) {
+    if (!alreadyOpen) {
+        g_hasLockedPos = false;
+        g_summonedByShake = summonNearCursor;
         g_summonAnchorPt = cursorAnchor;
-        g_hasCustomPos = false;
+        if (summonNearCursor) {
+            g_hasCustomPos = false;
+    g_hasLockedPos = false;
+        }
+        RECT rcInit{};
+        UINT initDpi = 96;
+        if (ComputeDesiredShelfRect(rcInit, initDpi)) {
+            g_lockedTopLeft = { rcInit.left, rcInit.top };
+            g_hasLockedPos = true;
+        }
     }
     g_shelfTargetOpen = true;
     g_shelfVisible = true;
@@ -2643,6 +2956,7 @@ static void HideShelfAnimated() {
     g_hoverHeaderBtn = 0;
     g_hoverRowIdx = -1;
     g_hoverRowRemove = -1;
+    g_hasLockedPos = false;
     StartShelfAnim();
 }
 
@@ -2685,29 +2999,32 @@ static void RestoreShelfFromTaskbar() {
     ShowShelfAnimated(false, pt);
 }
 
+static bool IsClipboardContentProtected() {
+    EnsureRegisteredFormats();
+    if (g_cfExcludeHistory && IsClipboardFormatAvailable(g_cfExcludeHistory)) {
+        return true;
+    }
+    if (g_cfCanIncludeHist && IsClipboardFormatAvailable(g_cfCanIncludeHist)) {
+        if (HANDLE hFlag = GetClipboardData(g_cfCanIncludeHist)) {
+            if (const DWORD* pAllow = static_cast<const DWORD*>(GlobalLock(hFlag))) {
+                bool disallowed = (*pAllow == 0);
+                GlobalUnlock(hFlag);
+                if (disallowed) return true;
+            }
+        }
+    }
+    return false;
+}
+
 static void CaptureClipboardIntoList(std::vector<StagedItem>& target, int maxCap, bool insertFront, bool showToastIfEmpty) {
     EnsureRegisteredFormats();
     bool vi = ComputeUseVietnamese(g_settings.lang);
     if (!OpenClipboard(g_shelfHwnd)) return;
 
     // Respect Windows privacy / password manager exclusion flags
-    if (insertFront) {
-        if (g_cfExcludeHistory && IsClipboardFormatAvailable(g_cfExcludeHistory)) {
-            CloseClipboard();
-            return;
-        }
-        if (g_cfCanIncludeHist && IsClipboardFormatAvailable(g_cfCanIncludeHist)) {
-            if (HANDLE hFlag = GetClipboardData(g_cfCanIncludeHist)) {
-                if (const DWORD* pAllow = static_cast<const DWORD*>(GlobalLock(hFlag))) {
-                    bool disallowed = (*pAllow == 0);
-                    GlobalUnlock(hFlag);
-                    if (disallowed) {
-                        CloseClipboard();
-                        return;
-                    }
-                }
-            }
-        }
+    if (insertFront && IsClipboardContentProtected()) {
+        CloseClipboard();
+        return;
     }
 
     bool added = false;
@@ -3536,7 +3853,7 @@ static void RenderShelfFrame(bool rebuildGlass) {
     float oy = (g_settings.shelfPosition == ShelfPosition::TopCenter && !g_hasCustomPos)
         ? 0.0f : ((ch - drawH) * 0.5f);
 
-    g_rcBtnClose = g_rcBtnMin = g_rcBtnPin = g_rcBtnPaste = g_rcBtnCopy = g_rcBtnReveal = {};
+    g_rcBtnClose = g_rcBtnMin = g_rcBtnPin = g_rcBtnPaste = g_rcBtnCopy = g_rcBtnReveal = g_rcBtnClearHist = {};
     g_rcTabShelf = g_rcTabClip = g_rcHeaderDrag = g_rcFooterDragAll = {};
     g_rcFilterChips = {};
     g_rowHits.clear();
@@ -3747,6 +4064,11 @@ static void RenderShelfFrame(bool rebuildGlass) {
                 drawSmallBtn(g_rcBtnReveal, L"\uE8B7", g_hoverHeaderBtn == 4);
                 drawSmallBtn(g_rcBtnCopy,   L"\uE8C8", g_hoverHeaderBtn == 3);
                 rightX = g_rcBtnPaste.left - DpiScaleF(6.0f, dpi);
+                if (!curList.empty()) {
+                    g_rcBtnClearHist = D2D1::RectF(g_rcBtnPaste.left - btnGap - btnSz, btnY, g_rcBtnPaste.left - btnGap, btnY + btnSz);
+                    drawSmallBtn(g_rcBtnClearHist, L"\uE74D", g_hoverHeaderBtn == 10, true, false);
+                    rightX = g_rcBtnClearHist.left - DpiScaleF(6.0f, dpi);
+                }
             } else {
                 // Windows Native Caption Controls on RIGHT: Close (✕), Minimize (—), Pin (📌) + Paste / Copy
                 g_rcBtnClose = D2D1::RectF(rightX - btnSz, btnY, rightX, btnY + btnSz);
@@ -3761,6 +4083,11 @@ static void RenderShelfFrame(bool rebuildGlass) {
                 drawSmallBtn(g_rcBtnCopy,  L"\uE8C8", g_hoverHeaderBtn == 3, false, false);
                 drawSmallBtn(g_rcBtnPaste, L"\uE77F", g_hoverHeaderBtn == 5, false, false);
                 rightX = g_rcBtnPaste.left - DpiScaleF(6.0f, dpi);
+                if (!curList.empty()) {
+                    g_rcBtnClearHist = D2D1::RectF(g_rcBtnPaste.left - btnGap - btnSz, btnY, g_rcBtnPaste.left - btnGap, btnY + btnSz);
+                    drawSmallBtn(g_rcBtnClearHist, L"\uE74D", g_hoverHeaderBtn == 10, true, false);
+                    rightX = g_rcBtnClearHist.left - DpiScaleF(6.0f, dpi);
+                }
             }
 
             // Header title
@@ -4304,7 +4631,7 @@ static void InspectClipboardForAlert(bool isPaste) {
 
     if (!OpenClipboard(g_shelfHwnd)) return;
 
-    bool isProtected = (g_cfExcludeHistory && IsClipboardFormatAvailable(g_cfExcludeHistory));
+    bool isProtected = IsClipboardContentProtected();
     ULONGLONG cutTick = g_lastCutKeyTick.exchange(0, std::memory_order_relaxed);
     bool isCut = (cutTick > 0 && (GetTickCount64() - cutTick <= 650));
     if (g_cfDropEffect && IsClipboardFormatAvailable(g_cfDropEffect)) {
@@ -4904,6 +5231,7 @@ static LRESULT CALLBACK ShelfWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             g_settings = ReadSettingsFromWindhawk();
             if (g_settings.shelfPosition != prevPos) {
                 g_hasCustomPos = false;
+                g_hasLockedPos = false;
             }
             g_glassCache.ClearAll();
             g_pillGlassCache.ClearAll();
@@ -4995,6 +5323,7 @@ static LRESULT CALLBACK ShelfWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             else if (PtInRectF(fx, fy, g_rcBtnCopy))       hovBtn = 3;
             else if (PtInRectF(fx, fy, g_rcBtnReveal))     hovBtn = 4;
             else if (PtInRectF(fx, fy, g_rcBtnPaste))      hovBtn = 5;
+            else if (PtInRectF(fx, fy, g_rcBtnClearHist))  hovBtn = 10;
             else if (PtInRectF(fx, fy, g_rcFooterDragAll)) hovBtn = 6;
             else if (PtInRectF(fx, fy, g_rcTabShelf))      hovBtn = 8;
             else if (PtInRectF(fx, fy, g_rcTabClip))       hovBtn = 9;
@@ -5090,6 +5419,21 @@ static LRESULT CALLBACK ShelfWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             if (PtInRectF(fx, fy, g_rcBtnReveal)) {
                 const auto& curList = GetActiveList();
                 if (!curList.empty()) RevealItemInExplorer(curList, 0);
+                return 0;
+            }
+            if (PtInRectF(fx, fy, g_rcBtnClearHist)) {
+                StopInlineAudioPlayback();
+                bool vi = ComputeUseVietnamese(g_settings.lang);
+                g_scrollOffset = 0;
+                if (g_activeTab == ActiveTab::ClipboardHistory && g_settings.replaceWinV) {
+                    ClearVectorItems(g_clipHistory);
+                    SetShelfToast(PickText(vi, L"Đã xóa toàn bộ lịch sử", L"Clipboard history cleared"));
+                } else {
+                    ClearVectorItems(g_stagedItems);
+                    HideTopMiniBarAnimated();
+                    SetShelfToast(PickText(vi, L"Đã xóa toàn bộ kệ", L"Shelf cleared"));
+                }
+                RenderShelfFrame(true);
                 return 0;
             }
 
@@ -5335,7 +5679,7 @@ static LRESULT CALLBACK ShelfWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                     }
                 }
 
-                if (shakeTriggered) {
+                if (!g_shelfTargetOpen && shakeTriggered) {
                     g_activeTab = ActiveTab::Shelf;
                     g_openedByHotkey = false;
                     ShowShelfAnimated(true, ptCur);
@@ -5379,24 +5723,12 @@ static LRESULT CALLBACK ShelfWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
 }
 
 // ---------------------------------------------------------------------------
-// 11. UI Thread & Windhawk Mod Lifecycle
+// 11. UI Thread & Windhawk Tool Mod Lifecycle
 // ---------------------------------------------------------------------------
-static bool RegisterModClassSafe(WNDCLASSEXW& wc) {
-    UnregisterClassW(wc.lpszClassName, wc.hInstance);
-    if (RegisterClassExW(&wc)) return true;
-    return GetLastError() == ERROR_CLASS_ALREADY_EXISTS;
-}
-
 static void StopThreadWithQuit(HANDLE& hThread, DWORD& threadId) {
     if (!hThread) return;
-    DWORD startTick = GetTickCount();
     while (WaitForSingleObject(hThread, 40) == WAIT_TIMEOUT) {
-        if (threadId != 0) {
-            PostThreadMessageW(threadId, WM_QUIT, 0, 0);
-        }
-        if (GetTickCount() - startTick > 2500) {
-            break;
-        }
+        if (threadId != 0) PostThreadMessageW(threadId, WM_QUIT, 0, 0);
     }
     CloseHandle(hThread);
     hThread = nullptr;
@@ -5409,10 +5741,11 @@ static DWORD WINAPI ShelfUiThreadProc(LPVOID) {
 
     HRESULT hrOle = OleInitialize(nullptr);
     EnsureRegisteredFormats();
+    ClearStagingDirContents();
     g_settings = ReadSettingsFromWindhawk();
     g_settingsDirty.store(false, std::memory_order_relaxed);
 
-    // Reset runtime UI state cleanly on every init/reload
+    // Reset runtime UI state cleanly on every init
     g_shelfVisible = false;
     g_shelfTargetOpen = false;
     g_shelfAnim = 0.0f;
@@ -5444,9 +5777,8 @@ static DWORD WINAPI ShelfUiThreadProc(LPVOID) {
     wc.hInstance     = hInst;
     wc.hCursor       = LoadCursorW(nullptr, IDC_ARROW);
     wc.lpszClassName = kShelfClass;
-    if (!RegisterModClassSafe(wc)) {
+    if (!RegisterClassExW(&wc)) {
         Wh_Log(L"Failed to register kShelfClass: %lu", GetLastError());
-        if (g_uiReadyEvent) SetEvent(g_uiReadyEvent);
         if (SUCCEEDED(hrOle)) OleUninitialize();
         return 1;
     }
@@ -5456,10 +5788,9 @@ static DWORD WINAPI ShelfUiThreadProc(LPVOID) {
     wcPill.hInstance     = hInst;
     wcPill.hCursor       = LoadCursorW(nullptr, IDC_HAND);
     wcPill.lpszClassName = kPillClass;
-    if (!RegisterModClassSafe(wcPill)) {
+    if (!RegisterClassExW(&wcPill)) {
         Wh_Log(L"Failed to register kPillClass: %lu", GetLastError());
         UnregisterClassW(kShelfClass, hInst);
-        if (g_uiReadyEvent) SetEvent(g_uiReadyEvent);
         if (SUCCEEDED(hrOle)) OleUninitialize();
         return 1;
     }
@@ -5468,11 +5799,10 @@ static DWORD WINAPI ShelfUiThreadProc(LPVOID) {
     wcAlert.lpfnWndProc   = CopyPasteAlertWndProc;
     wcAlert.hInstance     = hInst;
     wcAlert.lpszClassName = kAlertClass;
-    if (!RegisterModClassSafe(wcAlert)) {
+    if (!RegisterClassExW(&wcAlert)) {
         Wh_Log(L"Failed to register kAlertClass: %lu", GetLastError());
         UnregisterClassW(kPillClass, hInst);
         UnregisterClassW(kShelfClass, hInst);
-        if (g_uiReadyEvent) SetEvent(g_uiReadyEvent);
         if (SUCCEEDED(hrOle)) OleUninitialize();
         return 1;
     }
@@ -5483,12 +5813,11 @@ static DWORD WINAPI ShelfUiThreadProc(LPVOID) {
     wcPrev.hInstance     = hInst;
     wcPrev.hCursor       = LoadCursorW(nullptr, IDC_ARROW);
     wcPrev.lpszClassName = kPreviewClass;
-    if (!RegisterModClassSafe(wcPrev)) {
+    if (!RegisterClassExW(&wcPrev)) {
         Wh_Log(L"Failed to register kPreviewClass: %lu", GetLastError());
         UnregisterClassW(kAlertClass, hInst);
         UnregisterClassW(kPillClass, hInst);
         UnregisterClassW(kShelfClass, hInst);
-        if (g_uiReadyEvent) SetEvent(g_uiReadyEvent);
         if (SUCCEEDED(hrOle)) OleUninitialize();
         return 1;
     }
@@ -5526,9 +5855,6 @@ static DWORD WINAPI ShelfUiThreadProc(LPVOID) {
 
     if (g_settingsDirty.exchange(false, std::memory_order_acq_rel) && g_shelfHwnd) {
         PostMessageW(g_shelfHwnd, WM_APP_RELOAD_SETTINGS, 0, 0);
-    }
-    if (g_uiReadyEvent) {
-        SetEvent(g_uiReadyEvent);
     }
 
     MSG msg{};
@@ -5571,6 +5897,7 @@ static DWORD WINAPI ShelfUiThreadProc(LPVOID) {
 
     ClearVectorItems(g_stagedItems);
     ClearVectorItems(g_clipHistory);
+    ClearStagingDirContents();
     g_rowHits.clear();
     ReleaseRenderResources();
     g_wallpaperCache = {};
@@ -5584,43 +5911,19 @@ static DWORD WINAPI ShelfUiThreadProc(LPVOID) {
     return 0;
 }
 
-BOOL Wh_ModInit() {
-    if (HWND hTray = FindWindowW(L"Shell_TrayWnd", nullptr)) {
-        DWORD trayPid = 0;
-        GetWindowThreadProcessId(hTray, &trayPid);
-        if (trayPid != 0 && trayPid != GetCurrentProcessId()) {
-            return FALSE;
-        }
-    }
-
-    // Wait briefly if a previous mod instance is finishing Wh_ModUninit during toggle/update
-    g_singletonMutex = CreateMutexW(nullptr, TRUE, L"Local\\Windhawk_DragNDropEnhanced_PrimaryShell_V2");
-    if (g_singletonMutex && GetLastError() == ERROR_ALREADY_EXISTS) {
-        DWORD waitRes = WaitForSingleObject(g_singletonMutex, 4000);
-        if (waitRes != WAIT_OBJECT_0 && waitRes != WAIT_ABANDONED) {
-            CloseHandle(g_singletonMutex);
-            g_singletonMutex = nullptr;
-            return FALSE;
-        }
-    }
-
-    Wh_Log(L"Initializing Drag n Drop Enhanced for Windows 10 and 11 v2.0.1.0...");
+BOOL WhTool_ModInit() {
+    Wh_Log(L"Initializing Drag n Drop Enhanced for Windows 10 and 11 v2.0.1.0 (Tool Mod)...");
     g_unloading.store(false, std::memory_order_relaxed);
     g_running.store(true, std::memory_order_relaxed);
     g_settingsDirty.store(false, std::memory_order_relaxed);
     g_settings = ReadSettingsFromWindhawk();
 
-    g_uiReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_uiThread  = CreateThread(nullptr, 0, ShelfUiThreadProc, nullptr, 0, &g_uiThreadId);
     g_kbdThread = CreateThread(nullptr, 0, KbdHookThreadProc, nullptr, 0, &g_kbdThreadId);
-
-    if (g_uiReadyEvent && g_uiThread) {
-        WaitForSingleObject(g_uiReadyEvent, 1500);
-    }
     return g_uiThread != nullptr;
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     g_settingsDirty.store(true, std::memory_order_release);
     ModSettings fresh = ReadSettingsFromWindhawk();
     g_replaceWinVAtomic.store(fresh.replaceWinV, std::memory_order_relaxed);
@@ -5630,35 +5933,195 @@ void Wh_ModSettingsChanged() {
     }
 }
 
-void Wh_ModBeforeUninit() {
+void WhTool_ModUninit() {
+    Wh_Log(L"Uninitializing Drag n Drop Enhanced for Windows 10 and 11 v2.0.1.0 (Tool Mod)...");
     g_unloading.store(true, std::memory_order_relaxed);
     g_running.store(false, std::memory_order_relaxed);
-    if (g_shelfHwnd && IsWindow(g_shelfHwnd)) {
-        PostMessageW(g_shelfHwnd, WM_CLOSE, 0, 0);
-    }
+
     if (g_kbdThreadId != 0) {
         PostThreadMessageW(g_kbdThreadId, WM_QUIT, 0, 0);
     }
-}
-
-void Wh_ModUninit() {
-    Wh_Log(L"Uninitializing Drag n Drop Enhanced for Windows 10 and 11 v2.0.1.0...");
-    g_unloading.store(true, std::memory_order_relaxed);
-    g_running.store(false, std::memory_order_relaxed);
-
-    StopThreadWithQuit(g_kbdThread, g_kbdThreadId);
     if (g_shelfHwnd && IsWindow(g_shelfHwnd)) {
         PostMessageW(g_shelfHwnd, WM_CLOSE, 0, 0);
     }
+    StopThreadWithQuit(g_kbdThread, g_kbdThreadId);
     StopThreadWithQuit(g_uiThread, g_uiThreadId);
+}
 
-    if (g_uiReadyEvent) {
-        CloseHandle(g_uiReadyEvent);
-        g_uiReadyEvent = nullptr;
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
     }
-    if (g_singletonMutex) {
-        ReleaseMutex(g_singletonMutex);
-        CloseHandle(g_singletonMutex);
-        g_singletonMutex = nullptr;
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
     }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo, LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
