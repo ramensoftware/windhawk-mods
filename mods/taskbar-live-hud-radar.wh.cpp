@@ -254,6 +254,7 @@ survives Explorer restarts.
 #include <atomic>
 #include <algorithm>
 #include <mutex>
+#include <windhawk_utils.h>
 
 #define WM_HUD_UPDATE_UI        (WM_USER + 101)
 #define WM_HUD_CLEAN_DONE       (WM_USER + 102)
@@ -261,10 +262,6 @@ survives Explorer restarts.
 #define WM_HUD_UPDATE_GRAPH     (WM_USER + 104)
 #define TIMER_FAST_CHECK        1
 #define TIMER_HOVER_ACTIVATE    2
-
-#ifndef DWMWA_WINDOW_CORNER_PREFERENCE
-#define DWMWA_WINDOW_CORNER_PREFERENCE 33
-#endif
 
 #ifndef NET_TYPE_LOOPBACK
 #define NET_TYPE_LOOPBACK 24
@@ -629,11 +626,11 @@ void ShowTempStatus(const wchar_t* text, Gdiplus::Color color = Gdiplus::Color(2
 void ApplyWindowStyle(HWND hWnd) {
     // Let GDI+ handle the rounded corners and border cleanly via per-pixel alpha,
     // and disable Windows 11 DWM's automatic rounded frame/border at the corners.
-    DWORD cornerPref = 1; // DWMWCP_DONOTROUND
+    DWORD cornerPref = DWMWCP_DONOTROUND;
     DwmSetWindowAttribute(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &cornerPref, sizeof(cornerPref));
 
-    DWORD noBorder = 0xFFFFFFFE; // DWMWA_COLOR_NONE
-    DwmSetWindowAttribute(hWnd, 34 /* DWMWA_BORDER_COLOR */, &noBorder, sizeof(noBorder));
+    COLORREF noBorder = DWMWA_COLOR_NONE;
+    DwmSetWindowAttribute(hWnd, DWMWA_BORDER_COLOR, &noBorder, sizeof(noBorder));
 }
 
 HudAction ParseHudAction(PCWSTR str, HudAction def) {
@@ -645,10 +642,9 @@ HudAction ParseHudAction(PCWSTR str, HudAction def) {
 }
 
 Gdiplus::Color LoadColorSetting(PCWSTR name, Gdiplus::Color fallback, BYTE defaultAlpha = 255, bool* outExplicitAlpha = nullptr) {
-    PCWSTR str = Wh_GetStringSetting(name);
+    auto str = WindhawkUtils::StringSetting::make(name);
     Gdiplus::Color col = fallback;
-    ParseColorString(str, col, defaultAlpha, outExplicitAlpha);
-    Wh_FreeStringSetting(str);
+    ParseColorString(str.get(), col, defaultAlpha, outExplicitAlpha);
     return col;
 }
 
@@ -661,23 +657,26 @@ void LoadSettings(bool fromSettingsChanged = false) {
     int rawAlpha = Wh_GetIntSetting(L"bgAlpha");
     s.bgAlpha = (std::max)(40, (std::min)(255, rawAlpha));
 
-    PCWSTR bgModeStr = Wh_GetStringSetting(L"bgColorMode");
-    s.customBgEnabled = (lstrcmpiW(bgModeStr, L"custom") == 0);
-    Wh_FreeStringSetting(bgModeStr);
+    {
+        auto bgModeStr = WindhawkUtils::StringSetting::make(L"bgColorMode");
+        s.customBgEnabled = (lstrcmpiW(bgModeStr.get(), L"custom") == 0);
+    }
 
     s.customBgColor = LoadColorSetting(L"customBgColor", Gdiplus::Color((BYTE)s.bgAlpha, 20, 21, 26), (BYTE)s.bgAlpha, &s.customBgHasAlpha);
 
-    PCWSTR borderModeStr = Wh_GetStringSetting(L"borderColorMode");
-    s.customBorderEnabled = (lstrcmpiW(borderModeStr, L"custom") == 0);
-    Wh_FreeStringSetting(borderModeStr);
+    {
+        auto borderModeStr = WindhawkUtils::StringSetting::make(L"borderColorMode");
+        s.customBorderEnabled = (lstrcmpiW(borderModeStr.get(), L"custom") == 0);
+    }
     s.customBorderColor = LoadColorSetting(L"customBorderColor", Gdiplus::Color(180, 95, 150, 225), 255);
 
     int rawBorderThick = Wh_GetIntSetting(L"borderThickness");
     s.borderThickness = (rawBorderThick < 0) ? 1 : (std::min)(5, rawBorderThick);
 
-    PCWSTR metricsModeStr = Wh_GetStringSetting(L"metricsColorMode");
-    s.customMetricsEnabled = (lstrcmpiW(metricsModeStr, L"custom") == 0);
-    Wh_FreeStringSetting(metricsModeStr);
+    {
+        auto metricsModeStr = WindhawkUtils::StringSetting::make(L"metricsColorMode");
+        s.customMetricsEnabled = (lstrcmpiW(metricsModeStr.get(), L"custom") == 0);
+    }
     s.customLabelColor = LoadColorSetting(L"customLabelColor", Gdiplus::Color(255, 140, 145, 155), 255);
     s.customCpuColor   = LoadColorSetting(L"customCpuColor",   Gdiplus::Color(255, 245, 246, 250), 255);
     s.customRamColor   = LoadColorSetting(L"customRamColor",   Gdiplus::Color(255, 245, 246, 250), 255);
@@ -688,16 +687,18 @@ void LoadSettings(bool fromSettingsChanged = false) {
     s.customPingColor  = LoadColorSetting(L"customPingColor",  Gdiplus::Color(255, 125, 235, 155), 255);
 
     s.cornerPref = 2;
-    PCWSTR cornerStr = Wh_GetStringSetting(L"cornerStyle");
-    if (lstrcmpiW(cornerStr, L"square") == 0) s.cornerPref = 1;
-    else if (lstrcmpiW(cornerStr, L"small") == 0) s.cornerPref = 3;
-    Wh_FreeStringSetting(cornerStr);
+    {
+        auto cornerStr = WindhawkUtils::StringSetting::make(L"cornerStyle");
+        if (lstrcmpiW(cornerStr.get(), L"square") == 0) s.cornerPref = 1;
+        else if (lstrcmpiW(cornerStr.get(), L"small") == 0) s.cornerPref = 3;
+    }
 
-    PCWSTR anchorStr = Wh_GetStringSetting(L"anchorMode");
-    s.anchorMode = AnchorMode::Tray;
-    if (lstrcmpiW(anchorStr, L"right") == 0) s.anchorMode = AnchorMode::Right;
-    else if (lstrcmpiW(anchorStr, L"left") == 0) s.anchorMode = AnchorMode::Left;
-    Wh_FreeStringSetting(anchorStr);
+    {
+        auto anchorStr = WindhawkUtils::StringSetting::make(L"anchorMode");
+        s.anchorMode = AnchorMode::Tray;
+        if (lstrcmpiW(anchorStr.get(), L"right") == 0) s.anchorMode = AnchorMode::Right;
+        else if (lstrcmpiW(anchorStr.get(), L"left") == 0) s.anchorMode = AnchorMode::Left;
+    }
 
     int rawFontSize = Wh_GetIntSetting(L"fontSize");
     if (rawFontSize <= 0) rawFontSize = 12;
@@ -728,51 +729,41 @@ void LoadSettings(bool fromSettingsChanged = false) {
     s.showGpu = (Wh_GetIntSetting(L"showGpu") != 0);
     s.showGpuTemp = (Wh_GetIntSetting(L"showGpuTemp") != 0);
 
-    PCWSTR tempUnitStr = Wh_GetStringSetting(L"tempUnit");
-    s.tempUnit = (lstrcmpiW(tempUnitStr, L"fahrenheit") == 0) ? TempUnit::Fahrenheit : TempUnit::Celsius;
-    Wh_FreeStringSetting(tempUnitStr);
+    {
+        auto tempUnitStr = WindhawkUtils::StringSetting::make(L"tempUnit");
+        s.tempUnit = (lstrcmpiW(tempUnitStr.get(), L"fahrenheit") == 0) ? TempUnit::Fahrenheit : TempUnit::Celsius;
+    }
 
     s.showMiniBars = (Wh_GetIntSetting(L"showMiniBars") != 0);
 
-    PCWSTR diskModeStr = Wh_GetStringSetting(L"diskSpeedMode");
-    s.diskSpeedMode = DiskSpeedMode::Off;
-    if (lstrcmpiW(diskModeStr, L"total") == 0) s.diskSpeedMode = DiskSpeedMode::Total;
-    else if (lstrcmpiW(diskModeStr, L"rw") == 0) s.diskSpeedMode = DiskSpeedMode::RW;
-    else if (lstrcmpiW(diskModeStr, L"read") == 0) s.diskSpeedMode = DiskSpeedMode::ReadOnly;
-    else if (lstrcmpiW(diskModeStr, L"write") == 0) s.diskSpeedMode = DiskSpeedMode::WriteOnly;
-    Wh_FreeStringSetting(diskModeStr);
+    {
+        auto diskModeStr = WindhawkUtils::StringSetting::make(L"diskSpeedMode");
+        s.diskSpeedMode = DiskSpeedMode::Off;
+        if (lstrcmpiW(diskModeStr.get(), L"total") == 0) s.diskSpeedMode = DiskSpeedMode::Total;
+        else if (lstrcmpiW(diskModeStr.get(), L"rw") == 0) s.diskSpeedMode = DiskSpeedMode::RW;
+        else if (lstrcmpiW(diskModeStr.get(), L"read") == 0) s.diskSpeedMode = DiskSpeedMode::ReadOnly;
+        else if (lstrcmpiW(diskModeStr.get(), L"write") == 0) s.diskSpeedMode = DiskSpeedMode::WriteOnly;
+    }
 
     s.showNetSpeed = (Wh_GetIntSetting(L"showNetSpeed") != 0);
     s.enableRamClean = (Wh_GetIntSetting(L"enableRamClean") != 0);
     s.showPing = (Wh_GetIntSetting(L"showPing") != 0);
 
-    PCWSTR actStr = Wh_GetStringSetting(L"leftClickAction");
-    s.leftClickAction = ParseHudAction(actStr, HudAction::None);
-    Wh_FreeStringSetting(actStr);
+    s.leftClickAction = ParseHudAction(WindhawkUtils::StringSetting::make(L"leftClickAction").get(), HudAction::None);
+    s.ctrlLeftClickAction = ParseHudAction(WindhawkUtils::StringSetting::make(L"ctrlLeftClickAction").get(), HudAction::TrimRam);
+    s.rightClickAction = ParseHudAction(WindhawkUtils::StringSetting::make(L"rightClickAction").get(), HudAction::None);
+    s.ctrlRightClickAction = ParseHudAction(WindhawkUtils::StringSetting::make(L"ctrlRightClickAction").get(), HudAction::ToggleGraph);
 
-    actStr = Wh_GetStringSetting(L"ctrlLeftClickAction");
-    s.ctrlLeftClickAction = ParseHudAction(actStr, HudAction::TrimRam);
-    Wh_FreeStringSetting(actStr);
+    {
+        auto dragStr = WindhawkUtils::StringSetting::make(L"dragModifier");
+        s.dragModifier = DragModifier::Alt;
+        if (lstrcmpiW(dragStr.get(), L"ctrl") == 0) s.dragModifier = DragModifier::Ctrl;
+        else if (lstrcmpiW(dragStr.get(), L"shift") == 0) s.dragModifier = DragModifier::Shift;
+        else if (lstrcmpiW(dragStr.get(), L"none") == 0) s.dragModifier = DragModifier::None;
+        else if (lstrcmpiW(dragStr.get(), L"disabled") == 0) s.dragModifier = DragModifier::Disabled;
+    }
 
-    actStr = Wh_GetStringSetting(L"rightClickAction");
-    s.rightClickAction = ParseHudAction(actStr, HudAction::None);
-    Wh_FreeStringSetting(actStr);
-
-    actStr = Wh_GetStringSetting(L"ctrlRightClickAction");
-    s.ctrlRightClickAction = ParseHudAction(actStr, HudAction::ToggleGraph);
-    Wh_FreeStringSetting(actStr);
-
-    PCWSTR dragStr = Wh_GetStringSetting(L"dragModifier");
-    s.dragModifier = DragModifier::Alt;
-    if (lstrcmpiW(dragStr, L"ctrl") == 0) s.dragModifier = DragModifier::Ctrl;
-    else if (lstrcmpiW(dragStr, L"shift") == 0) s.dragModifier = DragModifier::Shift;
-    else if (lstrcmpiW(dragStr, L"none") == 0) s.dragModifier = DragModifier::None;
-    else if (lstrcmpiW(dragStr, L"disabled") == 0) s.dragModifier = DragModifier::Disabled;
-    Wh_FreeStringSetting(dragStr);
-
-    actStr = Wh_GetStringSetting(L"hoverAction");
-    s.hoverAction = ParseHudAction(actStr, HudAction::None);
-    Wh_FreeStringSetting(actStr);
+    s.hoverAction = ParseHudAction(WindhawkUtils::StringSetting::make(L"hoverAction").get(), HudAction::None);
 
     int rawHoverDelay = Wh_GetIntSetting(L"hoverDelayMs");
     if (rawHoverDelay <= 0) rawHoverDelay = 400;
@@ -1643,6 +1634,8 @@ bool IsFullscreenAppActive(HWND hTaskbar) {
         }
     }
 
+    // Do not treat maximized windows with a title bar as fullscreen: when the taskbar
+    // is set to auto-hide, a normal maximized window's rect covers the entire monitor.
     if (IsZoomed(hFg) &&
         (GetWindowLongPtrW(hFg, GWL_STYLE) & WS_CAPTION) == WS_CAPTION) {
         return false;
@@ -1734,6 +1727,7 @@ void RenderGraphPopup(HWND hWnd) {
         Gdiplus::GraphicsPath bgPath;
         AddRoundedRectF(bgPath, inset, inset, (Gdiplus::REAL)width - inset * 2.0f, (Gdiplus::REAL)height - inset * 2.0f, (Gdiplus::REAL)radius);
 
+        g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
         Gdiplus::SolidBrush bgBrush(bgColor);
         g.FillPath(&bgBrush, &bgPath);
 
@@ -1741,6 +1735,7 @@ void RenderGraphPopup(HWND hWnd) {
             Gdiplus::Pen borderPen(borderColor, penW);
             g.DrawPath(&borderPen, &bgPath);
         }
+        g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeDefault);
 
         int headerY = ScaleDpi(6, g_currentDpi);
         int pad = ScaleDpi(10, g_currentDpi);
@@ -2000,6 +1995,7 @@ void FastRepositionOnly() {
     SetWindowPos(hWnd, NULL, posX, posY, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
 }
 
+// GUI thread only: uses unsynchronized GUI globals (g_statusMessage, g_isHovered, cached fonts).
 void SyncWindowGeometry() {
     HWND hWnd = g_hHudWnd;
     if (!hWnd) return;
@@ -2051,14 +2047,14 @@ void SyncWindowGeometry() {
     const wchar_t* measureTempMax = (s.tempUnit == TempUnit::Fahrenheit) ? L"212\u00B0F" : L"100\u00B0C";
     const wchar_t* measureCpuTemp = s.stationaryWidth ? measureTempMax : cpuTempVal;
     const wchar_t* measureGpuTemp = s.stationaryWidth ? measureTempMax : gpuTempVal;
-    const wchar_t* measureNet = s.stationaryWidth ? L"\u2193999.9 Mbps" : netVal;
+    const wchar_t* measureNet = s.stationaryWidth ? L"\u21939999.9 Mbps" : netVal;
     const wchar_t* measurePing = s.stationaryWidth ? L"999ms" : pingVal;
     const wchar_t* measureDisk = diskVal;
     if (s.stationaryWidth && showDisk) {
-        if (s.diskSpeedMode == DiskSpeedMode::RW) measureDisk = L"R:999.9 MB/s W:999.9 MB/s";
-        else if (s.diskSpeedMode == DiskSpeedMode::Total) measureDisk = L"D:999.9 MB/s";
-        else if (s.diskSpeedMode == DiskSpeedMode::ReadOnly) measureDisk = L"R:999.9 MB/s";
-        else if (s.diskSpeedMode == DiskSpeedMode::WriteOnly) measureDisk = L"W:999.9 MB/s";
+        if (s.diskSpeedMode == DiskSpeedMode::RW) measureDisk = L"R:9999.9 MB/s W:9999.9 MB/s";
+        else if (s.diskSpeedMode == DiskSpeedMode::Total) measureDisk = L"D:9999.9 MB/s";
+        else if (s.diskSpeedMode == DiskSpeedMode::ReadOnly) measureDisk = L"R:9999.9 MB/s";
+        else if (s.diskSpeedMode == DiskSpeedMode::WriteOnly) measureDisk = L"W:9999.9 MB/s";
     }
 
     HDC screenDC = GetDC(NULL);
@@ -2071,26 +2067,28 @@ void SyncWindowGeometry() {
 
     {
         Gdiplus::Graphics measureGraphics(tempDC);
+        int reservedW = s.stationaryWidth
+            ? MeasureMetricsRowWidth(measureGraphics,
+                                     showCpu, showCpuTemp, measureCpu, measureCpuTemp,
+                                     showRam, measureRam,
+                                     showGpu, showGpuTemp, measureGpu, measureGpuTemp,
+                                     showDisk, measureDisk,
+                                     showNet, measureNet,
+                                     showPing, measurePing)
+            : 0;
         if (inStatus) {
             textW = MeasureTextWidth(measureGraphics, g_statusMessage.c_str(), g_pFontValue) + ScaleDpi(8, dpi);
+            if (s.stationaryWidth) textW = (std::max)(textW, reservedW);
             actualTextW = textW;
         } else {
-            textW = MeasureMetricsRowWidth(measureGraphics,
-                                           showCpu, showCpuTemp, measureCpu, measureCpuTemp,
-                                           showRam, measureRam,
-                                           showGpu, showGpuTemp, measureGpu, measureGpuTemp,
-                                           showDisk, measureDisk,
-                                           showNet, measureNet,
-                                           showPing, measurePing);
-            actualTextW = s.stationaryWidth
-                ? MeasureMetricsRowWidth(measureGraphics,
-                                         showCpu, showCpuTemp, cpuVal, cpuTempVal,
-                                         showRam, ramVal,
-                                         showGpu, showGpuTemp, gpuVal, gpuTempVal,
-                                         showDisk, diskVal,
-                                         showNet, netVal,
-                                         showPing, pingVal)
-                : textW;
+            actualTextW = MeasureMetricsRowWidth(measureGraphics,
+                                                 showCpu, showCpuTemp, cpuVal, cpuTempVal,
+                                                 showRam, ramVal,
+                                                 showGpu, showGpuTemp, gpuVal, gpuTempVal,
+                                                 showDisk, diskVal,
+                                                 showNet, netVal,
+                                                 showPing, pingVal);
+            textW = s.stationaryWidth ? (std::max)(reservedW, actualTextW) : actualTextW;
         }
     }
     DeleteDC(tempDC);
@@ -2171,6 +2169,7 @@ void SyncWindowGeometry() {
         Gdiplus::GraphicsPath bgPath;
         AddRoundedRectF(bgPath, inset, inset, (Gdiplus::REAL)exactWidth - inset * 2.0f, (Gdiplus::REAL)height - inset * 2.0f, (Gdiplus::REAL)radius);
 
+        g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
         Gdiplus::SolidBrush bgBrush(bgColor);
         g.FillPath(&bgBrush, &bgPath);
 
@@ -2178,6 +2177,7 @@ void SyncWindowGeometry() {
             Gdiplus::Pen borderPen(borderColor, penW);
             g.DrawPath(&borderPen, &bgPath);
         }
+        g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeDefault);
 
         g.SetClip(Gdiplus::Rect(ScaleDpi(4, dpi), 0, (std::max)(0, exactWidth - ScaleDpi(8, dpi)), height));
 
@@ -2347,6 +2347,7 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD, HWND hwnd, LONG idObject, LONG,
     }
 }
 
+// GUI thread only: uses unsynchronized hook/tray globals (g_hookedTray, g_hHookLoc, g_hHookVis).
 void UpdateTaskbarHooks() {
     HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
     if (hTray == g_hookedTray) return;
@@ -2531,7 +2532,6 @@ LRESULT CALLBACK HudWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         }
 
         case WM_HUD_APPLY_SETTINGS: {
-            ApplyWindowStyle(hWnd);
             SyncWindowGeometry();
             if (g_hGraphWnd && IsWindowVisible(g_hGraphWnd)) {
                 RenderGraphPopup(g_hGraphWnd);
@@ -2845,6 +2845,7 @@ void WhTool_ModUninit() {
         SetEvent(g_hStopEvent);
     }
 
+    // Join GUI thread first so its windows and WinEvent hooks are torn down before worker threads exit.
     for (HANDLE* h : { &g_hGuiThread, &g_hPingThread, &g_hStatsThread, &g_hCleanThread }) {
         if (*h) {
             WaitForSingleObject(*h, INFINITE);
