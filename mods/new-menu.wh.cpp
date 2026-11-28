@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              new-menu
-// @name            New
+// @name            New Menu
 // @description     Show, hide and add items in the "New" submenu of the Explorer context menu
 // @description:tr-TR Gezgin sağ tık menüsündeki "Yeni" alt menüsünde öğeleri göster, gizle ve yenilerini ekle
 // @version         1.0.0
@@ -17,7 +17,7 @@
 
 // ==WindhawkModReadme==
 /*
-# New
+# New Menu
 
 Clean up the **New** submenu of the Explorer context menu (right-click on the
 desktop or in a folder → **New**): hide the items you never use, and add your
