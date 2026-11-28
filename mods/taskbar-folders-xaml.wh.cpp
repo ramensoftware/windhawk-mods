@@ -38,7 +38,7 @@ In Windhawk settings, choose a folder design and place folders on either side of
 
 ![A folder to the left of Start with a thin divider between them](https://raw.githubusercontent.com/mamt104/windhawk-mods/94fc1a4a8a3459191976ffa62a93263b4537df9c/taskbar-folders-start.png)
 
-On the main taskbar, a folder can take the place of one of its apps or sit beside Start. Each Windows account keeps its own folders and shortcut copies.
+On the main taskbar, a folder can take the place of one of its apps or sit beside Start. You choose which taskbar apps belong together, wherever their shortcuts are stored. Each Windows account keeps its own folders and shortcut copies.
 
 To choose a fixed spot among ordinary pinned apps, select **Pin to taskbar** in the folder menu and confirm in File Explorer. You can drag this pin anywhere among your pinned apps, even when every app in the folder is closed. If you disable the mod, the pin opens an empty folder in Explorer. If the pin is still there after uninstalling, its target will be missing. Before uninstalling, right-click the pin and choose **Unpin from taskbar**.
 
@@ -50,7 +50,7 @@ Riunisci le app che usi insieme sotto una sola icona. Fai clic destro su uno spa
 
 Trascina le app per riordinarle. Per spostarne più di una, tieni premuta la prima e fai clic sulle altre. Trascina un’app sul desktop per crearvi un collegamento. Nelle impostazioni puoi scegliere lo stile e mettere le cartelle a sinistra o a destra di Start. Le app aperte mantengono il proprio pulsante sulla barra e hanno un puntino nella cartella.
 
-Sulla barra principale, una cartella può prendere il posto di una delle sue app o stare accanto a Start. Ogni account Windows conserva le proprie cartelle e copie dei collegamenti.
+Sulla barra principale, una cartella può prendere il posto di una delle sue app o stare accanto a Start. Scegli tu quali app della barra raggruppare, ovunque siano salvati i collegamenti. Ogni account Windows conserva le proprie cartelle e copie dei collegamenti.
 
 Per scegliere una posizione fissa tra le app aggiunte alla barra, scegli **Integra nella barra** dal menu della cartella e conferma in Esplora file. Puoi trascinare l’icona tra le altre app fissate anche quando tutte le app della cartella sono chiuse. Se disattivi la mod, l’icona apre una cartella vuota in Esplora file. Se l’icona resta fissata dopo la disinstallazione, perde la sua destinazione. Prima di disinstallarla, fai clic destro sull’icona e scegli **Rimuovi dalla barra delle applicazioni**.
 
@@ -62,7 +62,7 @@ Reúne las aplicaciones que usas juntas en un solo icono. Haz clic derecho en un
 
 Arrastra las aplicaciones para ordenarlas. Para mover varias, mantén pulsada la primera y haz clic en las demás. Arrastra una al escritorio para crear un acceso directo. En los ajustes puedes elegir el diseño y colocar las carpetas a la izquierda o a la derecha de Inicio. Las aplicaciones abiertas mantienen su botón en la barra y muestran un punto en la carpeta.
 
-En la barra de tareas principal, una carpeta puede ocupar el lugar de una de sus aplicaciones o situarse junto a Inicio. Cada cuenta de Windows conserva sus propias carpetas y copias de los accesos directos.
+En la barra de tareas principal, una carpeta puede ocupar el lugar de una de sus aplicaciones o situarse junto a Inicio. Tú eliges qué aplicaciones de la barra agrupar, estén donde estén sus accesos directos. Cada cuenta de Windows conserva sus propias carpetas y copias de los accesos directos.
 
 Para elegir una posición fija entre las aplicaciones ancladas, selecciona **Anclar a la barra de tareas** en el menú de la carpeta y confirma en el Explorador. Puedes arrastrar el icono entre las demás aplicaciones ancladas aunque todas las de la carpeta estén cerradas. Si desactivas el mod, el icono abre una carpeta vacía en el Explorador. Si el icono sigue anclado después de desinstalar el mod, perderá su destino. Antes de desinstalarlo, haz clic derecho en el icono y elige **Desanclar de la barra de tareas**.
 
@@ -74,7 +74,7 @@ Regroupez les applications que vous utilisez ensemble sous une seule icône. Fai
 
 Faites glisser les applications pour les réorganiser. Pour en déplacer plusieurs, maintenez le bouton enfoncé sur la première, puis cliquez sur les autres. Glissez une application sur le bureau pour y placer un raccourci. Les paramètres permettent de choisir l’apparence des dossiers et de les placer de part et d’autre de Démarrer. Une application ouverte conserve son bouton dans la barre et porte un point dans le dossier.
 
-Dans la barre des tâches principale, un dossier peut prendre la place de l’une de ses applications ou se placer à côté de Démarrer. Chaque compte Windows conserve ses propres dossiers et copies des raccourcis.
+Dans la barre des tâches principale, un dossier peut prendre la place de l’une de ses applications ou se placer à côté de Démarrer. Vous choisissez les applications de la barre des tâches à regrouper, quel que soit l’emplacement de leurs raccourcis. Chaque compte Windows conserve ses propres dossiers et copies des raccourcis.
 
 Pour choisir une place fixe parmi les applications épinglées, sélectionnez **Épingler à la barre des tâches** dans le menu du dossier et confirmez dans l’Explorateur. Vous pouvez déplacer cette icône parmi les applications épinglées même si toutes celles du dossier sont fermées. Si vous désactivez le mod, l’icône ouvre un dossier vide dans l’Explorateur. Si l’icône reste épinglée après la désinstallation, sa cible aura disparu. Avant de le désinstaller, faites un clic droit sur l’icône et choisissez **Désépingler de la barre des tâches**.
 
@@ -86,7 +86,7 @@ Fassen Sie häufig gemeinsam genutzte Apps unter einem Symbol zusammen. Klicken 
 
 Ziehen Sie Apps, um sie zu sortieren. Um mehrere zu verschieben, halten Sie die erste kurz gedrückt und klicken Sie dann auf die weiteren Apps. Ziehen Sie eine App auf den Desktop, um dort eine Verknüpfung anzulegen. In den Einstellungen wählen Sie das Design und die Position links oder rechts von Start. Geöffnete Apps behalten ihre Schaltfläche in der Taskleiste und sind im Ordner mit einem Punkt markiert.
 
-Auf der Haupttaskleiste kann ein Ordner den Platz einer seiner Apps einnehmen oder neben Start stehen. Jedes Windows-Konto behält seine eigenen Ordner und Kopien der Verknüpfungen.
+Auf der Haupttaskleiste kann ein Ordner den Platz einer seiner Apps einnehmen oder neben Start stehen. Sie wählen, welche Apps der Taskleiste zusammengehören, unabhängig vom Speicherort ihrer Verknüpfungen. Jedes Windows-Konto behält seine eigenen Ordner und Kopien der Verknüpfungen.
 
 Für einen festen Platz unter den angehefteten Apps wählen Sie im Ordnermenü **An Taskleiste anheften** und bestätigen dies im Explorer. Das Symbol lässt sich zwischen den angehefteten Apps verschieben, auch wenn alle Apps des Ordners geschlossen sind. Wenn Sie die Mod deaktivieren, öffnet das Symbol einen leeren Ordner im Explorer. Bleibt das Symbol nach der Deinstallation angeheftet, fehlt sein Ziel. Klicken Sie vor der Deinstallation mit der rechten Maustaste auf das Symbol und wählen Sie **Von Taskleiste lösen**.
 
@@ -1410,6 +1410,11 @@ static const UINT actionMsg =
     RegisterWindowMessageW(L"TaskbarFoldersXaml.Action.065");
 static const UINT refreshMsg =
     RegisterWindowMessageW(L"TaskbarFoldersXaml.Refresh.065");
+// The two high bits distinguish host lifecycle events from a menu command.
+static constexpr uint32_t kJumpTicketMask = 0x3fffffffU;
+static constexpr uint32_t kJumpAttached = 0x40000000U;
+static constexpr uint32_t kJumpDetached = 0x80000000U;
+static constexpr ULONGLONG kJumpAttachMs = 7000, kJumpRebindMs = 450;
 static constexpr UINT kStop = WM_APP + 321, kCancelModal = WM_APP + 330,
                       kModalDrained = WM_APP + 331;
 enum : UINT_PTR {
@@ -1468,6 +1473,30 @@ static bool isPrimaryRoot(FrameworkElement const& element) {
 
 static void closePanel();
 static HINSTANCE moduleInstance();
+// Only the load which registered a class can create windows with it or remove it.
+struct ModWindowClass {
+    const wchar_t* name;
+    std::once_flag once{};
+    ATOM atom{};
+
+    bool ensure(WNDPROC procedure, HCURSOR cursor = nullptr) {
+        std::call_once(once, [&] {
+            WNDCLASSW wc{};
+            wc.lpfnWndProc = procedure;
+            wc.hCursor = cursor;
+            wc.hInstance = moduleInstance();
+            wc.lpszClassName = name;
+            atom = RegisterClassW(&wc);
+        });
+        return atom != 0;
+    }
+
+    void remove() const {
+        if (atom)
+            UnregisterClassW(name, moduleInstance());
+    }
+};
+static ModWindowClass controllerClass{kController}, jumpHostClass{kHost};
 
 static wstring folderName(wstring value) {
     auto first = value.find_first_not_of(L" \r\n\t");
@@ -2839,6 +2868,7 @@ static void click(Button const& b,
 static void showFolder(const wstring&, FrameworkElement const&);
 // The taskbar's XAML island can be only as tall as the taskbar itself.
 static constexpr wchar_t kPanelClass[] = L"TaskbarFoldersXaml.AppPanel.04";
+static ModWindowClass panelClass{kPanelClass};
 enum : UINT {
     kApps = 101,
     kAdd,
@@ -3072,9 +3102,22 @@ struct FolderPanel : FolderPalette {
     wstring hoverFolder;
     POINT dragPoint{};
     HBRUSH searchBrush{};
-    RECT rest{}, morphFrom{}, searchRect{}, bodyClip{};
+    HWND contentCover{};
+    unsigned contentFrames = 0;
+    HWND contentShade{};
+    HDC shadeDC{};
+    HGDIOBJ shadeStock{};
+    POINT shadeSource{};
+    BYTE shadeOpacity{};
+    bool departingPage = false;
+    Ease shade;
+    HWND morphBacking{};
+    RECT backingCanvas{};
+    COLORREF backingColor = CLR_INVALID;
+    unsigned backingFrames = 0;
+    RECT rest{}, morphFrom{}, searchRect{};
     int heldRevealShift = 0;
-    SIZE childLayout{};
+    SIZE windowSize{};
     bool motion = false, frame = false, layered = false, closing = false;
     Ease reveal, arrival, morph;
     int slide = 0, hot = -1, columns = 1, capacity = 1, page = 0, wheel = 0,
@@ -3290,6 +3333,41 @@ static FileDestination childDirectory(IShellItem* item) {
         return {};
     return {fs::path(display(item, SIGDN_FILESYSPATH))};
 }
+// Modern Explorer exposes the row's display label through accessibility. Match
+// it against actual items in this view, including files with hidden extensions.
+static FileDestination visibleChildDirectory(const com_ptr<IFolderView>& view,
+                                            const wstring& label) {
+    auto items = view.try_as<IFolderView2>();
+    if (!items || label.empty())
+        return {};
+    com_ptr<IShellItem> match;
+    int previous = -1;
+    for (;;) {
+        int index = -1;
+        HRESULT hr = items->GetVisibleItem(previous, FALSE, &index);
+        // Some providers require a zero-based starting index and search after it.
+        if (hr == E_INVALIDARG && previous == -1) {
+            hr = S_OK;
+            index = 0;
+        }
+        if (hr == S_FALSE || (hr == S_OK && index < 0))
+            break;
+        com_ptr<IShellItem> item;
+        if (hr != S_OK || index <= previous ||
+            FAILED(items->GetItem(index, IID_PPV_ARGS(item.put()))))
+            return {};
+        previous = index;
+        const auto name = display(item.get(), SIGDN_NORMALDISPLAY);
+        if (name.empty())
+            return {};
+        if (name == label) {
+            if (match)
+                return {};  // An identical visible file or folder label is ambiguous.
+            match = std::move(item);
+        }
+    }
+    return childDirectory(match.get());
+}
 static FileDestination dropDirectory(HWND hit, HWND root, POINT screen) {
     auto surface = fileSurface(hit, root);
     if (surface == FileSurface::None)
@@ -3328,24 +3406,8 @@ static FileDestination dropDirectory(HWND hit, HWND root, POINT screen) {
             return childDirectory(item.get());
         }
     } else if (view) {
-        if (auto name = explorerItemAt(hit, screen)) {
-            if (name->empty() || *name == L"." || *name == L".." ||
-                name->find_first_of(L"\\/:") != wstring::npos)
-                return {};
-            com_ptr<IShellFolder> folder;
-            com_ptr<IShellItem> item;
-            PITEMID_CHILD child{};
-            if (FAILED(view->GetFolder(IID_PPV_ARGS(folder.put()))) ||
-                FAILED(folder->ParseDisplayName(nullptr, nullptr, name->data(),
-                                                nullptr, &child, nullptr)))
-                return {};
-            auto hr = SHCreateItemWithParent(nullptr, folder.get(), child,
-                                             IID_PPV_ARGS(item.put()));
-            CoTaskMemFree(child);
-            if (FAILED(hr))
-                return {};
-            return childDirectory(item.get());
-        }
+        if (auto name = explorerItemAt(hit, screen))
+            return visibleChildDirectory(view, *name);
     }
     return destination;
 }
@@ -4047,6 +4109,8 @@ static void applyPanelStyle(FolderStyle choice, bool force = false) {
     auto oldBackground = std::exchange(panel->background, background);
     auto oldSearch = std::exchange(panel->searchBrush, search);
     static_cast<FolderPalette&>(*panel) = next;
+    if (panel->shownStyle != style)
+        SetRectEmpty(&panel->backingCanvas);
     panel->shownStyle = style;
     panel->appearanceReady = true;
     panel->appliedSettings = settings;
@@ -4119,6 +4183,17 @@ static void paintBackdrop(HDC dc, HWND child, const RECT& bounds) {
               header.right - px(12), header.bottom};
     fillColor(dc, seam, panel->tileEdge);
     RestoreDC(dc, saved);
+}
+static void paintPanelFace(HDC dc, const RECT& bounds) {
+    paintBackdrop(dc, panel->window, bounds);
+    if (panel->choosing || panel->filtering) {
+        rounded(dc, panel->searchRect, panel->field, px(7));
+        RECT line = panel->searchRect;
+        line.left += px(7);
+        line.right -= px(7);
+        line.top = line.bottom - std::max(1, px(1));
+        fillColor(dc, line, GetFocus() == panel->filter ? panel->accent : panel->rim);
+    }
 }
 static void outlineTile(HDC dc,
                         RECT r,
@@ -4836,26 +4911,7 @@ static int panelGridTop() {
 static int panelFooter() {
     return px(panel->choosing || pageCount() > 1 ? 36 : 10);
 }
-static void clipPanelBody(int width, int height, int hiddenTop) {
-    RECT clip{};
-    if (hiddenTop > 0)
-        clip = {0, std::min(hiddenTop, height), width, height};
-    if (EqualRect(&panel->bodyClip, &clip))
-        return;
-    bool applied = true;
-    for (HWND child : {panel->list, panel->empty}) {
-        HRGN region = hiddenTop > 0 ? CreateRectRgnIndirect(&clip) : nullptr;
-        if ((hiddenTop > 0 && !region) || !SetWindowRgn(child, region, FALSE)) {
-            if (region)
-                DeleteObject(region);
-            applied = false;
-        }
-    }
-    if (applied)
-        panel->bodyClip = clip;
-}
 static void layoutPanelChildren(int w, int h) {
-    panel->childLayout = {w, h};
     const int pad = px(12), side = px(28), gap = px(4);
     const int last = w - pad - side, addX = last - side - gap;
     MoveWindow(panel->title, pad + px(2), px(8), std::max(1, addX - pad - gap),
@@ -4870,16 +4926,10 @@ static void layoutPanelChildren(int w, int h) {
                    std::max(1, w - 2 * pad - px(42)), panel->lineHeight + 1,
                    FALSE);
     }
-    const int top = panelGridTop();
-    // Lay out the new page once at its final distance from the taskbar.
-    // As the header rises, uncover the body in place, including its empty text.
-    const bool anchored = panel->morph.duration && panel->rest.bottom <= panel->anchor.top;
-    const int bodyHeight = anchored ? panel->rest.bottom - panel->rest.top : h;
-    const int bodyY = top + h - bodyHeight;
-    const int gridHeight = std::max(1, bodyHeight - top - panelFooter());
+    const int bodyY = panelGridTop();
+    const int gridHeight = std::max(1, h - bodyY - panelFooter());
     const int listWidth =
         std::max(1, std::min(w, panel->columns * panel->cellWidth));
-    clipPanelBody(w, gridHeight, top - bodyY);
     MoveWindow(panel->empty, pad, bodyY, std::max(1, w - 2 * pad), gridHeight, FALSE);
     MoveWindow(panel->list, (w - listWidth) / 2, bodyY, listWidth, gridHeight, FALSE);
     if (pageCount() > 1 && panel->pager) {
@@ -4897,6 +4947,214 @@ static int panelRevealShift(double now) {
     const int shift = int(std::lround(px(kPanelSlideDip) * (1 - panel->reveal.value(now))));
     return sign * std::max(0, shift - panel->heldRevealShift);
 }
+// Print only this popup's own controls. The old page can finish fading while
+// the live search field already has focus and accepts keyboard input.
+static void snapshotPage(HDC dc, const RECT& bounds) {
+    paintPanelFace(dc, bounds);
+    HWND first = GetWindow(panel->window, GW_CHILD);
+    for (HWND child = first ? GetWindow(first, GW_HWNDLAST) : nullptr; child;
+         child = GetWindow(child, GW_HWNDPREV)) {
+        if (child == panel->contentCover || !IsWindowVisible(child))
+            continue;
+        RECT r{};
+        GetClientRect(child, &r);
+        POINT origin{};
+        MapWindowPoints(child, panel->window, &origin, 1);
+        int saved = SaveDC(dc);
+        if (saved) {
+            SetViewportOrgEx(dc, origin.x, origin.y, nullptr);
+            IntersectClipRect(dc, 0, 0, r.right, r.bottom);
+            SendMessageW(child, WM_PRINTCLIENT, (WPARAM)dc, PRF_CLIENT | PRF_ERASEBKGND);
+            RestoreDC(dc, saved);
+        }
+    }
+}
+static void releaseShadePixels() {
+    if (auto dc = std::exchange(panel->shadeDC, nullptr)) {
+        if (panel->shadeStock)
+            DeleteObject(SelectObject(dc, std::exchange(panel->shadeStock, nullptr)));
+        DeleteDC(dc);
+    }
+}
+static void hideContentShade() {
+    panel->shade.set(0);
+    panel->departingPage = false;
+    if (panel->contentShade && IsWindowVisible(panel->contentShade))
+        ShowWindow(panel->contentShade, SW_HIDE);
+    releaseShadePixels();
+}
+// Position, pixels and initial alpha are submitted together. In particular a
+// reused window must never present the old page at the new page's origin.
+static bool startContentShade(bool departing, BYTE opacity = 255) {
+    // A rapid reversal keeps the last presented image until its replacement is ready.
+    releaseShadePixels();
+    if (!panel->contentShade) {
+        panel->contentShade = CreateWindowExW(
+            WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
+            L"STATIC", L"", WS_POPUP | WS_DISABLED, 0, 0, 1, 1,
+            panel->window, nullptr, moduleInstance(), nullptr);
+        if (!panel->contentShade)
+            return false;
+    }
+    RECT client{};
+    GetClientRect(panel->window, &client);
+    RECT r = client;
+    MapWindowPoints(panel->window, nullptr, reinterpret_cast<POINT*>(&r), 2);
+    const int inset = std::max(1, px(1));
+    InflateRect(&r, -inset, -inset);
+    if (IsRectEmpty(&r)) return false;
+    HWND w = panel->contentShade;
+    SIZE size{r.right - r.left, r.bottom - r.top};
+    POINT origin{r.left, r.top};
+    const int radius = std::max(1, px(panel->shownStyle == FolderStyle::Oled ||
+                                     panel->shownStyle == FolderStyle::Paper ? 4 : 8) - inset);
+    HRGN clip = CreateRoundRectRgn(0, 0, size.cx + 1, size.cy + 1, 2 * radius, 2 * radius);
+    if (!clip || !SetWindowRgn(w, clip, FALSE)) {
+        if (clip) DeleteObject(clip);
+        return false;
+    }
+    HDC windowDC = GetDC(panel->window);
+    if (!windowDC)
+        return false;
+    HDC dc = panel->shadeDC = CreateCompatibleDC(windowDC);
+    HBITMAP bitmap = dc ? CreateCompatibleBitmap(windowDC, client.right, client.bottom) : nullptr;
+    ReleaseDC(panel->window, windowDC);
+    auto stock = bitmap ? SelectObject(dc, bitmap) : nullptr;
+    if (!stock || stock == HGDI_ERROR) {
+        if (bitmap) DeleteObject(bitmap);
+        return false;
+    }
+    panel->shadeStock = stock;
+    panel->departingPage = departing;
+    if (departing)
+        snapshotPage(dc, client);
+    else
+        paintBackdrop(dc, panel->window, client);
+    BLENDFUNCTION blend{AC_SRC_OVER, 0, opacity, 0};
+    panel->shadeSource = {inset, inset};
+    if (!UpdateLayeredWindow(w, nullptr, &origin, &size, dc, &panel->shadeSource, 0,
+                             &blend, ULW_ALPHA) ||
+        !SetWindowPos(w, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE |
+                     SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOOWNERZORDER))
+        return false;
+    panel->shadeOpacity = opacity;
+    panel->shade.set(opacity / 255.);
+    target(panel->shade, 0, departing ? 64 : 100);
+    return panel->shade.duration != 0;
+}
+static void fadeDepartingPage() {
+    if (!panel->motion || panel->closing || panel->browsing || panel->contentFrames ||
+        panel->reveal.duration || panel->departingPage || !IsWindowVisible(panel->window))
+        return;
+    BYTE opacity = panel->shade.duration ? 255 - panel->shadeOpacity : 255;
+    if (opacity && !startContentShade(true, opacity))
+        hideContentShade();
+}
+// The native controls keep their final layout and focus while the shell moves.
+// Paint one unobstructed surface until the display has shown its resting bounds.
+static bool coverPanelContent(const RECT& from, const RECT& to) {
+    if (!panel->contentCover) {
+        panel->contentCover = CreateWindowExW(
+            0, L"STATIC", L"", WS_CHILD | WS_CLIPSIBLINGS | SS_OWNERDRAW,
+            0, 0, 0, 0, panel->window, nullptr, moduleInstance(), nullptr);
+    }
+    const int width = std::max(from.right - from.left, to.right - to.left);
+    const int height = std::max(from.bottom - from.top, to.bottom - to.top);
+    if (!panel->contentCover || !SetWindowPos(panel->contentCover, HWND_TOP, 0, 0,
+            width, height, SWP_NOACTIVATE | SWP_SHOWWINDOW))
+        return false;
+    panel->contentFrames = 2;
+    if (IsWindowVisible(panel->window))
+        RedrawWindow(panel->contentCover, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW);
+    return true;
+}
+static void showPanelContent(bool fade = false) {
+    if (!fade)
+        hideContentShade();
+    if (!panel->contentFrames)
+        return;
+    if (IsWindowVisible(panel->window) && !panel->closing)
+        layoutPanelChildren(panel->rest.right - panel->rest.left, panel->rest.bottom - panel->rest.top);
+    if (fade && !startContentShade(false))
+        hideContentShade();
+    panel->contentFrames = 0;
+    ShowWindow(panel->contentCover, SW_HIDE);
+    if (IsWindowVisible(panel->window))
+        RedrawWindow(panel->window, nullptr, nullptr,
+                     RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+}
+static void hideMorphBacking() {
+    if (panel->backingFrames) {
+        ShowWindow(panel->morphBacking, SW_HIDE);
+        panel->backingFrames = 0;
+    }
+}
+static void prepareMorphBacking(const RECT& from, const RECT& to) {
+    // The native border and the GDI client can be presented on different
+    // refreshes. Only the common interior needs a stationary surface behind
+    // it. Covering a growing edge would show a second outline one frame early.
+    RECT canvas{};
+    if (!IntersectRect(&canvas, &from, &to)) {
+        hideMorphBacking();
+        return;
+    }
+    DWORD border = 0;
+    if (FAILED(DwmGetWindowAttribute(panel->window, DWMWA_VISIBLE_FRAME_BORDER_THICKNESS,
+                                     &border, sizeof(border))))
+        border = std::max(1, px(1));
+    InflateRect(&canvas, -static_cast<int>(border), -static_cast<int>(border));
+    if (IsRectEmpty(&canvas)) {
+        hideMorphBacking();
+        return;
+    }
+    if (!panel->morphBacking) {
+        panel->morphBacking = CreateWindowExW(
+            WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE |
+                WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
+            L"STATIC", L"", WS_POPUP | WS_DISABLED, 0, 0, 1, 1,
+            GetWindow(panel->window, GW_OWNER), nullptr, moduleInstance(), nullptr);
+        if (!panel->morphBacking)
+            return;
+    }
+    const bool moved = !EqualRect(&canvas, &panel->backingCanvas);
+    if (moved || panel->backingColor != panel->surface) {
+        if (moved)
+            hideMorphBacking();
+        SIZE size{canvas.right - canvas.left, canvas.bottom - canvas.top};
+        POINT origin{canvas.left, canvas.top}, zero{};
+        HDC screen = GetDC(nullptr);
+        HDC dc = screen ? CreateCompatibleDC(screen) : nullptr;
+        HBITMAP bitmap = dc ? CreateCompatibleBitmap(screen, size.cx, size.cy) : nullptr;
+        auto before = bitmap ? SelectObject(dc, bitmap) : nullptr;
+        RECT all{0, 0, size.cx, size.cy};
+        bool uploaded = before && before != HGDI_ERROR &&
+            FillRect(dc, &all, panel->background) &&
+            UpdateLayeredWindow(panel->morphBacking, screen, &origin, &size, dc,
+                               &zero, 0, nullptr, ULW_OPAQUE);
+        if (before && before != HGDI_ERROR) SelectObject(dc, before);
+        if (bitmap) DeleteObject(bitmap);
+        if (dc) DeleteDC(dc);
+        if (screen) ReleaseDC(nullptr, screen);
+        const int radius = std::max(1, px(panel->shownStyle == FolderStyle::Oled ||
+                                         panel->shownStyle == FolderStyle::Paper ? 4 : 8) -
+                                         static_cast<int>(border));
+        HRGN clip = uploaded ? CreateRoundRectRgn(0, 0, size.cx + 1, size.cy + 1,
+                                                  2 * radius, 2 * radius) : nullptr;
+        if (!clip || !SetWindowRgn(panel->morphBacking, clip, FALSE)) {
+            if (clip) DeleteObject(clip);
+            SetRectEmpty(&panel->backingCanvas);
+            hideMorphBacking();
+            return;
+        }
+        panel->backingCanvas = canvas;
+        panel->backingColor = panel->surface;
+    }
+    panel->backingFrames = 2;
+    if (!IsWindowVisible(panel->morphBacking))
+        SetWindowPos(panel->morphBacking, panel->window, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW |
+                         SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+}
 static void panelPosition(double now, bool layout = false) {
     RECT r = panel->rest;
     if (IsRectEmpty(&r))
@@ -4911,14 +5169,21 @@ static void panelPosition(double now, bool layout = false) {
              edge(from.right, r.right), edge(from.bottom, r.bottom)};
     }
     const int w = r.right - r.left, h = r.bottom - r.top;
-    const bool resized = panel->childLayout.cx != w || panel->childLayout.cy != h;
-    SetWindowPos(panel->window, nullptr, r.left, r.top + panelRevealShift(now), w, h,
+    const bool resized = panel->windowSize.cx != w || panel->windowSize.cy != h;
+    OffsetRect(&r, 0, panelRevealShift(now));
+    if (panel->backingFrames && panel->backingColor != panel->surface)
+        prepareMorphBacking(panel->morphFrom, panel->rest);
+    SetWindowPos(panel->window, nullptr, r.left, r.top, w, h,
                  SWP_NOZORDER | SWP_NOACTIVATE |
                  (resized && layout && !panel->morph.duration ? SWP_NOCOPYBITS : 0));
-    if (layout || resized)
-        layoutPanelChildren(w, h);
+    panel->windowSize = {w, h};
+    if (resized && panel->contentFrames)
+        SetWindowPos(panel->contentCover, HWND_TOP, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+    if (layout || (resized && !panel->contentFrames))
+        layoutPanelChildren(panel->rest.right - panel->rest.left,
+                            panel->rest.bottom - panel->rest.top);
     if (resized && !layout)
-        RedrawWindow(panel->window, nullptr, nullptr,
+        RedrawWindow(panel->contentFrames ? panel->contentCover : panel->window, nullptr, nullptr,
                      RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
     if (panel->layered && (panel->reveal.duration || layout || !panel->morph.duration))
         SetLayeredWindowAttributes(panel->window, 0,
@@ -4940,7 +5205,7 @@ static void sizePanel(RECT dest, bool modeChanged) {
     const bool sameTarget = EqualRect(&dest, &panel->rest);
     if (sameTarget && panel->morph.duration && !modeChanged) {
         // Typing and arriving suggestions update the content, never the motion clock.
-        layoutPanelChildren(panel->childLayout.cx, panel->childLayout.cy);
+        layoutPanelChildren(dest.right - dest.left, dest.bottom - dest.top);
         return;
     }
     const auto now = motionTime();
@@ -4950,16 +5215,34 @@ static void sizePanel(RECT dest, bool modeChanged) {
         const auto distance = std::max({
             std::abs(dest.left - from.left), std::abs(dest.top - from.top),
             std::abs(dest.right - from.right), std::abs(dest.bottom - from.bottom)});
-        if (distance) {
-            panel->morphFrom = from;
-            panel->morph.set(0);
-            const double distanceDip = distance * 96. / panel->dpi;
-            const auto ms = static_cast<unsigned>(std::lround(
-                std::min(90. + .30 * distanceDip, double(kPanelRevealMs))));
-            target(panel->morph, 1, ms, now);
+        if (coverPanelContent(from, dest)) {
+            // A deliberate page change takes over a still-fading entrance at
+            // the edge that was actually on screen.
+            panel->reveal.set(1);
+            if (distance) {
+                prepareMorphBacking(from, dest);
+                panel->morphFrom = from;
+                panel->morph.set(0);
+                const double distanceDip = distance * 96. / panel->dpi;
+                const auto ms = static_cast<unsigned>(std::lround(
+                    std::min(90. + .30 * distanceDip, double(kPanelRevealMs))));
+                target(panel->morph, 1, ms, now);
+                if (panel->departingPage && panel->morph.duration)
+                    panel->morph.since = std::max(now, panel->shade.since + panel->shade.duration);
+            } else {
+                wakeMotion();
+            }
+            if (!panel->departingPage)
+                hideContentShade();
+        } else {
+            hideContentShade();
         }
     }
+    if (!panel->morph.duration)
+        hideMorphBacking();
     panelPosition(now, true);
+    if (!panel->frame)
+        showPanelContent();
 }
 static void layered(bool enabled) {
     if (panel->layered == enabled)
@@ -4975,15 +5258,20 @@ static void revealPanel() {
     if (!panel->motion) {
         panel->reveal.set(1);
         panelPosition(motionTime());
+        showPanelContent();
         return;
     }
     layered(true);
     target(panel->reveal, 1, kPanelRevealMs);
     panelPosition(motionTime());
+    if (!panel->frame)
+        showPanelContent();
 }
 static void dismissPanel() {
     if (!panel->window || panel->closing)
         return;
+    hideMorphBacking();
+    hideContentShade();
     if (!panel->motion || panel->browsing ||
         panel->reveal.value(motionTime()) < .028) {
         closePanel();
@@ -4996,7 +5284,7 @@ static void dismissPanel() {
         closePanel();
 }
 static void gridEntrance(int dir) {
-    panel->arrival.set(panel->motion ? 1 : 0);
+    panel->arrival.set(panel->motion && !panel->contentFrames ? 1 : 0);
     panel->slide = dir;
     target(panel->arrival, 0, 175);
 }
@@ -5014,9 +5302,36 @@ static void tickPanel() {
     auto now = panel->frameSample = motionTime();
     const bool revealing = panel->reveal.active(now);
     bool active = revealing;
+    if (panel->shade.duration) {
+        if (panel->shade.active(now)) {
+            const double t = std::clamp((now - panel->shade.since) / panel->shade.duration, 0., 1.);
+            const BYTE opacity = static_cast<BYTE>(std::lround(255 * panel->shade.start *
+                                                              (1 - t * t * (3 - 2 * t))));
+            if (opacity != panel->shadeOpacity) {
+                // Opacity changes across the whole snapshot on every fade frame.
+                BLENDFUNCTION blend{AC_SRC_OVER, 0, opacity, 0};
+                if (UpdateLayeredWindow(panel->contentShade, nullptr, nullptr, nullptr,
+                                        panel->shadeDC, &panel->shadeSource, 0, &blend, ULW_ALPHA))
+                    panel->shadeOpacity = opacity;
+                else
+                    hideContentShade();
+            }
+            active = true;
+        } else {
+            hideContentShade();
+        }
+    }
     const bool resizing = panel->morph.damage(now, active);
     if (panel->reveal.duration || resizing)
         panelPosition(now);
+    if (panel->backingFrames && !panel->morph.duration) {
+        if (panel->backingFrames == 1)
+            hideMorphBacking();
+        else {
+            --panel->backingFrames;
+            active = true;
+        }
+    }
     if (panel->reveal.duration && !revealing) {
         if (panel->closing) {
             closePanel();
@@ -5025,6 +5340,16 @@ static void tickPanel() {
         // Keep the composited surface for the next reveal. Tile-only
         // animation frames do not reposition or reblend the window.
         panel->reveal.set(1);
+    }
+    if (panel->contentFrames && !panel->closing && !panel->departingPage &&
+        !panel->reveal.duration && !panel->morph.duration) {
+        if (panel->contentFrames == 1 || !panel->motion) {
+            showPanelContent(panel->motion);
+            active |= panel->shade.duration != 0;
+        } else {
+            --panel->contentFrames;
+            active = true;
+        }
     }
     bool full = panel->arrival.damage(now, active);
     if (!panel->arrival.active(now))
@@ -5063,10 +5388,17 @@ static void tickPanel() {
         }
     }
     if (!active || !schedulePanelFrame()) {
-        if (panel->morph.duration) {
+        if (panel->closing) {
+            closePanel();
+            return;
+        }
+        if (panel->morph.duration || panel->reveal.duration) {
             panel->morph.set(1);
+            panel->reveal.set(1);
             panelPosition(now);
         }
+        showPanelContent();
+        hideMorphBacking();
         stopPanelFrames();
     }
 }
@@ -5864,8 +6196,7 @@ static void drawGrid(HDC dc) {
         auto& t = panel->tiles[i];
         int dx =
             int(std::lround(t.dx.value(now) + enter * panel->slide * px(15)));
-        int dy = int(
-            std::lround(t.dy.value(now) + (panel->slide ? 0 : enter * px(6))));
+        int dy = int(std::lround(t.dy.value(now)));
         OffsetRect(&r.cell, dx, dy);
         OffsetRect(&r.label, dx, dy);
         OffsetRect(&r.icon, dx, dy);
@@ -6562,9 +6893,13 @@ static HWND part(PCWSTR cls,
                  DWORD style,
                  int id,
                  bool visible = true) {
-    return CreateWindowExW(
-        0, cls, title, WS_CHILD | (visible ? WS_VISIBLE : 0) | style, 0, 0, 1,
+    HWND child = CreateWindowExW(
+        0, cls, title, WS_CHILD | WS_CLIPSIBLINGS | (visible ? WS_VISIBLE : 0) | style, 0, 0, 1,
         1, panel->window, (HMENU)(INT_PTR)id, moduleInstance(), nullptr);
+    if (child && panel->contentFrames)
+        SetWindowPos(child, panel->contentCover, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    return child;
 }
 static bool wirePanelChild(HWND h) {
     if (!h || !SetWindowSubclass(h, panelChild, 1, 0))
@@ -7101,6 +7436,8 @@ static void beginAdding(const wstring& dest) {
         note(uiText(UiString::SearchFailed));
         return;
     }
+    if (!panel->choosing)
+        fadeDepartingPage();
     panel->filtering = false;
     clearPanelSelection();
     panel->choosing = false;
@@ -7606,6 +7943,8 @@ static void registerPanelDrop(HWND window) {
         OleUninitialize();
 }
 static void stopPanelInteraction(HWND w) {
+    hideMorphBacking();
+    hideContentShade();
     panel->morph.set(1);
     panel->closing = true;
     panel->motion = false;
@@ -7633,6 +7972,7 @@ static void closePanel() {
         panel->rendered = ~0u;
     stopPanelInteraction(w);
     ShowWindow(w, SW_HIDE);
+    showPanelContent();
     if (panel->tips)
         SendMessageW(panel->tips, TTM_POP, 0, 0);
     if (panel->registeredDropTarget)
@@ -7779,6 +8119,7 @@ static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
                     if (!panel->motion)
                         stopExitFrames();
                     if (!panel->motion && panel->frame) {
+                        hideContentShade();
                         if (panel->closing) {
                             closePanel();
                             return 0;
@@ -7833,19 +8174,7 @@ static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
             case WM_PAINT: {
                 PAINTSTRUCT ps{};
                 HDC dc = BeginPaint(w, &ps);
-                paintBackdrop(dc, w, ps.rcPaint);
-                if (panel->choosing || panel->filtering) {
-                    rounded(dc, panel->searchRect, panel->field, px(7));
-                    RECT line = panel->searchRect;
-                    line.left += px(7);
-                    line.right -= px(7);
-                    line.top = line.bottom - std::max(1, px(1));
-                    auto old = SetDCBrushColor(dc, GetFocus() == panel->filter
-                                                       ? panel->accent
-                                                       : panel->rim);
-                    FillRect(dc, &line, (HBRUSH)GetStockObject(DC_BRUSH));
-                    SetDCBrushColor(dc, old);
-                }
+                paintPanelFace(dc, ps.rcPaint);
                 EndPaint(w, &ps);
                 return 0;
             }
@@ -7855,9 +8184,14 @@ static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
                 SetBkMode(dc, TRANSPARENT);
                 return (LRESULT)panel->background;
             }
-            case WM_DRAWITEM:
-                drawCommand(*reinterpret_cast<DRAWITEMSTRUCT*>(lp));
+            case WM_DRAWITEM: {
+                const auto& item = *reinterpret_cast<DRAWITEMSTRUCT*>(lp);
+                if (item.hwndItem == panel->contentCover)
+                    paintBackdrop(item.hDC, item.hwndItem, item.rcItem);
+                else
+                    drawCommand(item);
                 return TRUE;
+            }
             case WM_ACTIVATE:
                 if (panel->window != w)
                     break;
@@ -7901,6 +8235,7 @@ static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
                         auto id = panel->folder;
                         if (edit([&](Model& m) { transfer(m, id, a); }) &&
                             panel->window) {
+                            fadeDepartingPage();
                             panel->choosing = false;
                             panel->page = 0;
                             refreshPanel();
@@ -7910,7 +8245,6 @@ static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
                             if (f != panel->apps.end())
                                 changePage(int(f - panel->apps.begin()) /
                                            panel->capacity);
-                            gridEntrance(-1);
                         }
                         return 0;
                     }
@@ -7960,7 +8294,9 @@ static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
                         if (browse(panel->folder, controller ? controller : w,
                                    panel->anchor)) {
                             panel->browsing = true;
+                            hideMorphBacking();
                             ShowWindow(w, SW_HIDE);
+                            showPanelContent();
                             if (panel->reveal.duration || panel->morph.duration) {
                                 // Return from the picker to the fully open chooser even
                                 // if Browse was clicked during its first resize.
@@ -7975,6 +8311,7 @@ static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
                 }
                 if (HIWORD(wp) == BN_CLICKED && LOWORD(wp) == kMore) {
                     if (panel->choosing) {
+                        fadeDepartingPage();
                         panel->choosing = false;
                         panel->page = 0;
                         panel->arrival.set(0);
@@ -8011,6 +8348,10 @@ static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
                 break;
             case WM_DESTROY:
                 stopPanelInteraction(w);
+                if (auto shade = std::exchange(panel->contentShade, nullptr))
+                    DestroyWindow(shade);
+                if (auto backing = std::exchange(panel->morphBacking, nullptr))
+                    DestroyWindow(backing);
                 if (panel->registeredDropTarget) {
                     RevokeDragDrop(w);
                     if (stopping)
@@ -8065,12 +8406,7 @@ static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
     return DefWindowProcW(w, msg, wp, lp);
 }
 static bool createPanel(HWND owner, RECT anchor) {
-    WNDCLASSW wc{};
-    wc.lpfnWndProc = panelProc;
-    wc.hInstance = moduleInstance();
-    wc.lpszClassName = kPanelClass;
-    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-    if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+    if (!panelClass.ensure(panelProc, LoadCursorW(nullptr, IDC_ARROW)))
         return false;
     INITCOMMONCONTROLSEX init{sizeof(init), ICC_LISTVIEW_CLASSES};
     if (!InitCommonControlsEx(&init))
@@ -8200,14 +8536,15 @@ static void openPanel(wstring id,
                         runningWindowEvent, 0, 0, WINEVENT_OUTOFCONTEXT);
     scheduleWindowScan();
     layered(panel->motion);
+    if (panel->motion && !coverPanelContent(panel->rest, panel->rest))
+        panel->reveal.set(1);
     panelPosition(motionTime());
-    panel->arrival.set(panel->motion ? 1 : 0);
+    panel->arrival.set(0);
     panel->slide = 0;
     ShowWindow(panel->window, forDrop ? SW_SHOWNOACTIVATE : SW_SHOW);
     RedrawWindow(panel->window, nullptr, nullptr,
                  RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
     revealPanel();
-    gridEntrance(0);
     if (!forDrop) {
         SetForegroundWindow(panel->window);
         SetFocus(panel->apps.empty() ? panel->add : panel->list);
@@ -8353,6 +8690,7 @@ static void hoverShortcut(const wstring& folder,
 // A folder has its own OLE drop window for this file drag. When the pointer
 // crosses onto it Windows ends the previous taskbar target's insertion preview.
 static constexpr wchar_t kFileSurfaceClass[] = L"TaskbarFolders.FileDrop";
+static ModWindowClass fileSurfaceClass{kFileSurfaceClass};
 struct FileDropWindow {
     HWND window;
     wstring folder;
@@ -8501,11 +8839,7 @@ static bool registerFileWindow(HWND owner,
     if (IsRectEmpty(&r))
         return false;
     auto target = winrt::make_self<IconFileTarget>(id, element);
-    WNDCLASSW wc{};
-    wc.hInstance = moduleInstance();
-    wc.lpszClassName = kFileSurfaceClass;
-    wc.lpfnWndProc = DefWindowProcW;
-    if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+    if (!fileSurfaceClass.ensure(DefWindowProcW))
         return false;
     FileDropWindow entry{nullptr, id, target.as<IDropTarget>()};
     fileWindows->reserve(fileWindows->size() + 1);
@@ -8514,7 +8848,7 @@ static bool registerFileWindow(HWND owner,
     auto w = CreateWindowExW(
         WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED,
         kFileSurfaceClass, L"", WS_POPUP, r.left, r.top, r.right - r.left,
-        r.bottom - r.top, owner, nullptr, wc.hInstance, nullptr);
+        r.bottom - r.top, owner, nullptr, moduleInstance(), nullptr);
     if (!w || !SetLayeredWindowAttributes(w, 0, 1, LWA_ALPHA) ||
         FAILED(RegisterDragDrop(w, target.get()))) {
         if (w)
@@ -11607,6 +11941,7 @@ static void watchFrame() {
 struct NativeSelection {
     uint32_t ticket{};
     ULONGLONG opened{};
+    HWND host{};
     bool awaitingGroup{};
     wstring appId;
     std::unique_ptr<ITEMIDLIST, decltype(&CoTaskMemFree)> shortcut{
@@ -11688,7 +12023,7 @@ static void stageNative(const wstring& id, const ITEMIDLIST* pidl) {
         next.shortcut.reset(ILCloneFull(pidl));
     if (!f && id.empty() && !next.shortcut)
         return;
-    nextTicket = nextTicket % 0x7ffffffeU + 1;
+    nextTicket = nextTicket % kJumpTicketMask + 1;
     next.ticket = nextTicket;
     next.opened = GetTickCount64();
     J::JsonArray labels;
@@ -11711,9 +12046,28 @@ static void stageNative(const wstring& id, const ITEMIDLIST* pidl) {
         wakeJumpHosts();
     }
 }
+// A ticket is usable only while the host that attached its rows still has them.
+// A short initial unload can replace the XAML list before the menu becomes stable.
+static void updateJumpHost(WPARAM stamp, HWND host) {
+    if (!selection.ticket || (stamp & kJumpTicketMask) != selection.ticket || !host)
+        return;
+    const auto age = GetTickCount64() - selection.opened;
+    const WPARAM state = stamp & ~WPARAM{kJumpTicketMask};
+    if (state == kJumpDetached) {
+        if (host == selection.host) {
+            selection.host = nullptr;
+            if (age >= kJumpRebindMs)
+                clearSelection();
+        }
+    } else if (state == kJumpAttached && age <= kJumpAttachMs && windowClass(host, kHost) &&
+               isJumpThread(GetWindowThreadProcessId(host, nullptr))) {
+        selection.host = host;
+    }
+}
 static void invokeNativeAction(WPARAM seq, LPARAM ordinal) {
     if (!selection.ticket || seq != selection.ticket || ordinal < 1 ||
-        static_cast<size_t>(ordinal) > selection.actions.size())
+        static_cast<size_t>(ordinal) > selection.actions.size() ||
+        !windowClass(selection.host, kHost))
         return;
     auto command = std::move(selection.actions[ordinal - 1]);
     auto id = std::move(selection.appId);
@@ -11907,7 +12261,10 @@ static LRESULT CALLBACK controlProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             }
         }
         if (msg == actionMsg) {
-            invokeNativeAction(wp, lp);
+            if (wp & ~WPARAM{kJumpTicketMask})
+                updateJumpHost(wp, reinterpret_cast<HWND>(lp));
+            else
+                invokeNativeAction(wp, lp);
             return 0;
         }
     } catch (...) {
@@ -11927,14 +12284,10 @@ static bool ensureControl() {
         return false;
     if (controller)
         return uiThread == GetCurrentThreadId();
-    WNDCLASSW wc{};
-    wc.lpfnWndProc = controlProc;
-    wc.hInstance = moduleInstance();
-    wc.lpszClassName = kController;
-    if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+    if (!controllerClass.ensure(controlProc))
         return false;
     controller = CreateWindowExW(0, kController, L"", 0, 0, 0, 0, 0,
-                                 HWND_MESSAGE, nullptr, wc.hInstance, nullptr);
+                                 HWND_MESSAGE, nullptr, moduleInstance(), nullptr);
     if (!controller)
         return false;
     uiThread = GetCurrentThreadId();
@@ -12296,6 +12649,7 @@ static void openMenuFolder(const wstring& id) {
         if (panel->closing)
             revealPanel();
         if (panel->choosing) {
+            fadeDepartingPage();
             panel->choosing = false;
             panel->page = 0;
             refreshPanel();
@@ -12386,6 +12740,8 @@ static void clearFooter() {
         return;
     auto old = std::move(*footer);
     footer.reset();
+    PostMessageW(old.controller, actionMsg, old.ticket | kJumpDetached,
+                 reinterpret_cast<LPARAM>(hostWindow));
     if (!old.rows)
         return;
     try {
@@ -12531,7 +12887,7 @@ static bool attachJump(HWND ctl) {
         footer->rows.XamlRoot())
         return true;
     clearFooter();
-    if (GetTickCount64() - time > 7000)
+    if (GetTickCount64() - time > kJumpAttachMs)
         return true;
     auto system = currentSystemList();
     if (!system)
@@ -12594,9 +12950,9 @@ static bool attachJump(HWND ctl) {
                     auto list = sender.template as<C::ListView>();
                     uint32_t index{};
                     if (list.Items().IndexOf(args.ClickedItem(), index)) {
-                        SetForegroundWindow(tray());
                         PostMessageW(ctl, actionMsg, seq,
                                      static_cast<LPARAM>(index) + 1);
+                        SetForegroundWindow(tray());
                     }
                 } catch (...) {
                 }
@@ -12607,7 +12963,7 @@ static bool attachJump(HWND ctl) {
                     if (footer && footer->system == sender) {
                         clearFooter();
                         if (hostWindow && !stopping &&
-                            GetTickCount64() - time < 450)
+                            GetTickCount64() - time < kJumpRebindMs)
                             PostMessageW(hostWindow, refreshMsg, 0, 0);
                     }
                 } catch (...) {
@@ -12619,6 +12975,11 @@ static bool attachJump(HWND ctl) {
             system.Header(rows);
         else
             system.Footer(rows);
+        if (footer && footer->rows == rows && !PostMessageW(
+                ctl, actionMsg, seq | kJumpAttached, reinterpret_cast<LPARAM>(hostWindow))) {
+            clearFooter();
+            return false;
+        }
     } catch (...) {
         clearFooter();
         throw;
@@ -12696,14 +13057,10 @@ static LRESULT CALLBACK hostProc(HWND w, UINT m, WPARAM wp, LPARAM lp) {
 static bool ensureHost() {
     if (hostWindow)
         return true;
-    WNDCLASSW cls{};
-    cls.lpfnWndProc = hostProc;
-    cls.hInstance = moduleInstance();
-    cls.lpszClassName = kHost;
-    if (!RegisterClassW(&cls) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+    if (!jumpHostClass.ensure(hostProc))
         return false;
     hostWindow = CreateWindowExW(0, kHost, L"", 0, 0, 0, 0, 0, HWND_MESSAGE,
-                                 nullptr, cls.hInstance, nullptr);
+                                 nullptr, moduleInstance(), nullptr);
     if (!hostWindow)
         return false;
     try {
@@ -12846,22 +13203,18 @@ BOOL Wh_ModInit() {
     wchar_t path[MAX_PATH]{};
     GetModuleFileNameW(nullptr, path, MAX_PATH);
     explorer = equal(fs::path(path).filename().wstring(), L"explorer.exe");
-    if (explorer) {
-        modalDrained = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-        if (!modalDrained)
-            return FALSE;
-        try {
-            initTaskbarState();
-        } catch (...) {
-            releaseTaskbarState();
-            CloseHandle(std::exchange(modalDrained, nullptr));
-            return FALSE;
-        }
-    }
-    bool messages = WindhawkUtils::SetFunctionHook(DispatchMessageW, dispatch,
-                                                   &oldDispatch);
     if (!explorer)
-        return messages;
+        return WindhawkUtils::SetFunctionHook(DispatchMessageW, dispatch, &oldDispatch);
+    modalDrained = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!modalDrained)
+        return FALSE;
+    try {
+        initTaskbarState();
+    } catch (...) {
+        releaseTaskbarState();
+        CloseHandle(std::exchange(modalDrained, nullptr));
+        return FALSE;
+    }
     auto kb = GetModuleHandleW(L"kernelbase.dll");
     auto load = reinterpret_cast<decltype(&LoadLibraryExW)>(
         GetProcAddress(kb, "LoadLibraryExW"));
@@ -12911,8 +13264,8 @@ void Wh_ModUninit() {
     releaseTaskbarState();
     if (modalDrained)
         CloseHandle(std::exchange(modalDrained, nullptr));
-    UnregisterClassW(kFileSurfaceClass, moduleInstance());
-    UnregisterClassW(kPanelClass, moduleInstance());
-    UnregisterClassW(kController, moduleInstance());
-    UnregisterClassW(kHost, moduleInstance());
+    fileSurfaceClass.remove();
+    panelClass.remove();
+    controllerClass.remove();
+    jumpHostClass.remove();
 }
