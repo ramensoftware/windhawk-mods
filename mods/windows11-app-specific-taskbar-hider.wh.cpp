@@ -23,6 +23,8 @@ to reach a timeline scrollbar in DaVinci Resolve, or a horizontal scrollbar in
 Photoshop/InDesign) will not bring the taskbar back or steal focus from your
 app.
 
+![Demo: the taskbar is hidden while a target app is focused and comes back when switching away](https://raw.githubusercontent.com/Dszae/taskbar-fixer/main/docs/images/demo.gif)
+
 ## How it differs from similar mods
 
 * *Taskbar auto-hide fine tuning* can keep the taskbar from showing (its
