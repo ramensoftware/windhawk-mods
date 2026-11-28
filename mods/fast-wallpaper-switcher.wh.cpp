@@ -6,8 +6,8 @@
 // @version         1.1.0
 // @author          sarthakaksh
 // @github          https://github.com/sarthakaksh
-// @include         explorer.exe
-// @architecture    x86-64
+// @include         windhawk.exe
+// @license         GPL-3.0
 // @compilerOptions -ld2d1 -ldwrite -lwindowscodecs -lole32 -lshell32 -lshlwapi -ldwmapi -lgdi32 -luser32 -luuid -loleaut32 -lmfplat -lmfreadwrite -lmfuuid
 // ==/WindhawkMod==
 
@@ -35,7 +35,6 @@ Freeze, Dust, Glitch, Hyperspace and more.
 - **12 animated transitions**: Fade, Circle, Slide, Zoom, Ink, Slash, Whip,
   Glitch, Hyperspace, Burn, Freeze, Dust
 - **Subject cutouts** for Ink and Dust, remembered per wallpaper
-- **Wallpaper Engine support**: browse and apply your workshop wallpapers
 - **Hotkeys** for next / previous / random without opening the picker
 - **Scriptable**: trigger everything from other tools via named events
 - Works with the **Desktop Clock** mod from the same repo, which switches
@@ -70,8 +69,6 @@ center is big: that's the preview.
 |                                  | Fisheye grid, Tunnel)                  |
 | U                                | choose a subject cutout (Ink / Dust)   |
 | F                                | choose another folder                  |
-| W                                | switch source: image folder /          |
-|                                  | Wallpaper Engine                       |
 | Esc, click anywhere else         | close                                  |
 
 Extra controls in the full-screen styles:
@@ -87,7 +84,7 @@ as a character or a mountain, using a **PNG cutout** (transparent background,
 
 1. Select the wallpaper in the picker and press `T` until Ink or Dust is chosen.
 2. Press `U` and pick the cutout PNG. It's remembered **per wallpaper**.
-3. `Delete` in that dialog forgets the cutout. `Cancel` falls back to the
+3. Press `Delete` in the picker to forget the cutout. `Cancel` in the dialog falls back to the
    no-cutout version.
 
 Without a cutout, Ink uses ink drops and Dust uses a wind wave.
@@ -118,6 +115,28 @@ PowerShell one-liner:
 
     powershell -NoProfile -WindowStyle Hidden -Command "[Threading.EventWaitHandle]::OpenExisting('Local\FastWallpaper.Picker').Set()"
 
+
+## Good to know
+
+- **It changes your Windows wallpaper setting.** Choosing a wallpaper sets it
+  through Windows itself, the same as Settings > Personalization > Background.
+  Windows saves it in your profile, so the last wallpaper stays after you
+  disable or remove the mod. It also replaces a Slideshow or Windows Spotlight
+  background. The mod writes nothing else outside Windhawk's own storage.
+- **It runs in its own process.** The mod runs in a separate Windhawk process,
+  not inside Explorer, so a problem in it can't take the taskbar down.
+- **The heavy transitions use memory.** Each one builds full-screen pictures,
+  which can take a few hundred MB at 4K, more with "All monitors". On a
+  low-memory PC, use Fade, Circle, Slide or Zoom.
+- **Why a separate mod?** Simple Wallpaper Switcher is a light picker with
+  simple transitions. This mod is a much larger engine: 12 picker layouts,
+  8 pixel-based transitions (Ink, Slash, Whip, Glitch, Hyperspace, Burn,
+  Freeze, Dust), per-wallpaper subject cutouts, hotkeys and named events for
+  next / previous / random, and cooperation with the Desktop Clock and Audio
+  Visualizer mods. Folding all of that into a small mod would change its
+  scope, so it is kept separate.
+- **License.** GPL-3.0, because part of the code comes from the Mac Island &
+  Dock mod.
 
 ## 🧩 Part of a bigger setup
 
@@ -237,7 +256,7 @@ changes with your wallpaper:
   - spiral: Spiral (circles gliding along a double spiral)
   - fisheye: Fisheye grid (tidy grid, tiles swell near the mouse)
   - tunnel: Depth tunnel (frames on corridor walls, fly through)
-- ambient: true
+- ambient: false
   $name: Ambient backdrop
   $description: Full-screen picker styles show a blurred, darkened copy of the selected wallpaper behind them (cross-fades as you browse). Off = flat dark dim.
 - monitors: cursor
@@ -292,11 +311,12 @@ constexpr UINT WM_APP_RELOAD = WM_APP + 1;
 constexpr UINT WM_APP_PICKFOLDER = WM_APP + 2;
 constexpr UINT WM_APP_THUMB = WM_APP + 3;
 constexpr UINT WM_APP_PICKSUBJECT = WM_APP + 4;
-// Message of the Desktop Clock Widget mod (same explorer.exe process): "the
+// Message of the Desktop Clock Widget mod, posted to its control window: "the
 // wallpaper was just changed, switch your layout now". Ignored if that mod
 // isn't loaded.
 constexpr UINT kClockWallpaperNow = WM_APP + 2;
 constexpr UINT WM_APP_STEPDONE = WM_APP + 5;
+constexpr UINT WM_APP_CLOSEDIALOG = WM_APP + 6;
 
 // Windows showing a new wallpaper: looked at this often, for this long at
 // most; without a look, the transition's window goes after a moment.
@@ -350,8 +370,47 @@ std::atomic<int> g_inkRibbon{70};
 std::atomic<int> g_whipLight{0};  // Whip backdrop: 0 dark, 1 beige
 std::atomic<int> g_whipSpin{2};   // Whip spin, in half turns
 
-HANDLE g_mutex = nullptr;
 HANDLE g_thread = nullptr;
+IFileDialog* g_openDialog = nullptr;  // (main thread only) while a dialog shows
+
+// Duplicate handles of every thread the mod starts, so unloading can wait
+// until each one has really exited.
+[[clang::no_destroy]] std::vector<HANDLE> g_workers;
+SRWLOCK g_workersLock = SRWLOCK_INIT;
+
+HANDLE StartTrackedThread(LPSECURITY_ATTRIBUTES attributes,
+                          SIZE_T stackSize,
+                          LPTHREAD_START_ROUTINE start,
+                          LPVOID parameter,
+                          DWORD flags,
+                          LPDWORD threadId) {
+    HANDLE thread =
+        CreateThread(attributes, stackSize, start, parameter, flags, threadId);
+    HANDLE copy = nullptr;
+    if (thread && DuplicateHandle(GetCurrentProcess(), thread,
+                                  GetCurrentProcess(), &copy, SYNCHRONIZE,
+                                  FALSE, 0)) {
+        AcquireSRWLockExclusive(&g_workersLock);
+        // Let go of the ones that already finished.
+        g_workers.erase(
+            std::remove_if(g_workers.begin(), g_workers.end(),
+                           [](HANDLE handle) {
+                               if (WaitForSingleObject(handle, 0) !=
+                                   WAIT_OBJECT_0) {
+                                   return false;
+                               }
+                               CloseHandle(handle);
+                               return true;
+                           }),
+            g_workers.end());
+        g_workers.push_back(copy);
+        ReleaseSRWLockExclusive(&g_workersLock);
+    }
+    return thread;
+}
+
+// Every CreateThread below goes through the tracker.
+#define CreateThread StartTrackedThread
 HANDLE g_stop = nullptr;
 HANDLE g_events[4] = {};  // picker, next, prev, random
 volatile HWND g_hwnd = nullptr;
@@ -597,7 +656,7 @@ void LoadConfig() {
     g_inkRibbon = std::clamp(Wh_GetIntSetting(L"inkRibbonWidth"), 20, 300);
     const std::wstring m = GetSettingString(L"monitors");
     g_cfg.monitors = m == L"primary" ? 1 : m == L"all" ? 2 : 0;
-    g_cfg.ambient = false;  // no blurred wallpaper glow behind full-screen styles
+    g_cfg.ambient = Wh_GetIntSetting(L"ambient") != 0;
     g_cfg.hotkeys[ActionPicker] = GetSettingString(L"hotkeyPicker");
     g_cfg.hotkeys[ActionNext] = GetSettingString(L"hotkeyNext");
     g_cfg.hotkeys[ActionPrev] = GetSettingString(L"hotkeyPrev");
@@ -1519,6 +1578,7 @@ struct InkAnim {
 
         InkNoise noise;
         noise.Build(size, std::random_device{}());
+        if (g_unloading) return false;
         std::vector<uint16_t> T;
         subject = false;
         if (!subjectPath.empty()) {
@@ -1558,6 +1618,7 @@ struct InkAnim {
             }
         }
         if (!subject) {
+            if (g_unloading) return false;
             lines.clear();
             InkBuildSplatter(size, noise, &T);
         }
@@ -2962,7 +3023,9 @@ struct BurnAnim {
         nz.assign(N, 0);
         grain.assign(N, 0);
         float maxRaw = 1.0f;
+        if (g_unloading) return false;
         for (int y = 0; y < H; y++) {
+            if (g_unloading) return false;
             for (int x = 0; x < W; x++) {
                 const size_t i = (size_t)y * W + x;
                 const float n = noise.At((float)x, (float)y);  // -1..1
@@ -3552,6 +3615,7 @@ struct FreezeAnim {
         grain.assign(N, 0);
         float maxRaw = 1.0f;
         for (int y = 0; y < H; y++) {
+            if (g_unloading) return false;
             for (int x = 0; x < W; x++) {
                 const size_t i = (size_t)y * W + x;
                 const float n = noise.At((float)x, (float)y);  // -1..1
@@ -4011,6 +4075,7 @@ struct DustAnim {
         const int cell = std::max(2, (int)std::lround(2.2f * sc));
         float maxRaw = 1.0f;
         for (int y = 0; y < H; y++) {
+            if (g_unloading) return false;
             for (int x = 0; x < W; x++) {
                 const size_t i = (size_t)y * W + x;
                 const float e = raw[i];
@@ -4888,6 +4953,14 @@ DWORD WINAPI WallpaperChangeThreadProc(LPVOID parameter) {
 // Which monitors, and starting a change
 // ---------------------------------------------------------------------------
 
+BOOL CALLBACK EnumMonitorsProc(HMONITOR monitor, HDC, LPRECT, LPARAM param) {
+    MONITORINFO info{sizeof(info)};
+    if (GetMonitorInfo(monitor, &info)) {
+        ((std::vector<RECT>*)param)->push_back(info.rcMonitor);
+    }
+    return TRUE;
+}
+
 std::vector<RECT> TargetMonitors(POINT cursor) {
     std::vector<RECT> monitors;
     auto add = [&](HMONITOR monitor) {
@@ -4897,16 +4970,8 @@ std::vector<RECT> TargetMonitors(POINT cursor) {
         }
     };
     if (g_cfg.monitors == 2) {
-        EnumDisplayMonitors(
-            nullptr, nullptr,
-            [](HMONITOR monitor, HDC, LPRECT, LPARAM param) -> BOOL {
-                MONITORINFO info{sizeof(info)};
-                if (GetMonitorInfo(monitor, &info)) {
-                    ((std::vector<RECT>*)param)->push_back(info.rcMonitor);
-                }
-                return TRUE;
-            },
-            (LPARAM)&monitors);
+        EnumDisplayMonitors(nullptr, nullptr, EnumMonitorsProc,
+                            (LPARAM)&monitors);
     } else if (g_cfg.monitors == 1) {
         add(MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY));
     } else {
@@ -9818,19 +9883,11 @@ LRESULT CALLBACK CarouselProc(HWND hwnd,
 }
 
 void BringToFront(HWND hwnd) {
-    // (A process that didn't get the last input may not take the front: the
-    // front window's input is joined for a moment.)
-    HWND front = GetForegroundWindow();
-    const DWORD frontThread =
-        front ? GetWindowThreadProcessId(front, nullptr) : 0;
-    const DWORD thisThread = GetCurrentThreadId();
-    const bool attached =
-        frontThread && frontThread != thisThread &&
-        AttachThreadInput(thisThread, frontThread, TRUE);
+    // An empty input event lets SetForegroundWindow succeed when this process
+    // didn't receive the last input (for example, a named event started it).
+    INPUT input{};
+    SendInput(1, &input, sizeof(INPUT));
     SetForegroundWindow(hwnd);
-    if (attached) {
-        AttachThreadInput(thisThread, frontThread, FALSE);
-    }
     SetFocus(hwnd);
 }
 
@@ -10054,7 +10111,13 @@ std::wstring PickFolder(HWND owner) {
     dialog->GetOptions(&options);
     dialog->SetOptions(options | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM);
     dialog->SetTitle(L"The folder with your wallpapers");
-    if (FAILED(dialog->Show(owner))) {
+    if (g_unloading) {
+        return result;
+    }
+    g_openDialog = dialog.Get();
+    const HRESULT shown = dialog->Show(owner);
+    g_openDialog = nullptr;
+    if (FAILED(shown)) {
         return result;
     }
     ComPtr<IShellItem> item;
@@ -10086,7 +10149,13 @@ std::wstring PickSubject(HWND owner) {
     dialog->SetTitle(
         L"Subject of this wallpaper (PNG, transparent background, same size). "
         L"Cancel = ink drops, no subject");
-    if (FAILED(dialog->Show(owner))) {
+    if (g_unloading) {
+        return result;
+    }
+    g_openDialog = dialog.Get();
+    const HRESULT shown = dialog->Show(owner);
+    g_openDialog = nullptr;
+    if (FAILED(shown)) {
         return result;
     }
     ComPtr<IShellItem> item;
@@ -10175,6 +10244,11 @@ LRESULT CALLBACK MessageProc(HWND hwnd,
             ApplyWallpaper(wallpaper, true, subject);
             return 0;
         }
+        case WM_APP_CLOSEDIALOG:
+            if (g_openDialog) {
+                g_openDialog->Close(HRESULT_FROM_WIN32(ERROR_CANCELLED));
+            }
+            return 0;
         case WM_DESTROY:
             PostQuitMessage(0);
             return 0;
@@ -10250,15 +10324,17 @@ DWORD WINAPI MainThreadProc(LPVOID) {
 // Windhawk entry points
 // ---------------------------------------------------------------------------
 
-BOOL Wh_ModInit() {
-    // Only one explorer.exe process runs the mod.
-    g_mutex = CreateMutex(nullptr, FALSE, L"Local\\FastWallpaperSwitcherMod");
-    if (g_mutex && GetLastError() == ERROR_ALREADY_EXISTS) {
-        CloseHandle(g_mutex);
-        g_mutex = nullptr;
-        return TRUE;
-    }
+BOOL WhTool_ModInit() {
     g_unloading = false;
+    // Keep this background process off the efficiency cores and the coarse
+    // timers Windows gives to throttled processes.
+    PROCESS_POWER_THROTTLING_STATE throttle{};
+    throttle.Version = PROCESS_POWER_THROTTLING_CURRENT_VERSION;
+    throttle.ControlMask = PROCESS_POWER_THROTTLING_EXECUTION_SPEED |
+                           PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION;
+    throttle.StateMask = 0;
+    SetProcessInformation(GetCurrentProcess(), ProcessPowerThrottling,
+                          &throttle, sizeof(throttle));
     g_stop = CreateEvent(nullptr, TRUE, FALSE, nullptr);
     g_events[ActionPicker] =
         CreateEvent(nullptr, FALSE, FALSE, L"Local\\FastWallpaper.Picker");
@@ -10272,7 +10348,7 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     // What the settings page says wins over what the picker chose.
     Wh_DeleteValue(L"pickedFolder");
     Wh_DeleteValue(L"pickedTransition");
@@ -10282,17 +10358,33 @@ void Wh_ModSettingsChanged() {
     }
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     g_unloading = true;
     if (g_thread) {
         SetEvent(g_stop);
-        WaitForSingleObject(g_thread, 5000);
+        // Ends an open file dialog (its message loop runs on that thread).
+        if (HWND hwnd = g_hwnd) {
+            PostMessage(hwnd, WM_APP_CLOSEDIALOG, 0, 0);
+        }
+        WaitForSingleObject(g_thread, INFINITE);
         CloseHandle(g_thread);
         g_thread = nullptr;
-        // The transitions and picture threads still running.
-        for (int i = 0; i < 100 && g_threads > 0; i++) {
-            Sleep(50);
+    }
+    // The transitions and picture threads: wait until each one has really
+    // exited, not just counted itself out.
+    for (;;) {
+        HANDLE worker = nullptr;
+        AcquireSRWLockExclusive(&g_workersLock);
+        if (!g_workers.empty()) {
+            worker = g_workers.back();
+            g_workers.pop_back();
         }
+        ReleaseSRWLockExclusive(&g_workersLock);
+        if (!worker) {
+            break;
+        }
+        WaitForSingleObject(worker, INFINITE);
+        CloseHandle(worker);
     }
     for (HANDLE& handle : g_events) {
         if (handle) {
@@ -10304,8 +10396,183 @@ void Wh_ModUninit() {
         CloseHandle(g_stop);
         g_stop = nullptr;
     }
-    if (g_mutex) {
-        CloseHandle(g_mutex);
-        g_mutex = nullptr;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
     }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
