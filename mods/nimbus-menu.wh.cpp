@@ -17166,6 +17166,7 @@ static std::vector<PrivUse> PrivRead(IMMDeviceEnumerator* mm, std::unordered_map
 }
 
 static DWORD WINAPI PrivThread(LPVOID) {
+  for (;;) {
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     {
         ComPtr<IMMDeviceEnumerator> mm;
@@ -17220,7 +17221,13 @@ static DWORD WINAPI PrivThread(LPVOID) {
         if (mfplat) FreeLibrary(mfplat);
     }
     CoUninitialize();
-    return 0;
+    // Told to stay while it was still ending (PrivSetOn turned the item back on before this cleanup was done):
+    // start over, or the dot would stay empty with this finished thread taken for the running one.
+    AcquireSRWLockShared(&g_priv.lock);
+    bool again = !g_priv.stop;
+    ReleaseSRWLockShared(&g_priv.lock);
+    if (!again) return 0;
+  }
 }
 
 static void PrivSetOn(bool on) {
