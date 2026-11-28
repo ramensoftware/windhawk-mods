@@ -3,13 +3,13 @@
 // @name            Nimbus Menu
 // @description     Replaces the Windows taskbar with a light dock and its own Start menu (also on the Windows key): smoked glass, macOS-like zoom, live window previews, one bar per monitor, file search with Everything
 // @description:pt-BR Troca a barra de tarefas do Windows por uma dock leve com Iniciar próprio (também na tecla Windows): vidro fumê, zoom como no macOS, prévia das janelas ao vivo, uma barra por monitor, busca de arquivos com o Everything
-// @version         2.0.0
+// @version         2.1.0
 // @author          igoredm
 // @github          https://github.com/igoredm
 // @homepage        https://github.com/igoredm/nimbus-menu
 // @include         windhawk.exe
 // @include         explorer.exe
-// @compilerOptions -lole32 -loleaut32 -luuid -lgdi32 -ld2d1 -ldwrite -lwindowscodecs -ldwmapi -lshell32 -lshlwapi -lshcore -lpropsys -ladvapi32 -lcomdlg32 -lwlanapi -lversion -lcomctl32 -lsetupapi -lruntimeobject -lwinmm
+// @compilerOptions -lole32 -loleaut32 -luuid -lgdi32 -ld2d1 -ldwrite -lwindowscodecs -ldwmapi -lshell32 -lshlwapi -lshcore -lpropsys -ladvapi32 -lcomdlg32 -lwlanapi -lversion -lcomctl32 -lsetupapi -lruntimeobject -lwinmm -lwinhttp
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -34,21 +34,28 @@ Replaces the Windows taskbar with a light dock, one per monitor, with its own St
 * macOS-like zoom (or Lift / Focus), live window previews (hover a thumbnail to peek), drag icons to reorder, pin and unpin.
 * Its own Start: pinned apps, all apps, recent downloads, app search, files (with [Everything](https://www.voidtools.com) or Windows Search) and Windows Settings pages. Compact or wide search.
 * A search that understands you: no accents needed, initials ("vsc" finds Visual Studio Code), one typo ("spotfy"), common nicknames ("cmd", "calc"), and what you open most comes first.
+* A search that does things: sums ("12*3,5"), units ("10 km em mi", "100 f to c"), open windows by their title, and commands: "lock", "sleep", "timer 10m", "note buy bread", "empty recycle bin" (Windows asks first). Enter copies a result.
 * Keyboard in Start: arrows, Tab and Enter in every tab. Power: restart and shut down ask for a second click; right-click a power button for sign out, hibernate and restart to advanced options.
-* Right-click menus like Windows': open file location, copy path, and End task on the dock (when it's on in Windows, or always).
+* Right-click menus like Windows': an app's recent files (its jump list), open file location, copy path, and End task on the dock (when it's on in Windows, or always).
+* Unread notifications as a number on each app's dock icon; it goes when the app comes to the front.
 * The Windows key opens Nimbus' Start over any window (administrator ones too) and in games. Ctrl+Esc still opens Windows' Start. An optional shortcut (Alt+Space or Ctrl+Space) can open it too.
 * Status area at either end of the dock (or as a Start tab): clock and calendar, volume per app, network and Wi-Fi, battery, keyboard language. Each opens its own panel, or Windows' own if you prefer.
-* Sound panel, simple or complete (Settings → Status area → Sound; simple by default). Complete: the apps playing on the left and every output on the right; drag an app onto an output to play it there too, from one output to another to move it, × to take it off one; make any output the default, or the one for calls.
+* Sound panel, simple or complete (Settings → Sound and player; simple by default). Complete: the apps playing on the left and every output on the right; drag an app onto an output to play it there too, from one output to another to move it, × to take it off one; make any output the default, or the one for calls; click an app's dot on an output to set its volume there only.
+* Microphone and camera in use: a dot on the microphone and camera icon while an app uses them (orange for the microphone, green for the camera). Click it to see which app.
+* Run as administrator, from the right-click menu of the dock and of Start.
+* The sound panel shows where sound is coming out: a small bar moves under each output and app that's playing.
+* Grid sound panel: every app on every output, with the volume and the sound at each crossing.
+* If the bar's process crashes, Windows' taskbar comes back right away and Nimbus reopens by itself.
 * Tray: the icons of the apps running in the background, beside the status area. Inline with arrows, behind one button (pin the ones you want outside), or in a grid or list panel. Clicks go to the app itself, like on the taskbar; the middle button pins.
 * Control center: one dock button opens do not disturb, Bluetooth, night light, shortcuts (project, cast, captions, accessibility), each monitor's brightness, sound and power, and any other item you put there. Each item opens its full panel inside it, and it scrolls on small screens. Every item can be in the dock, the control center and Start at once, or off.
 * Bluetooth: turn it on and off, see paired devices with their battery, connect and disconnect headsets and speakers.
 * Notifications: Windows' notifications also show as Nimbus cards (in the corner you choose, paused while the mouse is on them, never over games), with their buttons; a bell with the count opens the list, newest first. Win+N can open it. Its own sounds (14 to pick, or Windows' own), one for notifications and one for reminders.
 * Player: what any app is playing (Spotify, YouTube…): cover, title, time, controls, shuffle and repeat, that app's volume. In the dock as the cover and title, the cover, the title, bars moving with the sound, or an icon.
-* Devices: the battery of wireless headsets, mice and Xbox controllers, with a warning at 20% and 10%. USB receivers too (Logitech, Razer…) with [BatteryHub](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor), a separate free program, if you turn it on (see below).
+* Devices: the battery of wireless headsets, mice and Xbox controllers, with a warning at 20% and 10%. USB receivers too (Logitech, Razer…) with [BatteryHub](https://github.com/ferloom/Wireless-Device-Battery-Monitor), a separate free program, if you turn it on (see below).
 * Notes and reminders: notes stay until you delete them; a reminder (in 1, 7 or 14 days, a month, or a calendar day, at a time or as soon as Nimbus runs) comes as a Nimbus notification, late too if the PC was off.
-* Shelf: drop files on the dock to keep them for a moment, then drag them anywhere. Ctrl+V turns a copied picture or text into a file you can drag.
+* Shelf: drop files on the dock to keep them for a moment, then drag them anywhere. Ctrl+V turns a copied picture or text into a file you can drag. Drop or paste a link and it's downloaded into the shelf (videos and pictures on sites through yt-dlp and gallery-dl, if you install them and turn it on).
 * Its own settings window, with a live dock preview: right-click the dock → Settings, or the Nimbus button at the bottom left of Start. Windhawk's Settings tab is empty on purpose: everything is in that window (what was set there in 1.x carries over).
-* Guided setup: a few questions set everything up (it opens by itself the first time; Settings → Get started brings it back). Everything can be changed later in Settings.
+* Guided setup: a few questions set everything up (it opens by itself the first time; Settings → Guided setup brings it back). Everything can be changed later in Settings.
 * Follows Windows' high contrast and "Animation effects" off.
 * Per-monitor settings: format, auto-hide, what shows, only that monitor's windows. Each monitor keeps its own, even when the monitors change order.
 * The dock runs in its own Windhawk process and hides when a game or video is in full screen. Explorer only gets three small hooks: the Windows key, Win+N, and passing the tray icons on to the dock (it never waits on the dock).
@@ -62,7 +69,7 @@ Replaces the Windows taskbar with a light dock, one per monitor, with its own St
 * Right-click an app for its menu, or an empty spot for the dock's menu (settings are there).
 
 **Status area**
-* Each item, and the tray, can go to the dock, the control center, a "Status" tab in Start (one, several or all of them), or be turned off (Settings → Status area).
+* Each item, and the tray, can go to the dock, the control center, a "Status" tab in Start (one, several or all of them), or be turned off (Settings → Items).
 * Start's Status tab looks like the control center; its parts can be put in any order ("Organize": drag them, or Alt + arrows).
 * Click an item for its panel. Scroll on the volume to change it; middle-click mutes.
 * The keyboard item: a click switches the language, right-click lists them all.
@@ -77,9 +84,10 @@ Replaces the Windows taskbar with a light dock, one per monitor, with its own St
 
 **Shelf**
 * Drag files over the dock: the shelf opens; drop them on it (it keeps only where they are, nothing is copied).
-* Drag an item from the shelf to a folder or an app: it's copied (or moved, see Settings → Status area → Shelf). With the right button, Windows asks.
+* Drag an item from the shelf to a folder or an app: it's copied (or moved, see Settings → Shelf). With the right button, Windows asks.
 * Ctrl+V (or "Paste") with the shelf open: a copied picture becomes a .png, text becomes a .txt, copied files come in as they are. Those pasted files move when dragged out, and are deleted when the mod stops if still on the shelf.
 * Right-click an item: Open, Show in folder, Copy, Remove.
+* Drop or paste (Ctrl+V) a link: a direct file link is downloaded by Nimbus. For a video, audio or pictures on a site (YouTube, TikTok, Instagram, ImagePond…), turn on Settings → Shelf → "Download videos and pictures from sites" and install the programs (see below). A card shows the progress; × cancels. Download only what you have the right to.
 
 **Help and suggestions:** [github.com/igoredm/nimbus-menu](https://github.com/igoredm/nimbus-menu) (ask for help, report a bug or suggest an idea).
 
@@ -94,9 +102,11 @@ Nimbus replaces part of Windows, so a few of its actions are Windows settings. H
 | Night light, power plan and mode, each monitor's brightness (DDC/CI), Bluetooth and Wi-Fi on or off, volume, keyboard language | Only when you click them, like in Windows' quick settings | They're your choices, so they stay as you set them (the same as when you change them in Windows). |
 | The default sound output (and the one for calls), and an app's own output (complete sound panel only, off by default) | Only when you drag an app or click Default or Calls on an output. These use the same parts of Windows its Sound settings use, which Microsoft doesn't document | Windows keeps them, as when set in Settings › Sound › Volume mixer (its "Reset" puts every app back on the default). An app on a second output is a copy Nimbus plays: it stops with ×, when the app closes, or when Nimbus stops. An app that picks its own outputs (TeamSpeak, Discord) is muted on the one you take it off. Those mutes are undone when Nimbus stops and done again when it starts. Going back to the simple panel puts back what Nimbus changed (each app's output as it was, copies off, those mutes undone), also later for an app that wasn't running; an output chosen in Windows' own mixer stays. A copy plays slightly behind, so two outputs in the same room sound doubled. |
 
-**BatteryHub** (optional, off by default): with "Devices › Use BatteryHub" on, Nimbus runs [BatteryHub](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor) (installed separately, version 1.1 or newer) hidden every 5 minutes with `--json`, only to read the batteries of USB receivers; it closes by itself, at most after 20 seconds. Turn it off in the Devices panel or in Settings › Status area.
+**Downloads** (optional, off by default except direct file links): with "Videos and pictures on sites" on, a link dropped on the shelf runs [yt-dlp](https://github.com/yt-dlp/yt-dlp) or [gallery-dl](https://github.com/mikf/gallery-dl) hidden (installed by you, e.g. `winget install yt-dlp.yt-dlp` and `winget install mikf.gallery-dl`; Nimbus never downloads a program), into the shelf's folder, with at most two hours per download; FFmpeg and deno are used when installed. "Use the browser's sign-in" (off by default) lets them read that browser's cookies. Downloaded files carry Windows' "came from the internet" mark.
 
-Nimbus' own data (settings, notes, pins, the shelf's pasted files) stays in the mod's storage. If the Windows taskbar ever stays hidden, turn the mod off or restart Explorer.
+**BatteryHub** (optional, off by default): with "Read USB receivers with BatteryHub" on (Settings → Items), Nimbus runs [BatteryHub](https://github.com/ferloom/Wireless-Device-Battery-Monitor) (installed separately: the original C++ BatteryHub, version 1.1 or newer; the original repository is offline for now and the link goes to its Rust recode, which doesn't have `--json` yet) hidden every 5 minutes with `--json`, only to read the batteries of USB receivers; it closes by itself, at most after 20 seconds. Turn it off in the Devices panel or in Settings › Status area.
+
+Nimbus' own data (settings, notes, pins, the shelf's pasted and downloaded files) stays in the mod's storage, in a folder only your account can open. If the Windows taskbar ever stays hidden, turn the mod off or restart Explorer.
 
 ---
 
@@ -105,54 +115,62 @@ Nimbus' own data (settings, notes, pins, the shelf's pasted files) stays in the 
 Troca a barra de tarefas do Windows por uma dock leve, uma por monitor, com Iniciar próprio.
 
 * Dock flutuante ou barra fixa; 4 visuais (Névoa, Cristal, Grafite, Aurora).
-* Zoom como no macOS (ou Elevar / Foco), prévia das janelas ao vivo (parar o mouse na miniatura mostra a janela), arrastar ícones pra reorganizar, fixar e desafixar.
+* Zoom como no macOS (ou Elevar / Foco), prévia das janelas ao vivo (parar o mouse na miniatura mostra a janela), arrastar ícones para reorganizar, fixar e desafixar.
 * Iniciar próprio: fixados, todos os apps, baixados recentes, busca de apps, arquivos (com o [Everything](https://www.voidtools.com) ou a busca do Windows) e telas das Configurações do Windows. Busca compacta ou larga.
 * Uma busca que entende: sem precisar de acento, por iniciais ("vsc" acha o Visual Studio Code), com uma letra errada ("spotfy"), apelidos comuns ("cmd", "calc", "zap"), e o que você mais abre vem primeiro.
+* Uma busca que faz coisas: contas ("12*3,5"), unidades ("10 km em mi", "100 f em c"), janelas abertas pelo título, e comandos: "bloquear", "suspender", "timer 10m", "nota comprar pão", "esvaziar lixeira" (o Windows pergunta antes). O Enter copia um resultado.
 * Teclado no Iniciar: setas, Tab e Enter em todas as abas. Energia: reiniciar e desligar pedem um segundo clique; o botão direito num botão de energia tem sair da conta, hibernar e reiniciar nas opções avançadas.
-* Menus do botão direito como os do Windows: abrir o local do arquivo, copiar caminho e Finalizar tarefa na dock (quando está ligado no Windows, ou sempre).
+* Menus do botão direito como os do Windows: os arquivos recentes do app (a lista de saltos), abrir o local do arquivo, copiar caminho e Finalizar tarefa na dock (quando está ligado no Windows, ou sempre).
+* Avisos não lidos como um número no ícone de cada app na dock; some quando o app vem para a frente.
 * A tecla Windows abre o Iniciar do Nimbus em qualquer janela (até de administrador) e em jogos. Ctrl+Esc continua abrindo o Iniciar do Windows. Um atalho opcional (Alt+Espaço ou Ctrl+Espaço) também pode abrir.
 * Área de status numa ponta da dock (ou numa aba do Iniciar): relógio e calendário, volume por app, rede e Wi-Fi, bateria, idioma do teclado. Cada item abre o seu painel, ou o do Windows se preferir.
-* Painel de som simples ou completo (Ajustes → Área de status → Som; simples por padrão). Completo: os apps tocando à esquerda e todas as saídas à direita; arraste um app pra uma saída pra tocar nela também, de uma saída pra outra pra trocar, × pra tirar de uma; qualquer saída vira a padrão, ou a das chamadas.
-* Bandeja: os ícones dos programas em segundo plano, ao lado da área de status. Lado a lado com setas, atrás de um botão (fixe fora os que quiser), ou num painel em grade ou lista. Os cliques vão pro próprio programa, como na barra; o botão do meio fixa.
-* Central de controle: um botão na dock abre não incomodar, Bluetooth, luz noturna, atalhos (projetar, transmitir, legendas, acessibilidade), o brilho de cada monitor, som e energia, e qualquer outro item que você puser lá. Cada item abre o painel completo dentro dela, e ela rola em telas pequenas. Cada item pode ficar na dock, na central e no Iniciar ao mesmo tempo, ou desligado.
+* Painel de som simples ou completo (Ajustes → Som e player; simples por padrão). Completo: os apps tocando à esquerda e todas as saídas à direita; arraste um app para uma saída para tocar nela também, de uma saída para outra para trocar, × para tirar de uma; qualquer saída vira a padrão, ou a das chamadas; clique na bolinha de um app numa saída para mudar o volume dele só ali.
+* Microfone e câmera em uso: um ponto no ícone de microfone e câmera enquanto algum app usa (laranja para o microfone, verde para a câmera). Clique para ver qual app.
+* Executar como administrador, no botão direito da dock e do Iniciar.
+* O painel de Som mostra onde está saindo som: uma barrinha mexe embaixo de cada saída e app que está tocando.
+* Painel de som Grade: cada app em cada saída, com o volume e o som em cada cruzamento.
+* Se o processo da barra cair, a barra do Windows volta na hora e o Nimbus reabre sozinho.
+* Bandeja: os ícones dos programas em segundo plano, ao lado da área de status. Lado a lado com setas, atrás de um botão (fixe fora os que quiser), ou num painel em grade ou lista. Os cliques vão para o próprio programa, como na barra; o botão do meio fixa.
+* Central: um botão na dock abre não incomodar, Bluetooth, luz noturna, atalhos (projetar, transmitir, legendas, acessibilidade), o brilho de cada monitor, som e energia, e qualquer outro item que você puser lá. Cada item abre o painel completo dentro dela, e ela rola em telas pequenas. Cada item pode ficar na dock, na Central e no Iniciar ao mesmo tempo, ou desligado.
 * Bluetooth: ligar e desligar, ver os aparelhos pareados com a bateria, conectar e desconectar fones e caixas de som.
-* Notificações: os avisos do Windows também aparecem como cartões do Nimbus (no canto escolhido, pausam com o mouse em cima, nunca sobre jogos), com os botões deles; um sino com o contador abre a lista, da mais nova pra mais antiga. O Win+N pode abrir. Sons próprios (14 pra escolher, ou o do Windows), um pros avisos e outro pros lembretes.
+* Notificações: os avisos do Windows também aparecem como cartões do Nimbus (no canto escolhido, pausam com o mouse em cima, nunca sobre jogos), com os botões deles; um sino com o contador abre a lista, da mais nova para a mais antiga. O Win+N pode abrir. Sons próprios (14 para escolher, ou o do Windows), um para as notificações e outro para os lembretes.
 * Player: o que qualquer app está tocando (Spotify, YouTube…): capa, título, tempo, controles, aleatório e repetir, o volume daquele app. Na dock como capa e título, só a capa, só o título, barras que se mexem com o som ou um ícone.
-* Dispositivos: a bateria de fones, mouses e controles de Xbox sem fio, com aviso em 20% e 10%. Receptores USB também (Logitech, Razer…) com o [BatteryHub](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor), um programa à parte e gratuito, se você ligar (veja abaixo).
+* Aparelhos: a bateria de fones, mouses e controles de Xbox sem fio, com aviso em 20% e 10%. Receptores USB também (Logitech, Razer…) com o [BatteryHub](https://github.com/ferloom/Wireless-Device-Battery-Monitor), um programa à parte e gratuito, se você ligar (veja abaixo).
 * Notas e lembretes: as notas ficam até você apagar; um lembrete (em 1, 7 ou 14 dias, 1 mês ou num dia do calendário, num horário ou assim que o Nimbus abrir) chega como notificação do Nimbus, atrasado também se o PC estava desligado.
-* Prateleira: solte arquivos na dock pra guardar por um tempo, depois arraste pra onde quiser. O Ctrl+V transforma uma imagem ou texto copiado num arquivo pra arrastar.
+* Prateleira: solte arquivos na dock para guardar por um tempo, depois arraste para onde quiser. O Ctrl+V transforma uma imagem ou texto copiado num arquivo para arrastar. Solte ou cole um link e ele é baixado para a prateleira (vídeos e imagens de sites pelo yt-dlp e pelo gallery-dl, se você instalar e ligar).
 * Janela de ajustes própria, com prévia da dock ao vivo: botão direito na dock → Ajustes, ou o botão do Nimbus no canto de baixo do Iniciar. A aba Configurações do Windhawk fica vazia de propósito: tudo está nessa janela (o que foi escolhido lá na 1.x é mantido).
-* Modo guiado: umas perguntas rápidas deixam tudo pronto (abre sozinho na primeira vez; Ajustes → Começar traz de volta). Tudo pode ser mudado depois nos Ajustes.
+* Configuração guiada: umas perguntas rápidas deixam tudo pronto (abre sozinho na primeira vez; Ajustes → Configuração guiada traz de volta). Tudo pode ser mudado depois nos Ajustes.
 * Segue o alto contraste do Windows e os "Efeitos de animação" desligados.
 * Ajustes por monitor: formato, esconder sozinha, o que aparece, só as janelas daquele monitor. Cada monitor guarda os seus, mesmo se a ordem dos monitores mudar.
-* A dock roda num processo próprio do Windhawk e some quando um jogo ou vídeo está em tela cheia. No Explorador entram só três ganchos pequenos: o da tecla Windows, o do Win+N e o que passa os ícones da bandeja pra dock (ele nunca espera a dock).
+* A dock roda num processo próprio do Windhawk e some quando um jogo ou vídeo está em tela cheia. No Explorador entram só três ganchos pequenos: o da tecla Windows, o do Win+N e o que passa os ícones da bandeja para a dock (ele nunca espera a dock).
 * Os textos ficam em inglês, ou em português quando o Windows está em português.
 
 ### Como usar
 
 **Dock**
-* Clique num app pra abrir ou trazer pra frente; o botão do meio abre uma janela nova.
-* Arraste um ícone pra mudar a ordem. Arraste um app aberto pros fixados pra fixar; arraste um fixado pra cima, pra fora da dock, pra desafixar.
+* Clique num app para abrir ou trazer para a frente; o botão do meio abre uma janela nova.
+* Arraste um ícone para mudar a ordem. Arraste um app aberto para os fixados para fixar; arraste um fixado para cima, para fora da dock, para desafixar.
 * Botão direito num app abre o menu dele; num espaço vazio, o menu da dock (os ajustes ficam lá).
 
 **Área de status**
-* Cada item, e a bandeja, pode ficar na dock, na central de controle, numa aba "Status" do Iniciar (num, em vários ou em todos), ou desligado (Ajustes → Área de status).
-* Clique num item pra abrir o painel. Role o mouse no volume pra mudar; o botão do meio deixa mudo.
+* Cada item, e a bandeja, pode ficar na dock, na Central, numa aba "Status" do Iniciar (num, em vários ou em todos), ou desligado (Ajustes → Itens).
+* Clique num item para abrir o painel. Role o mouse no volume para mudar; o botão do meio deixa mudo.
 * Teclado: um clique troca o idioma; o botão direito mostra a lista.
 
 **Bandeja**
-* *Botão* (o padrão): um botão guarda os ícones; clique nele pra mostrar ou esconder. Botão do meio num ícone fixa ele: os fixados ficam fora do botão, sempre à mostra. Botão do meio de novo devolve pra dentro.
+* *Botão* (o padrão): um botão guarda os ícones; clique nele para mostrar ou esconder. Botão do meio num ícone fixa ele: os fixados ficam fora do botão, sempre à mostra. Botão do meio de novo devolve para dentro.
 * *Lado a lado*: todos os ícones ficam na dock; os fixados vêm primeiro, com um pontinho.
 * *Grade* / *Lista*: o botão abre um painel com todos os ícones; o botão do meio fixa no começo.
 * No Iniciar, os ícones aparecem embaixo dos blocos de status; os cliques e o botão do meio funcionam igual.
-* Os cliques esquerdo e direito vão pro programa, como na barra do Windows (o menu que aparece é o do próprio programa). Role com as setas ou a roda do mouse. "Ícones à mostra" define quantos cabem de uma vez.
-* Arraste um ícone por cima de outro pra mudar a ordem (na dock, no painel ou na central).
+* Os cliques esquerdo e direito vão para o programa, como na barra do Windows (o menu que aparece é o do próprio programa). Role com as setas ou a roda do mouse. "Ícones à mostra" define quantos cabem de uma vez.
+* Arraste um ícone por cima de outro para mudar a ordem (na dock, no painel ou na Central).
 
 **Prateleira**
 * Arraste arquivos por cima da dock: a prateleira abre; solte nela (ela guarda só onde estão, nada é copiado).
-* Arraste um item da prateleira pra uma pasta ou um app: ele é copiado (ou movido, veja Ajustes → Área de status → Prateleira). Com o botão direito, o Windows pergunta.
+* Arraste um item da prateleira para uma pasta ou um app: ele é copiado (ou movido, veja Ajustes → Prateleira). Com o botão direito, o Windows pergunta.
 * Ctrl+V (ou "Colar") com a prateleira aberta: uma imagem copiada vira .png, um texto vira .txt, arquivos copiados entram como estão. Esses arquivos colados são movidos ao arrastar, e apagados quando o mod para se ainda estiverem na prateleira.
 * Botão direito num item: Abrir, Mostrar na pasta, Copiar, Remover.
+* Solte ou cole (Ctrl+V) um link: um link direto de arquivo o Nimbus baixa. Para vídeo, áudio ou imagens de um site (YouTube, TikTok, Instagram, ImagePond…), ligue Ajustes → Prateleira → "Baixar vídeos e imagens de sites" e instale os programas (veja abaixo). Um cartão mostra o andamento; o × cancela. Baixe só o que você tem direito.
 
 **Ajuda e sugestões:** [github.com/igoredm/nimbus-menu](https://github.com/igoredm/nimbus-menu) (peça ajuda, avise de um bug ou mande uma ideia).
 
@@ -162,24 +180,28 @@ O Nimbus substitui uma parte do Windows, então algumas ações dele são config
 
 | O quê | Quando | Como volta |
 |---|---|---|
-| A opção **"Ocultar automaticamente a barra de tarefas"** do próprio Windows (salva no seu perfil) | Enquanto "Esconder a barra do Windows" estiver ligado (o padrão), pra barra escondida não reservar espaço na tela | A sua escolha original fica guardada e volta quando o mod para, ao sair da conta ou desligar o PC, no próximo início depois de um travamento, e pela parte do Explorador quando o mod é desligado. |
+| A opção **"Ocultar automaticamente a barra de tarefas"** do próprio Windows (salva no seu perfil) | Enquanto "Esconder a barra do Windows" estiver ligado (o padrão), para a barra escondida não reservar espaço na tela | A sua escolha original fica guardada e volta quando o mod para, ao sair da conta ou desligar o PC, no próximo início depois de um travamento, e pela parte do Explorador quando o mod é desligado. |
 | O botão **"Mostrar faixas de notificação"** de cada app (Configurações › Sistema › Notificações) | Só se você ligar "Esconder os avisos do Windows" e confirmar (desligado por padrão) | O valor original de cada app é salvo antes de qualquer coisa ser desligada (se o backup não puder ser salvo, nada é desligado). Volta quando a opção é desligada, quando o mod para, ao sair da conta ou desligar o PC, e pela parte do Explorador quando o mod é desligado. |
 | Luz noturna, plano e modo de energia, brilho de cada monitor (DDC/CI), Bluetooth e Wi-Fi ligado ou desligado, volume, idioma do teclado | Só quando você clica, como nas Configurações rápidas do Windows | São escolhas suas, então ficam como você deixou (igual a mudar pelo Windows). |
-| A saída de som padrão (e a das chamadas), e a saída de cada app (só no painel de som completo, desligado por padrão) | Só quando você arrasta um app ou clica em Padrão ou Chamadas numa saída. Usam as mesmas partes do Windows que as Configurações de som usam, que a Microsoft não documenta | O Windows guarda, como em Configurações › Som › Mixer de volume (o "Redefinir" de lá volta todos os apps pra padrão). Um app numa segunda saída é uma cópia que o Nimbus toca: para no ×, quando o app fecha ou quando o Nimbus para. Um app que escolhe as próprias saídas (TeamSpeak, Discord) fica mudo na saída de onde você tira ele. Esses mudos saem quando o Nimbus para e voltam quando ele liga. Voltar pro painel simples desfaz o que o Nimbus mudou (a saída de cada app como era, sem cópias e sem esses mudos), também depois pra um app que estava fechado; a saída escolhida no mixer do próprio Windows fica. A cópia toca um pouco atrasada, então duas saídas na mesma sala soam dobradas. |
+| A saída de som padrão (e a das chamadas), e a saída de cada app (só no painel de som completo, desligado por padrão) | Só quando você arrasta um app ou clica em Padrão ou Chamadas numa saída. Usam as mesmas partes do Windows que as Configurações de som usam, que a Microsoft não documenta | O Windows guarda, como em Configurações › Som › Mixer de volume (o "Redefinir" de lá volta todos os apps para a padrão). Um app numa segunda saída é uma cópia que o Nimbus toca: para no ×, quando o app fecha ou quando o Nimbus para. Um app que escolhe as próprias saídas (TeamSpeak, Discord) fica mudo na saída de onde você tira ele. Esses mudos saem quando o Nimbus para e voltam quando ele liga. Voltar para o painel simples desfaz o que o Nimbus mudou (a saída de cada app como era, sem cópias e sem esses mudos), também depois para um app que estava fechado; a saída escolhida no mixer do próprio Windows fica. A cópia toca um pouco atrasada, então duas saídas na mesma sala soam dobradas. |
 
-**BatteryHub** (opcional, desligado por padrão): com "Dispositivos › Usar o BatteryHub" ligado, o Nimbus abre o [BatteryHub](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor) (instalado à parte, versão 1.1 ou mais nova) escondido a cada 5 minutos com `--json`, só pra ler as baterias de receptores USB; ele fecha sozinho, no máximo em 20 segundos. Desligue no painel Dispositivos ou em Ajustes › Área de status.
+**Downloads** (opcional, desligado por padrão, menos o link direto de arquivo): com "Vídeos e imagens de sites" ligado, um link solto na prateleira abre o [yt-dlp](https://github.com/yt-dlp/yt-dlp) ou o [gallery-dl](https://github.com/mikf/gallery-dl) escondido (instalados por você, por exemplo `winget install yt-dlp.yt-dlp` e `winget install mikf.gallery-dl`; o Nimbus nunca baixa programa), na pasta da prateleira, com no máximo duas horas por download; o FFmpeg e o deno são usados quando instalados. "Usar o login do navegador" (desligado por padrão) deixa eles lerem os cookies desse navegador. Os arquivos baixados levam a marca de "veio da internet" do Windows.
 
-Os dados do próprio Nimbus (ajustes, notas, fixados, os arquivos colados na prateleira) ficam no armazenamento do mod. Se a barra do Windows ficar escondida, desligue o mod ou reinicie o Explorador.
+**BatteryHub** (opcional, desligado por padrão): com "Ler receptores USB com o BatteryHub" ligado (Ajustes → Itens), o Nimbus abre o [BatteryHub](https://github.com/ferloom/Wireless-Device-Battery-Monitor) (instalado à parte: o BatteryHub original em C++, versão 1.1 ou mais nova; o repositório original está fora do ar e o link vai para a versão reescrita em Rust, que ainda não tem o `--json`) escondido a cada 5 minutos com `--json`, só para ler as baterias de receptores USB; ele fecha sozinho, no máximo em 20 segundos. Desligue no painel Dispositivos ou em Ajustes › Área de status.
+
+Os dados do próprio Nimbus (ajustes, notas, fixados, os arquivos colados e baixados na prateleira) ficam no armazenamento do mod, numa pasta que só a sua conta abre. Se a barra do Windows ficar escondida, desligue o mod ou reinicie o Explorador.
 */
 // ==/WindhawkModReadme==
 
 #include <windows.h>
 #include <mmsystem.h>
+#include <winhttp.h>
 #include <windowsx.h>
 #include <dwmapi.h>
 #include <shobjidl.h>
 #include <shlobj.h>
 #include <shlwapi.h>
+#include <psapi.h>
 #include <shellapi.h>
 #include <propsys.h>
 #include <d2d1.h>
@@ -189,6 +211,7 @@ Os dados do próprio Nimbus (ajustes, notas, fixados, os arquivos colados na pra
 #include <shellscalingapi.h>
 #include <wrl/client.h>
 #include <sddl.h>
+#include <aclapi.h>
 #include <chrono>
 #include <tlhelp32.h>
 #include <mmdeviceapi.h>
@@ -227,8 +250,10 @@ Os dados do próprio Nimbus (ajustes, notas, fixados, os arquivos colados na pra
 
 using Microsoft::WRL::ComPtr;
 static void MediaSetOn(bool on);
+static bool g_trayForced = false;  // a monitor in complete mode shows the tray, even with it off in general
 static std::atomic<bool> g_devHubOn{false};  // (the "Use BatteryHub" setting, read by the devices worker)
 static void DevSetOn(bool on);
+static void PrivSetOn(bool on);
 
 // ---------------------------------------------------------------------------
 // Settings
@@ -274,7 +299,7 @@ struct Settings {
     bool notifWinN = false;     // Win+N opens Nimbus' notifications instead of Windows' panel
     int notesPlace = 1;         // notes and reminders (places: 0 off, 1 dock, 2 Start, 3 the control center)
     bool notifDnd = false;      // do not disturb: no Nimbus cards (the bell's list still keeps them)
-    int extraPlace[8] = {4, 4, 4, 4, 4, 4, 1, 1};  // do not disturb, Bluetooth, night light, shortcuts, brightness, power, player, devices
+    int extraPlace[10] = {4, 4, 4, 4, 4, 4, 1, 1, 1, 0};  // do not disturb, Bluetooth, night light, shortcuts, brightness, power, player, devices, mic and camera, screen profiles
 } g_set;
 
 // Colors of the chosen look (Névoa, Cristal, Grafite, Aurora).
@@ -451,15 +476,25 @@ static const std::pair<const wchar_t*, const wchar_t*> kOwnKeys[] = {
     {L"shelfStyle", L"grade"}, {L"shelfLimit", L"10"}, {L"notifPlace", L"dock"}, {L"notifShow", L"1"},
     {L"notifV", L"baixo"}, {L"notifH", L"direita"}, {L"notifSecs", L"6"}, {L"notifHideWin", L"0"},
     {L"notifSound", L"pingo"}, {L"remSound", L"bolha"},
-    {L"notifWinN", L"0"}, {L"notesPlace", L"dock"}, {L"notifDnd", L"0"}, {L"dndPlace", L"central"}, {L"btPlace", L"central"}, {L"playerPlace", L"dock"}, {L"devPlace", L"dock"}, {L"devAlerts", L"1"}, {L"devHub", L"0"}, {L"playerDock", L"ambos"}, {L"playerHide", L"0"},
-    {L"nightPlace", L"central"}, {L"shortPlace", L"central"}, {L"lightPlace", L"central"}, {L"powerPlace", L"central"},
-    {L"soundPanel", L"simples"},
+    {L"notifWinN", L"0"}, {L"notesPlace", L"dock"}, {L"notifDnd", L"0"}, {L"dndPlace", L"central"}, {L"btPlace", L"central"}, {L"playerPlace", L"dock"}, {L"devPlace", L"dock"}, {L"privPlace", L"dock"}, {L"devAlerts", L"1"}, {L"devHub", L"0"}, {L"playerDock", L"ambos"}, {L"playerHide", L"0"},
+    {L"nightPlace", L"central"}, {L"shortPlace", L"central"}, {L"lightPlace", L"central"}, {L"powerPlace", L"central"}, {L"telasPlace", L"off"},
+    {L"pinCarousel", L"0"}, {L"pinCarouselN", L"5"},
+    {L"soundPanel", L"simples"}, {L"shelfSites", L"0"}, {L"shelfCookies", L"off"}, {L"shelfQuality", L"1080"}, {L"dockBadges", L"1"},
+    {L"edge", L"baixo"}, {L"align", L"centro"},  // every dock's screen edge and place on it (a monitor may have its own)
+    {L"apps", L"todos"}, {L"windows", L"todas"},  // which apps and windows every dock shows (see MonScopeMigrate)
 };
 static const wchar_t* const kMonGroups[] = {L"monPrimary", L"monLeft", L"monRight", L"monOther"};
 static const CfgKey kMonFields[] = {{L"enabled", true}, {L"format", false}, {L"autoHide", false},
                                    {L"showStart", true}, {L"showPinned", true}, {L"windows", false}};
 
 std::unordered_map<std::wstring, std::wstring> g_cfg;  // effective values, as text
+// (the shelf's download thread reads settings too: every read and write of g_cfg holds this)
+static SRWLOCK g_cfgLock = SRWLOCK_INIT;
+static void CfgPut(const std::wstring& name, const std::wstring& v) {
+    AcquireSRWLockExclusive(&g_cfgLock);
+    g_cfg[name] = v;
+    ReleaseSRWLockExclusive(&g_cfgLock);
+}
 
 // Values are saved as "=" + text, so an empty text (tintColor) differs from a missing value.
 static bool ReadVal(const std::wstring& name, std::wstring& out) {
@@ -494,10 +529,10 @@ static const wchar_t* CfgDefault(const std::wstring& name);
 
 // One setting: the Nimbus window's choice; else what Windhawk's page last had (2.0 builds noted it, 1.x
 // kept it as a Windhawk setting); else the default.
-static void SyncCfgKey(const std::wstring& name, bool isInt) {
+static void SyncCfgKey(std::unordered_map<std::wstring, std::wstring>& cfg, const std::wstring& name, bool isInt) {
     std::wstring v;
     if (ReadVal(UserPrefix() + L"cfg." + name, v) || ReadVal(UserPrefix() + L"seen." + name, v)) {
-        g_cfg[name] = v;
+        cfg[name] = v;
         return;
     }
     v = WhSetting(name, isInt);
@@ -507,36 +542,48 @@ static void SyncCfgKey(const std::wstring& name, bool isInt) {
     static int legacy = -1;
     if (legacy < 0) legacy = !WhSetting(L"style", false).empty() ? 1 : 0;
     bool real = isInt ? (v != L"0" || legacy == 1) : !v.empty();
-    g_cfg[name] = real ? v : CfgDefault(name);
+    cfg[name] = real ? v : CfgDefault(name);
     if (real && legacy == 1) WriteVal(UserPrefix() + L"cfg." + name, v);
 }
 
 static void LoadCfg() {
-    g_cfg.clear();
-    for (auto& k : kCfgKeys) SyncCfgKey(k.name, k.isInt);
+    std::unordered_map<std::wstring, std::wstring> cfg;  // (built aside, swapped in at once)
+    for (auto& k : kCfgKeys) SyncCfgKey(cfg, k.name, k.isInt);
     for (auto& k : kOwnKeys) {
         std::wstring v;
-        g_cfg[k.first] = ReadVal(UserPrefix() + L"cfg." + k.first, v) ? v : k.second;
+        cfg[k.first] = ReadVal(UserPrefix() + L"cfg." + k.first, v) ? v : k.second;
     }
     for (auto* g : kMonGroups)
-        for (auto& f : kMonFields) SyncCfgKey(std::wstring(g) + L"." + f.name, f.isInt);
+        for (auto& f : kMonFields) SyncCfgKey(cfg, std::wstring(g) + L"." + f.name, f.isInt);
+    AcquireSRWLockExclusive(&g_cfgLock);
+    g_cfg.swap(cfg);
+    ReleaseSRWLockExclusive(&g_cfgLock);
 }
 
 static int CfgInt(const wchar_t* name) {
+    AcquireSRWLockShared(&g_cfgLock);
     auto it = g_cfg.find(name);
-    return it == g_cfg.end() ? 0 : _wtoi(it->second.c_str());
+    int v = it == g_cfg.end() ? 0 : _wtoi(it->second.c_str());
+    ReleaseSRWLockShared(&g_cfgLock);
+    return v;
 }
 static std::wstring CfgStr(const wchar_t* name, const wchar_t* def = L"") {
+    AcquireSRWLockShared(&g_cfgLock);
     auto it = g_cfg.find(name);
-    return it == g_cfg.end() || it->second.empty() ? def : it->second;
+    std::wstring v = it == g_cfg.end() || it->second.empty() ? def : it->second;
+    ReleaseSRWLockShared(&g_cfgLock);
+    return v;
 }
 
 // A monitor's own choice for a field, else its position group's.
 static std::wstring MonCfg(const std::wstring& id, const wchar_t* group, const wchar_t* field) {
     std::wstring v;
     if (!id.empty() && ReadVal(UserPrefix() + L"mon." + id + L"." + field, v)) return v;
+    AcquireSRWLockShared(&g_cfgLock);
     auto it = g_cfg.find(std::wstring(group) + L"." + field);
-    return it == g_cfg.end() ? L"" : it->second;
+    v = it == g_cfg.end() ? L"" : it->second;
+    ReleaseSRWLockShared(&g_cfgLock);
+    return v;
 }
 
 // Where a status item (or the tray) goes: "dock", "central" (the control center), "iniciar" or "off".
@@ -620,12 +667,25 @@ void LoadSettings() {
     g_set.notesPlace = PlaceOf(CfgStr(L"notesPlace", L"dock"), true);
     g_set.notifDnd = CfgInt(L"notifDnd") != 0;
     {
-        const wchar_t* keys[8] = {L"dndPlace", L"btPlace", L"nightPlace", L"shortPlace", L"lightPlace", L"powerPlace", L"playerPlace", L"devPlace"};
-        for (int k = 0; k < 8; k++) g_set.extraPlace[k] = PlaceOf(CfgStr(keys[k], k >= 6 ? L"dock" : L"central"), true);
+        const wchar_t* keys[10] = {L"dndPlace", L"btPlace", L"nightPlace", L"shortPlace", L"lightPlace", L"powerPlace", L"playerPlace", L"devPlace",
+                                   L"privPlace", L"telasPlace"};
+        for (int k = 0; k < 10; k++) g_set.extraPlace[k] = PlaceOf(CfgStr(keys[k], k == 9 ? L"off" : k >= 6 ? L"dock" : L"central"), true);
     }
-    MediaSetOn(g_set.extraPlace[6] != 0);
+    // (items a monitor turns on by itself, in complete mode: their workers run too)
+    auto forced = [](const wchar_t* key) {
+        for (auto& id : MonIdsWithChoices()) {
+            std::wstring adv, m;
+            if (ReadVal(UserPrefix() + L"mon." + id + L".advanced", adv) && adv == L"1" &&
+                ReadVal(UserPrefix() + L"mon." + id + L".stat." + key, m) && m == L"1")
+                return true;
+        }
+        return false;
+    };
+    g_trayForced = forced(L"bandeja");
+    MediaSetOn(g_set.extraPlace[6] != 0 || forced(L"player"));
     g_devHubOn = CfgInt(L"devHub") != 0;
-    DevSetOn(g_set.extraPlace[7] != 0);
+    DevSetOn(g_set.extraPlace[7] != 0 || forced(L"dispositivos"));
+    PrivSetOn(g_set.extraPlace[8] != 0 || forced(L"privacidade"));
     std::wstring tint = str(L"tintColor", L"");
     g_set.customTint = false;
     const wchar_t* s = tint.c_str();
@@ -647,6 +707,42 @@ HANDLE g_uiThread;
 HWND g_msgWnd;
 UINT g_shellHookMsg;
 UINT g_taskbarCreatedMsg;
+static bool g_docksAfterEvent = false;
+struct TelaPerfil {  // a screen profile (see TelasLoad)
+    std::wstring nome, info, dados;
+};
+static std::vector<TelaPerfil> TelasLoad();
+static std::wstring TelaSignatureNow();
+static std::wstring TelaSignatureOf(const std::wstring& dados);
+static bool TelaSaveNow();
+static void TelaApply(const std::wstring& dados);
+struct TelasCache {
+    std::vector<TelaPerfil> list;
+    int cur = -1;        // the profile in use now (-1: none)
+    bool saved = true;   // the setup of now is one of them
+    std::atomic<DWORD> at{0};
+};
+static TelasCache g_telas;
+static void TelasForget() { g_telas.at = 0; }  // (read again on the next draw)
+static const TelasCache& TelasCached() {
+    DWORD now = GetTickCount();
+    if (!g_telas.at || now - g_telas.at > 2000) {
+        g_telas.list = TelasLoad();
+        std::wstring sig = TelaSignatureNow();
+        g_telas.cur = -1;
+        for (int i = 0; i < (int)g_telas.list.size(); i++)
+            if (!sig.empty() && TelaSignatureOf(g_telas.list[i].dados) == sig) {
+                g_telas.cur = i;
+                break;
+            }
+        g_telas.saved = g_telas.cur >= 0 || sig.empty();
+        g_telas.at = now | 1;
+    }
+    return g_telas;
+}
+static bool g_selfRestart = false;  // the bar ends with kSelfRestartCode so the guard opens it again (see DockHealth)
+constexpr DWORD kSelfRestartCode = 0x4E520001;
+constexpr UINT_PTR TIMER_DOCKS_LATE = 0x4E53;  // the docks made again a while after Explorer restarted (signing in)  // the next docks rebuild follows Explorer restarting or the monitors changing (to the log)
 
 ComPtr<ID2D1Factory> g_d2d;
 ComPtr<IDWriteFactory> g_dw;
@@ -695,6 +791,7 @@ struct App {
     bool iconTried = false;
 };
 std::vector<App> g_apps;
+static int AppBadge(const App& a);  // unread notifications of an app (0: none, or the feature is off)
 // The user's locale for text layout (line breaking, digits), not a fixed language.
 wchar_t g_locale[LOCALE_NAME_MAX_LENGTH] = L"en-US";
 std::unordered_map<HWND, bool> g_flashing;
@@ -791,15 +888,181 @@ static std::wstring NativePath(const std::wstring& path) {
     return path;
 }
 
+// A program inside a Store package (in WindowsApps) is started through its package: by its path it may not run,
+// and that folder changes with every update. Returns the package's app id, and moves the path to the installed version.
+static std::wstring PackagedAumid(std::wstring& path) {
+    const wchar_t* at = StrStrIW(path.c_str(), L"\\WindowsApps\\");
+    if (!at) return L"";
+    size_t start = (size_t)(at - path.c_str()) + 13, end = path.find(L'\\', start);
+    if (end == std::wstring::npos) return L"";
+    std::wstring full = path.substr(start, end - start), rest = path.substr(end);
+    size_t a = full.find(L'_'), b = full.rfind(L'_');  // (Name_Version_Arch_Resource_Publisher)
+    if (a == std::wstring::npos || b == a) return L"";
+    std::wstring family = full.substr(0, a) + full.substr(b);
+    HMODULE k = GetModuleHandleW(L"kernelbase.dll");
+    if (!k) k = GetModuleHandleW(L"kernel32.dll");
+    using ByFamily = LONG(WINAPI*)(PCWSTR, UINT32*, PWSTR*, UINT32*, WCHAR*);
+    using PathOf = LONG(WINAPI*)(PCWSTR, UINT32*, PWSTR);
+    using OpenInfo = LONG(WINAPI*)(PCWSTR, UINT32, void**);
+    using AppIds = LONG(WINAPI*)(void*, UINT32*, BYTE*, UINT32*);
+    using CloseInfo = LONG(WINAPI*)(void*);
+    auto byFamily = k ? (ByFamily)GetProcAddress(k, "GetPackagesByPackageFamily") : nullptr;
+    auto pathOf = k ? (PathOf)GetProcAddress(k, "GetPackagePathByFullName") : nullptr;
+    auto openInfo = k ? (OpenInfo)GetProcAddress(k, "OpenPackageInfoByFullName") : nullptr;
+    auto appIds = k ? (AppIds)GetProcAddress(k, "GetPackageApplicationIds") : nullptr;
+    auto closeInfo = k ? (CloseInfo)GetProcAddress(k, "ClosePackageInfo") : nullptr;
+    if (!byFamily || !pathOf || !openInfo || !appIds || !closeInfo) return L"";
+    UINT32 count = 0, chars = 0;
+    if (byFamily(family.c_str(), &count, nullptr, &chars, nullptr) == ERROR_INSUFFICIENT_BUFFER && count) {
+        std::vector<PWSTR> names(count);
+        std::vector<WCHAR> buf(chars);
+        if (byFamily(family.c_str(), &count, names.data(), &chars, buf.data()) == ERROR_SUCCESS && count) {
+            full = names[0];
+            wchar_t dir[MAX_PATH * 2] = {};
+            UINT32 len = ARRAYSIZE(dir);
+            if (pathOf(full.c_str(), &len, dir) == ERROR_SUCCESS && GetFileAttributesW((dir + rest).c_str()) != INVALID_FILE_ATTRIBUTES)
+                path = dir + rest;
+        }
+    }
+    void* info = nullptr;
+    std::wstring id;
+    if (openInfo(full.c_str(), 0, &info) != ERROR_SUCCESS || !info) return L"";
+    UINT32 bytes = 0, n = 0;
+    if (appIds(info, &bytes, nullptr, &n) == ERROR_INSUFFICIENT_BUFFER && bytes) {
+        std::vector<BYTE> ids(bytes);
+        if (appIds(info, &bytes, ids.data(), &n) == ERROR_SUCCESS && n) id = ((PCWSTR*)ids.data())[0];  // (the first: the app itself)
+    }
+    closeInfo(info);
+    return id;
+}
+
+// A shortcut made by an installer (MSI, like TeamSpeak's) "points" to its icon file: the real program comes
+// from Windows Installer.
+static std::wstring MsiProgramOf(const std::wstring& lnk) {
+    static HMODULE msi = LoadLibraryExW(L"msi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!msi) return L"";
+    auto getTarget = (UINT(WINAPI*)(LPCWSTR, LPWSTR, LPWSTR, LPWSTR))GetProcAddress(msi, "MsiGetShortcutTargetW");
+    auto getPath = (int(WINAPI*)(LPCWSTR, LPCWSTR, LPWSTR, LPDWORD))GetProcAddress(msi, "MsiGetComponentPathW");
+    wchar_t product[39] = {}, feature[39] = {}, component[39] = {}, path[MAX_PATH * 2] = {};
+    DWORD len = ARRAYSIZE(path);
+    if (!getTarget || !getPath || getTarget(lnk.c_str(), product, feature, component) != ERROR_SUCCESS) return L"";
+    if (component[0] && getPath(product, component, path, &len) == 3 /* INSTALLSTATE_LOCAL */ && !_wcsicmp(PathFindExtensionW(path), L".exe")) return path;
+    // Some installers tie the shortcut to no component (TeamSpeak): the usual place for a program of that name.
+    auto getInfo = (UINT(WINAPI*)(LPCWSTR, LPCWSTR, LPWSTR, LPDWORD))GetProcAddress(msi, "MsiGetProductInfoW");
+    wchar_t name[128] = {};
+    len = ARRAYSIZE(name);
+    if (!getInfo || getInfo(product, L"ProductName", name, &len) != ERROR_SUCCESS || !name[0] || wcspbrk(name, L"\\/:*?\"<>|")) return L"";
+    for (auto root : {L"%LOCALAPPDATA%\\Programs\\", L"%ProgramW6432%\\", L"%ProgramFiles(x86)%\\"}) {
+        std::wstring raw = std::wstring(root) + name + L"\\" + name + L".exe";
+        wchar_t full[MAX_PATH * 2] = {};
+        if (ExpandEnvironmentStringsW(raw.c_str(), full, ARRAYSIZE(full)) && GetFileAttributesW(full) != INVALID_FILE_ATTRIBUTES) return full;
+    }
+    return L"";
+}
+// The program behind a Start entry that has no window identity of its own (the app's window carries no
+// AppUserModelID, so it can only be matched by its program). Found through its shortcut in Start.
+static std::wstring AumidProgram(const std::wstring& aumid) {
+    static std::unordered_map<std::wstring, std::wstring> known;
+    if (auto it = known.find(aumid); it != known.end()) return it->second;
+    std::wstring out, name;
+    ComPtr<IShellItem> item;
+    PWSTR dn = nullptr;
+    if (SUCCEEDED(SHCreateItemFromParsingName((L"shell:AppsFolder\\" + aumid).c_str(), nullptr, IID_PPV_ARGS(&item))) &&
+        SUCCEEDED(item->GetDisplayName(SIGDN_NORMALDISPLAY, &dn)) && dn) {
+        name = dn;
+        CoTaskMemFree(dn);
+    }
+    std::function<void(const std::wstring&, int)> scan = [&](const std::wstring& dir, int depth) {
+        WIN32_FIND_DATAW fd;
+        HANDLE h = FindFirstFileW((dir + L"\\*").c_str(), &fd);
+        if (h == INVALID_HANDLE_VALUE) return;
+        do {
+            std::wstring full = dir + L"\\" + fd.cFileName;
+            if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+                if (depth < 3 && wcscmp(fd.cFileName, L".") && wcscmp(fd.cFileName, L"..")) scan(full, depth + 1);
+            } else if (out.empty() && !_wcsicmp(fd.cFileName, (name + L".lnk").c_str())) {
+                out = MsiProgramOf(full);
+                if (out.empty()) {
+                    ComPtr<IShellLinkW> link;
+                    ComPtr<IPersistFile> pf;
+                    wchar_t buf[MAX_PATH * 2] = {};
+                    if (SUCCEEDED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&link))) && SUCCEEDED(link.As(&pf)) &&
+                        SUCCEEDED(pf->Load(full.c_str(), STGM_READ)) && SUCCEEDED(link->GetPath(buf, ARRAYSIZE(buf), nullptr, 0)) &&
+                        !_wcsicmp(PathFindExtensionW(buf), L".exe"))
+                        out = buf;
+                }
+            }
+        } while (out.empty() && FindNextFileW(h, &fd));
+        FindClose(h);
+    };
+    if (!name.empty())
+        for (auto id : {FOLDERID_Programs, FOLDERID_CommonPrograms}) {
+            PWSTR base = nullptr;
+            if (out.empty() && SUCCEEDED(SHGetKnownFolderPath(id, 0, nullptr, &base)) && base) scan(base, 0);
+            if (base) CoTaskMemFree(base);
+        }
+    known[aumid] = out;
+    return out;
+}
+
+// Apps that update themselves into a new folder each version (Discord, Slack, Teams classic: "...\app-1.0.9269\
+// Discord.exe"): a pinned program whose folder is gone → the same file in the newest app-* folder next to it.
+static std::wstring SquirrelCurrent(const std::wstring& path) {
+    if (path.empty() || GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES) return path;
+    std::wstring low = Lower(path);
+    size_t at = low.rfind(L"\\app-");
+    if (at == std::wstring::npos) return path;
+    size_t end = path.find(L'\\', at + 1);
+    if (end == std::wstring::npos) return path;
+    std::wstring parent = path.substr(0, at), rest = path.substr(end);
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((parent + L"\\app-*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return path;
+    std::wstring best;
+    std::vector<int> bestVer;
+    do {
+        if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) continue;
+        std::wstring cand = parent + L"\\" + fd.cFileName + rest;
+        if (GetFileAttributesW(cand.c_str()) == INVALID_FILE_ATTRIBUTES) continue;
+        std::vector<int> ver;  // "app-1.0.9270" → 1, 0, 9270
+        for (const wchar_t* s = fd.cFileName + 4; *s;) {
+            ver.push_back(_wtoi(s));
+            while (*s && *s != L'.') s++;
+            if (*s) s++;
+        }
+        if (best.empty() || ver > bestVer) {
+            best = cand;
+            bestVer = ver;
+        }
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    return best.empty() ? path : best;
+}
+
 static void ResolvePin(Pin& p) {
     if (p.resolved) return;
     p.resolved = true;
-    if (p.kind == L"aumid") { p.aumid = p.value; return; }
-    if (p.kind == L"exe") { p.target = p.value; return; }
+    if (p.kind == L"aumid") {
+        p.aumid = p.value;
+        p.target = AumidProgram(p.value);  // (so a window without an identity still finds its pin)
+        return;
+    }
+    if (p.kind == L"exe") {
+        p.target = p.value;
+        p.aumid = PackagedAumid(p.target);  // (a Store app's program: opened through its package)
+        return;
+    }
+    // (a shortcut that can't be read now, on a drive still waking up, is read again on the next rebuild)
     ComPtr<IShellLinkW> link;
-    if (FAILED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&link)))) return;
+    if (FAILED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&link)))) {
+        p.resolved = false;
+        return;
+    }
     ComPtr<IPersistFile> pf;
-    if (FAILED(link.As(&pf)) || FAILED(pf->Load(p.value.c_str(), STGM_READ))) return;
+    if (FAILED(link.As(&pf)) || FAILED(pf->Load(p.value.c_str(), STGM_READ))) {
+        p.resolved = GetFileAttributesW(p.value.c_str()) == INVALID_FILE_ATTRIBUTES;  // (gone: nothing to wait for)
+        return;
+    }
     wchar_t buf[MAX_PATH * 2] = {};
     if (SUCCEEDED(link->GetPath(buf, ARRAYSIZE(buf), nullptr, SLGP_RAWPATH))) {
         std::wstring raw = buf;
@@ -814,6 +1077,10 @@ static void ResolvePin(Pin& p) {
         wchar_t exp[MAX_PATH * 2] = {};
         ExpandEnvironmentStringsW(raw.c_str(), exp, ARRAYSIZE(exp));
         p.target = exp;
+    }
+    if (_wcsicmp(PathFindExtensionW(p.target.c_str()), L".exe")) {
+        std::wstring real = MsiProgramOf(p.value);
+        if (!real.empty()) p.target = real;
     }
     wchar_t args[1024] = {};
     if (SUCCEEDED(link->GetArguments(args, ARRAYSIZE(args)))) p.args = args;
@@ -903,6 +1170,8 @@ static bool IsTaskWindow(HWND hwnd) {
 
 void LoadPins();
 void SavePins();
+static bool IsTempProgram(const std::wstring& exe);
+static void NimbusLog(const char* what);
 
 static App MakeStartApp() {
     App a;
@@ -913,16 +1182,29 @@ static App MakeStartApp() {
 }
 
 void RebuildApps() {
+    // (pins that updated themselves into a new folder: looked at once a minute, not on every rebuild,
+    // a pin on a sleeping or network drive would stall the bar)
+    static DWORD squirrelAt = 0;
+    bool squirrel = !squirrelAt || GetTickCount() - squirrelAt > 60000;
+    if (squirrel) squirrelAt = GetTickCount();
     std::vector<App> next;
     next.push_back(MakeStartApp());  // each monitor decides whether to show it (DockCfg)
     for (int i = 0; i < (int)g_pins.size(); i++) {
         Pin& p = g_pins[i];
+        if (squirrel && p.kind == L"exe") {  // (it updated itself into a new folder while Nimbus ran)
+            std::wstring now = SquirrelCurrent(p.value);
+            if (now != p.value) {
+                p.value = now;
+                p.resolved = false;
+                SavePins();
+            }
+        }
         ResolvePin(p);
         App a;
         a.pinned = true;
         a.pinIndex = i;
         a.aumid = p.aumid;
-        a.exe = p.kind == L"exe" ? p.value : p.target;
+        a.exe = !p.target.empty() ? p.target : p.kind == L"exe" ? p.value : L"";
         a.lnk = p.kind == L"lnk" ? p.value : L"";
         a.args = p.args;
         a.key = L"pin:" + Lower(p.value);
@@ -1019,6 +1301,92 @@ static std::deque<IconJob> g_iconJobs;
 static bool g_iconStop = false;
 static HANDLE g_iconThread = nullptr;
 
+// A packaged app left out of the apps list (AppListEntry="none", like Windows' print queue): its name and
+// logo straight from the package's manifest. "Family!AppId" → the logo's best PNG and the shown name.
+static bool PackageLook(const std::wstring& aumid, std::wstring& png, std::wstring& name) {
+    size_t bang = aumid.find(L'!');
+    if (bang == std::wstring::npos) return false;
+    std::wstring family = aumid.substr(0, bang), appId = aumid.substr(bang + 1);
+    HMODULE k = GetModuleHandleW(L"kernelbase.dll");
+    if (!k) k = GetModuleHandleW(L"kernel32.dll");
+    using ByFamily = LONG(WINAPI*)(PCWSTR, UINT32*, PWSTR*, UINT32*, WCHAR*);
+    using PathOf = LONG(WINAPI*)(PCWSTR, UINT32*, PWSTR);
+    auto byFamily = k ? (ByFamily)GetProcAddress(k, "GetPackagesByPackageFamily") : nullptr;
+    auto pathOf = k ? (PathOf)GetProcAddress(k, "GetPackagePathByFullName") : nullptr;
+    if (!byFamily || !pathOf) return false;
+    UINT32 count = 0, chars = 0;
+    if (byFamily(family.c_str(), &count, nullptr, &chars, nullptr) != ERROR_INSUFFICIENT_BUFFER || !count) return false;
+    std::vector<PWSTR> names(count);
+    std::vector<WCHAR> buf(chars);
+    if (byFamily(family.c_str(), &count, names.data(), &chars, buf.data()) != ERROR_SUCCESS || !count) return false;
+    std::wstring full = names[0];
+    wchar_t dir[MAX_PATH * 2] = {};
+    UINT32 len = ARRAYSIZE(dir);
+    if (pathOf(full.c_str(), &len, dir) != ERROR_SUCCESS) return false;
+    std::wstring root = dir;
+    // The manifest (UTF-8): this app's <Application> element, its logo and its name.
+    HANDLE h = CreateFileW((root + L"\\AppxManifest.xml").c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return false;
+    std::string xml;
+    char rb[8192];
+    DWORD n = 0;
+    while (ReadFile(h, rb, sizeof(rb), &n, nullptr) && n && xml.size() < 4 << 20) xml.append(rb, n);
+    CloseHandle(h);
+    int wn = MultiByteToWideChar(CP_UTF8, 0, xml.data(), (int)xml.size(), nullptr, 0);
+    std::wstring m(wn, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, xml.data(), (int)xml.size(), m.data(), wn);
+    size_t at = m.find(L"Id=\"" + appId + L"\"");
+    if (at == std::wstring::npos) return false;
+    size_t endApp = m.find(L"</Application>", at);
+    std::wstring app = m.substr(at, endApp == std::wstring::npos ? std::wstring::npos : endApp - at);
+    auto attr = [&](const wchar_t* key) -> std::wstring {
+        std::wstring k2 = std::wstring(key) + L"=\"";
+        size_t p = app.find(k2);
+        if (p == std::wstring::npos) return L"";
+        p += k2.size();
+        size_t e = app.find(L'"', p);
+        return e == std::wstring::npos ? L"" : app.substr(p, e - p);
+    };
+    std::wstring dn = attr(L"DisplayName"), logo = attr(L"Square44x44Logo");
+    if (logo.empty()) logo = attr(L"Square150x150Logo");
+    if (!dn.compare(0, 12, L"ms-resource:")) {
+        std::wstring pkgName = full.substr(0, full.find(L'_')), res = dn.substr(12), uri;
+        if (!res.compare(0, 2, L"//")) uri = L"ms-resource:" + res;
+        else if (!res.empty() && res[0] == L'/') uri = L"ms-resource://" + pkgName + res;
+        else uri = L"ms-resource://" + pkgName + L"/Resources/" + res;
+        wchar_t sb[512] = {};
+        dn = SUCCEEDED(SHLoadIndirectString((L"@{" + full + L"?" + uri + L"}").c_str(), sb, ARRAYSIZE(sb), nullptr)) ? sb : L"";
+    }
+    name = dn;
+    if (!logo.empty()) {
+        // "Assets\Logo.png" stands for its scaled files: Logo.targetsize-256_altform-unplated.png and the like.
+        std::wstring rel = logo, ext = PathFindExtensionW(logo.c_str());
+        rel.resize(rel.size() - ext.size());
+        std::wstring folder = root + L"\\" + rel.substr(0, rel.find_last_of(L'\\') == std::wstring::npos ? 0 : rel.find_last_of(L'\\'));
+        WIN32_FIND_DATAW fd;
+        HANDLE fh = FindFirstFileW((root + L"\\" + rel + L"*" + ext).c_str(), &fd);
+        int best = -1;
+        if (fh != INVALID_HANDLE_VALUE) {
+            do {
+                std::wstring fn = fd.cFileName;
+                if (fn.find(L"lightunplated") != std::wstring::npos || fn.find(L"contrast-") != std::wstring::npos) continue;
+                int score = 0;
+                size_t t = fn.find(L"targetsize-"), s = fn.find(L"scale-");
+                if (t != std::wstring::npos) score = _wtoi(fn.c_str() + t + 11) * 4;
+                else if (s != std::wstring::npos) score = _wtoi(fn.c_str() + s + 6);
+                else score = 50;
+                if (fn.find(L"altform-unplated") != std::wstring::npos) score += 2;
+                if (score > best) {
+                    best = score;
+                    png = folder + L"\\" + fn;
+                }
+            } while (FindNextFileW(fh, &fd));
+            FindClose(fh);
+        }
+    }
+    return !png.empty() || !name.empty();
+}
+
 static DWORD WINAPI IconThread(LPVOID) {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     for (;;) {
@@ -1035,23 +1403,32 @@ static DWORD WINAPI IconThread(LPVOID) {
 
         auto* r = new IconResult();
         r->key = job.key;
-        ComPtr<IShellItem> item;
-        if (!job.lnk.empty()) SHCreateItemFromParsingName(job.lnk.c_str(), nullptr, IID_PPV_ARGS(&item));
-        if (!item && !job.aumid.empty()) {
-            std::wstring p = L"shell:AppsFolder\\" + job.aumid;
-            SHCreateItemFromParsingName(p.c_str(), nullptr, IID_PPV_ARGS(&item));
-        }
-        if (!item && !job.exe.empty()) SHCreateItemFromParsingName(job.exe.c_str(), nullptr, IID_PPV_ARGS(&item));
-        if (item) {
+        // Its shortcut, its Start entry, its program: the next one when one gives no icon.
+        std::vector<std::wstring> ways;
+        if (!job.lnk.empty()) ways.push_back(job.lnk);
+        if (!job.aumid.empty()) ways.push_back(L"shell:AppsFolder\\" + job.aumid);
+        if (!job.exe.empty()) ways.push_back(NativePath(job.exe));  // (System32 as 64-bit, under WOW64)
+        for (auto& way : ways) {
+            ComPtr<IShellItem> item;
+            if (FAILED(SHCreateItemFromParsingName(way.c_str(), nullptr, IID_PPV_ARGS(&item))) || !item) continue;
             // The shell's display name is the translated one ("Explorador de Arquivos", not "File Explorer").
             PWSTR name = nullptr;
-            if (job.wantLabel && SUCCEEDED(item->GetDisplayName(SIGDN_NORMALDISPLAY, &name)) && name) {
+            if (job.wantLabel && r->label.empty() && SUCCEEDED(item->GetDisplayName(SIGDN_NORMALDISPLAY, &name)) && name) {
                 r->label = name;
                 if (r->label.size() > 4 && EqI(r->label.substr(r->label.size() - 4), L".exe")) r->label.resize(r->label.size() - 4);
                 CoTaskMemFree(name);
             }
             ComPtr<IShellItemImageFactory> factory;
             if (SUCCEEDED(item.As(&factory))) factory->GetImage(SIZE{job.size, job.size}, SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK, &r->hbm);
+            if (r->hbm) break;
+        }
+        std::wstring png, pname;
+        if ((!r->hbm || (job.wantLabel && r->label.empty())) && !job.aumid.empty() && PackageLook(job.aumid, png, pname)) {
+            if (job.wantLabel && r->label.empty()) r->label = pname;
+            ComPtr<IShellItem> item;
+            ComPtr<IShellItemImageFactory> factory;
+            if (!r->hbm && !png.empty() && SUCCEEDED(SHCreateItemFromParsingName(png.c_str(), nullptr, IID_PPV_ARGS(&item))) && SUCCEEDED(item.As(&factory)))
+                factory->GetImage(SIZE{job.size, job.size}, SIIGBF_THUMBNAILONLY | SIIGBF_BIGGERSIZEOK, &r->hbm);
         }
         if (!PostPtr(g_msgWnd, WM_APP_ICON, r)) {
             if (r->hbm) DeleteObject(r->hbm);
@@ -1319,6 +1696,21 @@ void LoadPins() {
         return;
     }
     for (auto& it : items) g_pins.push_back({it.first, it.second});
+    // An installer pinned by accident (dragged while it ran from a temporary folder): gone, so unpinned.
+    size_t before = g_pins.size();
+    g_pins.erase(std::remove_if(g_pins.begin(), g_pins.end(), [](const Pin& p) {
+        return p.kind == L"exe" && IsTempProgram(p.value) && GetFileAttributesW(p.value.c_str()) == INVALID_FILE_ATTRIBUTES;
+    }), g_pins.end());
+    bool moved = g_pins.size() != before;
+    for (auto& p : g_pins) {
+        if (p.kind != L"exe") continue;
+        std::wstring now = SquirrelCurrent(p.value);
+        if (now != p.value) {
+            p.value = now;
+            moved = true;
+        }
+    }
+    if (moved) SavePins();
 }
 
 void SavePins() {
@@ -1362,10 +1754,20 @@ static void RestoreTaskbarAutoHide() {
     std::wstring key = UKey(L"autoHideOrig");
     int orig = Wh_GetIntValue(key.c_str(), -1);
     if (orig < 0) return;
-    APPBARDATA abd = {sizeof(abd)};
-    abd.lParam = (LPARAM)orig;
-    SHAppBarMessage(ABM_SETSTATE, &abd);
-    Wh_DeleteValue(key.c_str());
+    // The note goes only once Windows took it: if the taskbar was busy (restarting, an Explorer still starting),
+    // the next start or stop tries again, instead of leaving auto-hide on with nothing to say it was Nimbus'.
+    for (int i = 0; i < 10; i++) {
+        APPBARDATA abd = {sizeof(abd)};
+        abd.lParam = (LPARAM)orig;
+        SHAppBarMessage(ABM_SETSTATE, &abd);
+        APPBARDATA q = {sizeof(q)};
+        if (((UINT)SHAppBarMessage(ABM_GETSTATE, &q) & ABS_AUTOHIDE) == ((UINT)orig & ABS_AUTOHIDE)) {
+            Wh_DeleteValue(key.c_str());
+            return;
+        }
+        Sleep(100);
+    }
+    Wh_Log(L"taskbar: auto-hide not given back yet (tried again later)");
 }
 
 static void ShowTaskbarWindows() {
@@ -1400,6 +1802,8 @@ struct Elem {
     float appear = 1;  // 0..1, grows in when an app opens
     float lift = 0, liftT = 0;  // "Elevar": raised icon
     float op = 1, opT = 1;      // "Foco": the others fade
+    int arrow = 0;              // the pinned carousel's arrows (app -1): -1 back, 1 forward
+    bool leaving = false;       // a pinned app the carousel just turned past: it shrinks away, then goes
 };
 
 // Each monitor's own choices (Windhawk settings monPrimary / monLeft / monRight / monOther).
@@ -1410,10 +1814,24 @@ struct DockCfg {
     bool showStart = true;
     bool showPinned = true;
     bool onlyThis = false;  // open windows: only the ones on this monitor
+    // The complete mode (Settings › Monitors): what of the status area this dock shows, and where it sits.
+    bool advanced = false;
+    std::unordered_map<std::wstring, int> statMode;  // status items, by key (see kDockStat): 1 shown, -1 left out
+    int align = 0;                                    // -1 start, 0 middle, 1 end (along its edge)
+    int edge = 0;                                     // the monitor's edge: 0 bottom, 1 top, 2 left, 3 right
+    bool noApps = false;                              // no app icons at all (only the status area)
+    bool onlyPinned = false;                          // the pinned apps only (no other open ones)
+    // (overrides of the general look; 0 / -1 / empty: the general one)
+    int iconSize = 0, iconGap = -1, zoom = 0, tintOpacity = -1, bottomGap = -1, hideDelay = -1;
+    bool hasTint = false, autoTint = false;
+    COLORREF tint = 0;
+    std::wstring anim;
+    std::wstring monId;  // its monitor (see MonitorIdentity)
 };
 
 static DockCfg LoadDockCfg(const wchar_t* group, const std::wstring& monId) {
     DockCfg c;
+    c.monId = monId;
     auto v = [&](const wchar_t* field) { return MonCfg(monId, group, field); };
     c.enabled = _wtoi(v(L"enabled").c_str()) != 0;
     std::wstring f = v(L"format");
@@ -1422,7 +1840,55 @@ static DockCfg LoadDockCfg(const wchar_t* group, const std::wstring& monId) {
     c.autoHide = h == L"sim" ? true : h == L"nao" ? false : g_set.autoHide;
     c.showStart = _wtoi(v(L"showStart").c_str()) != 0 && g_set.showStart;
     c.showPinned = _wtoi(v(L"showPinned").c_str()) != 0;
-    c.onlyThis = v(L"windows") == L"deste";
+    // Apps on this dock: all, the open ones, the pinned ones, or none. (Before 2.1: "showPinned" off = the open ones.)
+    // (this monitor's own value, else the one for every dock; a monitor not taken into that yet reads as it
+    // always did: see MonScopeMigrate)
+    auto scoped = [&](const wchar_t* field) {
+        std::wstring own, gen;
+        if (monId.empty() || !ReadVal(UserPrefix() + L"cfg." + field, gen) || !ReadVal(UserPrefix() + L"mon." + monId + L"." + field, own))
+            return v(field);
+        return own.empty() ? gen : own;
+    };
+    std::wstring apps = scoped(L"apps");
+    if (apps == L"todos") c.showPinned = true;
+    if (apps == L"abertos") c.showPinned = false;
+    if (apps == L"fixados") c.showPinned = c.onlyPinned = true;
+    c.noApps = apps == L"nenhum";
+    c.onlyThis = scoped(L"windows") == L"deste";
+    c.advanced = v(L"advanced") == L"1";
+    // The edge and the place on it: this monitor's own (only with "advanced"), else the general ones.
+    std::wstring a = c.advanced ? v(L"align") : L"", e = c.advanced ? v(L"edge") : L"";
+    if (a.empty()) a = CfgStr(L"align", L"centro");
+    if (e.empty()) e = CfgStr(L"edge", L"baixo");
+    c.align = a == L"esquerda" ? -1 : a == L"direita" ? 1 : 0;
+    c.edge = e == L"cima" ? 1 : e == L"esquerda" ? 2 : e == L"direita" ? 3 : 0;
+    if (c.advanced) {
+        extern const wchar_t* const kDockStatKeys[];
+        for (int i = 0; kDockStatKeys[i]; i++) {
+            std::wstring m = v((std::wstring(L"stat.") + kDockStatKeys[i]).c_str());
+            if (m == L"1" || m == L"0") c.statMode[kDockStatKeys[i]] = m == L"1" ? 1 : -1;
+        }
+        auto num = [&](const wchar_t* f, int def, int lo, int hi) {
+            std::wstring x = v(f);
+            return x.empty() ? def : std::clamp(_wtoi(x.c_str()), lo, hi);
+        };
+        c.iconSize = num(L"iconSize", 0, 24, 128);
+        c.iconGap = num(L"iconGap", -1, 0, 64);
+        c.zoom = num(L"magnification", 0, 100, 250);
+        c.tintOpacity = num(L"tintOpacity", -1, 0, 100);
+        c.bottomGap = num(L"bottomGap", -1, 0, 100);
+        c.hideDelay = num(L"hideDelay", -1, 0, 5000);
+        c.anim = v(L"animation");
+        std::wstring t = v(L"tintColor");
+        c.autoTint = t == L"auto";  // (its own "Auto": the look's color, whatever the general one is)
+        const wchar_t* ts = t.c_str();
+        if (ts[0] == L'#') ts++;
+        if (wcslen(ts) == 6) {
+            unsigned long x = wcstoul(ts, nullptr, 16);
+            c.tint = RGB((x >> 16) & 0xFF, (x >> 8) & 0xFF, x & 0xFF);
+            c.hasTint = true;
+        }
+    }
     return c;
 }
 
@@ -1487,6 +1953,76 @@ static const wchar_t* MonitorGroup(HMONITOR mon, const RECT& rc) {
     if (cx < pi.rcMonitor.left) return L"monLeft";
     if (cx >= pi.rcMonitor.right) return L"monRight";
     return L"monOther";
+}
+
+// ---- "Apps on this dock" and "Open windows": one value for every dock, and a monitor's own ----
+// Until 2.1's new Settings a monitor only had its own ("mon.<id>.apps" or its "showPinned"; "mon.<id>.windows" or
+// its position group's). Now "apps" and "windows" are settings for all, and a monitor's own value is the
+// exception, as on every other row. Moving over changes nothing any dock shows: the value for all starts as the
+// primary monitor's; a monitor showing the same follows it from then on (its own value saved empty), one showing
+// something else keeps that as its own. A monitor with saved choices that was unplugged then is taken in the same
+// way when it is back; one never seen before follows All.
+static std::wstring MonScopeLegacy(const std::wstring& id, const wchar_t* group, const std::wstring& field) {
+    if (field == L"apps") {
+        std::wstring v = MonCfg(id, group, L"apps");
+        return !v.empty() ? v : _wtoi(MonCfg(id, group, L"showPinned").c_str()) ? L"todos" : L"abertos";
+    }
+    return MonCfg(id, group, L"windows") == L"deste" ? L"deste" : L"todas";
+}
+static void MonScopeMigrate() {
+    struct Mon {
+        std::wstring id;
+        const wchar_t* group;
+        bool primary;
+    };
+    std::vector<Mon> mons;
+    EnumDisplayMonitors(nullptr, nullptr, [](HMONITOR mon, HDC, LPRECT, LPARAM l) WINAPI -> BOOL {
+        MONITORINFO mi = {sizeof(mi)};
+        if (GetMonitorInfoW(mon, &mi))
+            ((std::vector<Mon>*)l)->push_back({MonitorIdentity(mon).id, MonitorGroup(mon, mi.rcMonitor), (mi.dwFlags & MONITORINFOF_PRIMARY) != 0});
+        return TRUE;
+    }, (LPARAM)&mons);
+    std::vector<std::wstring> ids = MonIdsWithChoices();
+    const size_t known = ids.size();
+    for (const wchar_t* f : {L"apps", L"windows"}) {
+        std::wstring field = f, gen, genKey = UserPrefix() + L"cfg." + field;
+        auto monKey = [&](const std::wstring& id) { return UserPrefix() + L"mon." + id + L"." + field; };
+        bool first = !ReadVal(genKey, gen);
+        if (first) {
+            const Mon* p = nullptr;
+            for (auto& m : mons)
+                if (m.primary) p = &m;
+            if (!p) continue;  // (no monitor to start from now: next time)
+            gen = MonScopeLegacy(p->id, p->group, field);
+            // An own value saved empty meant "nothing of its own" until now. It goes away (apps), or becomes the
+            // "every window" it stood for, so that monitor is still read the old way when it is taken in.
+            for (size_t k = 0; k < known; k++) {
+                std::wstring own;
+                if (!ReadVal(monKey(ids[k]), own) || !own.empty()) continue;
+                if (field == L"apps") Wh_DeleteValue(monKey(ids[k]).c_str());
+                else WriteVal(monKey(ids[k]), L"todas");
+            }
+            WriteVal(genKey, gen);
+            CfgPut(field, gen);
+            for (size_t k = 0; k < known; k++) {  // (the same as All's: it follows All from here)
+                std::wstring own;
+                if (ReadVal(monKey(ids[k]), own) && own == gen) WriteVal(monKey(ids[k]), L"");
+            }
+        }
+        for (auto& m : mons) {  // (the monitors plugged in now and not taken in yet)
+            std::wstring own;
+            if (m.id.empty() || ReadVal(monKey(m.id), own)) continue;
+            bool seen = first || std::find(ids.begin(), ids.begin() + known, m.id) != ids.begin() + known;
+            std::wstring was = seen ? MonScopeLegacy(m.id, m.group, field) : gen;
+            WriteVal(monKey(m.id), was == gen ? L"" : was);
+            if (std::find(ids.begin(), ids.end(), m.id) == ids.end()) ids.push_back(m.id);
+        }
+    }
+    if (ids.size() != known) {  // (so "Back to defaults" finds what was saved for them)
+        std::wstring list;
+        for (auto& x : ids) list += (list.empty() ? L"" : L",") + x;
+        WriteVal(UserPrefix() + L"monIds", list);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1566,6 +2102,7 @@ struct NotifAction {
 struct NotifItem {
     long long id = 0;
     std::wstring aumid, title, body, launch, launchType;
+    std::wstring image;     // the toast's own picture (a local file), for an app Windows doesn't list
     std::vector<NotifAction> actions;
     long long arrival = 0;  // FILETIME
     bool silent = false;    // the app asked for no sound
@@ -1597,8 +2134,46 @@ static int RemPending() {
 }
 
 // The control center and the items that came with it.
-constexpr int StDnd = 70, StBt = 71, StNight = 72, StShort = 73, StLight = 74, StPower = 75, StPlayer = 76, StDevices = 77, StCentral = 80;
-static bool IsExtra(int id) { return id >= StDnd && id <= StDevices; }
+constexpr int StDnd = 70, StBt = 71, StNight = 72, StShort = 73, StLight = 74, StPower = 75, StPlayer = 76, StDevices = 77, StPrivacy = 78, StTelas = 79, StCentral = 80;
+static bool IsExtra(int id) { return id >= StDnd && id <= StTelas; }
+// The status items one dock can leave out (complete mode, per monitor): key (stored), id, names.
+// "bandeja" is the tray (id -1).
+struct DockStatName {
+    const wchar_t* key;
+    int id;
+    const wchar_t *pt, *en;
+};
+static const DockStatName kDockStat[] = {
+    {L"bandeja", -1, L"Bandeja", L"Tray"},
+    {L"central", StCentral, L"Central", L"Control center"},
+    {L"relogio", StClock, L"Relógio e data", L"Clock and date"},
+    {L"bateria", StBattery, L"Bateria", L"Battery"},
+    {L"volume", StVolume, L"Volume", L"Volume"},
+    {L"rede", StNetwork, L"Rede", L"Network"},
+    {L"teclado", StKeyboard, L"Idioma do teclado", L"Keyboard language"},
+    {L"dispositivos", StDevices, L"Baterias dos aparelhos", L"Device batteries"},
+    {L"avisos", StNotif, L"Notificações", L"Notifications"},
+    {L"notas", StNotes, L"Notas e lembretes", L"Notes and reminders"},
+    {L"prateleira", StShelf, L"Prateleira", L"Shelf"},
+    {L"player", StPlayer, L"Player", L"Player"},
+    {L"privacidade", StPrivacy, L"Microfone e câmera em uso", L"Microphone and camera in use"},
+    {L"naoincomodar", StDnd, L"Não incomodar", L"Do not disturb"},
+    {L"luznoturna", StNight, L"Luz noturna", L"Night light"},
+    {L"bluetooth", StBt, L"Bluetooth", L"Bluetooth"},
+    {L"atalhos", StShort, L"Atalhos do Windows", L"Windows shortcuts"},
+    {L"brilho", StLight, L"Brilho", L"Brightness"},
+    {L"energia", StPower, L"Energia", L"Power"},
+    {L"telas", StTelas, L"Arranjos de telas", L"Screen layouts"},
+};
+extern const wchar_t* const kDockStatKeys[] = {L"bandeja", L"central", L"relogio", L"bateria", L"volume", L"rede", L"teclado", L"dispositivos",
+                                               L"avisos", L"notas", L"prateleira", L"player", L"privacidade", L"naoincomodar", L"luznoturna",
+                                               L"bluetooth", L"atalhos", L"brilho", L"energia", L"telas", nullptr};
+// Microphone and camera in use (read by a worker from Windows' privacy records).
+struct PrivUse {
+    bool cam = false;
+    std::wstring name, path;
+};
+static std::vector<PrivUse> PrivNow();
 
 // Wireless devices' batteries (Bluetooth, Xbox controllers, and BatteryHub's receivers when installed).
 struct DevBattery {
@@ -1639,25 +2214,42 @@ static bool CentralOn() {
     for (int id = 0; id < StCount; id++)
         if (StatOn(id) && (g_set.statPlace[id] & PlCentral)) return true;
     if ((g_set.trayPlace & PlCentral) || (g_set.shelfPlace & PlCentral) || (g_set.notifPlace & PlCentral) || (g_set.notesPlace & PlCentral)) return true;
-    for (int k = 0; k < 8; k++)
+    for (int k = 0; k < 10; k++)
         if ((g_set.extraPlace[k] & PlCentral)) return true;
     return false;
 }
 
 // The items in the dock, left to right.
-static std::vector<int> StatIds() {
+// The dock's status items. A dock in complete mode (Settings > Monitors) may show or leave out any of
+// them, whatever the general choice: its own choice wins, else the general one.
+static const wchar_t* DockStatKey(int id) {
+    for (auto& n : kDockStat)
+        if (n.id == id) return n.key;
+    return L"";
+}
+static int DockStatMode(const DockCfg* c, int id) {
+    if (!c || !c->advanced) return 0;
+    auto it = c->statMode.find(DockStatKey(id));
+    return it == c->statMode.end() ? 0 : it->second;
+}
+static std::vector<int> StatIds(const DockCfg* c = nullptr) {
     std::vector<int> ids;
-    if ((g_set.notesPlace & PlDock)) ids.push_back(StNotes);
-    if ((g_set.notifPlace & PlDock)) ids.push_back(StNotif);
-    if ((g_set.shelfPlace & PlDock)) ids.push_back(StShelf);
-    if ((ExtraPlace(StPlayer) & PlDock) && (!CfgInt(L"playerHide") || MediaNow().has)) ids.push_back(StPlayer);
-    if ((ExtraPlace(StDevices) & PlDock) && !DevicesNow().empty()) ids.push_back(StDevices);
-    for (int id : {StDnd, StNight, StBt, StShort, StLight, StPower})
-        if ((ExtraPlace(id) & PlDock) && (id != StBt || BtPresent())) ids.push_back(id);
+    auto want = [c](int id, bool general) {
+        int m = DockStatMode(c, id);
+        return m ? m > 0 : general;
+    };
+    if (want(StNotes, g_set.notesPlace & PlDock)) ids.push_back(StNotes);
+    if (want(StNotif, g_set.notifPlace & PlDock)) ids.push_back(StNotif);
+    if (want(StShelf, g_set.shelfPlace & PlDock)) ids.push_back(StShelf);
+    if (want(StPlayer, ExtraPlace(StPlayer) & PlDock) && (!CfgInt(L"playerHide") || MediaNow().has)) ids.push_back(StPlayer);
+    if (want(StDevices, ExtraPlace(StDevices) & PlDock) && !DevicesNow().empty()) ids.push_back(StDevices);
+    if (want(StPrivacy, ExtraPlace(StPrivacy) & PlDock) && !PrivNow().empty()) ids.push_back(StPrivacy);
+    for (int id : {StDnd, StNight, StBt, StShort, StLight, StPower, StTelas})
+        if (want(id, ExtraPlace(id) & PlDock) && (id != StBt || BtPresent())) ids.push_back(id);
     for (int id : {StKeyboard, StNetwork, StVolume, StBattery})
-        if (StatOn(id) && (g_set.statPlace[id] & PlDock)) ids.push_back(id);
-    if (CentralOn()) ids.push_back(StCentral);
-    if (StatOn(StClock) && (g_set.statPlace[StClock] & PlDock)) ids.push_back(StClock);
+        if (want(id, StatOn(id) && (g_set.statPlace[id] & PlDock)) && (id != StBattery || g_stat.battery)) ids.push_back(id);
+    if (want(StCentral, CentralOn())) ids.push_back(StCentral);
+    if (want(StClock, StatOn(StClock) && (g_set.statPlace[StClock] & PlDock))) ids.push_back(StClock);
     if (StatOnLeft()) std::reverse(ids.begin(), ids.end());
     return ids;
 }
@@ -1786,6 +2378,14 @@ static void ToggleMute() {
 }
 
 // One app's sound (all of its sessions on the default device).
+// (IAudioMeterInformation: only declared in this compiler's headers.)
+struct NimbusMeter : public IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE GetPeakValue(float* peak) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetMeteringChannelCount(UINT* count) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetChannelsPeakValues(UINT32 count, float* peaks) = 0;
+    virtual HRESULT STDMETHODCALLTYPE QueryHardwareSupport(DWORD* mask) = 0;
+};
+__CRT_UUID_DECL(NimbusMeter, 0xC02216F6, 0x8C67, 0x4B5B, 0x9D, 0x00, 0xD0, 0x08, 0xE7, 0x3E, 0x00, 0x64)
 struct AppVol {
     DWORD pid = 0;
     bool system = false;
@@ -1875,13 +2475,17 @@ static void SetAppVolume(AppVol& a, float v) {
 // output use the same parts of Windows its Sound settings use, which Microsoft doesn't document; an app
 // on a second output is a copy Nimbus plays itself, while it runs.)
 
-static bool SoundFull() { return CfgStr(L"soundPanel", L"simples") == L"completo"; }
+static bool SoundFull() {
+    std::wstring v = CfgStr(L"soundPanel", L"simples");
+    return v == L"completo" || v == L"extremo";
+}
 
 struct SndOut {
     std::wstring id, name, kind;  // kind: speakers, headset, display
     float vol = 1;
     bool muted = false, def = false, comm = false;  // comm: Windows' default for calls
     ComPtr<IAudioEndpointVolume> ev;
+    ComPtr<NimbusMeter> meter;  // how loud it's playing now
 };
 struct SndApp {
     AppVol v;
@@ -1896,6 +2500,7 @@ struct SndCopy {
     DWORD pid = 0;
     std::wstring dev;
     HANDLE thread = nullptr, stop = nullptr;
+    std::atomic<float> vol{1.0f};  // the app's volume on this output (the copy's own session)
 };
 struct {
     std::vector<SndOut> outs;
@@ -1905,8 +2510,19 @@ struct {
     bool dragging = false;
     int dragApp = -1, dragFrom = -2;  // the app being dragged, and from where (-1: the list)
     int hot = -1;                     // the output under it
+    int popApp = -1, popOut = -1;     // an app's volume on one output, open over its card
+    D2D1_RECT_F popRc{};
     std::wstring note;                // a word about what just happened (an app that picks its own outputs)
+    std::wstring sxMenu;              // Extreme: the program whose "+" menu is open (by path: the list reloads)
+    bool sxAll = false;               // Extreme: the outputs with nothing on them get a column too
+    float scrollX = 0, maxX = 0;      // Extreme: the output columns scroll sideways when they don't fit
+    D2D1_RECT_F headR{};              // ... and the wheel over their cards scrolls them
+    bool big = false;                 // Extreme as a big mixer, in the middle of the screen
+    bool panning = false;             // ... the grid being dragged with the mouse
+    D2D1_POINT_2F panAt{};
+    float panX = 0, panY = 0;
 } g_snd;
+static HWND g_sndDim = nullptr;  // (the screen dimmed under the big mixer)
 static std::vector<std::unique_ptr<SndCopy>> g_sndCopies;
 
 static DWORD WinBuild() {
@@ -2098,10 +2714,18 @@ static DWORD WINAPI SndCopyThread(void* param) {
                  SUCCEEDED(ren->GetBufferSize(&renFrames)) && SUCCEEDED(ren->GetService(IID_PPV_ARGS(&rc)));
         }
         Wh_Log(L"sound: copy of app %lu %s", c->pid, ok ? L"started" : L"couldn't start");
+        ComPtr<ISimpleAudioVolume> copyVol;  // (the copy's own session: the app's volume on this output)
+        if (ok) ren->GetService(IID_PPV_ARGS(&copyVol));
+        float applied = -1;
         if (ok && SUCCEEDED(ren->Start()) && SUCCEEDED(cap->Start())) {
             HANDLE waits[2] = {c->stop, capEv};
             for (;;) {
                 if (WaitForMultipleObjects(2, waits, FALSE, 500) == WAIT_OBJECT_0) break;
+                float want = c->vol.load();
+                if (copyVol && want != applied) {
+                    copyVol->SetMasterVolume(want, nullptr);
+                    applied = want;
+                }
                 UINT32 pkt = 0;
                 while (SUCCEEDED(cc->GetNextPacketSize(&pkt)) && pkt) {
                     BYTE* data = nullptr;
@@ -2134,11 +2758,30 @@ static int SndCopyAt(DWORD pid, const std::wstring& dev) {
         if (g_sndCopies[i]->pid == pid && g_sndCopies[i]->dev == dev) return (int)i;
     return -1;
 }
+static std::vector<std::wstring> SndList(const wchar_t* name);
+static float SndCopyVolSaved(const std::wstring& path, const std::wstring& dev) {
+    std::wstring pre = path + L"|" + dev + L"|";
+    for (auto& x : SndList(L"sound.copyVol"))
+        if (x.compare(0, pre.size(), pre) == 0) return std::clamp((float)_wtof(x.c_str() + pre.size()), 0.0f, 1.0f);
+    return 1.0f;
+}
+static void SndCopyVolSave(const std::wstring& path, const std::wstring& dev, float v) {
+    auto list = SndList(L"sound.copyVol");
+    std::wstring pre = path + L"|" + dev + L"|";
+    list.erase(std::remove_if(list.begin(), list.end(), [&](const std::wstring& x) { return x.compare(0, pre.size(), pre) == 0; }), list.end());
+    if (v < 0.995f) {
+        wchar_t num[16];
+        swprintf_s(num, L"%.2f", v);
+        list.push_back(pre + num);
+    }
+    StoreItems(L"sound.copyVol", list);
+}
 static void SndCopyStart(DWORD pid, const std::wstring& dev) {
     if (!SndCanCopy() || SndCopyAt(pid, dev) >= 0) return;
     auto c = std::make_unique<SndCopy>();
     c->pid = pid;
     c->dev = dev;
+    c->vol = SndCopyVolSaved(ProcessPath(pid), dev);
     c->stop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     c->thread = CreateThread(nullptr, 0, SndCopyThread, c.get(), 0, nullptr);
     if (!c->thread) {
@@ -2176,6 +2819,149 @@ static void SndCopiesStopAll(DWORD deadline) {
     g_sndCopies.clear();
 }
 
+// ---- Each app's real level, for the panel's bars ----
+// Windows' per-session meter gives the whole output's level on some PCs (every app moves together), so the level
+// comes from the app's own sound (process loopback). One worker reads them all, only while the sound panel is open.
+static struct {
+    SRWLOCK lock = SRWLOCK_INIT;
+    std::vector<DWORD> want;
+    std::unordered_map<DWORD, float> peaks;
+    HANDLE thread = nullptr, stop = nullptr;
+} g_sndMeter;
+struct SndMeterCap {
+    DWORD pid = 0, triedAt = 0;
+    ComPtr<IAudioClient> client;
+    ComPtr<IAudioCaptureClient> capture;
+    HANDLE event = nullptr;
+};
+static void SndMeterOpen(SndMeterCap& c) {
+    typedef HRESULT(WINAPI * ActivateFn)(LPCWSTR, REFIID, PROPVARIANT*, IActivateAudioInterfaceCompletionHandler*,
+                                         IActivateAudioInterfaceAsyncOperation**);
+    static HMODULE mm = LoadLibraryExW(L"mmdevapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    auto activate = mm ? (ActivateFn)GetProcAddress(mm, "ActivateAudioInterfaceAsync") : nullptr;
+    c.triedAt = GetTickCount();
+    c.client.Reset();
+    c.capture.Reset();
+    if (!activate) return;
+    NimbusLoopbackParams lp = {1, c.pid, 0};
+    PROPVARIANT pv;
+    PropVariantInit(&pv);
+    pv.vt = VT_BLOB;
+    pv.blob.cbSize = sizeof(lp);
+    pv.blob.pBlobData = (BYTE*)&lp;
+    ComPtr<IAudioClient> cl;
+    SndActivated* h = new SndActivated();
+    ComPtr<IActivateAudioInterfaceAsyncOperation> op;
+    if (SUCCEEDED(activate(L"VAD\\Process_Loopback", __uuidof(IAudioClient), &pv, h, &op)) && WaitForSingleObject(h->done, 2000) == WAIT_OBJECT_0) {
+        HRESULT hr = E_FAIL;
+        ComPtr<IUnknown> unk;
+        if (SUCCEEDED(op->GetActivateResult(&hr, &unk)) && SUCCEEDED(hr) && unk) unk.As(&cl);
+    }
+    h->Release();
+    if (!cl) return;
+    WAVEFORMATEX fmt = {WAVE_FORMAT_PCM, 2, 48000, 48000 * 4, 4, 16, 0};
+    if (!c.event) c.event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    ComPtr<IAudioCaptureClient> cc;
+    if (SUCCEEDED(cl->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_EVENTCALLBACK | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM,
+                                 2000000, 0, &fmt, nullptr)) &&
+        SUCCEEDED(cl->SetEventHandle(c.event)) && SUCCEEDED(cl->GetService(IID_PPV_ARGS(&cc))) && SUCCEEDED(cl->Start())) {
+        c.client = cl;
+        c.capture = cc;
+    }
+}
+static void SndMeterClose(SndMeterCap& c) {
+    if (c.client) c.client->Stop();
+    c.capture.Reset();
+    c.client.Reset();
+    if (c.event) CloseHandle(c.event);
+    c.event = nullptr;
+}
+static DWORD WINAPI SndMeterThread(void*) {
+    HRESULT co = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    {
+        std::vector<SndMeterCap> caps;
+        while (WaitForSingleObject(g_sndMeter.stop, 40) == WAIT_TIMEOUT) {
+            AcquireSRWLockShared(&g_sndMeter.lock);
+            std::vector<DWORD> want = g_sndMeter.want;
+            ReleaseSRWLockShared(&g_sndMeter.lock);
+            for (size_t i = caps.size(); i-- > 0;)
+                if (std::find(want.begin(), want.end(), caps[i].pid) == want.end()) {
+                    SndMeterClose(caps[i]);
+                    caps.erase(caps.begin() + i);
+                }
+            for (DWORD pid : want) {
+                auto it = std::find_if(caps.begin(), caps.end(), [&](const SndMeterCap& c) { return c.pid == pid; });
+                if (it == caps.end()) {
+                    if (caps.size() >= 16) continue;
+                    SndMeterCap c;
+                    c.pid = pid;
+                    SndMeterOpen(c);
+                    caps.push_back(std::move(c));
+                } else if (!it->capture && GetTickCount() - it->triedAt > 5000) {
+                    SndMeterOpen(*it);
+                }
+            }
+            std::unordered_map<DWORD, float> now;
+            for (auto& c : caps) {
+                float top = 0;
+                UINT32 pkt = 0;
+                bool bad = false;
+                while (c.capture) {
+                    if (FAILED(c.capture->GetNextPacketSize(&pkt))) {
+                        bad = true;
+                        break;
+                    }
+                    if (!pkt) break;
+                    BYTE* data = nullptr;
+                    UINT32 frames = 0;
+                    DWORD flags = 0;
+                    if (FAILED(c.capture->GetBuffer(&data, &frames, &flags, nullptr, nullptr))) {
+                        bad = true;
+                        break;
+                    }
+                    if (!(flags & AUDCLNT_BUFFERFLAGS_SILENT)) {
+                        const short* x = (const short*)data;
+                        for (UINT32 k = 0; k < frames * 2; k++) top = std::max(top, std::abs((int)x[k]) / 32768.0f);
+                    }
+                    c.capture->ReleaseBuffer(frames);
+                }
+                if (bad) {  // (the app closed its sound: tried again in a while)
+                    c.capture.Reset();
+                    c.client.Reset();
+                    c.triedAt = GetTickCount();
+                }
+                now[c.pid] = top;
+            }
+            AcquireSRWLockExclusive(&g_sndMeter.lock);
+            g_sndMeter.peaks.swap(now);
+            ReleaseSRWLockExclusive(&g_sndMeter.lock);
+        }
+        for (auto& c : caps) SndMeterClose(c);
+    }
+    if (SUCCEEDED(co)) CoUninitialize();
+    return 0;
+}
+static void SndMeterEnd(DWORD wait) {
+    if (!g_sndMeter.thread) return;
+    SetEvent(g_sndMeter.stop);
+    if (WaitForSingleObject(g_sndMeter.thread, wait) != WAIT_OBJECT_0) return;  // (still closing: the next start waits for it)
+    CloseHandle(g_sndMeter.thread);
+    CloseHandle(g_sndMeter.stop);
+    g_sndMeter.thread = g_sndMeter.stop = nullptr;
+    g_sndMeter.want.clear();
+    g_sndMeter.peaks.clear();
+}
+static void SndMeterBegin() {
+    if (g_sndMeter.thread && WaitForSingleObject(g_sndMeter.stop, 0) == WAIT_OBJECT_0) SndMeterEnd(800);
+    if (g_sndMeter.thread || !SndCanCopy()) return;
+    g_sndMeter.stop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (g_sndMeter.stop) g_sndMeter.thread = CreateThread(nullptr, 0, SndMeterThread, nullptr, 0, nullptr);
+    if (!g_sndMeter.thread && g_sndMeter.stop) {
+        CloseHandle(g_sndMeter.stop);
+        g_sndMeter.stop = nullptr;
+    }
+}
+
 static const PROPERTYKEY kSndName = {{0xa45c254e, 0xdf1c, 0x4efd, {0x80, 0x20, 0x67, 0xd1, 0x46, 0xa8, 0x50, 0xe0}}, 14};  // the friendly name
 static const PROPERTYKEY kSndForm = {{0x1da5d803, 0xd492, 0x4edd, {0x8c, 0x23, 0xe0, 0xc0, 0xff, 0xee, 0x7f, 0x0e}}, 0};   // the form factor
 
@@ -2186,8 +2972,45 @@ static int SndOutOf(const std::wstring& id) {
 }
 
 static std::vector<std::wstring> SndMutedList();
+static void SndMutedSave(const std::vector<std::wstring>& v);
+// Sessions (Windows' instance id of each) seen muted by the panel's list. One of them found unmuted again was unmuted by
+// the user (Windows' mixer, the app): its entry leaves the list. One not seen yet is new: it gets the mute.
+std::unordered_set<std::wstring> g_sndMuteSeen;
+static std::wstring SndInstance(IAudioSessionControl2* c2) {
+    LPWSTR id = nullptr;
+    std::wstring v;
+    if (c2 && SUCCEEDED(c2->GetSessionInstanceIdentifier(&id)) && id) {
+        v = id;
+        CoTaskMemFree(id);
+    }
+    return v;
+}
+static bool SndMuteKeep(const std::wstring& inst, const std::wstring& path, const std::wstring& dev, ISimpleAudioVolume* sv, BOOL muted,
+                        std::vector<std::wstring>& list, bool& changed) {
+    std::wstring key = path + L"|" + dev;
+    auto it = std::find(list.begin(), list.end(), key);
+    if (it == list.end()) return muted != FALSE;
+    std::wstring seen = inst.empty() ? path + L"|" + dev : inst;
+    if (muted) {
+        g_sndMuteSeen.insert(seen);
+        return true;
+    }
+    if (g_sndMuteSeen.count(seen)) {
+        Wh_Log(L"sound: unmuted outside Nimbus, its entry goes");
+        g_sndMuteSeen.erase(seen);
+        list.erase(it);
+        changed = true;
+        return false;
+    }
+    sv->SetMute(TRUE, nullptr);  // (taken off this output, and started after Nimbus)
+    g_sndMuteSeen.insert(seen);
+    return true;
+}
 // Every output that's on, and the apps playing on each (a paused app stays where it was last).
 static void SndLoad() {
+    std::wstring popPath = g_snd.popApp >= 0 && g_snd.popApp < (int)g_snd.apps.size() ? g_snd.apps[g_snd.popApp].v.path : L"";
+    std::wstring popDev = g_snd.popOut >= 0 && g_snd.popOut < (int)g_snd.outs.size() ? g_snd.outs[g_snd.popOut].id : L"";
+    g_snd.popApp = g_snd.popOut = -1;
     std::unordered_map<std::wstring, ComPtr<IWICBitmapSource>> icons;  // (kept by path: not extracted again on every read)
     for (auto& a : g_snd.apps)
         if (a.v.icon) icons[a.v.path] = a.v.icon;
@@ -2214,6 +3037,7 @@ static void SndLoad() {
     col->GetCount(&n);
     DWORD self = GetCurrentProcessId();
     auto mutedList = SndMutedList();
+    bool mutedChanged = false;
     struct Seen {
         DWORD pid;
         int out;
@@ -2249,6 +3073,7 @@ static void SndLoad() {
             o.ev->GetMute(&m);
             o.muted = m;
         }
+        dev->Activate(__uuidof(NimbusMeter), CLSCTX_ALL, nullptr, (void**)o.meter.GetAddressOf());
         int oi = (int)g_snd.outs.size();
         g_snd.outs.push_back(o);
         ComPtr<IAudioSessionManager2> mgr;
@@ -2289,13 +3114,11 @@ static void SndLoad() {
             it->sess.push_back({oi, sv});
             BOOL muted = FALSE;
             sv->GetMute(&muted);
-            if (!muted && std::find(mutedList.begin(), mutedList.end(), it->v.path + L"|" + o.id) != mutedList.end()) {
-                sv->SetMute(TRUE, nullptr);  // (taken off this output, and started after Nimbus)
-                muted = TRUE;
-            }
-            seen.push_back({pid, oi, st == AudioSessionStateActive, muted != FALSE});
+            bool m = SoundFull() ? SndMuteKeep(SndInstance(c2.Get()), it->v.path, o.id, sv.Get(), muted, mutedList, mutedChanged) : muted != FALSE;
+            seen.push_back({pid, oi, st == AudioSessionStateActive, m});
         }
     }
+    if (mutedChanged) SndMutedSave(mutedList);
     // Where each one plays: where it's playing now; paused, where it played.
     for (auto& a : g_snd.apps) {
         // (muted there by the panel: not playing there)
@@ -2312,6 +3135,15 @@ static void SndLoad() {
         }
     }
     std::stable_sort(g_snd.apps.begin(), g_snd.apps.end(), [](const SndApp& a, const SndApp& b) { return _wcsicmp(a.v.name.c_str(), b.v.name.c_str()) < 0; });
+    if (!popPath.empty())
+        for (size_t i = 0; i < g_snd.apps.size(); i++)
+            if (g_snd.apps[i].v.path == popPath) {
+                int oi = SndOutOf(popDev);
+                if (oi >= 0 && std::find(g_snd.apps[i].outs.begin(), g_snd.apps[i].outs.end(), oi) != g_snd.apps[i].outs.end()) {
+                    g_snd.popApp = (int)i;
+                    g_snd.popOut = oi;
+                }
+            }
 }
 
 static bool SndIsCopy(const SndApp& a, int oi) { return oi >= 0 && oi < (int)g_snd.outs.size() && SndCopyAt(a.v.pid, g_snd.outs[oi].id) >= 0; }
@@ -2343,6 +3175,30 @@ static void SndRouteTo(const SndApp& a, int oi) {
     SndRoute(a.v.pid, g_snd.outs[oi].def ? L"" : g_snd.outs[oi].id);
 }
 static bool SndHas(const std::vector<int>& v, int x) { return std::find(v.begin(), v.end(), x) != v.end(); }
+static float SndAppVolOn(const SndApp& a, int oi) {
+    if (oi < 0 || oi >= (int)g_snd.outs.size()) return 1;
+    int c = SndCopyAt(a.v.pid, g_snd.outs[oi].id);
+    if (c >= 0) return g_sndCopies[c]->vol.load();
+    for (auto& x : a.sess)
+        if (x.first == oi) {
+            float v = 1;
+            x.second->GetMasterVolume(&v);
+            return v;
+        }
+    return 1;
+}
+static void SndAppVolSet(const SndApp& a, int oi, float v) {
+    if (oi < 0 || oi >= (int)g_snd.outs.size()) return;
+    v = std::clamp(v, 0.0f, 1.0f);
+    int c = SndCopyAt(a.v.pid, g_snd.outs[oi].id);
+    if (c >= 0) {
+        g_sndCopies[c]->vol = v;
+        SndCopyVolSave(a.v.path, g_snd.outs[oi].id, v);
+        return;
+    }
+    for (auto& x : a.sess)
+        if (x.first == oi) x.second->SetMasterVolume(v, nullptr);  // (Windows keeps it, as in its mixer)
+}
 static bool SndHasSession(const SndApp& a, int oi) {
     return std::any_of(a.sess.begin(), a.sess.end(), [&](const auto& x) { return x.first == oi; });
 }
@@ -2372,7 +3228,7 @@ static void SndMuteOn(const SndApp& a, int oi, bool mute) {
 // Every app session on every output: (pid, app path, output id, its volume control).
 struct SndSess {
     DWORD pid;
-    std::wstring path, dev;
+    std::wstring path, dev, inst;
     ComPtr<ISimpleAudioVolume> sv;
 };
 static std::vector<SndSess> SndAllSessions() {
@@ -2406,7 +3262,7 @@ static std::vector<SndSess> SndAllSessions() {
             if (!pid) continue;
             auto it = paths.find(pid);
             if (it == paths.end()) it = paths.emplace(pid, ProcessPath(pid)).first;
-            if (!it->second.empty()) out.push_back({pid, it->second, devId, sv});
+            if (!it->second.empty()) out.push_back({pid, it->second, devId, SndInstance(c2.Get()), sv});
         }
     }
     return out;
@@ -2416,8 +3272,19 @@ static std::vector<SndSess> SndAllSessions() {
 static void SndMutesApply(bool mute) {
     auto muted = SndMutedList();
     if (muted.empty()) return;
-    for (auto& x : SndAllSessions())
-        if (std::find(muted.begin(), muted.end(), x.path + L"|" + x.dev) != muted.end()) x.sv->SetMute(mute, nullptr);
+    if (!mute) {
+        for (auto& x : SndAllSessions())
+            if (std::find(muted.begin(), muted.end(), x.path + L"|" + x.dev) != muted.end()) x.sv->SetMute(FALSE, nullptr);
+        g_sndMuteSeen.clear();
+        return;
+    }
+    bool changed = false;
+    for (auto& x : SndAllSessions()) {
+        BOOL m = FALSE;
+        x.sv->GetMute(&m);
+        SndMuteKeep(x.inst, x.path, x.dev, x.sv.Get(), m, muted, changed);
+    }
+    if (changed) SndMutedSave(muted);
 }
 // In Simple: what the complete panel changed goes back as soon as each app runs (its output as Windows
 // had it, its mute off); done entries leave the lists. Returns whether some wait for an app to run.
@@ -2436,7 +3303,17 @@ static bool SndPutBack() {
         if (!done) mutedLeft.push_back(m);
     }
     // (an app that's gone from the PC won't run again: its entries go)
-    auto gone = [](const std::wstring& path) { return !path.empty() && GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES; };
+    // (only when its disk is here: an app on an unplugged drive will be back)
+    auto gone = [](const std::wstring& path) {
+        if (path.empty()) return false;
+        std::wstring native = NativePath(path);
+        wchar_t root[MAX_PATH] = {};
+        wcsncpy_s(root, native.c_str(), _TRUNCATE);
+        if (!PathStripToRootW(root)) return false;
+        UINT t = GetDriveTypeW(root);
+        if (t == DRIVE_NO_ROOT_DIR || t == DRIVE_UNKNOWN || GetFileAttributesW(root) == INVALID_FILE_ATTRIBUTES) return false;
+        return GetFileAttributesW(native.c_str()) == INVALID_FILE_ATTRIBUTES && GetLastError() != ERROR_ACCESS_DENIED;
+    };
     mutedLeft.erase(std::remove_if(mutedLeft.begin(), mutedLeft.end(), [&](const std::wstring& m) { return gone(m.substr(0, m.rfind(L'|'))); }),
                     mutedLeft.end());
     for (auto& r : routed) {
@@ -2953,7 +3830,7 @@ static std::wstring StatLabel(int id) {
         case StClock:
             return g_stat.dateLong;
         case StCentral:
-            return L2(L"Central de controle", L"Control center");
+            return L2(L"Central", L"Control center");
         case StDnd:
             return g_set.notifDnd ? L2(L"Não incomodar: ligado", L"Do not disturb: on") : L2(L"Não incomodar: desligado", L"Do not disturb: off");
         case StBt:
@@ -2966,12 +3843,26 @@ static std::wstring StatLabel(int id) {
             return L2(L"Brilho", L"Brightness");
         case StPower:
             return L2(L"Energia", L"Power");
+        case StTelas: {
+            static std::wstring tip;
+            const auto& c = TelasCached();
+            tip = std::wstring(L2(L"Arranjos de telas", L"Screen layouts")) + (c.cur >= 0 ? L": " + c.list[c.cur].nome : L"");
+            return tip.c_str();
+        }
+        case StPrivacy: {
+            static std::wstring tip;
+            tip.clear();
+            for (auto& u : PrivNow())
+                tip += (tip.empty() ? L"" : L" · ") + u.name + (u.cam ? L2(L" (câmera)", L" (camera)") : L2(L" (microfone)", L" (microphone)"));
+            if (tip.empty()) tip = L2(L"Microfone e câmera", L"Microphone and camera");
+            return tip.c_str();
+        }
         case StDevices: {
             static std::wstring tip;
             tip.clear();
             for (auto& dv : DevicesNow())
                 if (dv.percent >= 0) tip += (tip.empty() ? L"" : L" · ") + dv.name + L" " + std::to_wstring(dv.percent) + L"%";
-            if (tip.empty()) tip = L2(L"Dispositivos: nenhuma bateria", L"Devices: no batteries");
+            if (tip.empty()) tip = L2(L"Aparelhos: nenhuma bateria", L"Devices: no batteries");
             return tip.c_str();
         }
         case StPlayer: {
@@ -3025,10 +3916,18 @@ static const wchar_t* StatIcon(int id) {
             return L"M12 7a5 5 0 1 1 0 10a5 5 0 1 1 0-10z M12 1v2 M12 21v2 M4.2 4.2l1.4 1.4 M18.4 18.4l1.4 1.4 M1 12h2 M21 12h2";
         case StPower:
             return L"M13 3L5 13h6l-1 8 8-10h-6z";
+        case StTelas:  // (a screen and a smaller one behind it)
+            return L"M8 7h13v10H8z M12 21h5 M14.5 17v4 M5 14H3V4h13v3";
         case StPlayer:
             return L"M9 18V5l11-2v13 M9 18a3 3 0 1 1-6 0a3 3 0 1 1 6 0z M20 16a3 3 0 1 1-6 0a3 3 0 1 1 6 0z";
         case StDevices:
             return L"M12 3a5 5 0 0 1 5 5v8a5 5 0 0 1-10 0V8a5 5 0 0 1 5-5z M12 3v6 M7 10h10";
+        case StPrivacy: {
+            auto u = PrivNow();
+            bool mic = std::any_of(u.begin(), u.end(), [](const PrivUse& x) { return !x.cam; });
+            return mic || u.empty() ? L"M9 5a3 3 0 0 1 6 0v6a3 3 0 0 1-6 0z M5.5 11a6.5 6.5 0 0 0 13 0 M12 17.5V21"
+                                    : L"M3 7h12v10H3z M15 10.5l6-3.5v10l-6-3.5";
+        }
         case StNotif:
             return g_set.notifShow ? L"M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z M10 20.5a2 2 0 0 0 4 0"
                                    : L"M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z M10 20.5a2 2 0 0 0 4 0 M4 4l16 16";
@@ -3111,10 +4010,11 @@ struct TrayUi {
     UINT replayMsg = 0;
     bool published = false;
 } g_trayUi;
+static DWORD g_trayTouchedAt = 0;  // the last click on a tray icon, either button (see TrayTouchedJustNow)
 
 static void StatusChanged();
 
-static bool TrayOn() { return g_set.trayPlace != 0; }  // listening (in the dock or in Start)
+static bool TrayOn() { return g_set.trayPlace != 0 || g_trayForced; }  // listening (in the dock or in Start)
 static bool TrayInDock() { return (g_set.trayPlace & PlDock); }
 static bool TrayInStart() { return (g_set.trayPlace & PlStart); }
 static bool TrayStyle(const wchar_t* st) { return g_set.trayStyle == st; }
@@ -3225,6 +4125,61 @@ static bool TrayApply(const TrayWire& w) {
 static bool TrayIsPinned(const TrayIcon& t) {
     return std::find(g_trayPinned.begin(), g_trayPinned.end(), t.key) != g_trayPinned.end();
 }
+// A pinned icon's docks, by monitor id ("tray.pinMon": a line per icon, "key<TAB>id,id"); an icon not here
+// goes to every dock.
+std::unordered_map<std::wstring, std::vector<std::wstring>> g_trayPinMon;
+static void LoadTrayPinMon() {
+    g_trayPinMon.clear();
+    std::vector<wchar_t> b(32768);
+    if (!Wh_GetStringValue((UserPrefix() + L"tray.pinMon").c_str(), b.data(), b.size())) return;
+    std::wstring v = b.data();
+    size_t a = 0;
+    while (a < v.size()) {
+        size_t e = v.find(L'\n', a);
+        if (e == std::wstring::npos) e = v.size();
+        std::wstring line = v.substr(a, e - a);
+        size_t t = line.find(L'\t');
+        if (t != std::wstring::npos) {
+            std::vector<std::wstring> ids;
+            std::wstring rest = line.substr(t + 1);
+            size_t c = 0;
+            while (c < rest.size()) {
+                size_t d = rest.find(L',', c);
+                if (d == std::wstring::npos) d = rest.size();
+                if (d > c) ids.push_back(rest.substr(c, d - c));
+                c = d + 1;
+            }
+            if (!ids.empty()) g_trayPinMon[line.substr(0, t)] = ids;
+        }
+        a = e + 1;
+    }
+}
+static void SaveTrayPinMon() {
+    std::wstring v;
+    for (auto& [key, ids] : g_trayPinMon) {
+        if (ids.empty()) continue;
+        v += key + L"\t";
+        for (size_t i = 0; i < ids.size(); i++) v += (i ? L"," : L"") + ids[i];
+        v += L"\n";
+    }
+    Wh_SetStringValue((UserPrefix() + L"tray.pinMon").c_str(), v.c_str());
+}
+// The monitors on now, by id.
+static std::vector<std::wstring> MonIdsNow() {
+    std::vector<std::wstring> v;
+    EnumDisplayMonitors(nullptr, nullptr, [](HMONITOR m, HDC, LPRECT, LPARAM l) WINAPI -> BOOL {
+        ((std::vector<std::wstring>*)l)->push_back(MonitorIdentity(m).id);
+        return TRUE;
+    }, (LPARAM)&v);
+    return v;
+}
+// Pinned, and to this dock (mon: its monitor; null: any dock).
+static bool TrayPinnedHere(const TrayIcon& t, const std::wstring* mon) {
+    if (!TrayIsPinned(t)) return false;
+    if (!mon) return true;
+    auto it = g_trayPinMon.find(t.key);
+    return it == g_trayPinMon.end() || it->second.empty() || std::find(it->second.begin(), it->second.end(), *mon) != it->second.end();
+}
 
 // The order dragged by hand (the icons not pinned), by key.
 std::vector<std::wstring> g_trayOrderKeys;
@@ -3251,16 +4206,23 @@ static std::vector<int> TrayOrder() {
     return v;
 }
 // The icons in the scrolling strip ("button" style: the pinned ones stay outside it).
-static std::vector<int> TrayStripList() {
+static std::vector<int> TrayStripList(const std::wstring* mon = nullptr) {
     std::vector<int> v = TrayOrder();
-    if (TrayStyle(L"botao")) v.erase(std::remove_if(v.begin(), v.end(), [](int i) { return TrayIsPinned(g_tray[i]); }), v.end());
+    if (TrayStyle(L"botao")) v.erase(std::remove_if(v.begin(), v.end(), [mon](int i) { return TrayPinnedHere(g_tray[i], mon); }), v.end());
     return v;
 }
-static std::vector<int> TrayFixedList() {
+static std::vector<int> TrayFixedList(const std::wstring* mon = nullptr) {
     std::vector<int> v;
     if (!TrayStyle(L"botao")) return v;
     for (int i : TrayOrder())
-        if (TrayIsPinned(g_tray[i])) v.push_back(i);
+        if (TrayPinnedHere(g_tray[i], mon)) v.push_back(i);
+    return v;
+}
+// The pinned icons, in pin order (any style): they stay in the dock.
+static std::vector<int> TrayPinnedList(const std::wstring* mon = nullptr) {
+    std::vector<int> v;
+    for (int i : TrayOrder())
+        if (TrayPinnedHere(g_tray[i], mon)) v.push_back(i);
     return v;
 }
 static int TrayMaxOff() { return std::max(0, (int)TrayStripList().size() - g_set.trayVisible); }
@@ -3296,6 +4258,7 @@ static void TrayMove(const std::wstring& drag, const std::wstring& target, bool 
 static void LoadTrayPins() {
     LoadItems(L"tray.order", L'*', g_trayOrderKeys);
     LoadItems(L"tray.pinned", L'*', g_trayPinned);
+    LoadTrayPinMon();
 }
 static void SaveTrayPins() { StoreItems(L"tray.pinned", g_trayPinned); }
 static void TrayTogglePin(int i) {
@@ -3303,6 +4266,44 @@ static void TrayTogglePin(int i) {
     auto it = std::find(g_trayPinned.begin(), g_trayPinned.end(), g_tray[i].key);
     if (it != g_trayPinned.end()) g_trayPinned.erase(it);
     else g_trayPinned.push_back(g_tray[i].key);
+    if (g_trayPinMon.erase(g_tray[i].key)) SaveTrayPinMon();  // (pinned again: every dock)
+    SaveTrayPins();
+}
+// Settings: not pinned (mode 0), on every dock (1), or one dock switched on or off (2, mon).
+static void TraySetPin(const std::wstring& key, int mode, const std::wstring& mon = L"") {
+    bool pinned = std::find(g_trayPinned.begin(), g_trayPinned.end(), key) != g_trayPinned.end();
+    if (mode == 0) {
+        g_trayPinned.erase(std::remove(g_trayPinned.begin(), g_trayPinned.end(), key), g_trayPinned.end());
+        g_trayPinMon.erase(key);
+    } else {
+        if (!pinned) g_trayPinned.push_back(key);
+        if (mode == 1) {
+            g_trayPinMon.erase(key);
+        } else {
+            auto& ids = g_trayPinMon[key];
+            if (ids.empty() && pinned) {  // (was on every dock: now every dock but this one)
+                for (auto& m : MonIdsNow())
+                    if (m != mon) ids.push_back(m);
+            } else {
+                auto f = std::find(ids.begin(), ids.end(), mon);
+                if (f != ids.end()) ids.erase(f);
+                else ids.push_back(mon);
+                bool every = !ids.empty();  // (ticked one by one up to all of them: every dock, a new monitor's too)
+                for (auto& m : MonIdsNow()) every &= std::find(ids.begin(), ids.end(), m) != ids.end();
+                if (every) {
+                    g_trayPinMon.erase(key);
+                    SaveTrayPinMon();
+                    SaveTrayPins();
+                    return;
+                }
+            }
+            if (ids.empty()) {  // (none left: not pinned)
+                g_trayPinMon.erase(key);
+                g_trayPinned.erase(std::remove(g_trayPinned.begin(), g_trayPinned.end(), key), g_trayPinned.end());
+            }
+        }
+    }
+    SaveTrayPinMon();
     SaveTrayPins();
 }
 
@@ -3335,6 +4336,7 @@ static void TrayClick(int i, int button) {
     const TrayIcon& t = g_tray[i];
     POINT pt;
     GetCursorPos(&pt);
+    g_trayTouchedAt = GetTickCount();
     // The app's menu or window comes to the front (Nimbus has the right: the click was on it).
     AllowSetForegroundWindow(t.pid);
     if (button == 1) {
@@ -3357,6 +4359,9 @@ static void TrayClick(int i, int button) {
 // A left click on a tray icon just happened: a second one may follow (a double click), so the Start or
 // the panel it's in stays open a moment, even if the app's window takes the focus meanwhile.
 static bool TrayClickJustNow() { return GetTickCount() - g_trayUi.lastClick < GetDoubleClickTime() + 100; }
+// Any click on a tray icon (either button) a moment ago: the app's menu or window taking the focus then
+// isn't the user leaving the panel or the Start. They close only on a click outside.
+static bool TrayTouchedJustNow() { return g_trayTouchedAt && GetTickCount() - g_trayTouchedAt < 4000; }
 
 // ---- Kept between runs: the icons of apps already running when Nimbus (or the mod) restarts ----
 
@@ -3371,6 +4376,24 @@ static std::wstring UserDir(bool create) {
     if (dir.back() != L'\\') dir += L'\\';
     dir += sid;
     if (create) SHCreateDirectoryExW(nullptr, dir.c_str(), nullptr);
+    // Only this account (and the system, and administrators) may open it: the shelf's pasted files and the
+    // tray's icons are there. Once per run, when the folder is there; never with an unknown account.
+    static bool locked = false;
+    if (!locked && !sid.compare(0, 4, L"S-1-") && GetFileAttributesW(dir.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        locked = true;
+        PSECURITY_DESCRIPTOR sd = nullptr;
+        std::wstring sddl = L"D:P(A;OICI;FA;;;" + sid + L")(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)";
+        if (ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl.c_str(), SDDL_REVISION_1, &sd, nullptr)) {
+            BOOL present = FALSE, def = FALSE;
+            PACL dacl = nullptr;
+            if (GetSecurityDescriptorDacl(sd, &present, &dacl, &def) && present && dacl) {
+                DWORD r = SetNamedSecurityInfoW(dir.data(), SE_FILE_OBJECT, DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+                                                nullptr, nullptr, dacl, nullptr);
+                if (r) Wh_Log(L"user folder: permissions not set (%lu)", r);
+            }
+            LocalFree(sd);
+        }
+    }
     return dir;
 }
 
@@ -3643,16 +4666,21 @@ struct Dock {
     bool menuOpen = false;
     bool fullscreen = false;
     DWORD outsideSince = 0;
+    DWORD edgeSince = 0;   // auto-hide: the mouse has sat at the dock's edge since (0: not there); see EdgeWatch
+    bool edgeTold = false; // that hold already looked at
+    DWORD animTick = 0;    // the last animation frame (an "animating" dock whose frames stopped is restarted)
     DWORD bandsAt = 0;          // the blur bands were last moved (see PlaceDock)
     bool bandsPending = false;
     D2D1_RECT_F pill{};
     bool appbar = false;  // fixed bar, always shown: reserves its strip so maximized windows stop above it
+    DWORD drawErr = 0;    // the last UpdateLayeredWindow failure (0: drawn); see DockHealth
     ComPtr<IDWriteTextFormat> fontBold;
     std::vector<StatItem> stat;  // the status area's items (see BuildStat)
     float statW = 0;
     int statHover = -1;
     ComPtr<IDWriteTextFormat> fontTiny;  // the tray button's count
     float trayPos = 0, trayVel = 0;      // the strip's scroll, in icons (a spring toward g_trayUi.off)
+    int pinOff = 0, pinMax = 0, pinStep = 1;  // the pinned carousel: first shown, the last first, a click's turn
     int trayHot = -1;                    // g_tray index under the mouse
 };
 std::vector<Dock*> g_docks;
@@ -3666,14 +4694,142 @@ struct Drag {
     float x = 0, y = 0;
 } g_drag;
 
-static float S(const Dock& d) { return g_set.iconSize * d.scale * d.fit; }
-static float Gap(const Dock& d) { return g_set.iconGap * d.scale * d.fit; }
+static int DockIconSize(const Dock& d) { return d.cfg.iconSize > 0 ? d.cfg.iconSize : g_set.iconSize; }
+static int DockIconGap(const Dock& d) { return d.cfg.iconGap >= 0 ? d.cfg.iconGap : g_set.iconGap; }
+static float S(const Dock& d) { return DockIconSize(d) * d.scale * d.fit; }
+static float Gap(const Dock& d) { return DockIconGap(d) * d.scale * d.fit; }
 static float PadY(const Dock& d) { return 10 * d.scale; }
 static float DotRoom(const Dock& d) { return 7 * d.scale; }
 static float PillH(const Dock& d) { return S(d) + PadY(d) * 2 + DotRoom(d); }
-static float Zoom() { return g_set.magnification / 100.0f; }
+static float Zoom(const Dock& d) { return (d.cfg.zoom > 0 ? d.cfg.zoom : g_set.magnification) / 100.0f; }
 static float PillRadius(const Dock& d) { return d.cfg.fixed ? 0.0f : std::min(PillH(d) / 2, S(d) * 0.42f); }
-static float BottomGap(const Dock& d) { return d.cfg.fixed ? 0.0f : g_set.bottomGap * d.scale; }
+static float BottomGap(const Dock& d) { return d.cfg.fixed ? 0.0f : (d.cfg.bottomGap >= 0 ? d.cfg.bottomGap : g_set.bottomGap) * d.scale; }
+
+// ---- The dock's edge (complete mode: top, left or right too) ----
+// Everything is laid out as for the bottom edge, in "dock space" (x along the edge, y across it, the
+// screen's edge at y = ch), and turned to the real edge when drawn, placed and when the mouse comes in.
+// Icons and text stay upright: they're only moved to their turned place (DockUpright).
+static bool DockVert(const Dock& d) { return d.cfg.edge >= 2; }
+static int DockWinW(const Dock& d) { return DockVert(d) ? d.ch : d.cw; }
+static int DockWinH(const Dock& d) { return DockVert(d) ? d.cw : d.ch; }
+static D2D1_POINT_2F DockToWin(const Dock& d, float x, float y) {
+    switch (d.cfg.edge) {
+        case 1: return D2D1::Point2F(x, d.ch - y);
+        case 2: return D2D1::Point2F(d.ch - y, x);
+        case 3: return D2D1::Point2F(y, x);
+        default: return D2D1::Point2F(x, y);
+    }
+}
+static D2D1_POINT_2F WinToDock(const Dock& d, float wx, float wy) {
+    switch (d.cfg.edge) {
+        case 1: return D2D1::Point2F(wx, d.ch - wy);
+        case 2: return D2D1::Point2F(wy, d.ch - wx);
+        case 3: return D2D1::Point2F(wy, wx);
+        default: return D2D1::Point2F(wx, wy);
+    }
+}
+static D2D1_MATRIX_3X2_F DockMatrix(const Dock& d) {
+    switch (d.cfg.edge) {
+        case 1: return D2D1::Matrix3x2F(1, 0, 0, -1, 0, (float)d.ch);
+        case 2: return D2D1::Matrix3x2F(0, 1, -1, 0, (float)d.ch, 0);
+        case 3: return D2D1::Matrix3x2F(0, 1, 1, 0, 0, 0);
+        default: return D2D1::Matrix3x2F::Identity();
+    }
+}
+// The content window on the screen; `slide` pushes it out past the edge (hiding).
+static RECT DockWinRect(const Dock& d, int slide = 0) {
+    int W = DockWinW(d), H = DockWinH(d);
+    const RECT& m = d.rcMon;
+    switch (d.cfg.edge) {
+        case 1: return {m.left, m.top - slide, m.left + W, m.top - slide + H};
+        case 2: return {m.left - slide, m.top, m.left - slide + W, m.top + H};
+        case 3: return {m.right - W + slide, m.top, m.right + slide, m.top + H};
+        default: return {m.left, m.bottom - H + slide, m.left + W, m.bottom + slide};
+    }
+}
+static POINT DockToScreen(const Dock& d, float x, float y) {
+    RECT w = DockWinRect(d);
+    D2D1_POINT_2F p = DockToWin(d, x, y);
+    return {w.left + (LONG)std::lround(p.x), w.top + (LONG)std::lround(p.y)};
+}
+static D2D1_POINT_2F ScreenToDock(const Dock& d, POINT pt) {
+    RECT w = DockWinRect(d);
+    return WinToDock(d, (float)(pt.x - w.left), (float)(pt.y - w.top));
+}
+static RECT DockRectToScreen(const Dock& d, D2D1_RECT_F r, int slide = 0) {
+    RECT w = DockWinRect(d, slide);
+    D2D1_POINT_2F a = DockToWin(d, r.left, r.top), b = DockToWin(d, r.right, r.bottom);
+    return {w.left + (LONG)std::lround(std::min(a.x, b.x)), w.top + (LONG)std::lround(std::min(a.y, b.y)),
+            w.left + (LONG)std::lround(std::max(a.x, b.x)), w.top + (LONG)std::lround(std::max(a.y, b.y))};
+}
+// A panel of w x h opened from the dock at x (dock space): beside the dock's inner side, `gap` away,
+// inside the monitor.
+static POINT DockPanelAt(const Dock& d, float ax, int w, int h, int gap) {
+    POINT a = DockToScreen(d, ax, d.pill.top);
+    POINT p;
+    switch (d.cfg.edge) {
+        case 1: p = {a.x - w / 2, a.y + gap}; break;
+        case 2: p = {a.x + gap, a.y - h / 2}; break;
+        case 3: p = {a.x - gap - w, a.y - h / 2}; break;
+        default: p = {a.x - w / 2, a.y - gap - h}; break;
+    }
+    const RECT& m = d.rcMon;
+    p.x = std::clamp<LONG>(p.x, m.left + 8, std::max<LONG>(m.left + 8, m.right - w - 8));
+    p.y = std::clamp<LONG>(p.y, m.top + 8, std::max<LONG>(m.top + 8, m.bottom - h - 8));
+    return p;
+}
+// Room for a panel from the dock (height, screen px).
+static int DockRoomH(const Dock& d) {
+    POINT a = DockToScreen(d, 0, d.pill.top);
+    switch (d.cfg.edge) {
+        case 1: return d.rcMon.bottom - a.y;
+        case 2:
+        case 3: return d.rcMon.bottom - d.rcMon.top;
+        default: return a.y - d.rcMon.top;
+    }
+}
+// While alive, what's drawn is upright, at the turned place of the dock-space point (cx, cy).
+struct DockUpright {
+    ID2D1RenderTarget* rt;
+    D2D1_MATRIX_3X2_F old;
+    bool on;
+    DockUpright(const Dock& d, ID2D1RenderTarget* t, float cx, float cy) : rt(t), on(d.cfg.edge != 0) {
+        if (!on) return;
+        rt->GetTransform(&old);
+        D2D1_POINT_2F p = DockToWin(d, cx, cy);
+        rt->SetTransform(D2D1::Matrix3x2F::Translation(p.x - cx, p.y - cy));
+    }
+    ~DockUpright() {
+        if (on) rt->SetTransform(old);
+    }
+};
+// A name tag beside something of the dock (dock-space rect r), on the side away from the screen edge.
+static void DockTag(const Dock& d, ID2D1RenderTarget* rt, D2D1_RECT_F r, IDWriteTextLayout* lay, ID2D1Brush* bg, ID2D1Brush* fg) {
+    DWRITE_TEXT_METRICS tm;
+    lay->GetMetrics(&tm);
+    float px = 10 * d.scale, py = 5 * d.scale, gap = 8 * d.scale, w = tm.width + px * 2, h = tm.height + py * 2;
+    D2D1_POINT_2F a = DockToWin(d, r.left, r.top), b = DockToWin(d, r.right, r.bottom);
+    float L = std::min(a.x, b.x), R = std::max(a.x, b.x), T = std::min(a.y, b.y), B = std::max(a.y, b.y);
+    float cx = (L + R) / 2, cy = (T + B) / 2, W = (float)DockWinW(d), H = (float)DockWinH(d);
+    D2D1_RECT_F lr;
+    switch (d.cfg.edge) {
+        case 1: lr = D2D1::RectF(cx - w / 2, B + gap, cx + w / 2, B + gap + h); break;
+        case 2: lr = D2D1::RectF(R + gap, cy - h / 2, R + gap + w, cy + h / 2); break;
+        case 3: lr = D2D1::RectF(L - gap - w, cy - h / 2, L - gap, cy + h / 2); break;
+        default: lr = D2D1::RectF(cx - w / 2, T - gap - h, cx + w / 2, T - gap); break;
+    }
+    float m = 4 * d.scale;
+    if (lr.left < m) lr.right += m - lr.left, lr.left = m;
+    if (lr.right > W - m) lr.left -= lr.right - (W - m), lr.right = W - m;
+    if (lr.top < m) lr.bottom += m - lr.top, lr.top = m;
+    if (lr.bottom > H - m) lr.top -= lr.bottom - (H - m), lr.bottom = H - m;
+    D2D1_MATRIX_3X2_F old;
+    rt->GetTransform(&old);
+    rt->SetTransform(D2D1::Matrix3x2F::Identity());
+    rt->FillRoundedRectangle(D2D1::RoundedRect(lr, 8 * d.scale, 8 * d.scale), bg);
+    rt->DrawTextLayout(D2D1::Point2F(lr.left + px, lr.top + py), lay, fg);
+    rt->SetTransform(old);
+}
 
 // An app's windows as this dock shows them (all, or only the ones on its monitor).
 static std::vector<HWND> DockWins(const Dock& d, const App& a) {
@@ -3775,14 +4931,6 @@ static int PlayerDockMode() {
 static int PlayerShows() { return MediaNow().has ? PlayerDockMode() : PdIcon; }
 
 // The bars: the sound's level (the default output's peak meter), each bar moving at its own pace.
-// (IAudioMeterInformation: only declared in this compiler's headers.)
-struct NimbusMeter : public IUnknown {
-    virtual HRESULT STDMETHODCALLTYPE GetPeakValue(float* peak) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetMeteringChannelCount(UINT* count) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetChannelsPeakValues(UINT32 count, float* peaks) = 0;
-    virtual HRESULT STDMETHODCALLTYPE QueryHardwareSupport(DWORD* mask) = 0;
-};
-__CRT_UUID_DECL(NimbusMeter, 0xC02216F6, 0x8C67, 0x4B5B, 0x9D, 0x00, 0xD0, 0x08, 0xE7, 0x3E, 0x00, 0x64)
 struct PlayerVis {
     float lv[5] = {};
     float t = 0;
@@ -3834,9 +4982,9 @@ static float StatWidth(const Dock& d, int id) {
 static float TraySlot(const Dock& d) { return 32 * d.scale; }
 
 // The tray's pieces, left to right: [pinned icons][button][<][strip][>], by style.
+static bool DockShowsTray(const Dock& d);
 static std::vector<StatItem> TrayItems(const Dock& d) {
     std::vector<StatItem> v;
-    if (!TrayInDock()) return v;
     auto add = [&](int id, float w, int sub) {
         StatItem it;
         it.id = id;
@@ -3845,14 +4993,22 @@ static std::vector<StatItem> TrayItems(const Dock& d) {
         v.push_back(it);
     };
     float slot = TraySlot(d);
+    if (!DockShowsTray(d)) {
+        // The tray in the control center or Start: the icons pinned to this dock still show here (like only
+        // Teams), unless this dock leaves the tray out on purpose (complete mode).
+        if (DockStatMode(&d.cfg, -1) < 0 || !TrayOn()) return v;
+        for (int i : TrayPinnedList(&d.cfg.monId)) add(StTrayIcon, slot, i);
+        return v;
+    }
     if (TrayStyle(L"grade") || TrayStyle(L"lista")) {
+        for (int i : TrayPinnedList(&d.cfg.monId)) add(StTrayIcon, slot, i);
         if (!TrayOrder().empty()) add(StTrayBtn, 40 * d.scale, -1);
         return v;
     }
-    std::vector<int> strip = TrayStripList();
+    std::vector<int> strip = TrayStripList(&d.cfg.monId);
     bool button = TrayStyle(L"botao");
     if (button) {
-        for (int i : TrayFixedList()) add(StTrayIcon, slot, i);
+        for (int i : TrayFixedList(&d.cfg.monId)) add(StTrayIcon, slot, i);
         if (!strip.empty()) add(StTrayBtn, 40 * d.scale, -1);
         if (!g_trayUi.open) return v;
     }
@@ -3864,11 +5020,17 @@ static std::vector<StatItem> TrayItems(const Dock& d) {
     return v;
 }
 
+// The tray in this dock: its own choice (complete mode), else the general one.
+static bool DockShowsTray(const Dock& d) {
+    int m = DockStatMode(&d.cfg, -1);
+    return m ? m > 0 : TrayInDock();
+}
+
 static void BuildStat(Dock& d) {
     std::vector<StatItem> old = d.stat;  // (positions stay until the next layout: a panel placed now uses them)
     d.stat.clear();
     d.statW = 0;
-    for (int id : StatIds()) {
+    for (int id : StatIds(&d.cfg)) {
         StatItem it;
         it.id = id;
         it.w = StatWidth(d, id);
@@ -3891,8 +5053,16 @@ static float StatBlock(const Dock& d) { return d.stat.empty() ? 0 : d.statW + (d
 
 // Where the apps start, for `appsW` of apps.
 static float AppsLeft(const Dock& d, float appsW) {
-    if (d.cfg.fixed || d.stat.empty()) return d.cw / 2.0f - appsW / 2.0f;
-    float block = StatBlock(d), left = d.cw / 2.0f - (appsW + block) / 2.0f;
+    // (complete mode: the dock at the left or right end of its edge instead of the middle)
+    float edge = 28 * d.scale;
+    if (d.cfg.fixed || d.stat.empty()) {
+        if (d.cfg.align == 0) return d.cw / 2.0f - appsW / 2.0f;
+        float corner = d.cfg.fixed && !d.stat.empty() ? d.statW + 24 * d.scale : 0;  // (the status items' corner)
+        bool statLeft = StatOnLeft();
+        return d.cfg.align < 0 ? edge + (statLeft ? corner : 0) : d.cw - edge - appsW - (statLeft ? 0 : corner);
+    }
+    float block = StatBlock(d), full = appsW + block;
+    float left = d.cfg.align < 0 ? edge : d.cfg.align > 0 ? d.cw - edge - full : d.cw / 2.0f - full / 2.0f;
     return StatOnLeft() ? left + block : left;
 }
 
@@ -3925,7 +5095,7 @@ static int TrayIconAt(const Dock& d, int si, float x) {
     const StatItem& it = d.stat[si];
     if (it.id == StTrayIcon) return it.sub;
     if (it.id != StTrayStrip) return -1;
-    std::vector<int> strip = TrayStripList();
+    std::vector<int> strip = TrayStripList(&d.cfg.monId);
     int j = (int)std::floor((x - it.x) / TraySlot(d) + d.trayPos);
     return j >= 0 && j < (int)strip.size() ? strip[j] : -1;
 }
@@ -4002,6 +5172,7 @@ static void DrawTrayDrag(Dock& d, float cy, ID2D1SolidColorBrush* ink) {
     }
     for (int i = 0; i < (int)g_tray.size(); i++)
         if (g_tray[i].key == g.key) {
+            DockUpright up(d, d.rt.Get(), g.mx, cy - 8 * d.scale);
             DrawTrayIcon(d, i, g.mx, cy - 8 * d.scale, 0.9f);
             break;
         }
@@ -4020,14 +5191,17 @@ static void DrawTrayItem(Dock& d, int i, float cy, ID2D1SolidColorBrush* ink, ID
     switch (it.id) {
         case StTrayIcon:
             if (hot) box(it.x, it.x + it.w, false);
-            DrawTrayIcon(d, it.sub, cx, cy);
+            {
+                DockUpright up(d, d.rt.Get(), cx, cy);
+                DrawTrayIcon(d, it.sub, cx, cy);
+            }
             break;
         case StTrayBtn: {
             bool open = TrayStyle(L"botao") ? g_trayUi.open : FlyoutShows(d, StTrayBtn);
             if (open || hot) box(it.x, it.x + it.w, open);
             const wchar_t* chev = !TrayStyle(L"botao") ? L"M6 15l6-6 6 6" : open ? L"M15 6l-6 6 6 6" : L"M9 6l6 6-6 6";
             DrawLineIcon(d.rt.Get(), chev, cx - 2 * d.scale, cy, 18 * d.scale, ink);
-            int n = (int)(TrayStyle(L"botao") ? TrayStripList() : TrayOrder()).size();
+            int n = (int)(TrayStyle(L"botao") ? TrayStripList(&d.cfg.monId) : TrayOrder()).size();
             if (n > 0 && d.fontTiny) {
                 std::wstring num = std::to_wstring(n);
                 float tw = TextSize(num, d.fontTiny.Get()).width;
@@ -4037,6 +5211,7 @@ static void DrawTrayItem(Dock& d, int i, float cy, ID2D1SolidColorBrush* ink, ID
                 bc.a *= 0.18f;
                 hov->SetColor(bc);
                 d.rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(right - bw, top, right, top + bhh), bhh / 2, bhh / 2), hov);
+                DockUpright up(d, d.rt.Get(), right - bw / 2, top + bhh / 2);
                 DrawTextAt(d.rt.Get(), num, d.fontTiny.Get(), right - bw / 2, top + bhh / 2, ink);
             }
             break;
@@ -4053,7 +5228,7 @@ static void DrawTrayItem(Dock& d, int i, float cy, ID2D1SolidColorBrush* ink, ID
             break;
         }
         case StTrayStrip: {
-            std::vector<int> strip = TrayStripList();
+            std::vector<int> strip = TrayStripList(&d.cfg.monId);
             float slot = TraySlot(d);
             d.rt->PushAxisAlignedClip(D2D1::RectF(it.x, cy - bh / 2, it.x + it.w, cy + bh / 2), D2D1_ANTIALIAS_MODE_ALIASED);
             for (int j = 0; j < (int)strip.size(); j++) {
@@ -4061,7 +5236,10 @@ static void DrawTrayItem(Dock& d, int i, float cy, ID2D1SolidColorBrush* ink, ID
                 if (x + slot < it.x || x > it.x + it.w) continue;
                 int ti = strip[j];
                 if (ti == d.trayHot) box(x + 1 * d.scale, x + slot - 1 * d.scale, false);
-                DrawTrayIcon(d, ti, x + slot / 2, cy);
+                {
+                    DockUpright up(d, d.rt.Get(), x + slot / 2, cy);
+                    DrawTrayIcon(d, ti, x + slot / 2, cy);
+                }
                 if (TrayIsPinned(g_tray[ti]))
                     d.rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x + slot - 7 * d.scale, cy - bh / 2 + 9 * d.scale), 2.5f * d.scale,
                                                     2.5f * d.scale), ink);
@@ -4081,7 +5259,7 @@ static std::wstring TrayLabel(const Dock& d, const StatItem& it, float& cx) {
     int ti = d.trayHot;
     if (ti < 0 || ti >= (int)g_tray.size() || (it.id != StTrayIcon && it.id != StTrayStrip)) return L"";
     if (it.id == StTrayStrip) {
-        std::vector<int> strip = TrayStripList();
+        std::vector<int> strip = TrayStripList(&d.cfg.monId);
         auto f = std::find(strip.begin(), strip.end(), ti);
         if (f != strip.end()) cx = it.x + ((f - strip.begin()) - d.trayPos + 0.5f) * TraySlot(d);
     }
@@ -4109,10 +5287,11 @@ static void DrawStat(Dock& d, float cy) {
     float bh = StatBoxH(d), r = 10 * d.scale;
     for (int i = 0; i < (int)d.stat.size(); i++) {
         const StatItem& it = d.stat[i];
-        if (IsTrayKind(it.id)) {
+        if (IsTrayKind(it.id)) {  // (its icons stand upright one by one: a dock at a side shows them in a column)
             DrawTrayItem(d, i, cy, ink.Get(), hov.Get());
             continue;
         }
+        DockUpright up(d, d.rt.Get(), it.x + it.w / 2, cy);
         bool open = FlyoutShows(d, it.id), hot = i == d.statHover;
         if (open || hot) {
             D2D1_COLOR_F hc = g_theme.hover;
@@ -4134,6 +5313,14 @@ static void DrawStat(Dock& d, float cy) {
             case StBattery:
                 DrawBattery(d.rt.Get(), cx, cy, 21 * d.scale, ink.Get());
                 break;
+            case StPrivacy: {
+                auto u = PrivNow();
+                bool mic = std::any_of(u.begin(), u.end(), [](const PrivUse& x) { return !x.cam; });
+                ComPtr<ID2D1SolidColorBrush> on;
+                d.rt->CreateSolidColorBrush(mic ? D2D1::ColorF(0xF5A623) : D2D1::ColorF(0x34C759), &on);
+                DrawLineIcon(d.rt.Get(), StatIcon(StPrivacy), cx, cy, 20 * d.scale, on.Get());
+                break;
+            }
             case StDevices: {
                 int low = 101;
                 for (auto& dv : DevicesNow())
@@ -4201,6 +5388,16 @@ static void DrawStat(Dock& d, float cy) {
                 DrawLineIcon(d.rt.Get(), StatIcon(it.id), cx, cy, 20 * d.scale, ink.Get());
                 break;
         }
+        // Microphone or camera in use, with that item kept in the control center: a dot on its button.
+        if (it.id == StCentral && (ExtraPlace(StPrivacy) & PlCentral) && !(ExtraPlace(StPrivacy) & PlDock)) {
+            auto used = PrivNow();
+            if (!used.empty()) {
+                bool mic = std::any_of(used.begin(), used.end(), [](const PrivUse& x) { return !x.cam; });
+                ComPtr<ID2D1SolidColorBrush> on;
+                d.rt->CreateSolidColorBrush(mic ? D2D1::ColorF(0xF5A623) : D2D1::ColorF(0x34C759), &on);
+                d.rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx + 10 * d.scale, cy - 10 * d.scale), 4 * d.scale, 4 * d.scale), on.Get());
+            }
+        }
         size_t badgeN = it.id == StShelf ? g_shelf.size() : it.id == StNotif ? g_notifs.size() : it.id == StNotes ? (size_t)RemPending() : 0;
         if (badgeN && d.fontTiny) {
             std::wstring num = badgeN > 99 ? L"99+" : std::to_wstring(badgeN);
@@ -4229,12 +5426,11 @@ static void DrawStatLabel(Dock& d, float cy, ID2D1Brush* bg, ID2D1Brush* fg) {
     if (!lay) return;
     DWRITE_TEXT_METRICS tm;
     lay->GetMetrics(&tm);
-    float px = 10 * d.scale, py = 5 * d.scale;
-    float bottom = cy - StatBoxH(d) / 2 - 8 * d.scale;
-    float left = std::clamp(cx - tm.width / 2 - px, 4 * d.scale, d.cw - tm.width - px * 2 - 4 * d.scale);
-    D2D1_RECT_F lr = D2D1::RectF(left, bottom - tm.height - py * 2, left + tm.width + px * 2, bottom);
-    d.rt->FillRoundedRectangle(D2D1::RoundedRect(lr, 8 * d.scale, 8 * d.scale), bg);
-    d.rt->DrawTextLayout(D2D1::Point2F(lr.left + px, lr.top + py), lay.Get(), fg);
+    (void)tm;
+    float bh = StatBoxH(d);
+    float l = it.x, r = it.x + it.w;
+    if (it.id == StTrayStrip) l = cx - TraySlot(d) / 2, r = cx + TraySlot(d) / 2;  // (the icon under the mouse)
+    DockTag(d, d.rt.Get(), D2D1::RectF(l, cy - bh / 2, r, cy + bh / 2), lay.Get(), bg, fg);
 }
 
 void RenderDock(Dock& d);
@@ -4262,32 +5458,91 @@ static void BuildElems(Dock& d, bool animateNew) {
         }
         e.push_back(el);
     };
+    // The pinned carousel (Settings > Dock): the pinned apps take turns, N at a time, between two arrows.
+    // One that's open and turned out of view goes with the open apps (after the divider), so it never
+    // disappears. Icons turning in grow, the ones turning out shrink.
+    constexpr bool kPinCarousel = false;  // (put aside for now: its settings are hidden too)
+    int carN = kPinCarousel && CfgInt(L"pinCarousel") && d.cfg.showPinned ? std::clamp(CfgInt(L"pinCarouselN"), 2, 30) : 0;
+    std::vector<int> idle;  // (all the pinned ones, in order)
+    if (carN)
+        for (int i = 0; i < (int)g_apps.size(); i++)
+            if (g_apps[i].pinned && !g_apps[i].start) idle.push_back(i);
+    std::vector<int> moved;  // open pinned apps out of the carousel's view: shown with the open apps
+    bool car = carN && (int)idle.size() > carN;
+    d.pinMax = car ? (int)idle.size() - carN : 0;
+    d.pinOff = std::clamp(d.pinOff, 0, d.pinMax);
+    d.pinStep = std::max(1, carN - 1);
+    bool arrowBack = false, arrowFwd = false;
+    auto addArrow = [&](int dir) {
+        add(-1, dir < 0 ? L"#pin-back" : L"#pin-fwd");
+        e.back().arrow = dir;
+        e.back().leaving = false;
+    };
     bool startShown = false, sepStart = false, anyPinnedShown = false, sepRunning = false;
     for (int i = 0; i < (int)g_apps.size(); i++) {
         const App& a = g_apps[i];
+        if (d.cfg.noApps && !a.start) continue;  // (complete mode: only the status area, and the Start button if on)
+        if (car && !a.start && !a.pinned && arrowBack && !arrowFwd) {  // (the pinned group ended)
+            addArrow(1);
+            arrowFwd = true;
+        }
         bool show;
         if (a.start) show = d.cfg.showStart;
         else if (a.pinned) show = d.cfg.showPinned || !DockWins(d, a).empty();
-        else show = !DockWins(d, a).empty();
+        else show = !d.cfg.onlyPinned && !DockWins(d, a).empty();
         if (!show) continue;
         if (!a.start && startShown && !sepStart) {
             add(-1, L"#sep-start");
             sepStart = true;
         }
+        if (car && a.pinned && !a.start && !arrowBack) {
+            addArrow(-1);
+            arrowBack = true;
+        }
+        if (car && a.pinned && !a.start) {
+            int rank = (int)(std::find(idle.begin(), idle.end(), i) - idle.begin());
+            if (rank < (int)idle.size() && (rank < d.pinOff || rank >= d.pinOff + carN)) {
+                if (!DockWins(d, a).empty()) {
+                    moved.push_back(i);
+                    continue;
+                }
+                // Turned out: still shrinking if it was showing, else nothing.
+                auto o = old.find(a.key);
+                if (o != old.end() && o->second.appear > 0.04f) {
+                    add(i, a.key);
+                    e.back().leaving = true;
+                }
+                continue;
+            }
+        }
         if (!a.start && !a.pinned && !sepRunning) {
             if (anyPinnedShown) add(-1, L"#sep-running");
             sepRunning = true;
+            for (int m : moved) {  // (the open pinned apps the carousel turned out of view, first)
+                add(m, g_apps[m].key);
+                e.back().leaving = false;
+            }
+            moved.clear();
         }
         if (a.start) startShown = true;
         if (a.pinned) anyPinnedShown = true;
         add(i, a.key);
+        e.back().leaving = false;
+    }
+    if (car && arrowBack && !arrowFwd) addArrow(1);
+    if (!moved.empty()) {  // (no other open app: they get the open apps' place of their own)
+        add(-1, L"#sep-running");
+        for (int m : moved) {
+            add(m, g_apps[m].key);
+            e.back().leaving = false;
+        }
     }
     d.elems.swap(e);
 
     // Fit the monitor: at full size (with room for the zoomed icons), how wide would the dock be?
-    float slot = (g_set.iconSize + g_set.iconGap) * d.scale, sep = g_set.iconGap * d.scale;
-    float need = 24 * d.scale + slot * std::max(0.0f, Zoom() - 1) * 1.6f;
-    for (auto& el : d.elems) need += el.app < 0 ? sep : slot;
+    float slot = (DockIconSize(d) + DockIconGap(d)) * d.scale, sep = DockIconGap(d) * d.scale;
+    float need = 24 * d.scale + slot * std::max(0.0f, Zoom(d) - 1) * 1.6f;
+    for (auto& el : d.elems) need += el.arrow ? slot * 0.5f : el.app < 0 ? sep : slot;
     BuildStat(d);
     need += StatBlock(d);
     float avail = d.cw - 32 * d.scale;
@@ -4300,35 +5555,35 @@ static void BuildElems(Dock& d, bool animateNew) {
 static void ComputeTargets(Dock& d) {
     float slot = S(d) + Gap(d), sepW = Gap(d);
     float rest = 0;
-    for (auto& el : d.elems) rest += el.app < 0 ? sepW : slot;
+    for (auto& el : d.elems) rest += el.arrow ? slot * 0.5f : el.app < 0 ? sepW : slot;
     float x = AppsLeft(d, rest);
     float range = slot * 2.4f;
-    const std::wstring& anim = g_set.animation;
+    const std::wstring& anim = d.cfg.anim.empty() ? g_set.animation : d.cfg.anim;
     // Icon under the mouse, by the resting layout (stable while icons grow).
     int hov = -1;
     {
         float hx = x;
         for (int i = 0; i < (int)d.elems.size(); i++) {
-            float w = d.elems[i].app < 0 ? sepW : slot;
+            float w = d.elems[i].arrow ? slot * 0.5f : d.elems[i].app < 0 ? sepW : slot;
             if (d.elems[i].app >= 0 && d.mouseX >= hx && d.mouseX < hx + w) hov = i;
             hx += w;
         }
     }
     for (int i = 0; i < (int)d.elems.size(); i++) {
         Elem& el = d.elems[i];
-        float w = el.app < 0 ? sepW : slot;
+        float w = el.arrow ? slot * 0.5f : el.app < 0 ? sepW : slot;
         float cx = x + w / 2;
         el.target = 1;
         el.liftT = 0;
         el.opT = 1;
         if (el.app >= 0 && d.mouseX >= 0) {
-            if (anim == L"zoom" && Zoom() > 1.001f) {
+            if (anim == L"zoom" && Zoom(d) > 1.001f) {
                 float dist = std::fabs(d.mouseX - cx) / range;
-                if (dist < 1) el.target = 1 + (Zoom() - 1) * (0.5f + 0.5f * std::cos(3.14159265f * dist));
+                if (dist < 1) el.target = 1 + (Zoom(d) - 1) * (0.5f + 0.5f * std::cos(3.14159265f * dist));
             } else if (anim == L"elevar") {
                 if (i == hov) el.liftT = -S(d) * 0.22f;
             } else if (anim == L"foco") {
-                if (i == hov) el.target = std::min(std::max(Zoom(), 1.08f), 1.16f);
+                if (i == hov) el.target = std::min(std::max(Zoom(d), 1.08f), 1.16f);
                 else if (hov >= 0) el.opT = 0.42f;
             }
         }
@@ -4342,7 +5597,10 @@ static bool StepAnim(Dock& d) {
         float diff = el.target - el.m;
         if (std::fabs(diff) < 0.002f) el.m = el.target;
         else { el.m += diff * 0.35f; moving = true; }
-        if (el.appear < 1) {
+        if (el.leaving) {
+            el.appear = std::max(0.0f, el.appear - el.appear * 0.24f - 0.012f);
+            moving = true;
+        } else if (el.appear < 1) {
             el.appear = std::min(1.0f, el.appear + (1.0f - el.appear) * 0.22f + 0.01f);
             moving = true;
         }
@@ -4353,6 +5611,7 @@ static bool StepAnim(Dock& d) {
         if (std::fabs(dop) < 0.01f) el.op = el.opT;
         else { el.op += dop * 0.25f; moving = true; }
     }
+    d.elems.erase(std::remove_if(d.elems.begin(), d.elems.end(), [](const Elem& el) { return el.leaving && el.appear <= 0.001f; }), d.elems.end());
     for (auto it = g_launch.begin(); it != g_launch.end();) it = GetTickCount() - it->second > kLaunchBounceMs ? g_launch.erase(it) : std::next(it);
     if (!g_launch.empty() && d.visible) moving = true;
     // The tray strip's scroll: a spring, so it slightly overshoots and settles.
@@ -4375,13 +5634,13 @@ static bool StepAnim(Dock& d) {
 static void Layout(Dock& d) {
     float slot = S(d) + Gap(d), sepW = Gap(d);
     float total = 0;
-    for (auto& el : d.elems) total += (el.app < 0 ? sepW : slot * el.m) * el.appear;
+    for (auto& el : d.elems) total += (el.arrow ? slot * 0.5f : el.app < 0 ? sepW : slot * el.m) * el.appear;
     float padX = 12 * d.scale;
     float left = AppsLeft(d, total);
     float x = left;
     for (auto& el : d.elems) {
         el.x = x;
-        el.w = (el.app < 0 ? sepW : slot * el.m) * el.appear;
+        el.w = (el.arrow ? slot * 0.5f : el.app < 0 ? sepW : slot * el.m) * el.appear;
         x += el.w;
     }
     LayoutStat(d, left, total);
@@ -4393,8 +5652,10 @@ static void Layout(Dock& d) {
 }
 
 static void Animate(Dock& d) {
-    if (!d.animating) {
+    // (an "animating" dock with no frame for half a second lost its timer: it would never move again)
+    if (!d.animating || GetTickCount() - d.animTick > 500) {
         d.animating = true;
+        d.animTick = GetTickCount();
         SetTimer(d.content, TIMER_ANIM, 15, nullptr);
     }
 }
@@ -4414,9 +5675,20 @@ static void EnsureTarget(Dock& d) {
     d.bmps.clear();
 }
 
+// An icon that didn't come (the shell not ready at logon, a Store app mid-update, a drive waking up) is
+// asked again after 10 s, 1 min and 5 min.
+static std::unordered_map<std::wstring, std::pair<DWORD, int>> g_iconRetry;  // key -> (when, tries)
 static ID2D1Bitmap* IconBitmap(Dock& d, App& a) {
     auto it = d.bmps.find(a.key);
     if (it != d.bmps.end()) return it->second.Get();
+    if (a.iconTried && !a.icon) {
+        auto r = g_iconRetry.find(a.key);
+        if (r != g_iconRetry.end() && r->second.first && (LONG)(GetTickCount() - r->second.first) >= 0) {
+            r->second.first = 0;
+            for (auto& o : g_apps)
+                if (o.key == a.key) o.iconTried = false;
+        }
+    }
     if (!a.iconTried) {
         a.iconTried = true;
         RequestIcon(a);  // arrives as WM_APP_ICON; a plain tile until then
@@ -4429,14 +5701,31 @@ static ID2D1Bitmap* IconBitmap(Dock& d, App& a) {
     return bmp.Get();
 }
 
+// A dock that couldn't be drawn (no target yet, the graphics card resetting) tries again shortly: a new
+// dock that was never drawn would stay invisible.
+constexpr UINT_PTR TIMER_DOCK_RETRY = 0x4E52;
 void RenderDock(Dock& d) {
+    // (the apps were rebuilt while this dock's rebuild waited, for a menu: its items may point past them)
+    for (auto& el : d.elems)
+        if (el.app >= (int)g_apps.size()) {
+            BuildElems(d, false);
+            break;
+        }
     EnsureTarget(d);
-    if (!d.rt) return;
+    if (!d.rt) {
+        if (d.content) SetTimer(d.content, TIMER_DOCK_RETRY, 500, nullptr);
+        return;
+    }
     Layout(d);
-    RECT rc = {0, 0, d.cw, d.ch};
-    if (FAILED(d.rt->BindDC(d.memDC, &rc))) return;
+    RECT rc = {0, 0, DockWinW(d), DockWinH(d)};
+    if (FAILED(d.rt->BindDC(d.memDC, &rc))) {
+        if (d.content) SetTimer(d.content, TIMER_DOCK_RETRY, 500, nullptr);
+        return;
+    }
     d.rt->BeginDraw();
+    d.rt->SetTransform(D2D1::Matrix3x2F::Identity());
     d.rt->Clear(D2D1::ColorF(0, 0, 0, 0));
+    d.rt->SetTransform(DockMatrix(d));  // (dock space to the real edge; see DockToWin)
 
     float r = PillRadius(d);
     D2D1_ROUNDED_RECT pill = D2D1::RoundedRect(d.pill, r, r);
@@ -4445,6 +5734,14 @@ void RenderDock(Dock& d) {
     // so the whole pill keeps catching the mouse (layered windows ignore alpha 0).
     ComPtr<ID2D1SolidColorBrush> fill, white, ltext, label, dot, flash, tile, sep;
     D2D1_COLOR_F tint = g_theme.tint;
+    if (d.cfg.hasTint || d.cfg.autoTint || d.cfg.tintOpacity >= 0) {  // (this monitor's own glass color or strength)
+        Theme t = MakeTheme(g_set.style, (d.cfg.tintOpacity >= 0 ? d.cfg.tintOpacity : g_set.tintOpacity) / 100.0f);
+        COLORREF c = d.cfg.hasTint ? d.cfg.tint : g_set.tint;
+        if (!d.cfg.autoTint && (d.cfg.hasTint || g_set.customTint) && g_set.style != L"grafite")
+            t.tint = Rgba(GetRValue(c), GetGValue(c), GetBValue(c), t.tint.a);
+        tint = t.tint;
+        if (!g_transparencyUsed) tint.a = g_theme.tint.a;
+    }
     tint.a = std::max(tint.a, 1.0f / 255);
     d.rt->CreateSolidColorBrush(tint, &fill);
     d.rt->FillRoundedRectangle(pill, fill.Get());
@@ -4480,6 +5777,19 @@ void RenderDock(Dock& d) {
     int hoverElem = -1;
     for (int i = 0; i < (int)d.elems.size(); i++) {
         Elem& el = d.elems[i];
+        if (el.arrow) {  // the carousel's arrow: a chevron, faint when there's nothing more that way
+            bool can = el.arrow < 0 ? d.pinOff > 0 : d.pinOff < d.pinMax;
+            bool hot = d.mouseX >= el.x && d.mouseX < el.x + el.w;
+            float cx = el.x + el.w / 2, cy = d.pill.top + PillH(d) / 2, a = S(d) * 0.13f;
+            ComPtr<ID2D1SolidColorBrush> br;
+            D2D1_COLOR_F c = g_theme.text;
+            c.a = can ? (hot ? 0.95f : 0.6f) : 0.18f;
+            d.rt->CreateSolidColorBrush(c, &br);
+            float dx = el.arrow * a * 0.55f;
+            d.rt->DrawLine(D2D1::Point2F(cx - dx, cy - a), D2D1::Point2F(cx + dx, cy), br.Get(), 2 * d.scale);
+            d.rt->DrawLine(D2D1::Point2F(cx + dx, cy), D2D1::Point2F(cx - dx, cy + a), br.Get(), 2 * d.scale);
+            continue;
+        }
         if (el.app < 0) {
             float cx = el.x + el.w / 2;
             float h = S(d) * 0.62f;
@@ -4499,6 +5809,8 @@ void RenderDock(Dock& d) {
             else lift += -std::fabs(std::sin(t / 1000.0f * 3.14159265f * 2.2f)) * S(d) * 0.32f;
         }
         D2D1_RECT_F ir = D2D1::RectF(cx - size / 2, iconBottom - size + lift, cx + size / 2, iconBottom + lift);
+        {  // (upright at its turned place, on a dock at another edge)
+        DockUpright up(d, d.rt.Get(), cx, (ir.top + ir.bottom) / 2);
         // "Elevar": a soft shadow under the raised icon.
         if (el.lift < -0.5f) {
             float k = std::min(1.0f, el.lift / (-S(d) * 0.22f));
@@ -4528,6 +5840,20 @@ void RenderDock(Dock& d) {
         } else {
             float tr = size * 0.27f;
             d.rt->FillRoundedRectangle(D2D1::RoundedRect(ir, tr, tr), tile.Get());
+        }
+        if (int nb = a.start ? 0 : AppBadge(a); nb > 0 && d.fontTiny) {
+            // Unread notifications: a red count on the icon's corner.
+            std::wstring num = nb > 9 ? L"9+" : std::to_wstring(nb);
+            float tw = TextSize(num, d.fontTiny.Get()).width;
+            float bhh = std::max(15 * d.scale, size * 0.36f), bw = std::max(bhh, tw + 8 * d.scale);
+            float right = ir.right + bhh * 0.28f, top = ir.top - bhh * 0.28f;
+            D2D1_RECT_F br = D2D1::RectF(right - bw, top, right, top + bhh);
+            ComPtr<ID2D1SolidColorBrush> red, wt;
+            d.rt->CreateSolidColorBrush(D2D1::ColorF(0xE5484D, el.op), &red);
+            d.rt->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, el.op), &wt);
+            d.rt->FillRoundedRectangle(D2D1::RoundedRect(br, bhh / 2, bhh / 2), red.Get());
+            DrawTextAt(d.rt.Get(), num, d.fontTiny.Get(), (br.left + br.right) / 2, (br.top + br.bottom) / 2, wt.Get());
+        }
         }
         if (!DockWins(d, a).empty()) {
             float dr = 2.4f * d.scale;
@@ -4569,6 +5895,7 @@ void RenderDock(Dock& d) {
             float size = S(d);
             float cy = std::clamp(g_drag.y, size / 2, d.ch - size / 2);
             D2D1_RECT_F fr = D2D1::RectF(g_drag.x - size / 2, cy - size / 2, g_drag.x + size / 2, cy + size / 2);
+            DockUpright up(d, d.rt.Get(), g_drag.x, cy);
             if (ID2D1Bitmap* bmp = IconBitmap(d, *it)) {
                 float op = removes ? 0.4f : 0.95f;
                 if (d.dc) d.dc->DrawBitmap(bmp, fr, op, D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC, nullptr, nullptr);
@@ -4582,27 +5909,35 @@ void RenderDock(Dock& d) {
     if (hoverElem >= 0 && !d.menuOpen && d.font && !PreviewShowing(g_apps[d.elems[hoverElem].app].key)) {
         Elem& el = d.elems[hoverElem];
         App& a = g_apps[el.app];
-        const std::wstring& text = a.label.empty() ? std::wstring(L"App") : a.label;
+        // No name from the shell (a program that's gone, say): its file name, so it can be told apart.
+        std::wstring text = a.label;
+        if (text.empty()) {
+            std::wstring f = !a.exe.empty() ? a.exe : !a.lnk.empty() ? a.lnk : a.aumid;
+            text = PathFindFileNameW(f.c_str());
+            if (text.size() > 4 && text[text.size() - 4] == L'.') text.resize(text.size() - 4);
+            if (text.empty()) text = L"App";
+        }
         ComPtr<IDWriteTextLayout> lay;
         g_dw->CreateTextLayout(text.c_str(), (UINT32)text.size(), d.font.Get(), 600 * d.scale, 60 * d.scale, &lay);
         if (lay) {
             DWRITE_TEXT_METRICS tm;
             lay->GetMetrics(&tm);
-            float px = 10 * d.scale, py = 5 * d.scale;
             float size = S(d) * el.m;
             float cx = el.x + el.w / 2;
-            float bottom = iconBottom - size - 8 * d.scale;
-            D2D1_RECT_F lr = D2D1::RectF(cx - tm.width / 2 - px, bottom - tm.height - py * 2, cx + tm.width / 2 + px, bottom);
-            d.rt->FillRoundedRectangle(D2D1::RoundedRect(lr, 8 * d.scale, 8 * d.scale), label.Get());
-            d.rt->DrawTextLayout(D2D1::Point2F(lr.left + px, lr.top + py), lay.Get(), ltext.Get());
+            DockTag(d, d.rt.Get(), D2D1::RectF(cx - size / 2, iconBottom - size, cx + size / 2, iconBottom), lay.Get(), label.Get(),
+                    ltext.Get());
         }
     }
     DrawStatLabel(d, iconBottom - S(d) / 2, label.Get(), ltext.Get());
 
     if (d.rt->EndDraw() == D2DERR_RECREATE_TARGET) {
+        static DWORD lost = 0;
+        if (!lost || GetTickCount() - lost > 60000) NimbusLog("evento | a placa de vídeo resetou o desenho da dock (refeito)");
+        lost = GetTickCount();
         d.rt.Reset();
         d.dc.Reset();
         d.bmps.clear();
+        if (d.content) SetTimer(d.content, TIMER_DOCK_RETRY, 300, nullptr);
         return;
     }
     PlaceDock(d);
@@ -4685,7 +6020,7 @@ static HWND CreateBand() {
 constexpr UINT_PTR TIMER_DOCK_BANDS = 15;
 void PlaceDock(Dock& d) {
     int slide = (int)std::lround((1 - d.shown) * (PillH(d) + BottomGap(d) + 8 * d.scale));
-    int top = d.rcMon.bottom - d.ch + slide;
+    RECT wr = DockWinRect(d, slide);
 
     if (d.shown <= 0.001f && !d.wantShown) {
         if (d.visible) {
@@ -4696,11 +6031,16 @@ void PlaceDock(Dock& d) {
         return;
     }
 
-    POINT dst = {d.rcMon.left, top};
-    SIZE size = {d.cw, d.ch};
+    POINT dst = {wr.left, wr.top};
+    SIZE size = {DockWinW(d), DockWinH(d)};
     POINT src = {0, 0};
     BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
-    UpdateLayeredWindow(d.content, nullptr, &dst, &size, d.memDC, &src, 0, &bf, ULW_ALPHA);
+    if (UpdateLayeredWindow(d.content, nullptr, &dst, &size, d.memDC, &src, 0, &bf, ULW_ALPHA)) {
+        d.drawErr = 0;
+    } else {  // (not on screen: try again shortly)
+        d.drawErr = GetLastError() ? GetLastError() : 1;
+        SetTimer(d.content, TIMER_DOCK_RETRY, 500, nullptr);
+    }
 
     // The blur behind is ~20 small windows: moving them all takes Windows up to 30 ms. While the dock
     // zooms (a frame every 15 ms) they follow at most every 33 ms; the last position always arrives.
@@ -4711,8 +6051,8 @@ void PlaceDock(Dock& d) {
             SetTimer(d.content, TIMER_DOCK_BANDS, 34, nullptr);
         }
     } else {
-        PlaceBands(d.bands, d.bandRc, g_theme.blur, d.rcMon.left + d.pill.left, top + d.pill.top,
-                   d.rcMon.left + d.pill.right, top + d.pill.bottom, PillRadius(d));
+        RECT pr = DockRectToScreen(d, d.pill, slide);
+        PlaceBands(d.bands, d.bandRc, g_theme.blur, (float)pr.left, (float)pr.top, (float)pr.right, (float)pr.bottom, PillRadius(d));
         d.bandsAt = now;
         d.bandsPending = false;
     }
@@ -4726,12 +6066,36 @@ void PlaceDock(Dock& d) {
 static Dock* DockFrom(HWND hwnd) { return (Dock*)GetWindowLongPtrW(hwnd, GWLP_USERDATA); }
 
 static int ElemAt(Dock& d, float x, float y) {
-    if (y < d.pill.top - S(d) * (Zoom() - 1) - 4 * d.scale || y > d.pill.bottom) return -1;
+    if (y < d.pill.top - S(d) * (Zoom(d) - 1) - 4 * d.scale || y > d.pill.bottom) return -1;
     for (int i = 0; i < (int)d.elems.size(); i++) {
         const Elem& el = d.elems[i];
-        if (el.app >= 0 && x >= el.x && x < el.x + el.w) return i;
+        if (el.app >= 0 && !el.leaving && x >= el.x && x < el.x + el.w) return i;
     }
     return -1;
+}
+// The pinned carousel's arrow under x (-1 back, 1 forward), or 0.
+static int PinArrowAt(Dock& d, float x, float y) {
+    if (y < d.pill.top || y > d.pill.bottom) return 0;
+    for (auto& el : d.elems)
+        if (el.arrow && x >= el.x && x < el.x + el.w) return el.arrow;
+    return 0;
+}
+// Over the carousel (between its arrows)?
+static bool InPinCarousel(Dock& d, float x, float y) {
+    if (y < d.pill.top - S(d) * (Zoom(d) - 1) || y > d.pill.bottom) return false;
+    float l = -1, r = -1;
+    for (auto& el : d.elems) {
+        if (el.arrow < 0) l = el.x;
+        if (el.arrow > 0) r = el.x + el.w;
+    }
+    return l >= 0 && r > l && x >= l && x < r;
+}
+static void PinTurn(Dock& d, int by) {
+    int to = std::clamp(d.pinOff + by, 0, d.pinMax);
+    if (to == d.pinOff) return;
+    d.pinOff = to;
+    BuildElems(d, true);
+    Invalidate(d);
 }
 
 // ---------------------------------------------------------------------------
@@ -4764,14 +6128,112 @@ static void Activate(HWND h) {
 }
 
 static void Animate(Dock& d);
+static std::wstring AppFileLocation(const std::wstring& launch);
+// An app hidden in the tray with its main window put away (Teams during a call: only the call shows):
+// opening it again doesn't bring that window back, a double click on its tray icon does. Sends that.
+static bool WakeFromTray(const App& a) {
+    // (Store apps only: they run one copy anyway. A browser in the tray keeps opening new windows.)
+    std::wstring exe = Lower(NativePath(a.exe));
+    if (exe.empty() || exe.find(L"\\windowsapps\\") == std::wstring::npos) return false;
+    for (const TrayIcon& t : g_tray) {
+        if (!t.pid || !t.cbMsg || Lower(t.path) != exe) continue;
+        struct Find {
+            std::wstring exe;
+            HWND hidden;  // its main window, put away (the first in z-order: the one last used)
+            int shown;    // its windows on screen
+        };
+        // Any process of the app (Teams runs several): the hidden window may not be the tray icon's.
+        auto scan = [](const std::wstring& exe) {
+            Find f = {exe, nullptr, 0};
+            EnumWindows([](HWND h, LPARAM lp) WINAPI -> BOOL {
+                auto* f = (Find*)lp;
+                if (GetWindow(h, GW_OWNER) || !GetWindowTextLengthW(h)) return TRUE;
+                LONG_PTR st = GetWindowLongPtrW(h, GWL_STYLE), ex = GetWindowLongPtrW(h, GWL_EXSTYLE);
+                if ((ex & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE)) || (st & WS_CAPTION) != WS_CAPTION || (st & WS_CHILD)) return TRUE;
+                DWORD pid = 0;
+                GetWindowThreadProcessId(h, &pid);
+                if (Lower(ProcessPath(pid)) != f->exe) return TRUE;
+                if (IsWindowVisible(h)) f->shown++;
+                else if (!f->hidden) f->hidden = h;
+                return TRUE;
+            }, (LPARAM)&f);
+            return f;
+        };
+        Find f = scan(exe);
+        if (!f.hidden) continue;
+        // A double click as the taskbar sends it: down, up (+ select), double, up.
+        POINT pt;
+        GetCursorPos(&pt);
+        AllowSetForegroundWindow(t.pid);
+        TraySend(t, WM_LBUTTONDOWN, pt);
+        TraySend(t, WM_LBUTTONUP, pt);
+        if (t.version >= 3) TraySend(t, NIN_SELECT, pt);
+        TraySend(t, WM_LBUTTONDBLCLK, pt);
+        TraySend(t, WM_LBUTTONUP, pt);
+        Wh_Log(L"launch: %s woken from its tray icon", t.key.c_str());
+        // If the app ignored it, its window is shown here.
+        struct Later {
+            std::wstring exe;
+            int shown;
+            Find (*scan)(const std::wstring&);
+        };
+        auto* later = new Later{exe, f.shown, +scan};
+        HANDLE th = CreateThread(nullptr, 0, [](LPVOID p) WINAPI -> DWORD {
+            std::unique_ptr<Later> l((Later*)p);
+            Sleep(900);
+            Find now = l->scan(l->exe);
+            if (now.shown > l->shown || !now.hidden) return 0;
+            ShowWindow(now.hidden, IsIconic(now.hidden) ? SW_RESTORE : SW_SHOW);
+            SetForegroundWindow(now.hidden);
+            Wh_Log(L"launch: the app didn't answer its tray icon; its window was shown");
+            return 0;
+        }, later, 0, nullptr);
+        if (th) CloseHandle(th);
+        else delete later;
+        return true;
+    }
+    return false;
+}
+
 static void Launch(const App& a) {
     g_launch[a.key] = GetTickCount();
     for (auto* d : g_docks) Animate(*d);
+    if (WakeFromTray(a)) return;
     std::wstring target;
+    std::wstring exe = a.exe, packaged = a.aumid.empty() ? PackagedAumid(exe) : L"";
     if (!a.lnk.empty()) target = a.lnk;
     else if (!a.aumid.empty()) target = L"shell:AppsFolder\\" + a.aumid;
+    else if (!packaged.empty()) target = L"shell:AppsFolder\\" + packaged;
     else target = NativePath(a.exe);
     if (!target.empty()) ShellExecuteW(nullptr, L"open", target.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+}
+
+// Run as administrator: what to run, or empty when it doesn't apply (Store apps, File Explorer, anything
+// that isn't a program). A shortcut is preferred: it keeps its arguments and working folder.
+static std::wstring AdminTarget(const std::wstring& lnk, const std::wstring& exe) {
+    const wchar_t* ext = PathFindExtensionW(exe.c_str());
+    if (exe.empty() || _wcsicmp(ext, L".exe") || StrStrIW(exe.c_str(), L"\\WindowsApps\\") ||
+        !_wcsicmp(PathFindFileNameW(exe.c_str()), L"explorer.exe") || GetFileAttributesW(exe.c_str()) == INVALID_FILE_ATTRIBUTES)
+        return L"";
+    if (!lnk.empty() && !_wcsicmp(PathFindExtensionW(lnk.c_str()), L".lnk") && GetFileAttributesW(lnk.c_str()) != INVALID_FILE_ATTRIBUTES) return lnk;
+    return exe;
+}
+// On its own thread: the call only returns after the Windows permission prompt is answered.
+static DWORD WINAPI AdminThread(LPVOID p) {
+    std::unique_ptr<std::wstring> target((std::wstring*)p);
+    HRESULT co = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    SHELLEXECUTEINFOW sei = {sizeof(sei)};
+    sei.lpVerb = L"runas";
+    sei.lpFile = target->c_str();
+    sei.nShow = SW_SHOWNORMAL;
+    if (!ShellExecuteExW(&sei) && GetLastError() != ERROR_CANCELLED) Wh_Log(L"run as administrator failed: %u", GetLastError());
+    if (SUCCEEDED(co)) CoUninitialize();
+    return 0;
+}
+static void LaunchAdmin(const std::wstring& target) {
+    auto* copy = new std::wstring(target);
+    if (HANDLE t = CreateThread(nullptr, 0, AdminThread, copy, 0, nullptr)) CloseHandle(t);
+    else delete copy;
 }
 
 static void OpenStart() {
@@ -4782,6 +6244,10 @@ static void OpenStart() {
 void ToggleStart(Dock& d);
 static void CloseStart(bool animate);
 
+// The app the dock just opened: a second click of a double click must not open it twice or minimize it.
+static std::wstring g_clickLaunched;
+static DWORD g_clickLaunchedAt = 0;
+
 static void ClickApp(Dock& d, App& a) {
     if (a.start) {
         if (g_set.nevoaStart) ToggleStart(d);
@@ -4790,7 +6256,21 @@ static void ClickApp(Dock& d, App& a) {
     }
     CloseStart(true);  // an app from the dock: the Iniciar gets out of the way
     std::vector<HWND> wins = DockWins(d, a);
-    if (wins.empty()) { Launch(a); return; }
+    DWORD now = GetTickCount();
+    bool justLaunched = g_clickLaunched == a.key && now - g_clickLaunchedAt < 1500;
+    if (wins.empty()) {
+        if (justLaunched) return;
+        g_clickLaunched = a.key;
+        g_clickLaunchedAt = now;
+        Launch(a);
+        return;
+    }
+    if (justLaunched) {  // (its window just appeared: bring it, never minimize it)
+        Activate(wins.front());
+        return;
+    }
+    // The second click of a double click on an app the dock just brought up: it stays open.
+    if (wins.size() == 1 && g_activated == wins[0] && now - g_activatedAt < GetDoubleClickTime()) return;
     // In front: the foreground window, or one it belongs to (a dialog of it), or the one this dock just
     // brought up (Windows may still be bringing it).
     HWND fg = GetForegroundWindow();
@@ -4802,6 +6282,11 @@ static void ClickApp(Dock& d, App& a) {
         std::find(wins.begin(), wins.end(), g_activated) != wins.end())
         front = g_activated;
     Wh_Log(L"dock: app click (%d windows, fg=%p front=%p iconic=%d)", (int)wins.size(), fg, front, front ? IsIconic(front) : -1);
+    // Windows can leave a minimized window as the foreground one: it isn't showing, so a click opens it.
+    if (front && IsIconic(front)) {
+        Activate(front);
+        return;
+    }
     if (front) {
         if (wins.size() == 1) {
             // ShowWindowAsync also reaches windows run as administrator (a posted SC_MINIMIZE doesn't).
@@ -4823,7 +6308,22 @@ static bool AumidInStart(const std::wstring& aumid) {
     return SUCCEEDED(SHCreateItemFromParsingName((L"shell:AppsFolder\\" + aumid).c_str(), nullptr, IID_PPV_ARGS(&item)));
 }
 
+// A program run from a temporary folder (an installer, an uninstaller's copy of itself): it's gone once it
+// ends, so it's never kept on the dock.
+static bool IsTempProgram(const std::wstring& exe) {
+    if (exe.empty()) return false;
+    if (!_wcsicmp(PathFindExtensionW(exe.c_str()), L".tmp")) return true;
+    wchar_t tmp[MAX_PATH] = {}, longTmp[MAX_PATH] = {};
+    if (!GetTempPathW(MAX_PATH, tmp)) return false;
+    std::wstring t = GetLongPathNameW(tmp, longTmp, MAX_PATH) ? longTmp : tmp;
+    std::wstring e = Lower(exe), tl = Lower(t);
+    return e.rfind(tl, 0) == 0 || e.find(L"\\appdata\\local\\temp\\") != std::wstring::npos || e.find(L"\\windows\\temp\\") != std::wstring::npos;
+}
+
 static bool PinForApp(const App& a, Pin& out) {
+    if (IsTempProgram(a.exe)) return false;
+    // (an identity with no program and no entry in the apps list: no icon, no name, nothing to open)
+    if (!a.aumid.empty() && a.exe.empty() && !AumidInStart(a.aumid)) return false;
     if (!a.aumid.empty() && (a.exe.empty() || AumidInStart(a.aumid))) out = {L"aumid", a.aumid};
     else if (!a.exe.empty()) out = {L"exe", a.exe};
     else return false;
@@ -4896,13 +6396,26 @@ static int TrackDockMenu(Dock& d, HMENU m, POINT screen) {
 }
 
 // Menu of the dock itself (Start button or empty part of the dock).
+static void CfgSet(const std::wstring& name, const std::wstring& v);
 static void ShowDockMenu(Dock& d, POINT screen) {
     HMENU m = CreatePopupMenu();
     AppendMenuW(m, MF_STRING, 1, Tr(S_BarSettings));
     AppendMenuW(m, MF_STRING, 2, Tr(S_TaskManager));
+    auto telas = TelasLoad();  // (screen profiles: one click switches Windows' display setup)
+    std::wstring now = telas.empty() ? L"" : TelaSignatureNow();
+    HMENU sub = CreatePopupMenu();
+    for (int i = 0; i < (int)telas.size(); i++)
+        AppendMenuW(sub, MF_STRING | (TelaSignatureOf(telas[i].dados) == now ? MF_CHECKED : 0), 100 + i, telas[i].nome.c_str());
+    if (!telas.empty()) AppendMenuW(sub, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(sub, MF_STRING, 99, L2(L"Salvar a tela de agora", L"Save the setup of now"));
+    AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(m, MF_POPUP, (UINT_PTR)sub, L2(L"Arranjos de telas", L"Screen layouts"));
     int cmd = TrackDockMenu(d, m, screen);
     if (cmd == 1) OpenSettings();
     if (cmd == 2) ShellExecuteW(nullptr, L"open", L"taskmgr.exe", nullptr, nullptr, SW_SHOWNORMAL);
+    if (cmd == 99 && !TelaSaveNow())
+        MessageBoxW(nullptr, L2(L"Não deu para salvar. Até 10 arranjos.", L"Couldn't save. Up to 10 layouts."), L"Nimbus Menu", MB_OK | MB_ICONWARNING | MB_TOPMOST);
+    if (cmd >= 100 && cmd - 100 < (int)telas.size()) TelaApply(telas[cmd - 100].dados);
     d.outsideSince = GetTickCount();
     Invalidate(d);
 }
@@ -4965,12 +6478,128 @@ static void EndTask(const std::vector<HWND>& wins) {
                   {}, true, false);
 }
 
+// ---- Jump lists: an app's recent (or frequent) files, as Windows keeps them for it ----
+// Read only, through IApplicationDocumentLists. An app without its own id has the one Windows makes from
+// where its exe is ("{known folder}\\rest\\app.exe").
+static std::wstring ImplicitAppId(const std::wstring& exe) {
+    if (exe.empty()) return L"";
+    static const KNOWNFOLDERID* folders[] = {&FOLDERID_System, &FOLDERID_SystemX86, &FOLDERID_Windows, &FOLDERID_ProgramFilesX64,
+                                             &FOLDERID_ProgramFilesX86, &FOLDERID_UserProgramFiles, &FOLDERID_LocalAppData,
+                                             &FOLDERID_RoamingAppData, &FOLDERID_Profile};
+    for (auto* id : folders) {
+        PWSTR path = nullptr;
+        if (FAILED(SHGetKnownFolderPath(*id, KF_FLAG_DONT_VERIFY, nullptr, &path)) || !path) continue;
+        std::wstring dir = path;
+        CoTaskMemFree(path);
+        if (dir.back() != L'\\') dir += L'\\';
+        if (exe.size() > dir.size() && !_wcsnicmp(exe.c_str(), dir.c_str(), dir.size())) {
+            wchar_t g[64] = {};
+            StringFromGUID2(*id, g, ARRAYSIZE(g));
+            return std::wstring(g) + L"\\" + exe.substr(dir.size());
+        }
+    }
+    return exe;
+}
+
+// The id of what a Start item opens: a shortcut has its own, or the one of its program.
+static std::wstring AppIdOfLaunch(const std::wstring& launch) {
+    const wchar_t* ext = PathFindExtensionW(launch.c_str());
+    std::wstring target = launch;
+    if (!_wcsicmp(ext, L".lnk")) {
+        static const PROPERTYKEY kAumid = {{0x9F4C2855, 0x9F79, 0x4B39, {0xA8, 0xD0, 0xE1, 0xD4, 0x2D, 0xE1, 0xD5, 0xF3}}, 5};
+        ComPtr<IPropertyStore> ps;
+        if (SUCCEEDED(SHGetPropertyStoreFromParsingName(launch.c_str(), nullptr, GPS_DEFAULT, IID_PPV_ARGS(&ps)))) {
+            std::wstring id = GetPropString(ps.Get(), kAumid);
+            if (!id.empty()) return id;
+        }
+        ComPtr<IShellLinkW> sl;
+        ComPtr<IPersistFile> pf;
+        wchar_t path[MAX_PATH * 2] = {};
+        if (SUCCEEDED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&sl))) && SUCCEEDED(sl.As(&pf)) &&
+            SUCCEEDED(pf->Load(launch.c_str(), STGM_READ)) && SUCCEEDED(sl->GetPath(path, ARRAYSIZE(path), nullptr, 0)) && path[0])
+            target = path;
+    }
+    if (!_wcsicmp(PathFindFileNameW(target.c_str()), L"explorer.exe")) return L"Microsoft.Windows.Explorer";
+    return ImplicitAppId(target);
+}
+
+struct JumpItem {
+    std::wstring name;
+    ComPtr<IShellItem> item;
+};
+static std::vector<JumpItem> JumpList(const std::wstring& appId, UINT max) {
+    std::vector<JumpItem> out;
+    ComPtr<IApplicationDocumentLists> dl;
+    if (appId.empty() || FAILED(CoCreateInstance(CLSID_ApplicationDocumentLists, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dl))) ||
+        FAILED(dl->SetAppID(appId.c_str())))
+        return out;
+    for (APPDOCLISTTYPE t : {ADLT_RECENT, ADLT_FREQUENT}) {
+        ComPtr<IObjectArray> arr;
+        UINT n = 0;
+        if (FAILED(dl->GetList(t, max, IID_PPV_ARGS(&arr))) || FAILED(arr->GetCount(&n))) continue;
+        for (UINT i = 0; i < n && out.size() < max; i++) {
+            JumpItem j;
+            ComPtr<IShellLinkW> sl;
+            if (FAILED(arr->GetAt(i, IID_PPV_ARGS(&j.item)))) {
+                PIDLIST_ABSOLUTE pidl = nullptr;
+                if (FAILED(arr->GetAt(i, IID_PPV_ARGS(&sl))) || FAILED(sl->GetIDList(&pidl)) || !pidl) continue;
+                SHCreateItemFromIDList(pidl, IID_PPV_ARGS(&j.item));
+                CoTaskMemFree(pidl);
+                if (!j.item) continue;
+            }
+            // A file: only on this PC's own drives (one on a network share or a drive that's out could hold the
+            // menu for seconds), and named by its path, without asking the disk.
+            PWSTR nm = nullptr;
+            if (SUCCEEDED(j.item->GetDisplayName(SIGDN_FILESYSPATH, &nm)) && nm) {
+                std::wstring path = nm;
+                CoTaskMemFree(nm);
+                nm = nullptr;
+                if (path.size() < 3 || path[1] != L':') continue;
+                wchar_t root[4] = {path[0], L':', L'\\', 0};
+                if (GetDriveTypeW(root) != DRIVE_FIXED) continue;
+                j.name = PathFindFileNameW(path.c_str());
+            } else if (SUCCEEDED(j.item->GetDisplayName(SIGDN_NORMALDISPLAY, &nm)) && nm) {
+                j.name = nm;
+                CoTaskMemFree(nm);
+            }
+            if (j.name.empty()) continue;
+            // (an & would underline the next letter in a menu)
+            for (size_t k = 0; (k = j.name.find(L'&', k)) != std::wstring::npos; k += 2) j.name.insert(k, 1, L'&');
+            if (j.name.size() > 60) j.name = j.name.substr(0, 57) + L"…";
+            out.push_back(std::move(j));
+        }
+        if (!out.empty()) break;  // (recent ones; the frequent ones only when there are none)
+    }
+    return out;
+}
+static void JumpOpen(IShellItem* item) {
+    PIDLIST_ABSOLUTE pidl = nullptr;
+    if (!item || FAILED(SHGetIDListFromObject(item, &pidl))) return;
+    SHELLEXECUTEINFOW sei = {sizeof(sei)};
+    sei.fMask = SEE_MASK_IDLIST | SEE_MASK_ASYNCOK;
+    sei.lpIDList = pidl;
+    sei.nShow = SW_SHOWNORMAL;
+    ShellExecuteExW(&sei);
+    CoTaskMemFree(pidl);
+}
+// The items at the top of a menu (ids from 1000), with a gray title.
+static void JumpAddTo(HMENU m, const std::vector<JumpItem>& items) {
+    if (items.empty()) return;
+    AppendMenuW(m, MF_STRING | MF_GRAYED, 0, L2(L"Recentes", L"Recent"));
+    for (size_t i = 0; i < items.size(); i++) AppendMenuW(m, MF_STRING, 1000 + i, items[i].name.c_str());
+    AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+}
+
 static void ShowMenu(Dock& d, int elem, POINT screen) {
     App& a = g_apps[d.elems[elem].app];
     if (a.start) { ShowDockMenu(d, screen); return; }
     std::wstring key = a.key;
     HMENU m = CreatePopupMenu();
+    auto jump = JumpList(!a.aumid.empty() ? a.aumid : ImplicitAppId(a.exe), 6);
+    JumpAddTo(m, jump);
     AppendMenuW(m, MF_STRING, 1, Tr(S_NewWindow));
+    std::wstring admin = AdminTarget(a.lnk, !a.exe.empty() ? NativePath(a.exe) : !a.lnk.empty() ? AppFileLocation(a.lnk) : L"");
+    if (!admin.empty()) AppendMenuW(m, MF_STRING, 5, L2(L"Executar como administrador", L"Run as administrator"));
     AppendMenuW(m, MF_STRING, 2, a.pinned ? Tr(S_UnpinDock) : Tr(S_PinDock));
     std::vector<HWND> wins = DockWins(d, a);
     if (!wins.empty()) {
@@ -4979,6 +6608,8 @@ static void ShowMenu(Dock& d, int elem, POINT screen) {
         if (EndTaskEnabled()) AppendMenuW(m, MF_STRING, 4, Tr(S_EndTask));
     }
     int cmd = TrackDockMenu(d, m, screen);
+    if (cmd >= 1000 && cmd - 1000 < (int)jump.size()) JumpOpen(jump[cmd - 1000].item.Get());
+    if (cmd == 5) LaunchAdmin(admin);
     for (auto& x : g_apps) {
         if (x.key != key) continue;
         if (cmd == 1) Launch(x);
@@ -5000,12 +6631,20 @@ constexpr UINT WM_APP_APPBAR = WM_APP + 5;
 static void SetAppBarPos(Dock& d) {
     APPBARDATA abd = {sizeof(abd)};
     abd.hWnd = d.content;
-    abd.uEdge = ABE_BOTTOM;
+    abd.uEdge = d.cfg.edge == 1 ? ABE_TOP : d.cfg.edge == 2 ? ABE_LEFT : d.cfg.edge == 3 ? ABE_RIGHT : ABE_BOTTOM;
     abd.rc = d.rcMon;
     LONG h = (LONG)std::lround(PillH(d));
-    abd.rc.top = abd.rc.bottom - h;
+    auto cut = [&] {
+        switch (d.cfg.edge) {
+            case 1: abd.rc.bottom = abd.rc.top + h; break;
+            case 2: abd.rc.right = abd.rc.left + h; break;
+            case 3: abd.rc.left = abd.rc.right - h; break;
+            default: abd.rc.top = abd.rc.bottom - h; break;
+        }
+    };
+    cut();
     SHAppBarMessage(ABM_QUERYPOS, &abd);
-    abd.rc.top = abd.rc.bottom - h;
+    cut();
     SHAppBarMessage(ABM_SETPOS, &abd);
 }
 
@@ -5206,10 +6845,8 @@ void ShowPreview(Dock& d, int elem) {
 
     // Above the icon, inside the monitor.
     const Elem& el = d.elems[elem];
-    int iconCx = d.rcMon.left + (int)(el.x + el.w / 2);
-    int dockTop = d.rcMon.bottom - d.ch + (int)d.pill.top;
-    int x = std::clamp(iconCx - w / 2, (int)d.rcMon.left + 8, (int)d.rcMon.right - w - 8);
-    int y = dockTop - h - (int)PS(10);
+    POINT at = DockPanelAt(d, el.x + el.w / 2, w, h, (int)PS(10));
+    int x = at.x, y = at.y;
     g_prev.rc = {x, y, x + w, y + h};
 
     SetWindowPos(g_prev.hwnd, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE | SWP_SHOWWINDOW);
@@ -5361,7 +6998,7 @@ enum StartRowKind { RowApp, RowFile, RowTabPinned, RowTabAll, RowPower, RowActio
 // The Start's Status tab shows when any status item, or the tray, goes to Start.
 static bool StartHasStatus() {
     if (TrayInStart() || (g_set.shelfPlace & PlStart) || (g_set.notifPlace & PlStart) || (g_set.notesPlace & PlStart)) return true;
-    for (int k = 0; k < 8; k++)
+    for (int k = 0; k < 10; k++)
         if ((g_set.extraPlace[k] & PlStart)) return true;
     for (int id = 0; id < StCount; id++)
         if (StatOn(id) && (g_set.statPlace[id] & PlStart)) return true;
@@ -5385,6 +7022,14 @@ struct StartRow {
     std::function<void()> fn;             // RowFn: what a click does
     std::function<void(float)> slide;     // RowSlide: set from 0..1
     float x0 = 0, x1 = 0;                 // RowSlide: the track
+};
+
+// A search that does something: a sum, a unit conversion, an open window, a command.
+struct QuickHit {
+    wchar_t glyph = 0;     // Segoe Fluent Icons
+    std::wstring title, sub;
+    bool strong = false;   // (a sum, a conversion or a command: chosen first; a window isn't)
+    std::function<void()> run;
 };
 
 struct StartMenu {
@@ -5446,6 +7091,7 @@ struct StartMenu {
     DWORD wideStart = 0;
     float offX = 0;  // panel's left edge inside the window
     std::vector<StartItem*> setHits;
+    std::vector<QuickHit> quick;
     int powerArm = -1;  // restart or shut down clicked once: a second click within 4 s does it
     DWORD powerArmAt = 0;
 } g_start;
@@ -5487,7 +7133,19 @@ static void LoadSettingsItems() {
         {L"Lock screen", L"Tela de bloqueio", L"ms-settings:lockscreen", L"lock bloqueio"},
         {L"Fonts", L"Fontes", L"ms-settings:fonts", L"font typeface fonte letra"},
         {L"Taskbar", L"Barra de tarefas", L"ms-settings:taskbar", L"taskbar barra"},
-        {L"Installed apps", L"Aplicativos instalados", L"ms-settings:appsfeatures", L"uninstall programs apps desinstalar programas"},
+        {L"Programs and Features", L"Programas e Recursos", L"appwiz.cpl", L"uninstall remove programs apps desinstalar remover programas adicionar painel de controle"},
+        {L"Installed apps", L"Aplicativos instalados", L"ms-settings:appsfeatures", L"uninstall remove programs apps desinstalar remover programas"},
+        {L"Control Panel", L"Painel de Controle", L"control.exe", L"control panel classic clássico configurações"},
+        {L"Device Manager", L"Gerenciador de Dispositivos", L"devmgmt.msc", L"drivers hardware device driver dispositivos placa"},
+        {L"Disk Management", L"Gerenciamento de Disco", L"diskmgmt.msc", L"partition format volume disk partição formatar disco"},
+        {L"Network Connections", L"Conexões de Rede", L"ncpa.cpl", L"adapter ethernet ip dns adaptador rede"},
+        {L"Sound (classic)", L"Som (clássico)", L"mmsys.cpl", L"playback recording devices reprodução gravação dispositivos de som"},
+        {L"Power Options", L"Opções de Energia", L"powercfg.cpl", L"power plan battery plano de energia bateria"},
+        {L"System Properties", L"Propriedades do Sistema", L"sysdm.cpl", L"environment variables computer name restore variáveis de ambiente nome do computador restauração"},
+        {L"Windows Firewall", L"Firewall do Windows", L"firewall.cpl", L"firewall ports portas rede"},
+        {L"Services", L"Serviços", L"services.msc", L"service serviço windows"},
+        {L"Task Scheduler", L"Agendador de Tarefas", L"taskschd.msc", L"schedule tasks agendar tarefas"},
+        {L"Event Viewer", L"Visualizador de Eventos", L"eventvwr.msc", L"logs errors crash erros eventos"},
         {L"Default apps", L"Aplicativos padrão", L"ms-settings:defaultapps", L"default browser open with navegador padrão abrir com"},
         {L"Startup apps", L"Inicialização", L"ms-settings:startupapps", L"startup run at sign-in iniciar com o windows apps"},
         {L"Accounts", L"Contas", L"ms-settings:accounts", L"user account email usuário conta"},
@@ -5699,6 +7357,14 @@ static void QueryEverything() {
 }
 
 static void RunStartAction(int action) {
+    if (action >= 100) {  // a quick result: the Start closes first (a question or a window may come)
+        int i = action - 100;
+        if (i >= (int)g_start.quick.size() || !g_start.quick[i].run) return;
+        auto fn = g_start.quick[i].run;
+        CloseStart(true);
+        fn();
+        return;
+    }
     switch (action) {
         case ActOpenEverything: {
             std::wstring exe = EverythingExe();
@@ -6101,9 +7767,11 @@ static int ItemScore(StartItem& it, const std::wstring& q) {
 
 static void PlaceStartBands();
 
+static std::vector<QuickHit> QuickFind(const std::wstring& raw);
 static void UpdateSearch() {
     g_start.appHits.clear();
     g_start.setHits.clear();
+    g_start.quick = QuickFind(g_start.query);
     if (!g_start.query.empty()) {
         if (!g_allAppsLoaded) LoadAllApps();
         LoadUsage();
@@ -6114,15 +7782,15 @@ static void UpdateSearch() {
         for (auto& a : g_allApps)
             if (int sc = ItemScore(a, q)) found.push_back({sc, &a});
         std::stable_sort(found.begin(), found.end(), [](auto& x, auto& y) { return x.first > y.first; });
-        for (size_t i = 0; i < found.size() && i < 6; i++) g_start.appHits.push_back(found[i].second);
-        if (g_set.wideSearch) {
-            LoadSettingsItems();
-            std::vector<std::pair<int, StartItem*>> sf;
-            for (auto& st : g_settingsItems)
-                if (int sc = ItemScore(st, q)) sf.push_back({sc, &st});
-            std::stable_sort(sf.begin(), sf.end(), [](auto& x, auto& y) { return x.first > y.first; });
-            for (size_t i = 0; i < sf.size() && i < 3; i++) g_start.setHits.push_back(sf[i].second);
-        }
+        LoadSettingsItems();
+        std::vector<std::pair<int, StartItem*>> sf;
+        for (auto& st : g_settingsItems)
+            if (int sc = ItemScore(st, q)) sf.push_back({sc, &st});
+        std::stable_sort(sf.begin(), sf.end(), [](auto& x, auto& y) { return x.first > y.first; });
+        for (size_t i = 0; i < sf.size() && i < 3; i++) g_start.setHits.push_back(sf[i].second);
+        // (with Windows' settings found, fewer apps: they must not push them off the list)
+        size_t maxApps = g_start.setHits.empty() ? 6 : 3;
+        for (size_t i = 0; i < found.size() && i < maxApps; i++) g_start.appHits.push_back(found[i].second);
     }
     // Wide search: widen while there's a search, back when it's cleared.
     bool want = g_set.wideSearch && !g_start.query.empty();
@@ -6133,7 +7801,8 @@ static void UpdateSearch() {
         HideBands(g_start.bands, g_start.bandRc);
         SetTimer(g_start.hwnd, TIMER_START_WIDE, 15, nullptr);
     }
-    g_start.sel = 0;
+    // (a sum or a command is chosen first; a window that matches comes after the apps)
+    g_start.sel = !g_start.quick.empty() && (g_start.quick[0].strong || g_start.appHits.empty()) ? 0 : (int)g_start.quick.size();
     KillTimer(g_start.hwnd, TIMER_SEARCH);
     if (g_start.query.size() >= 2) SetTimer(g_start.hwnd, TIMER_SEARCH, 120, nullptr);
     else g_start.files.clear();
@@ -6152,6 +7821,7 @@ static void FinishCloseStart() {
     g_start.files.clear();
     g_start.appHits.clear();
     g_start.setHits.clear();
+    g_start.quick.clear();
     g_start.scroll = 0;
     g_start.hover = -1;
 }
@@ -6186,7 +7856,94 @@ static void CloseStart(bool animate) {
 static void LaunchItem(const StartItem& it) {
     if (!it.file) NoteUsage(it.launch);
     std::wstring target = it.file ? NativePath(it.launch) : it.launch;
-    ShellExecuteW(nullptr, L"open", target.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    // (a classic tool, .cpl or .msc, opens with its own default verb)
+    ShellExecuteW(nullptr, it.setting ? nullptr : L"open", target.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+}
+
+// "Reiniciar no modo de segurança": a copy of this Windows' boot entry with safe mode on, hidden from
+// the boot menu and picked for the next start only (bcdedit /bootsequence), so the start after that is
+// normal again by itself: nothing to undo, and no way to get stuck in safe mode. bcdedit needs an
+// administrator, so it asks (UAC). The copy from the last time is deleted first.
+static std::wstring Base64Utf16(const std::wstring& t) {
+    static const char* k = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string b;
+    for (wchar_t c : t) {
+        b.push_back((char)(c & 0xFF));
+        b.push_back((char)((c >> 8) & 0xFF));
+    }
+    std::wstring o;
+    for (size_t i = 0; i < b.size(); i += 3) {
+        unsigned v = (unsigned char)b[i] << 16;
+        if (i + 1 < b.size()) v |= (unsigned char)b[i + 1] << 8;
+        if (i + 2 < b.size()) v |= (unsigned char)b[i + 2];
+        o += (wchar_t)k[(v >> 18) & 63];
+        o += (wchar_t)k[(v >> 12) & 63];
+        o += i + 1 < b.size() ? (wchar_t)k[(v >> 6) & 63] : L'=';
+        o += i + 2 < b.size() ? (wchar_t)k[v & 63] : L'=';
+    }
+    return o;
+}
+static DWORD WINAPI SafeModeThread(LPVOID p) {
+    bool net = p != nullptr;  // "com internet": safe mode with networking
+    std::wstring ask =
+        std::wstring(net ? L2(L"O PC vai reiniciar no modo de segurança com internet só desta vez",
+                              L"The PC will restart in safe mode with networking this once")
+                         : L2(L"O PC vai reiniciar no modo de segurança só desta vez", L"The PC will restart in safe mode this once")) +
+        L2(L": na próxima vez que ligar, ele volta ao normal sozinho.\n\n"
+           L"O Windows vai pedir permissão de administrador. No modo de segurança o Nimbus não roda (a barra do Windows aparece), "
+           L"e pode ser que peça a senha da conta em vez do PIN.\n\n"
+           L"Se o disco tiver BitLocker (criptografia do dispositivo), o Windows pode pedir a chave de recuperação ao ligar. "
+           L"Antes de continuar, confira se você tem essa chave (fica na sua conta Microsoft: aka.ms/myrecoverykey).\n\n"
+           L"Salve o que estiver aberto. Reiniciar agora?",
+           L": the next time it starts, it's back to normal by itself.\n\n"
+           L"Windows will ask for administrator permission. Nimbus doesn't run in safe mode (the Windows taskbar shows), "
+           L"and it may ask for the account password instead of the PIN.\n\n"
+           L"If the drive uses BitLocker (device encryption), Windows may ask for the recovery key when it starts. "
+           L"Before you go on, make sure you have that key (it's in your Microsoft account: aka.ms/myrecoverykey).\n\n"
+           L"Save your work. Restart now?");
+    if (MessageBoxW(nullptr, ask.c_str(), L"Nimbus Menu", MB_OKCANCEL | MB_ICONINFORMATION | MB_TOPMOST | MB_SETFOREGROUND) != IDOK)
+        return 0;
+    std::wstring script =
+        L"$ErrorActionPreference='Stop';$d='Nimbus Menu - modo de seguranca';"
+        L"try{"
+        L"foreach($b in ((bcdedit /enum osloader /v) -join \"`n\") -split \"`n`n\"){"
+        L"if($b -like \"*$d*\" -and $b -match '\\{[0-9a-fA-F-]{36}\\}'){bcdedit /delete $matches[0] /f | Out-Null}};"
+        L"$o=(bcdedit /copy '{current}' /d $d) -join ' ';"
+        L"if($LASTEXITCODE -ne 0 -or $o -notmatch '\\{[0-9a-fA-F-]{36}\\}'){exit 2};$g=$matches[0];"
+        L"bcdedit /set $g safeboot SAFEMODE | Out-Null;if($LASTEXITCODE -ne 0){bcdedit /delete $g /f | Out-Null;exit 3};"
+        L"bcdedit /displayorder $g /remove | Out-Null;"
+        L"bcdedit /bootsequence $g | Out-Null;if($LASTEXITCODE -ne 0){bcdedit /delete $g /f | Out-Null;exit 4};"
+        L"shutdown.exe /r /t 0;exit 0"
+        L"}catch{exit 5}";
+    script.replace(script.find(L"SAFEMODE"), 8, net ? L"network" : L"minimal");
+    std::wstring args = L"-NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand " + Base64Utf16(script);
+    wchar_t ps[MAX_PATH];
+    GetSystemDirectoryW(ps, MAX_PATH);
+    wcscat_s(ps, L"\\WindowsPowerShell\\v1.0\\powershell.exe");
+    SHELLEXECUTEINFOW ei = {sizeof(ei)};
+    ei.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
+    ei.lpVerb = L"runas";
+    ei.lpFile = ps;
+    ei.lpParameters = args.c_str();
+    ei.nShow = SW_HIDE;
+    if (!ShellExecuteExW(&ei) || !ei.hProcess) {
+        NimbusLog("modo de seguranca: permissao de administrador negada");
+        return 0;
+    }
+    WaitForSingleObject(ei.hProcess, 60000);
+    DWORD code = 1;
+    GetExitCodeProcess(ei.hProcess, &code);
+    CloseHandle(ei.hProcess);
+    if (code != 0) {
+        char line[96];
+        sprintf_s(line, "modo de seguranca: bcdedit falhou (codigo %lu)", code);
+        NimbusLog(line);
+        MessageBoxW(nullptr,
+                    L2(L"Não deu pra preparar o modo de segurança. Use \"Reiniciar nas opções avançadas\": Solução de problemas › Opções avançadas › Configurações de inicialização › Reiniciar › 4.",
+                       L"Couldn't set up safe mode. Use \"Restart to advanced options\": Troubleshoot › Advanced options › Startup Settings › Restart › 4."),
+                    L"Nimbus Menu", MB_OK | MB_ICONWARNING | MB_TOPMOST | MB_SETFOREGROUND);
+    }
+    return 0;
 }
 
 static void Power(int which) {
@@ -6224,6 +7981,10 @@ static void Power(int which) {
         case 8:
             ShellExecuteW(nullptr, L"open", L"shutdown.exe", L"/r /o /t 0", nullptr, SW_HIDE);
             break;
+        case 9:  // (on its own thread: it asks first, then waits for the UAC prompt)
+        case 10:
+            if (HANDLE t = CreateThread(nullptr, 0, SafeModeThread, which == 10 ? (LPVOID)1 : nullptr, 0, nullptr)) CloseHandle(t);
+            break;
     }
 }
 
@@ -6246,6 +8007,8 @@ static void PowerMenu(POINT pt) {
     if (CanHibernate()) AppendMenuW(m, MF_STRING, 1 + 7, L2(L"Hibernar", L"Hibernate"));
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(m, MF_STRING, 1 + 2, Tr(S_Restart));
+    AppendMenuW(m, MF_STRING, 1 + 9, L2(L"Reiniciar no modo de segurança", L"Restart in safe mode"));
+    AppendMenuW(m, MF_STRING, 1 + 10, L2(L"Reiniciar no modo de segurança com internet", L"Restart in safe mode with networking"));
     AppendMenuW(m, MF_STRING, 1 + 8, L2(L"Reiniciar nas opções avançadas", L"Restart to advanced options"));
     AppendMenuW(m, MF_STRING, 1 + 3, Tr(S_ShutDown));
     g_start.menuOpen = true;
@@ -6606,7 +8369,13 @@ static void RenderStartFrame() {
         for (size_t i = 0; i < list.size(); i++) {
             float x = pad + (i % cols) * (colW + gap);
             float y = gridTop + (i / cols) * (rowH + gap) - s.scroll;
-            if (y + rowH < gridTop || y > listBottom) continue;
+            if (y + rowH < gridTop || y > listBottom) {
+                // (out of view: a row only the keyboard sees, so the arrows can go on and scroll to it)
+                StartRow row{D2D1::RectF(x, y, x + colW, y + rowH), list[i].file ? RowFile : RowApp, &list[i], 0};
+                row.hidden = true;
+                s.rows.push_back(std::move(row));
+                continue;
+            }
             drawRow(list[i], D2D1::RectF(x, y, x + colW, y + rowH), s.tab == 0 && s.pinDrag.active && (int)i == s.pinDrag.cur,
                     s.tab == 2);
         }
@@ -6634,6 +8403,23 @@ static void RenderStartFrame() {
             rt->DrawTextW(t, (UINT32)wcslen(t), s.small.Get(), D2D1::RectF(pad + SS(4), y, listRight, y + SS(22)), sub.Get());
             y += SS(24);
         };
+        for (size_t i = 0; i < s.quick.size(); i++) {
+            if (y + SS(50) > listBottom) break;
+            auto& q = s.quick[i];
+            D2D1_RECT_F r = D2D1::RectF(pad, y, listRight, y + SS(48));
+            int idx = (int)s.rows.size();
+            s.rows.push_back({r, RowAction, nullptr, 100 + (int)i});
+            rt->FillRoundedRectangle(D2D1::RoundedRect(r, SS(14), SS(14)), (s.hover == idx || k == s.sel) ? cardHi.Get() : card.Get());
+            wchar_t g[2] = {q.glyph, 0};
+            rt->DrawTextW(g, 1, s.glyphs.Get(), D2D1::RectF(r.left + SS(16), r.top, r.left + SS(40), r.bottom), sub.Get());
+            rt->DrawTextW(q.title.c_str(), (UINT32)q.title.size(), s.font.Get(), D2D1::RectF(r.left + SS(52), r.top + SS(5), r.right - SS(12), r.top + SS(28)),
+                          text.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
+            rt->DrawTextW(q.sub.c_str(), (UINT32)q.sub.size(), s.small.Get(), D2D1::RectF(r.left + SS(52), r.top + SS(27), r.right - SS(12), r.bottom - SS(3)),
+                          sub.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
+            y += SS(52);
+            k++;
+        }
+        if (!s.quick.empty()) y += SS(4);
         if (s.appHits.empty()) {
             sectionTitle(Tr(S_Apps));
             rt->DrawTextW(Tr(S_NoApps), (UINT32)wcslen(Tr(S_NoApps)), s.small.Get(), D2D1::RectF(pad + SS(4), y, listRight, y + SS(24)), sub.Get());
@@ -6649,6 +8435,17 @@ static void RenderStartFrame() {
             drawRow(*s.appHits[i], D2D1::RectF(pad, y, listRight, y + SS(46)), k == s.sel, false, k);
             y += SS(50);
             k++;
+        }
+        // Windows' settings and classic tools (before the files: Everything can fill the list).
+        if (!s.setHits.empty() && y + SS(80) < listBottom) {
+            y += SS(6);
+            sectionTitle(Tr(S_Settings));
+            for (auto* st : s.setHits) {
+                if (y + SS(48) > listBottom) break;
+                drawRow(*st, D2D1::RectF(pad, y, listRight, y + SS(46)), k == s.sel, false, k);
+                y += SS(50);
+                k++;
+            }
         }
         y += SS(6);
         if (y + SS(30) < listBottom && g_set.fileSearch != L"off") {
@@ -6691,17 +8488,6 @@ static void RenderStartFrame() {
                 if (y + SS(50) > listBottom) break;
                 drawRow(f, D2D1::RectF(pad, y, listRight, y + SS(48)), k == s.sel, true, k);
                 y += SS(52);
-                k++;
-            }
-        }
-        // Wide search: Windows Settings pages.
-        if (wideNow && !s.setHits.empty() && y + SS(80) < listBottom) {
-            y += SS(6);
-            sectionTitle(Tr(S_Settings));
-            for (auto* st : s.setHits) {
-                if (y + SS(48) > listBottom) break;
-                drawRow(*st, D2D1::RectF(pad, y, listRight, y + SS(46)), k == s.sel, false, k);
-                y += SS(50);
                 k++;
             }
         }
@@ -6811,6 +8597,7 @@ static bool StartLostFront(HWND fg, bool changed) {
     if (!g_start.open || g_start.menuOpen || GetTickCount() - g_start.openedAt < 200 || GetTickCount() - g_lastWinAlone < 400) return false;
     // (polling: the window that was already in front isn't a change; told by Windows: it is)
     if (!fg || fg == g_start.hwnd || (!changed && fg == g_startFg)) return false;
+    if (TrayTouchedJustNow()) return false;  // (a tray icon's app answering its click: its menu or window)
     wchar_t fcls[64] = {};
     GetClassNameW(GetAncestor(fg, GA_ROOT), fcls, ARRAYSIZE(fcls));
     return wcsncmp(fcls, L"NimbusMenu_", 11) != 0 && wcscmp(fcls, L"#32768") != 0 && wcscmp(fcls, L"Windows.UI.Core.CoreWindow") != 0;
@@ -6931,10 +8718,19 @@ void ToggleStart(Dock& d) {
     }
     if (!g_allAppsLoaded) LoadAllApps();
 
-    int dockTop = d.rcMon.bottom - d.ch + (int)d.pill.top;
-    int x = d.rcMon.left + (d.cw - s.w) / 2;
-    int y = dockTop - s.h - (int)SS(12);
-    y = std::max(y, (int)d.rcMon.top + 8);
+    int x, y;
+    if (d.cfg.edge == 0) {
+        int dockTop = d.rcMon.bottom - d.ch + (int)d.pill.top;
+        x = d.rcMon.left + (d.cw - s.w) / 2;
+        y = dockTop - s.h - (int)SS(12);
+        y = std::max(y, (int)d.rcMon.top + 8);
+    } else {  // (beside the dock at another edge, by its Start button if it has one)
+        float ax = d.cw / 2.0f;
+        for (auto& el : d.elems)
+            if (el.app >= 0 && el.app < (int)g_apps.size() && g_apps[el.app].start) ax = el.x + el.w / 2;
+        POINT at = DockPanelAt(d, ax, s.w, s.h, (int)SS(12));
+        x = at.x, y = at.y;
+    }
     s.rc = {x, y, x + s.w, y + s.h};
     s.query.clear();
     s.tab = 0;
@@ -7173,10 +8969,10 @@ static void CopyTextSel(HWND hwnd) {
 }
 
 static StartItem* SelectedResult() {
-    int k = 0;
+    int k = (int)g_start.quick.size();
     for (auto* a : g_start.appHits) if (k++ == g_start.sel) return a;
-    for (auto& f : g_start.files) if (k++ == g_start.sel) return &f;
     for (auto* st : g_start.setHits) if (k++ == g_start.sel) return st;
+    for (auto& f : g_start.files) if (k++ == g_start.sel) return &f;
     return nullptr;
 }
 
@@ -7240,16 +9036,29 @@ static void StartItemMenu(StartItem& it, POINT pt) {
     if (it.file) return;
     bool pinned = std::any_of(g_startPins.begin(), g_startPins.end(), [&](const StartItem& p) { return EqI(p.launch, it.launch); });
     HMENU m = CreatePopupMenu();
-    AppendMenuW(m, MF_STRING, 1, pinned ? Tr(S_UnpinStart) : Tr(S_PinStart));
     std::wstring id = it.launch.rfind(L"shell:AppsFolder\\", 0) == 0 ? it.launch.substr(17) : L"";
+    auto jump = JumpList(!id.empty() ? id : AppIdOfLaunch(it.launch), 6);
+    JumpAddTo(m, jump);
+    AppendMenuW(m, MF_STRING, 1, pinned ? Tr(S_UnpinStart) : Tr(S_PinStart));
     bool uwp = !id.empty() && id.find(L'\\') == std::wstring::npos;
     if (uwp) AppendMenuW(m, MF_STRING, 2, Tr(S_PinDock));
     std::wstring location = AppFileLocation(it.launch);
+    if (!id.empty() && _wcsicmp(PathFindExtensionW(location.c_str()), L".exe")) {  // (an installer's shortcut points to its icon)
+        std::wstring real = AumidProgram(id);
+        if (!real.empty()) location = real;
+    }
     if (!location.empty()) AppendMenuW(m, MF_STRING, 3, Tr(S_OpenLocation));
+    std::wstring admin = AdminTarget(it.launch, location);
+    if (!admin.empty()) AppendMenuW(m, MF_STRING, 4, L2(L"Executar como administrador", L"Run as administrator"));
     g_start.menuOpen = true;
     int cmd = TrackPopupMenuEx(m, TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, g_start.hwnd, nullptr);
     g_start.menuOpen = false;
     DestroyMenu(m);
+    if (cmd >= 1000 && cmd - 1000 < (int)jump.size()) {
+        CloseStart(true);
+        JumpOpen(jump[cmd - 1000].item.Get());
+        return;
+    }
     if (cmd == 1) {
         if (pinned) {
             g_startPins.erase(std::remove_if(g_startPins.begin(), g_startPins.end(),
@@ -7271,6 +9080,11 @@ static void StartItemMenu(StartItem& it, POINT pt) {
         std::wstring args = L"/select,\"" + location + L"\"";
         CloseStart(true);
         ShellExecuteW(nullptr, L"open", L"explorer.exe", args.c_str(), nullptr, SW_SHOWNORMAL);
+        return;
+    } else if (cmd == 4) {
+        NoteUsage(it.launch);
+        CloseStart(true);
+        LaunchAdmin(admin);
         return;
     }
     SetForegroundWindow(g_start.hwnd);
@@ -7342,7 +9156,7 @@ LRESULT CALLBACK StartProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             if (toRoot && toPid == GetCurrentProcessId()) GetClassNameW(toRoot, toCls, ARRAYSIZE(toCls));
             bool toOurPanel = !wcscmp(toCls, L"NimbusMenu_Flyout") || !wcscmp(toCls, L"NimbusMenu_NoteEdit");
             if (LOWORD(wp) == WA_INACTIVE && s.open && !s.menuOpen && !toOurPanel && GetTickCount() - s.openedAt > 150 &&
-                GetTickCount() - g_lastWinAlone > 1500 && !TrayClickJustNow()) {
+                GetTickCount() - g_lastWinAlone > 1500 && !TrayClickJustNow() && !TrayTouchedJustNow()) {
                 // Windows' search box takes the focus as soon as the Windows key goes down: that press
                 // is closing the Start, and the Explorer part must not open it again right after.
                 HWND other = GetForegroundWindow();
@@ -7581,8 +9395,7 @@ LRESULT CALLBACK StartProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 CloseFlyout();
                 RenderStart();
             } else if (row.kind == RowTray) {
-                TrayClick(row.power, 0);
-                SetTimer(hwnd, TIMER_START_TRAY, GetDoubleClickTime() + 120, nullptr);  // then the Start closes
+                TrayClick(row.power, 0);  // (the Start stays: it closes on a click outside it)
             } else if (row.kind == RowTabStatus) {
                 s.tab = 3;
                 s.scroll = 0;
@@ -7640,7 +9453,7 @@ LRESULT CALLBACK StartProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 return 0;
             }
             if (r >= 0 && s.rows[r].kind == RowTray) {
-                // (The app's menu takes the focus, and the Start closes.)
+                // (The app's menu takes the focus; the Start stays until a click outside.)
                 TrayClick(s.rows[r].power, 1);
                 return 0;
             }
@@ -7690,7 +9503,9 @@ LRESULT CALLBACK StartProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                         StartActivateFocus(hwnd);
                         return 0;
                     }
-                    if (StartItem* it = SelectedResult()) {
+                    if (s.sel >= 0 && s.sel < (int)s.quick.size()) {
+                        RunStartAction(100 + s.sel);
+                    } else if (StartItem* it = SelectedResult()) {
                         StartItem copy = *it;
                         CloseStart(true);
                         LaunchItem(copy);
@@ -7707,7 +9522,7 @@ LRESULT CALLBACK StartProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                         RenderStart();
                         return 0;
                     }
-                    int total = (int)(s.appHits.size() + s.files.size() + s.setHits.size());
+                    int total = (int)(s.quick.size() + s.appHits.size() + s.files.size() + s.setHits.size());
                     if (total) {
                         s.sel = (s.sel + (wp == VK_DOWN ? 1 : total - 1)) % total;
                         RenderStart();
@@ -8161,6 +9976,99 @@ static float PanelClock(float y) {
 
 static std::wstring PctText(float v) { return std::to_wstring((int)std::lround(v * 100)) + L"%"; }
 
+// The level bars of the sound panel: where sound is coming out right now. Only read while the panel is open
+// (by its 40 ms timer), and it only redraws when a bar moved. Keys: "d" default output, "o<id>", "a<pid>".
+static std::unordered_map<std::wstring, float> g_sndLevels;
+static ComPtr<NimbusMeter> g_sndDefMeter;
+static DWORD g_sndDefAt = 0;
+
+static bool SndWide();
+// A session that's playing and can be heard.
+static bool SndAudible(const ComPtr<ISimpleAudioVolume>& v) {
+    BOOL muted = FALSE;
+    float level = 0;
+    ComPtr<IAudioSessionControl> c;
+    AudioSessionState st;
+    return v && SUCCEEDED(v->GetMute(&muted)) && !muted && SUCCEEDED(v->GetMasterVolume(&level)) && level > 0 && SUCCEEDED(v.As(&c)) &&
+           SUCCEEDED(c->GetState(&st)) && st == AudioSessionStateActive;
+}
+static bool SndLevelsTick() {
+    bool moved = false;
+    auto put = [&](const std::wstring& key, float peak) {
+        float want = peak > 0.002f ? std::min(1.0f, std::sqrt(peak) * 1.1f) : 0;
+        float& v = g_sndLevels[key];
+        float was = v;
+        v += (want - v) * (want > v ? 0.7f : 0.22f);  // (up fast, down slow)
+        if (v < 0.01f) v = 0;
+        if (std::fabs(v - was) > 0.004f) moved = true;
+    };
+    SndMeterBegin();
+    DWORD self = GetCurrentProcessId();
+    std::vector<DWORD> want;
+    auto ask = [&](DWORD pid, const std::vector<ComPtr<ISimpleAudioVolume>>& vols) {
+        if (pid && pid != self && std::any_of(vols.begin(), vols.end(), SndAudible) && std::find(want.begin(), want.end(), pid) == want.end())
+            want.push_back(pid);
+    };
+    bool wide = SndWide();
+    if (wide)
+        for (auto& a : g_snd.apps) ask(a.v.pid, a.v.vols);
+    else
+        for (auto& a : g_appVols) ask(a.pid, a.vols);
+    std::unordered_map<DWORD, float> peaks;
+    AcquireSRWLockExclusive(&g_sndMeter.lock);
+    g_sndMeter.want = want;
+    peaks = g_sndMeter.peaks;
+    ReleaseSRWLockExclusive(&g_sndMeter.lock);
+    auto peakOf = [&](DWORD pid) {
+        if (std::find(want.begin(), want.end(), pid) == want.end()) return 0.0f;
+        auto it = peaks.find(pid);
+        return it == peaks.end() ? 0.0f : it->second;
+    };
+    if (wide) {
+        for (auto& o : g_snd.outs) {
+            float peak = 0;
+            if (o.meter && !o.muted) o.meter->GetPeakValue(&peak);
+            put(L"o" + o.id, peak);
+        }
+        for (auto& a : g_snd.apps) {
+            float peak = peakOf(a.v.pid);
+            put(L"a" + std::to_wstring(a.v.pid), peak);
+            // On each output: only where it really plays.
+            for (int oi : a.outs) {
+                bool on = false;
+                if (oi >= 0 && oi < (int)g_snd.outs.size() && SndCopyAt(a.v.pid, g_snd.outs[oi].id) >= 0) on = SndAppVolOn(a, oi) > 0;
+                for (auto& x : a.sess)
+                    if (x.first == oi && SndAudible(x.second)) on = true;
+                put(L"c" + std::to_wstring(a.v.pid) + L"|" + std::to_wstring(oi), on ? peak : 0);
+            }
+        }
+        return moved;
+    }
+    if (!g_sndDefMeter || GetTickCount() - g_sndDefAt > 3000) {  // (the default output may have changed)
+        g_sndDefMeter.Reset();
+        g_sndDefAt = GetTickCount();
+        ComPtr<IMMDevice> dev;
+        if (g_stat.mmde && SUCCEEDED(g_stat.mmde->GetDefaultAudioEndpoint(eRender, eMultimedia, &dev)))
+            dev->Activate(__uuidof(NimbusMeter), CLSCTX_ALL, nullptr, (void**)g_sndDefMeter.GetAddressOf());
+    }
+    float peak = 0;
+    if (g_sndDefMeter && !g_stat.muted) g_sndDefMeter->GetPeakValue(&peak);
+    put(L"d", peak);
+    for (auto& a : g_appVols) put(L"a" + std::to_wstring(a.pid), peakOf(a.pid));
+    return moved;
+}
+// Right under a volume slider; nothing while it's silent. (Drawn before the slider: the knob stays on top.)
+static void SndLevelBarV(float x, float top, float w, float level) {
+    if (!FDraw() || level <= 0) return;
+    float y = top + 16 + 6;
+    FFill(D2D1::RectF(x, y, x + std::max(3.0f, w * std::min(level, 1.0f)), y + 2.5f), 1.25f, FCol(D2D1::ColorF(0x34C759), 0.95f));
+}
+static float SndLevelOf(const std::wstring& key) {
+    auto it = g_sndLevels.find(key);
+    return it == g_sndLevels.end() ? 0 : it->second;
+}
+static void SndLevelBar(float x, float top, float w, const std::wstring& key) { SndLevelBarV(x, top, w, SndLevelOf(key)); }
+
 // The complete sound panel (wherever the sound panel opens, the control center too).
 // The room across the monitor (DIPs): a narrow screen gets a narrower panel, and under 520 the simple one.
 static float SndRoomW() {
@@ -8168,14 +10076,44 @@ static float SndRoomW() {
     return (g_fly.dock->rcMon.right - g_fly.dock->rcMon.left) / g_fly.scale - 16;
 }
 static bool SndWide() { return g_fly.kind == StVolume && SoundFull() && SndRoomW() >= 520; }  // (inside the control center too)
+// Extreme: a grid of apps by outputs (needs the room; on a narrower monitor it's the complete panel).
+static bool SndExtremeNow() { return SndWide() && CfgStr(L"soundPanel", L"simples") == L"extremo" && SndRoomW() >= 720; }
+// Outputs with something on them (or the default) get a full column; the others stay a slim one.
+static bool SndOutShown(int oi) {
+    if (oi < 0 || oi >= (int)g_snd.outs.size()) return false;
+    if (g_snd.outs[oi].def) return true;
+    return std::any_of(g_snd.apps.begin(), g_snd.apps.end(), [&](const SndApp& a) { return SndHas(a.outs, oi); });
+}
+static bool SndOutCol(int oi) { return SndOutShown(oi) || g_snd.sxAll; }
+static constexpr float kSxName = 200, kSxCol = 220, kSxGap = 8, kSxPlus = 44;
+static float SndExtremeW() {
+    if (g_snd.big) return std::max(720.0f, std::floor(SndRoomW() * 0.92f));
+    float w = kFlyPad * 2 + kSxName + kSxGap + kSxPlus;
+    for (int oi = 0; oi < (int)g_snd.outs.size(); oi++)
+        if (SndOutCol(oi)) w += kSxCol + kSxGap;
+    return std::clamp(w, 720.0f, std::min(1240.0f, SndRoomW()));
+}
+// The sessions of one program (Discord runs two) share a row in Extreme: what's set there goes to each.
+static std::vector<std::vector<int>> SndGroups() {
+    std::vector<std::vector<int>> g;
+    for (int ai = 0; ai < (int)g_snd.apps.size(); ai++) {
+        const std::wstring& path = g_snd.apps[ai].v.path;
+        auto it = std::find_if(g.begin(), g.end(), [&](const std::vector<int>& x) { return !path.empty() && !_wcsicmp(g_snd.apps[x[0]].v.path.c_str(), path.c_str()); });
+        if (it != g.end()) it->push_back(ai);
+        else g.push_back({ai});
+    }
+    return g;
+}
 static void SndAfter();
 static void OpenFlyout(Dock& d, int kind, bool fromStart);
 
 // A hit inside a scrolled column: only the part that shows.
 static void SndHit(FlyHit h, const D2D1_RECT_F& view) {
-    if (h.r.bottom <= view.top || h.r.top >= view.bottom) return;
+    if (h.r.bottom <= view.top || h.r.top >= view.bottom || h.r.right <= view.left || h.r.left >= view.right) return;
     h.r.top = std::max(h.r.top, view.top);
     h.r.bottom = std::min(h.r.bottom, view.bottom);
+    h.r.left = std::max(h.r.left, view.left);
+    h.r.right = std::min(h.r.right, view.right);
     g_fly.hits.push_back(std::move(h));
 }
 static void SndSlider(float x, float top, float w, float v, const D2D1_RECT_F& view, std::function<void(float)> set) {
@@ -8230,13 +10168,18 @@ static float PanelSoundFull(float y) {
     float lx0 = kFlyPad, lx1 = kFlyPad + std::min(214.0f, (kFlyW - kFlyPad * 2 - 16) * 0.4f), rx0 = lx1 + 16, rx1 = kFlyW - kFlyPad;
     const float itemH = 68, gap = 6, pillH = 30;
     // The pills of one output, laid out in rows (also to know the card's height).
-    auto pillW = [&](const SndApp& a) { return 4 + 22 + 6 + std::min(130.0f, TextSize(a.v.name, f.fSmall.Get()).width) + 4 + 22 + 4; };
+    // (a pill shows the app's volume on that output when it isn't 100%)
+    auto pillLabel = [&](const SndApp& a, int oi) {
+        float v = oi >= 0 ? SndAppVolOn(a, oi) : 1;
+        return v < 0.995f ? a.v.name + L" · " + PctText(v) : a.v.name;
+    };
+    auto pillW = [&](const SndApp& a, int oi) { return 4 + 22 + 6 + std::min(150.0f, TextSize(pillLabel(a, oi), f.fSmall.Get()).width) + 4 + 22 + 4; };
     auto pillRows = [&](int oi) {
         float x = 0, w = rx1 - rx0 - 24;
         int rows = 0;
         for (auto& a : S.apps) {
             if (std::find(a.outs.begin(), a.outs.end(), oi) == a.outs.end()) continue;
-            float pw = pillW(a);
+            float pw = pillW(a, oi);
             if (!rows || x + pw > w) {
                 rows++;
                 x = 0;
@@ -8297,6 +10240,7 @@ static float PanelSoundFull(float y) {
         }
         FText(a.v.name, f.fSmall.Get(), lx0 + 40, ly + 7, lx1 - lx0 - 48, 20, FInk());
         FText(outNames(a), f.fSmall.Get(), lx0 + 40, ly + 25, lx1 - lx0 - 48, 16, FSub());
+        SndLevelBar(lx0 + 40, ly + 36, lx1 - lx0 - 52, L"a" + std::to_wstring(a.v.pid));
         SndSlider(lx0 + 40, ly + 36, lx1 - lx0 - 52, a.v.level, S.colL, [ai](float v) {
             if (ai < g_snd.apps.size()) SetAppVolume(g_snd.apps[ai].v, v);
         });
@@ -8366,6 +10310,7 @@ static float PanelSoundFull(float y) {
         }
         cy += 30;
         cy += 40;
+        SndLevelBar(rx0 + 14, cy, rx1 - rx0 - 14 - 54, L"o" + o.id);
         SndSlider(rx0 + 14, cy, rx1 - rx0 - 14 - 54, o.muted ? 0 : o.vol, S.colR, [oi](float v) {
             if (oi >= g_snd.outs.size() || !g_snd.outs[oi].ev) return;
             g_snd.outs[oi].ev->SetMasterVolumeLevelScalar(v, nullptr);
@@ -8381,7 +10326,7 @@ static float PanelSoundFull(float y) {
         for (size_t ai = 0; ai < S.apps.size(); ai++) {
             SndApp& a = S.apps[ai];
             if (std::find(a.outs.begin(), a.outs.end(), (int)oi) == a.outs.end()) continue;
-            float w = pillW(a);
+            float w = pillW(a, (int)oi);
             if (any && x + w > pw) {
                 x = 0;
                 cy += pillH + 6;
@@ -8395,6 +10340,11 @@ static float PanelSoundFull(float y) {
             ph.sndApp = (int)ai;
             ph.sndFrom = (int)oi;
             ph.sndOut = (int)oi;
+            ph.click = [ai, oi] {  // (a click without dragging: its volume on this output)
+                bool same = g_snd.popApp == (int)ai && g_snd.popOut == (int)oi;
+                g_snd.popApp = same ? -1 : (int)ai;
+                g_snd.popOut = same ? -1 : (int)oi;
+            };
             SndHit(std::move(ph), S.colR);
             if (ID2D1Bitmap* bmp = FBitmap(a.v.path, a.v.icon.Get()); bmp && FDraw()) {
                 D2D1_RECT_F ir = D2D1::RectF(pr.left + 6, cy + 6, pr.left + 24, cy + 24);
@@ -8403,7 +10353,10 @@ static float PanelSoundFull(float y) {
             } else {
                 FIcon(L"M4 5h16v14H4z M4 9h16", pr.left + 15, cy + 15, 15, FSub());
             }
-            FText(a.v.name, f.fSmall.Get(), pr.left + 32, cy, w - 32 - 28, pillH, FInk());
+            FText(pillLabel(a, (int)oi), f.fSmall.Get(), pr.left + 32, cy, w - 32 - 28, pillH, FInk());
+            if (S.popApp == (int)ai && S.popOut == (int)oi && FDraw())
+                f.rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(pr.left + .75f, pr.top + .75f, pr.right - .75f, pr.bottom - .75f), pillH / 2, pillH / 2),
+                                           FBr(FInk()), 1.5f);
             // × : off this output (not when it's the only one)
             bool canX = a.outs.size() > 1;
             D2D1_RECT_F xr = D2D1::RectF(pr.right - 26, cy + 4, pr.right - 4, cy + 26);
@@ -8422,6 +10375,36 @@ static float PanelSoundFull(float y) {
             x += w + 6;
         }
         if (!any) FText(L2(L"Arraste um app pra cá", L"Drag an app here"), f.fSmall.Get(), px, cy, pw, 20, FCol(g_theme.text, 0.45f));
+        // The open app's volume on this output: over the bottom of the card, so nothing grows.
+        if (S.popOut == (int)oi && S.popApp >= 0 && S.popApp < (int)S.apps.size() && SndHas(S.apps[S.popApp].outs, (int)oi)) {
+            SndApp& a = S.apps[S.popApp];
+            D2D1_RECT_F pr = D2D1::RectF(rx0 + 8, ry + ch - 50, rx1 - 8, ry + ch - 8);
+            S.popRc = pr;
+            FFill(pr, 11, FSolidTint());
+            if (FDraw())
+                f.rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(pr.left + .5f, pr.top + .5f, pr.right - .5f, pr.bottom - .5f), 10.5f, 10.5f),
+                                           FBr(FCol(g_theme.text, 0.2f)), 1);
+            FlyHit bg;  // (clicks on it stay on it)
+            bg.r = pr;
+            bg.click = [] {};
+            SndHit(std::move(bg), S.colR);
+            std::wstring lab = a.v.name + L2(L" só aqui", L" here only");
+            float lw = std::min(150.0f, TextSize(lab, f.fSmall.Get()).width + 4);
+            FText(lab, f.fSmall.Get(), pr.left + 12, pr.top, lw, pr.bottom - pr.top, FInk());
+            float sx = pr.left + 12 + lw + 10, sw = pr.right - 30 - 44 - sx;
+            int pa = S.popApp, po = (int)oi;
+            SndSlider(sx, pr.top + 5, std::max(40.0f, sw), SndAppVolOn(a, po), S.colR, [pa, po](float v) {
+                if (pa < (int)g_snd.apps.size()) SndAppVolSet(g_snd.apps[pa], po, v);
+            });
+            FText(PctText(SndAppVolOn(a, po)), f.fSmall.Get(), pr.right - 30 - 44, pr.top, 40, pr.bottom - pr.top, FSub(), DWRITE_TEXT_ALIGNMENT_TRAILING);
+            D2D1_RECT_F xr = D2D1::RectF(pr.right - 30, pr.top + 10, pr.right - 8, pr.top + 32);
+            if (FHot(xr)) FFill(xr, 11, FCol(g_theme.text, 0.14f));
+            FIcon(L"M7 7l10 10M17 7L7 17", (xr.left + xr.right) / 2, (xr.top + xr.bottom) / 2, 11, FSub(), 2.2f);
+            FlyHit xh;
+            xh.r = xr;
+            xh.click = [] { g_snd.popApp = g_snd.popOut = -1; };
+            SndHit(std::move(xh), S.colR);
+        }
         ry += ch + 8;
     }
     if (FDraw()) f.rt->PopAxisAlignedClip();
@@ -8430,7 +10413,7 @@ static float PanelSoundFull(float y) {
     // The app being dragged, under the mouse.
     if (S.dragging && S.dragApp >= 0 && S.dragApp < (int)S.apps.size() && FDraw() && f.mouse.x >= 0) {
         SndApp& a = S.apps[S.dragApp];
-        float w = pillW(a) - 26;
+        float w = pillW(a, S.dragFrom) - 26;
         D2D1_RECT_F pr = D2D1::RectF(f.mouse.x - 14, f.mouse.y - 15, f.mouse.x - 14 + w, f.mouse.y + 15);
         FFill(pr, 15, FCol(g_theme.text, 0.22f));
         if (ID2D1Bitmap* bmp = FBitmap(a.v.path, a.v.icon.Get())) {
@@ -8443,7 +10426,366 @@ static float PanelSoundFull(float y) {
     return top + colH + 4;
 }
 
+// Extreme: each program in a row, the outputs in use in columns; every crossing has its volume on that output
+// and a bar with its sound there. An empty crossing puts it there; "+" at the end of a row lists every output
+// it isn't on; "+N" on top shows the outputs with nothing on them as columns too.
+static float PanelSoundExtreme(float y) {
+    auto& f = g_fly;
+    auto& S = g_snd;
+    const int cols = (int)S.outs.size();
+    const float x0 = kFlyPad, x1 = kFlyW - kFlyPad, headH = 100, rowH = 54, rowGap = 4;
+    const wchar_t* kPlus = L"M12 6v12M6 12h12";
+    const wchar_t* kX = L"M7 7l10 10M17 7L7 17";
+    auto groups = SndGroups();
+    std::vector<int> shown;
+    int hidden = 0, inUse = 0;
+    for (int oi = 0; oi < cols; oi++) {
+        if (SndOutCol(oi)) shown.push_back(oi);
+        if (!SndOutShown(oi)) hidden++;
+        if (std::any_of(S.apps.begin(), S.apps.end(), [&](const SndApp& a) { return SndHas(a.outs, oi); })) inUse++;
+    }
+    float plusX = x1 - kSxPlus;
+    // The columns share the room between the names and "+"; under 170 each, they keep 170 and scroll sideways.
+    const float viewL = x0 + kSxName + kSxGap;
+    float viewR = plusX - kSxGap;
+    const float n = (float)shown.size();
+    float colW = n > 0 ? std::max(170.0f, (viewR - viewL - kSxGap * (n - 1)) / n) : 0;
+    if (S.big) colW = std::min(colW, 320.0f);  // (the big mixer: wide columns are hard to read; "+" comes after them)
+    float total = n > 0 ? n * colW + (n - 1) * kSxGap : 0;
+    if (S.big && total < viewR - viewL) {
+        viewR = viewL + total;
+        plusX = viewR + kSxGap;
+    }
+    S.maxX = std::max(0.0f, total - (viewR - viewL));
+    S.scrollX = std::clamp(S.scrollX, 0.0f, S.maxX);
+    std::vector<float> colX(cols, 0);
+    {
+        float x = viewL - S.scrollX;
+        for (int oi : shown) {
+            colX[oi] = x;
+            x += colW + kSxGap;
+        }
+    }
+    auto onIn = [&](const std::vector<int>& g, int oi) {
+        std::vector<int> v;
+        for (int m : g)
+            if (SndHas(S.apps[m].outs, oi)) v.push_back(m);
+        return v;
+    };
+
+    float headY = y + 34 + (S.note.empty() ? 0 : 54);
+    D2D1_RECT_F moreR = D2D1::RectF(plusX, headY, x1, headY + headH);
+    std::wstring hint = std::to_wstring(groups.size()) + (groups.size() == 1 ? L2(L" app tocando", L" app playing") : L2(L" apps tocando", L" apps playing")) +
+                        L" · " + std::to_wstring(inUse) + (inUse == 1 ? L2(L" saída em uso", L" output in use") : L2(L" saídas em uso", L" outputs in use"));
+    if (hidden && FIn(moreR))
+        hint = S.sxAll ? std::wstring(L2(L"esconder as saídas sem som", L"hide the outputs with no sound"))
+                       : L2(L"mostrar as outras saídas: ", L"show the other outputs: ") + std::to_wstring(hidden);
+    {
+        // Bigger / smaller: the mixer in the middle of the screen, or back to its place
+        float tw = TextSize(L2(L"Som", L"Sound"), f.fTitle.Get()).width;
+        D2D1_RECT_F br = D2D1::RectF(kFlyPad + tw + 8, y - 4, kFlyPad + tw + 36, y + 24);
+        if (FHot(br)) FFill(br, 8, FHov());
+        FIcon(S.big ? L"M10 4v6H4 M14 20v-6h6 M4 4l6 6 M20 20l-6-6" : L"M4 10V4h6 M20 14v6h-6 M4 4l6 6 M20 20l-6-6", (br.left + br.right) / 2,
+              (br.top + br.bottom) / 2, 13, FHot(br) ? FInk() : FSub(), 2);
+        FHitAdd(br, [] {
+            g_snd.big = !g_snd.big;
+            g_snd.scrollX = g_snd.scrollR = 0;
+            g_snd.sxMenu.clear();
+        });
+        if (FHot(br)) hint = S.big ? L2(L"voltar pro painel", L"back to the panel") : L2(L"abrir o mixer grande", L"open the big mixer");
+    }
+    FHeader(y, L2(L"Som", L"Sound"), hint);
+    if (!S.note.empty()) {
+        D2D1_RECT_F nr = D2D1::RectF(kFlyPad, y, kFlyW - kFlyPad, y + 46);
+        FFill(nr, 10, FCol(g_theme.text, 0.08f));
+        FText(S.note, f.fWrapS ? f.fWrapS.Get() : f.fSmall.Get(), nr.left + 12, nr.top + 4, nr.right - nr.left - 48, 38, FInk());
+        D2D1_RECT_F xr = D2D1::RectF(nr.right - 32, nr.top + 12, nr.right - 10, nr.top + 34);
+        if (FHot(xr)) FFill(xr, 11, FCol(g_theme.text, 0.14f));
+        FIcon(kX, (xr.left + xr.right) / 2, (xr.top + xr.bottom) / 2, 11, FSub(), 2.2f);
+        FHitAdd(xr, [] { g_snd.note.clear(); });
+        y += 54;
+    }
+
+    // The outputs, on top: name (two lines), default, volume and level.
+    D2D1_RECT_F headView = D2D1::RectF(viewL, y, viewR, y + headH);
+    S.headR = headView;
+    FText(L2(L"App · volume geral", L"App · overall volume"), f.fSmall.Get(), x0 + 4, y + headH - 24, kSxName - 8, 18, FSub());
+    if (FDraw()) f.rt->PushAxisAlignedClip(D2D1::RectF(viewL - 1, y - 1, viewR + 1, y + headH + 1), D2D1_ANTIALIAS_MODE_ALIASED);
+    for (int oi : shown) {
+        SndOut& o = S.outs[oi];
+        float cx = colX[oi], cw = colW;
+        D2D1_RECT_F r = D2D1::RectF(cx, y, cx + cw, y + headH);
+        FFill(r, 12, FCol(g_theme.hover, o.def ? 1.0f : 0.55f));
+        if (o.def && FDraw())
+            f.rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + .5f, r.top + .5f, r.right - .5f, r.bottom - .5f), 11.5f, 11.5f),
+                                       FBr(FCol(g_theme.text, 0.14f)), 1);
+        FIcon(SndKindIcon(o.kind), cx + 20, y + 19, 15, FInk());
+        D2D1_RECT_F nameR = D2D1::RectF(cx + 34, y + 9, cx + cw - 10, y + 43);
+        if (FDraw()) f.rt->PushAxisAlignedClip(nameR, D2D1_ANTIALIAS_MODE_ALIASED);
+        FText(o.name, f.fWrapS ? f.fWrapS.Get() : f.fSmall.Get(), nameR.left, nameR.top, nameR.right - nameR.left, 0, FInk());
+        if (FDraw()) f.rt->PopAxisAlignedClip();
+        const wchar_t* tag = o.def ? L2(L"Padrão", L"Default") : L2(L"Tornar padrão", L"Make default");
+        float by = y + 47, bw = TextSize(tag, f.fSmall.Get()).width + (o.def ? 34 : 22);
+        D2D1_RECT_F b = D2D1::RectF(cx + 12, by, cx + 12 + bw, by + 22);
+        if (o.def) {
+            FFill(b, 11, FInk());
+            FIcon(L"M5 12l5 5 9-10", b.left + 13, by + 11, 10, FSolidTint(), 2.4f);
+            FText(tag, f.fSmall.Get(), b.left + 22, by, bw - 26, 22, FSolidTint());
+        } else {
+            if (FHot(b)) FFill(b, 11, FHov());
+            if (FDraw())
+                f.rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(b.left + .5f, b.top + .5f, b.right - .5f, b.bottom - .5f), 10.5f, 10.5f),
+                                           FBr(FCol(g_theme.text, 0.22f)), 1);
+            FText(tag, f.fSmall.Get(), b.left, by, bw, 22, FCol(g_theme.text, 0.88f), DWRITE_TEXT_ALIGNMENT_CENTER);
+            FlyHit th;
+            th.r = b;
+            std::wstring id = o.id;
+            th.click = [id] {
+                SndSetDefault(id, false);
+                SndAfter();
+            };
+            SndHit(std::move(th), headView);
+        }
+        float sw = cw - 24 - 44;
+        SndLevelBar(cx + 12, y + 64, sw, L"o" + o.id);
+        SndSlider(cx + 12, y + 64, sw, o.muted ? 0 : o.vol, headView, [oi](float v) {
+            if (oi >= (int)g_snd.outs.size() || !g_snd.outs[oi].ev) return;
+            g_snd.outs[oi].ev->SetMasterVolumeLevelScalar(v, nullptr);
+            if (v > 0) g_snd.outs[oi].ev->SetMute(FALSE, nullptr);
+            g_snd.outs[oi].vol = v;
+            g_snd.outs[oi].muted = false;
+        });
+        FText(o.muted ? std::wstring(L2(L"Mudo", L"Muted")) : PctText(o.vol), f.fSmall.Get(), cx + cw - 52, y + 64, 40, 32, FSub(), DWRITE_TEXT_ALIGNMENT_TRAILING);
+    }
+    if (FDraw()) f.rt->PopAxisAlignedClip();
+    // The other outputs, as one button: shows them as columns (or hides them again).
+    if (hidden) {
+        D2D1_RECT_F r = D2D1::RectF(plusX, y, x1, y + headH);
+        FFill(r, 12, FCol(g_theme.hover, FHot(r) ? 0.9f : S.sxAll ? 0.55f : 0.0f));
+        if (FDraw())
+            f.rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + .5f, r.top + .5f, r.right - .5f, r.bottom - .5f), 11.5f, 11.5f),
+                                       FBr(FCol(g_theme.text, 0.14f)), 1);
+        FIcon(S.sxAll ? L"M15 6l-6 6 6 6" : L"M3 5h18v11H3z M8 20h8 M12 16v4", (r.left + r.right) / 2, y + headH / 2 - 9, 15, FSub());
+        FText(S.sxAll ? std::wstring(L"") : L"+" + std::to_wstring(hidden), f.fSmall.Get(), r.left, y + headH / 2 + 2, r.right - r.left, 20, FSub(), DWRITE_TEXT_ALIGNMENT_CENTER);
+        FHitAdd(r, [] {
+            g_snd.sxAll = !g_snd.sxAll;
+            g_snd.scrollX = 0;
+        });
+    }
+    y += headH + 10;
+
+    // The programs, by rows (they scroll under the outputs).
+    float top = y;
+    float contentH = groups.empty() ? 40 : groups.size() * (rowH + rowGap) - rowGap;
+    float roomH = std::max(140.0f, f.maxH - top - kFlyPad - (S.maxX > 0 ? 10 : 0) - 4);
+    float colH = S.big ? roomH : std::min(contentH, roomH);
+    S.maxL = 0;
+    S.scrollL = 0;
+    S.colL = D2D1::RectF(0, 0, 0, 0);
+    S.maxR = std::max(0.0f, contentH - colH);
+    S.scrollR = std::clamp(S.scrollR, 0.0f, S.maxR);
+    S.colR = D2D1::RectF(x0 - 4, top, x1 + 4, top + colH);
+    bool inView = f.mouse.y >= S.colR.top && f.mouse.y < S.colR.bottom;
+    const D2D1_RECT_F cellsView = D2D1::RectF(viewL, top, viewR, top + colH);  // (the crossings: both ways)
+    bool inCells = inView && f.mouse.x >= viewL && f.mouse.x < viewR;
+    if (FDraw()) f.rt->PushAxisAlignedClip(S.colR, D2D1_ANTIALIAS_MODE_ALIASED);
+    float ry = top - S.scrollR;
+    int menuRow = -1;
+    float menuY = 0;
+    if (groups.empty()) FText(L2(L"Nenhum app tocando agora.", L"No app is playing now."), f.fSmall.Get(), x0 + 4, ry, x1 - x0, 32, FSub());
+    for (size_t gi = 0; gi < groups.size(); gi++) {
+        const std::vector<int>& g = groups[gi];
+        SndApp& a = S.apps[g[0]];
+        D2D1_RECT_F rr = D2D1::RectF(x0, ry, x1, ry + rowH);
+        bool menuHere = !S.sxMenu.empty() && !_wcsicmp(S.sxMenu.c_str(), a.v.path.c_str());
+        bool rowHot = inView && FHot(rr);
+        if (menuHere) {
+            menuRow = (int)gi;
+            menuY = ry;
+        }
+        FFill(rr, 12, FCol(g_theme.hover, rowHot || menuHere ? 0.8f : 0.4f));
+        // name, how many it is, and its own volume (every session of it)
+        if (ID2D1Bitmap* bmp = FBitmap(a.v.path, a.v.icon.Get()); bmp && FDraw()) {
+            D2D1_RECT_F ir = D2D1::RectF(x0 + 10, ry + 15, x0 + 34, ry + 39);
+            if (f.dc) f.dc->DrawBitmap(bmp, ir, 1, D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC, nullptr, nullptr);
+            else f.rt->DrawBitmap(bmp, ir);
+        } else {
+            FIcon(L"M4 5h16v14H4z M4 9h16", x0 + 22, ry + 27, 18, FSub());
+        }
+        float nx = x0 + 44, nw = kSxName - 56;
+        std::wstring count = g.size() > 1 ? std::to_wstring(g.size()) : L"";
+        float cw0 = count.empty() ? 0 : TextSize(count, f.fSmall.Get()).width + 12;
+        float tw = std::min(nw - (cw0 ? cw0 + 6 : 0), TextSize(a.v.name, f.fSmall.Get()).width + 2);
+        FText(a.v.name, f.fSmall.Get(), nx, ry + 6, tw, 18, FInk());
+        if (cw0) {
+            D2D1_RECT_F br = D2D1::RectF(nx + tw + 6, ry + 8, nx + tw + 6 + cw0, ry + 23);
+            FFill(br, 7.5f, FCol(g_theme.text, 0.12f));
+            FText(count, f.fSmall.Get(), br.left, br.top, cw0, br.bottom - br.top, FSub(), DWRITE_TEXT_ALIGNMENT_CENTER);
+        }
+        float lvl = 0;
+        for (int m : g) lvl = std::max(lvl, SndLevelOf(L"a" + std::to_wstring(S.apps[m].v.pid)));
+        SndLevelBarV(nx, ry + 16, nw, lvl);
+        std::vector<int> all = g;
+        SndSlider(nx, ry + 16, nw, a.v.level, S.colR, [all](float v) {
+            for (int m : all)
+                if (m < (int)g_snd.apps.size()) SetAppVolume(g_snd.apps[m].v, v);
+        });
+        std::vector<int> outsOf;
+        for (int m : g)
+            for (int o : S.apps[m].outs)
+                if (!SndHas(outsOf, o)) outsOf.push_back(o);
+        // the crossings
+        if (FDraw()) f.rt->PushAxisAlignedClip(D2D1::RectF(viewL - 1, top, viewR + 1, top + colH), D2D1_ANTIALIAS_MODE_ALIASED);
+        for (int oi : shown) {
+            float cx = colX[oi], cw = colW;
+            D2D1_RECT_F r = D2D1::RectF(cx, ry + 5, cx + cw, ry + rowH - 5);
+            std::vector<int> on = onIn(g, oi);
+            if (on.empty()) {
+                // Not on this output: blank, and over it, "play here too" (or, dragging this row's app: "move it here").
+                bool target = S.dragging && SndHas(g, S.dragApp);
+                if (target && FDraw()) {
+                    bool over = inCells && FIn(r);
+                    if (over) FFill(r, 10, FCol(g_theme.hover, 0.9f));
+                    f.rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + .75f, r.top + .75f, r.right - .75f, r.bottom - .75f), 9.5f, 9.5f),
+                                               FBr(FCol(g_theme.text, over ? 0.85f : 0.3f)), over ? 1.5f : 1);
+                    if (over) FText(L2(L"Mover pra cá", L"Move it here"), f.fSmall.Get(), r.left, r.top, r.right - r.left, r.bottom - r.top, FInk(), DWRITE_TEXT_ALIGNMENT_CENTER);
+                } else if (inCells && FHot(r) && !S.dragging) {
+                    FFill(r, 10, FCol(g_theme.hover, 0.9f));
+                    std::wstring t = L2(L"Tocar aqui também", L"Play here too");
+                    float w = std::min(cw - 40, TextSize(t, f.fSmall.Get()).width + 2), lx = (r.left + r.right) / 2 - (w + 18) / 2;
+                    FIcon(kPlus, lx + 6, (r.top + r.bottom) / 2, 12, FSub(), 2);
+                    FText(t, f.fSmall.Get(), lx + 18, r.top, w, r.bottom - r.top, FSub());
+                }
+                FlyHit ah;
+                ah.r = r;
+                if (target) ah.sndOut = oi;
+                ah.click = [all, oi] {
+                    g_snd.note.clear();
+                    for (int m : all) SndAdd(m, oi);
+                    SndAfter();
+                };
+                SndHit(std::move(ah), cellsView);
+                continue;
+            }
+            FFill(r, 10, FCol(g_theme.hover, 0.7f));
+            FlyHit ch;  // (the wheel over it changes this volume)
+            ch.r = r;
+            ch.sndApp = on[0];
+            ch.sndFrom = oi;
+            ch.click = [] {};
+            SndHit(std::move(ch), cellsView);
+            float v = SndAppVolOn(S.apps[on[0]], oi);
+            bool canX = rowHot && outsOf.size() > 1;
+            float sw = cw - 12 - 50 - (canX ? 28 : 0);
+            float cl = 0;
+            for (int m : on) cl = std::max(cl, SndLevelOf(L"c" + std::to_wstring(S.apps[m].v.pid) + L"|" + std::to_wstring(oi)));
+            SndLevelBarV(cx + 12, ry + 11, sw, cl);
+            SndSlider(cx + 12, ry + 11, sw, v, cellsView, [on, oi](float nv) {
+                for (int m : on)
+                    if (m < (int)g_snd.apps.size()) SndAppVolSet(g_snd.apps[m], oi, nv);
+            });
+            FText(PctText(v), f.fSmall.Get(), cx + 12 + sw + 4, ry + 11, 36, 32, FSub(), DWRITE_TEXT_ALIGNMENT_TRAILING);
+            if (canX) {
+                D2D1_RECT_F xr = D2D1::RectF(r.right - 30, ry + 16, r.right - 8, ry + 38);
+                FFill(xr, 11, FCol(g_theme.text, FHot(xr) ? 0.2f : 0.1f));
+                FIcon(kX, (xr.left + xr.right) / 2, (xr.top + xr.bottom) / 2, 10, FCol(g_theme.text, 0.8f), 2.4f);
+                FlyHit xh;
+                xh.r = xr;
+                xh.click = [on, oi] {
+                    g_snd.note.clear();
+                    for (int m : on) SndRemove(m, oi);
+                    SndAfter();
+                };
+                SndHit(std::move(xh), cellsView);
+            }
+        }
+        if (FDraw()) f.rt->PopAxisAlignedClip();
+        // "+": every output it isn't on, by name
+        if ((int)outsOf.size() < cols) {
+            D2D1_RECT_F pr = D2D1::RectF(plusX + (kSxPlus - 30) / 2, ry + 12, plusX + (kSxPlus + 30) / 2, ry + 42);
+            if (menuHere) FFill(pr, 15, FInk());
+            else if (inView && FHot(pr)) FFill(pr, 15, FCol(g_theme.text, 0.14f));
+            FIcon(kPlus, (pr.left + pr.right) / 2, (pr.top + pr.bottom) / 2, 13,
+                  menuHere ? FSolidTint() : FCol(g_theme.text, rowHot ? 0.8f : 0.38f), 2.2f);
+            std::wstring path = a.v.path;
+            FlyHit mh;
+            mh.r = pr;
+            mh.click = [path, menuHere] { g_snd.sxMenu = menuHere ? L"" : path; };
+            SndHit(std::move(mh), S.colR);
+        }
+        ry += rowH + rowGap;
+    }
+    if (FDraw()) f.rt->PopAxisAlignedClip();
+    if (S.maxR > 0 && FDraw()) {
+        float h = colH, th = std::max(28.0f, h * h / (h + S.maxR)), ty = top + (h - th) * (S.scrollR / S.maxR);
+        FFill(D2D1::RectF(S.colR.right - 1, ty, S.colR.right + 2, ty + th), 1.5f, FCol(g_theme.text, 0.22f));
+    }
+    float bottom = top + colH + 4;
+    if (S.maxX > 0) {  // (sideways: under the columns; Shift + wheel, or the wheel over their cards)
+        float w = viewR - viewL, th = std::max(36.0f, w * w / (w + S.maxX)), tx = viewL + (w - th) * (S.scrollX / S.maxX);
+        FFill(D2D1::RectF(viewL, bottom + 2, viewR, bottom + 5), 1.5f, FCol(g_theme.text, 0.08f));
+        FFill(D2D1::RectF(tx, bottom + 2, tx + th, bottom + 5), 1.5f, FCol(g_theme.text, 0.3f));
+        bottom += 10;
+    }
+
+    // The open "+" menu, over everything (a click anywhere else closes it).
+    if (menuRow >= 0) {
+        const std::vector<int>& g = groups[menuRow];
+        std::vector<int> list;
+        for (int oi = 0; oi < cols; oi++)
+            if (onIn(g, oi).empty()) list.push_back(oi);
+        if (list.empty()) {
+            S.sxMenu.clear();
+        } else {
+            const float mw = 260, ih = 32, mh = 8 + 26 + list.size() * ih + 6;
+            float mx = plusX + kSxPlus - 4 - mw, my = menuY + 46;
+            if (my + mh > bottom) my = std::max(top - 60, menuY + 8 - mh);
+            FHitAdd(D2D1::RectF(0, 0, kFlyW, 100000), [] { g_snd.sxMenu.clear(); });
+            D2D1_RECT_F mr = D2D1::RectF(mx, my, mx + mw, my + mh);
+            FFill(D2D1::RectF(mr.left - 2, mr.top + 2, mr.right + 2, mr.bottom + 8), 14, D2D1::ColorF(0, 0.18f));
+            FFill(D2D1::RectF(mr.left - 1, mr.top + 1, mr.right + 1, mr.bottom + 4), 13, D2D1::ColorF(0, 0.22f));
+            FFill(mr, 12, FSolidTint());
+            FFill(mr, 12, FCol(g_theme.hover, 0.5f));
+            if (FDraw())
+                f.rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(mr.left + .5f, mr.top + .5f, mr.right - .5f, mr.bottom - .5f), 11.5f, 11.5f),
+                                           FBr(FCol(g_theme.text, 0.14f)), 1);
+            FHitAdd(mr, [] {});
+            FText(S.apps[g[0]].v.name + L2(L" também em", L" also on"), f.fSmall.Get(), mx + 14, my + 8, mw - 28, 22, FSub());
+            float iy = my + 34;
+            std::vector<int> all = g;
+            for (int oi : list) {
+                D2D1_RECT_F ir = D2D1::RectF(mx + 6, iy, mx + mw - 6, iy + ih);
+                if (FHot(ir)) FFill(ir, 8, FCol(g_theme.text, 0.1f));
+                FIcon(SndKindIcon(S.outs[oi].kind), ir.left + 18, iy + ih / 2, 14, FInk());
+                FText(S.outs[oi].name, f.fSmall.Get(), ir.left + 36, iy, ir.right - ir.left - 44, ih, FInk());
+                FHitAdd(ir, [all, oi] {
+                    g_snd.note.clear();
+                    g_snd.sxMenu.clear();
+                    for (int m : all) SndAdd(m, oi);
+                    SndAfter();
+                });
+                iy += ih;
+            }
+        }
+    }
+    if (S.dragging && S.dragApp >= 0 && S.dragApp < (int)S.apps.size() && FDraw() && f.mouse.x >= 0) {
+        SndApp& a = S.apps[S.dragApp];
+        float w = std::min(200.0f, TextSize(a.v.name, f.fSmall.Get()).width) + 42;
+        D2D1_RECT_F pr = D2D1::RectF(f.mouse.x - 14, f.mouse.y - 15, f.mouse.x - 14 + w, f.mouse.y + 15);
+        FFill(pr, 15, FSolidTint());
+        FFill(pr, 15, FCol(g_theme.text, 0.18f));
+        if (ID2D1Bitmap* bmp = FBitmap(a.v.path, a.v.icon.Get())) {
+            D2D1_RECT_F ir = D2D1::RectF(pr.left + 6, pr.top + 6, pr.left + 24, pr.top + 24);
+            if (f.dc) f.dc->DrawBitmap(bmp, ir, 1, D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC, nullptr, nullptr);
+            else f.rt->DrawBitmap(bmp, ir);
+        }
+        FText(a.v.name, f.fSmall.Get(), pr.left + 32, pr.top, w - 36, 30, FInk());
+    }
+    return bottom;
+}
+
 static float PanelVolume(float y) {
+    if (SndExtremeNow()) return PanelSoundExtreme(y);
     if (SndWide()) return PanelSoundFull(y);
     FHeader(y, L2(L"Som", L"Sound"), g_stat.device);
     if (!g_stat.audio) {
@@ -8455,6 +10797,7 @@ static float PanelVolume(float y) {
         FIcon(StatIcon(StVolume), (mb.left + mb.right) / 2, y + 16, 19, FInk());
         FHitAdd(mb, [] { ToggleMute(); });
         float sx = kFlyPad + 40, sw = kFlyW - kFlyPad - 48 - sx;
+        SndLevelBar(sx, y, sw, L"d");
         FSlider(sx, y, sw, g_stat.muted ? 0 : g_stat.vol, [](float v) { SetVolume(v); });
         FText(g_stat.muted ? L2(L"Mudo", L"Muted") : PctText(g_stat.vol), g_fly.fSmall.Get(), kFlyW - kFlyPad - 44, y, 44, 32,
               FSub(), DWRITE_TEXT_ALIGNMENT_TRAILING);
@@ -8481,6 +10824,7 @@ static float PanelVolume(float y) {
             }
             FText(a.name, g_fly.fSmall.Get(), kFlyPad + 32, y, 92, 32, FInk());
             float sx = kFlyPad + 134, sw = kFlyW - kFlyPad - 48 - sx;
+            SndLevelBar(sx, y, sw, L"a" + std::to_wstring(a.pid));
             FSlider(sx, y, sw, a.level, [i](float v) {
                 if (i < g_appVols.size()) SetAppVolume(g_appVols[i], v);
             });
@@ -8638,13 +10982,8 @@ static void TrayPanelClick(const std::wstring& key, int button) {
         TrayChanged();
         return;
     }
-    if (button == 1) {
-        CloseFlyout();
-        TrayClick(i, button);
-        return;
-    }
+    // (the panel stays: it closes on a click outside it, like any other time)
     TrayClick(i, button);
-    SetTimer(g_fly.hwnd, TIMER_FLY_TRAY, GetDoubleClickTime() + 120, nullptr);  // then the panel closes
 }
 
 static void TrayPanelHit(D2D1_RECT_F r, const std::wstring& key) {
@@ -8758,7 +11097,8 @@ static bool InShelfDir(const std::wstring& path) {
     if (!GetFullPathNameW(path.c_str(), ARRAYSIZE(full), full, nullptr)) return false;
     std::wstring f = full;
     dir += L'\\';
-    return f.size() > dir.size() && _wcsnicmp(f.c_str(), dir.c_str(), dir.size()) == 0 && f.find(L"..") == std::wstring::npos;
+    // (GetFullPathName already resolved "\..\": a name like "Wait... what.mp4" is fine)
+    return f.size() > dir.size() && _wcsnicmp(f.c_str(), dir.c_str(), dir.size()) == 0 && f.find(L"\\..\\") == std::wstring::npos;
 }
 
 static void ShelfFill(ShelfItem& it) {
@@ -8814,9 +11154,14 @@ static int ShelfFind(const std::wstring& path) {
 }
 
 // Pasted files are ours: removing them from the shelf deletes them (unless they were dragged out).
+static void DlRemoveDir(const std::wstring& dir);
 static void ShelfDropItem(int i) {
     if (i < 0 || i >= (int)g_shelf.size()) return;
-    if (g_shelf[i].gen && InShelfDir(g_shelf[i].path) && PathExists(g_shelf[i].path)) DeleteFileW(g_shelf[i].path.c_str());
+    if (g_shelf[i].gen && InShelfDir(g_shelf[i].path) && PathExists(g_shelf[i].path)) {
+        DWORD a = GetFileAttributesW(g_shelf[i].path.c_str());
+        if (a & FILE_ATTRIBUTE_DIRECTORY) DlRemoveDir(g_shelf[i].path);  // (a downloaded album)
+        else DeleteFileW(g_shelf[i].path.c_str());
+    }
     g_shelf.erase(g_shelf.begin() + i);
 }
 
@@ -8887,7 +11232,988 @@ static bool SavePng(IWICBitmapSource* src, const std::wstring& path) {
     return SUCCEEDED(fr->WriteSource(conv.Get(), nullptr)) && SUCCEEDED(fr->Commit()) && SUCCEEDED(enc->Commit());
 }
 
+// ---- Downloads through the shelf ----
+// A link dropped or pasted on the shelf is downloaded into it. A direct file link is fetched by Nimbus
+// itself (WinHTTP). Videos and pictures on sites go through yt-dlp and gallery-dl, only when the user
+// turned that on and installed them (Nimbus never downloads a program). Each job works in its own
+// folder in the shelf's folder; when it ends, its files become pasted items of the shelf.
+
+enum DlKind { DlDirect, DlVideo, DlImages, DlEither, DlUnknown };
+enum DlPhase { DlChoose, DlRun, DlMissing, DlFailed };
+
+struct DlJob {
+    int id = 0;
+    std::wstring url, host, title, dir;
+    int kind = DlUnknown;
+    int phase = DlRun;
+    int mode = 0;                // with a tool: 0 video, 1 audio only, 2 pictures
+    std::atomic<int> pct{-1};    // -1: not known
+    std::atomic<int> count{0};   // pictures so far (gallery-dl)
+    std::atomic<bool> stop{false};
+    HANDLE thread = nullptr;
+    HANDLE job = nullptr;        // the tool and what it starts (ffmpeg) end together
+    SRWLOCK lock = SRWLOCK_INIT;
+    std::wstring msg;            // why it failed, or what to install
+    bool page = false;           // the direct try found a web page
+    bool ok = false;
+    std::atomic<DWORD> posted{0};
+    std::atomic<bool> finished{false};  // (set by the worker just before its last message)
+    bool noCookies = false;      // the browser's cookies couldn't be read: tried again without them
+    bool cookieFail = false;
+    std::wstring quality;        // this download's (from Settings; the card changes it for this one only)
+};
+std::vector<std::unique_ptr<DlJob>> g_dl;
+int g_dlNext = 1;
+constexpr UINT WM_APP_DL = WM_APP + 22;
+static float FChip(float x, float y, const std::wstring& label, bool on, std::function<void()> fn);
+static float FWrapText(const std::wstring& s, float x, float top, float w, float maxH, D2D1_COLOR_F c);
+
+static bool DlSitesOn() { return CfgInt(L"shelfSites") != 0; }
+
+static bool HostIs(const std::wstring& host, std::initializer_list<const wchar_t*> names) {
+    for (const wchar_t* n : names) {
+        size_t l = wcslen(n);
+        if (host == n || (host.size() > l && host.compare(host.size() - l, l, n) == 0 && host[host.size() - l - 1] == L'.')) return true;
+    }
+    return false;
+}
+
+// "https://host/path?x" -> host and the path's last part. Only http and https.
+static bool UrlParts(const std::wstring& url, std::wstring& host, std::wstring& last) {
+    std::wstring l = Lower(url);
+    size_t s = l.rfind(L"https://", 0) == 0 ? 8 : l.rfind(L"http://", 0) == 0 ? 7 : std::wstring::npos;
+    if (s == std::wstring::npos) return false;
+    size_t e = l.find_first_of(L"/?#", s);
+    host = l.substr(s, e == std::wstring::npos ? std::wstring::npos : e - s);
+    if (size_t at = host.rfind(L'@'); at != std::wstring::npos) host = host.substr(at + 1);
+    if (size_t c = host.find(L':'); c != std::wstring::npos) host = host.substr(0, c);
+    if (host.rfind(L"www.", 0) == 0) host = host.substr(4);
+    if (host.empty()) return false;
+    std::wstring path = e == std::wstring::npos ? L"" : url.substr(e);
+    if (size_t q = path.find_first_of(L"?#"); q != std::wstring::npos) path = path.substr(0, q);
+    while (!path.empty() && path.back() == L'/') path.pop_back();
+    size_t sl = path.find_last_of(L'/');
+    last = sl == std::wstring::npos ? path : path.substr(sl + 1);
+    return true;
+}
+
+static std::wstring UrlDecode(const std::wstring& s) {
+    std::string u8;
+    for (size_t i = 0; i < s.size(); i++) {
+        if (s[i] == L'%' && i + 2 < s.size() && iswxdigit(s[i + 1]) && iswxdigit(s[i + 2])) {
+            u8 += (char)wcstol(s.substr(i + 1, 2).c_str(), nullptr, 16);
+            i += 2;
+        } else if (s[i] < 0x80) {
+            u8 += (char)s[i];
+        } else {
+            char b[8];
+            int n = WideCharToMultiByte(CP_UTF8, 0, &s[i], 1, b, sizeof(b), nullptr, nullptr);
+            u8.append(b, n > 0 ? n : 0);
+        }
+    }
+    int n = MultiByteToWideChar(CP_UTF8, 0, u8.data(), (int)u8.size(), nullptr, 0);
+    std::wstring w(n > 0 ? n : 0, L'\0');
+    if (n > 0) MultiByteToWideChar(CP_UTF8, 0, u8.data(), (int)u8.size(), w.data(), n);
+    return w;
+}
+
+// A name Windows takes: no reserved characters, no trailing dots or spaces, not too long.
+static std::wstring SafeName(std::wstring n) {
+    for (auto& c : n)
+        if (c < 32 || wcschr(L"<>:\"/\\|?*", c)) c = L'_';
+    while (!n.empty() && (n.back() == L'.' || n.back() == L' ')) n.pop_back();
+    while (!n.empty() && n.front() == L' ') n.erase(0, 1);
+    if (n.size() > 120) {
+        size_t dot = n.find_last_of(L'.');
+        std::wstring ext = dot != std::wstring::npos && n.size() - dot <= 8 ? n.substr(dot) : L"";
+        n = n.substr(0, 120 - ext.size()) + ext;
+    }
+    static const wchar_t* reserved[] = {L"con", L"prn", L"aux", L"nul", L"com1", L"com2", L"com3", L"com4", L"com5", L"com6", L"com7",
+                                        L"com8", L"com9", L"lpt1", L"lpt2", L"lpt3", L"lpt4", L"lpt5", L"lpt6", L"lpt7", L"lpt8", L"lpt9",
+                                        L"conin$", L"conout$"};
+    std::wstring base = Lower(n.substr(0, n.find(L'.')));
+    for (auto r : reserved)
+        if (base == r) n = L"_" + n;
+    return n.empty() ? L"download" : n;
+}
+
+static std::wstring ExtOf(const std::wstring& name) {
+    size_t dot = name.find_last_of(L'.');
+    return dot == std::wstring::npos || name.size() - dot > 6 ? L"" : Lower(name.substr(dot));
+}
+
+static bool DirectExt(const std::wstring& ext) {
+    static const wchar_t* exts[] = {L".png", L".jpg", L".jpeg", L".gif", L".webp", L".bmp", L".avif", L".heic", L".svg", L".ico",
+                                    L".pdf", L".zip", L".7z", L".rar", L".tar", L".gz", L".mp4", L".webm", L".mkv", L".mov",
+                                    L".mp3", L".m4a", L".wav", L".flac", L".ogg", L".opus", L".txt", L".csv", L".json", L".docx",
+                                    L".xlsx", L".pptx", L".odt", L".epub", L".psd", L".ttf", L".otf", L".woff2", L".iso", L".msi",
+                                    L".exe"};
+    for (auto e : exts)
+        if (ext == e) return true;
+    return false;
+}
+
+// What the link is, from its address alone.
+static int DlClassify(const std::wstring& host, const std::wstring& last) {
+    if (DirectExt(ExtOf(last))) return DlDirect;
+    if (HostIs(host, {L"youtube.com", L"youtu.be", L"tiktok.com", L"vimeo.com", L"twitch.tv", L"facebook.com", L"fb.watch",
+                      L"dailymotion.com", L"soundcloud.com", L"bandcamp.com", L"kick.com", L"streamable.com", L"bilibili.com",
+                      L"rumble.com", L"music.youtube.com"}))
+        return DlVideo;
+    if (HostIs(host, {L"imagepond.net", L"imgur.com", L"deviantart.com", L"pixiv.net", L"artstation.com", L"flickr.com",
+                      L"wallhaven.cc", L"danbooru.donmai.us", L"imgbox.com", L"postimg.cc", L"catbox.moe", L"behance.net"}))
+        return DlImages;
+    if (HostIs(host, {L"instagram.com", L"x.com", L"twitter.com", L"reddit.com", L"redd.it", L"bsky.app", L"pinterest.com",
+                      L"pin.it", L"tumblr.com", L"threads.net"}))
+        return DlEither;
+    return DlUnknown;
+}
+
+// yt-dlp, gallery-dl and ffmpeg, as winget, scoop or PATH put them. Asked again each time (installing
+// one shouldn't need a restart).
+static std::wstring ToolExeFind(const wchar_t* name) {
+    wchar_t buf[MAX_PATH * 2] = {};
+    std::wstring file = std::wstring(name) + L".exe";
+    std::vector<std::wstring> places;
+    if (GetEnvironmentVariableW(L"LOCALAPPDATA", buf, ARRAYSIZE(buf))) places.push_back(std::wstring(buf) + L"\\Microsoft\\WinGet\\Links\\" + file);
+    if (GetEnvironmentVariableW(L"USERPROFILE", buf, ARRAYSIZE(buf))) places.push_back(std::wstring(buf) + L"\\scoop\\shims\\" + file);
+    if (GetEnvironmentVariableW(L"ProgramFiles", buf, ARRAYSIZE(buf))) places.push_back(std::wstring(buf) + L"\\WinGet\\Links\\" + file);
+    for (auto& p : places)
+        if (PathExists(p)) return p;
+    // (the PATH as it is now in the registry: Explorer's own may be from before the install)
+    for (int hive = 0; hive < 2; hive++) {
+        HKEY k = nullptr;
+        if (RegOpenKeyExW(hive ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER,
+                          hive ? L"SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment" : L"Environment", 0, KEY_READ, &k))
+            continue;
+        std::vector<wchar_t> v(32768);
+        DWORD sz = (DWORD)(v.size() * sizeof(wchar_t)), type = 0;
+        LSTATUS st = RegQueryValueExW(k, L"Path", nullptr, &type, (BYTE*)v.data(), &sz);
+        RegCloseKey(k);
+        if (st || (type != REG_SZ && type != REG_EXPAND_SZ)) continue;
+        v.back() = 0;
+        wchar_t ex[32768];
+        if (!ExpandEnvironmentStringsW(v.data(), ex, ARRAYSIZE(ex))) continue;
+        std::wstring all = ex;
+        size_t a = 0;
+        while (a <= all.size()) {
+            size_t b = all.find(L';', a);
+            std::wstring d = all.substr(a, b == std::wstring::npos ? std::wstring::npos : b - a);
+            if (!d.empty() && d.find(L'"') == std::wstring::npos && !PathIsRelativeW(d.c_str())) {
+                if (d.back() != L'\\') d += L'\\';
+                if (PathExists(d + file)) return d + file;
+            }
+            if (b == std::wstring::npos) break;
+            a = b + 1;
+        }
+    }
+    return L"";
+}
+// (Settings draws every frame and asks for these: the answer is kept 10 s, a PATH folder on an offline
+// drive would otherwise freeze the bar on each frame)
+static std::wstring ToolExe(const wchar_t* name) {
+    static SRWLOCK lock = SRWLOCK_INIT;
+    static std::unordered_map<std::wstring, std::pair<DWORD, std::wstring>> seen;
+    AcquireSRWLockShared(&lock);
+    auto it = seen.find(name);
+    bool fresh = it != seen.end() && GetTickCount() - it->second.first < 10000;
+    std::wstring v = fresh ? it->second.second : L"";
+    ReleaseSRWLockShared(&lock);
+    if (fresh) return v;
+    v = ToolExeFind(name);
+    AcquireSRWLockExclusive(&lock);
+    seen[name] = {GetTickCount(), v};
+    ReleaseSRWLockExclusive(&lock);
+    return v;
+}
+
+// (progress: a redraw at most every 120 ms; the end always)
+static std::wstring DlQuality() {
+    std::wstring q = CfgStr(L"shelfQuality", L"1080");
+    return q == L"melhor" || q == L"1080" || q == L"720" || q == L"480" || q == L"2160" ? q : L"1080";
+}
+static std::wstring DlQualityName(const std::wstring& q) { return q == L"melhor" ? L2(L"Melhor", L"Best") : q == L"2160" ? L"4K" : q + L"p"; }
+
+static void DlPost(DlJob* j, bool force = false) {
+    DWORD now = GetTickCount();
+    if (!force && now - j->posted < 120) return;
+    j->posted = now;
+    if (g_msgWnd) PostMessageW(g_msgWnd, WM_APP_DL, (WPARAM)j->id, 0);
+}
+
+// The tool and what it started end now (the job handle is shared with the worker).
+static void DlKill(DlJob* j) {
+    AcquireSRWLockExclusive(&j->lock);
+    if (j->job) TerminateJobObject(j->job, 1);
+    ReleaseSRWLockExclusive(&j->lock);
+}
+
+static void DlFail(DlJob* j, const std::wstring& m) {
+    AcquireSRWLockExclusive(&j->lock);
+    j->msg = m;
+    ReleaseSRWLockExclusive(&j->lock);
+}
+
+// ---- The direct download (WinHTTP) ----
+
+static std::wstring HeaderOf(HINTERNET req, DWORD what) {
+    DWORD sz = 0;
+    WinHttpQueryHeaders(req, what, WINHTTP_HEADER_NAME_BY_INDEX, nullptr, &sz, WINHTTP_NO_HEADER_INDEX);
+    if (!sz) return L"";
+    std::wstring s(sz / sizeof(wchar_t), L'\0');
+    if (!WinHttpQueryHeaders(req, what, WINHTTP_HEADER_NAME_BY_INDEX, s.data(), &sz, WINHTTP_NO_HEADER_INDEX)) return L"";
+    s.resize(sz / sizeof(wchar_t));
+    return s;
+}
+
+// filename*=UTF-8''... or filename="..."
+static std::wstring DispositionName(const std::wstring& cd) {
+    std::wstring l = Lower(cd);
+    size_t a = l.find(L"filename*=");
+    if (a != std::wstring::npos) {
+        std::wstring v = cd.substr(a + 10);
+        if (size_t q = v.find(L"''"); q != std::wstring::npos) v = v.substr(q + 2);
+        v = v.substr(0, v.find(L';'));
+        return UrlDecode(v);
+    }
+    a = l.find(L"filename=");
+    if (a == std::wstring::npos) return L"";
+    std::wstring v = cd.substr(a + 9);
+    if (!v.empty() && v[0] == L'"') {
+        v = v.substr(1);
+        v = v.substr(0, v.find(L'"'));
+    } else {
+        v = v.substr(0, v.find(L';'));
+    }
+    return v;
+}
+
+static const wchar_t* ExtForType(const std::wstring& ct) {
+    static const std::pair<const wchar_t*, const wchar_t*> m[] = {
+        {L"image/png", L".png"}, {L"image/jpeg", L".jpg"}, {L"image/gif", L".gif"}, {L"image/webp", L".webp"},
+        {L"image/avif", L".avif"}, {L"image/svg+xml", L".svg"}, {L"application/pdf", L".pdf"}, {L"application/zip", L".zip"},
+        {L"video/mp4", L".mp4"}, {L"video/webm", L".webm"}, {L"audio/mpeg", L".mp3"}, {L"audio/mp4", L".m4a"},
+        {L"audio/ogg", L".ogg"}, {L"text/plain", L".txt"}, {L"application/json", L".json"}};
+    for (auto& e : m)
+        if (ct.rfind(e.first, 0) == 0) return e.second;
+    return L"";
+}
+
+static bool DlDirectRun(DlJob* j) {
+    URL_COMPONENTS uc = {sizeof(uc)};
+    wchar_t host[256] = {}, path[4096] = {};
+    uc.lpszHostName = host;
+    uc.dwHostNameLength = ARRAYSIZE(host);
+    uc.lpszUrlPath = path;
+    uc.dwUrlPathLength = ARRAYSIZE(path);
+    uc.dwExtraInfoLength = 1;  // (the query stays with the path)
+    std::wstring full = j->url;
+    if (!WinHttpCrackUrl(full.c_str(), 0, 0, &uc)) return DlFail(j, L2(L"Link inválido.", L"Not a valid link.")), false;
+    std::wstring obj = std::wstring(path) + (uc.lpszExtraInfo ? std::wstring(uc.lpszExtraInfo, uc.dwExtraInfoLength) : L"");
+    HINTERNET ses = WinHttpOpen(L"Mozilla/5.0 (Windows NT 10.0; Win64; x64)", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+                                WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!ses) return DlFail(j, L2(L"Sem conexão.", L"No connection.")), false;
+    WinHttpSetTimeouts(ses, 10000, 10000, 10000, 10000);
+    DWORD redir = WINHTTP_OPTION_REDIRECT_POLICY_DISALLOW_HTTPS_TO_HTTP;
+    WinHttpSetOption(ses, WINHTTP_OPTION_REDIRECT_POLICY, &redir, sizeof(redir));
+    HINTERNET con = WinHttpConnect(ses, host, uc.nPort, 0);
+    HINTERNET req = con ? WinHttpOpenRequest(con, L"GET", obj.c_str(), nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
+                                             uc.nScheme == INTERNET_SCHEME_HTTPS ? WINHTTP_FLAG_SECURE : 0)
+                          : nullptr;
+    bool ok = false;
+    HANDLE f = INVALID_HANDLE_VALUE;
+    std::wstring file;
+    auto done = [&] {
+        if (f != INVALID_HANDLE_VALUE) CloseHandle(f);
+        if (!ok && !file.empty()) DeleteFileW(file.c_str());
+        if (req) WinHttpCloseHandle(req);
+        if (con) WinHttpCloseHandle(con);
+        WinHttpCloseHandle(ses);
+        return ok;
+    };
+    if (!req || !WinHttpSendRequest(req, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0) ||
+        !WinHttpReceiveResponse(req, nullptr)) {
+        DlFail(j, L2(L"Não deu pra conectar.", L"Couldn't connect."));
+        return done();
+    }
+    DWORD code = 0, sz = sizeof(code);
+    WinHttpQueryHeaders(req, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &code, &sz,
+                        WINHTTP_NO_HEADER_INDEX);
+    if (code >= 400) {
+        DlFail(j, std::wstring(L2(L"O site respondeu ", L"The site answered ")) + std::to_wstring(code) + L".");
+        return done();
+    }
+    std::wstring ct = Lower(HeaderOf(req, WINHTTP_QUERY_CONTENT_TYPE));
+    if (ct.rfind(L"text/html", 0) == 0 || ct.rfind(L"application/xhtml", 0) == 0) {
+        j->page = true;  // (a page, not a file: a tool may know the site)
+        return done();
+    }
+    std::wstring name = DispositionName(HeaderOf(req, WINHTTP_QUERY_CONTENT_DISPOSITION));
+    if (name.empty()) {
+        std::wstring h, last;
+        UrlParts(j->url, h, last);
+        name = UrlDecode(last);
+    }
+    name = SafeName(name.empty() ? L"download" : name);
+    if (ExtOf(name).empty()) name += ExtForType(ct);
+    if (ExtOf(name) == L".url" || ExtOf(name) == L".lnk" || ExtOf(name) == L".scf") name += L".txt";  // (never a shortcut)
+    file = j->dir + L"\\" + name;
+    AcquireSRWLockExclusive(&j->lock);
+    j->title = name;
+    ReleaseSRWLockExclusive(&j->lock);
+    f = CreateFileW(file.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (f == INVALID_HANDLE_VALUE) {
+        file.clear();
+        DlFail(j, L2(L"Não deu pra salvar.", L"Couldn't save it."));
+        return done();
+    }
+    ULONGLONG total = 0, got = 0;
+    std::wstring len = HeaderOf(req, WINHTTP_QUERY_CONTENT_LENGTH);
+    if (!len.empty()) total = _wcstoui64(len.c_str(), nullptr, 10);
+    std::vector<char> buf(64 * 1024);
+    for (;;) {
+        if (j->stop) return done();
+        DWORD n = 0;
+        if (!WinHttpReadData(req, buf.data(), (DWORD)buf.size(), &n)) {
+            DlFail(j, L2(L"A conexão caiu.", L"The connection dropped."));
+            return done();
+        }
+        if (!n) break;
+        DWORD w = 0;
+        if (!WriteFile(f, buf.data(), n, &w, nullptr) || w != n) {
+            DlFail(j, L2(L"Não deu pra salvar (disco cheio?).", L"Couldn't save it (disk full?)."));
+            return done();
+        }
+        got += n;
+        if (total) j->pct = (int)std::min<ULONGLONG>(99, got * 100 / total);
+        DlPost(j);
+    }
+    ok = got > 0;
+    if (!ok) DlFail(j, L2(L"Veio vazio.", L"It came empty."));
+    return done();
+}
+
+// ---- yt-dlp and gallery-dl ----
+
+static void DlLine(DlJob* j, bool images, const std::string& line, std::wstring& lastErr) {
+    int n = MultiByteToWideChar(CP_UTF8, 0, line.data(), (int)line.size(), nullptr, 0);
+    std::wstring w(n > 0 ? n : 0, L'\0');
+    if (n > 0) MultiByteToWideChar(CP_UTF8, 0, line.data(), (int)line.size(), w.data(), n);
+    if (w.empty()) return;
+    if (w.rfind(L"ERROR:", 0) == 0 || w.find(L"[error]") != std::wstring::npos) lastErr = w;
+    if (images) {
+        // (gallery-dl prints each file it saved; "# " marks one it already had)
+        if (w.size() > 3 && (w[1] == L':' || w.rfind(L"# ", 0) == 0)) {
+            j->count++;
+            DlPost(j);
+        }
+        return;
+    }
+    if (w.rfind(L"[download]", 0) == 0) {
+        size_t p = w.find(L'%');
+        if (p != std::wstring::npos) {
+            size_t a = w.find_last_of(L' ', p);
+            int v = a == std::wstring::npos ? -1 : (int)wcstod(w.substr(a + 1, p - a - 1).c_str(), nullptr);
+            if (v >= 0 && v <= 100 && std::min(v, 99) != j->pct) {
+                j->pct = std::min(v, 99);
+                DlPost(j);
+            }
+        }
+        size_t d = w.find(L"Destination: ");
+        if (w.rfind(L"[ExtractAudio]", 0) == 0 || w.rfind(L"[Merger]", 0) == 0) {
+            j->pct = 99;
+            DlPost(j, true);
+        }
+        if (d != std::wstring::npos) {
+            std::wstring t = w.substr(d + 13);
+            size_t sl = t.find_last_of(L'\\');
+            AcquireSRWLockExclusive(&j->lock);
+            j->title = sl == std::wstring::npos ? t : t.substr(sl + 1);
+            ReleaseSRWLockExclusive(&j->lock);
+            DlPost(j);
+        }
+    }
+}
+
+static std::wstring Quote(const std::wstring& s) { return L"\"" + s + L"\""; }
+
+static bool DlToolRun(DlJob* j) {
+    bool images = j->mode == 2;
+    std::wstring exe = ToolExe(images ? L"gallery-dl" : L"yt-dlp");
+    if (exe.empty()) {
+        DlFail(j, std::wstring(L2(L"Precisa do ", L"Needs ")) + (images ? L"gallery-dl" : L"yt-dlp") + L".");
+        return false;
+    }
+    std::wstring cmd = Quote(exe);
+    std::wstring cookies = CfgStr(L"shelfCookies", L"off");
+    if ((cookies != L"edge" && cookies != L"chrome" && cookies != L"firefox" && cookies != L"brave") || j->noCookies) cookies.clear();
+    if (images) {
+        cmd += L" -D " + Quote(j->dir);
+        if (!cookies.empty()) cmd += L" --cookies-from-browser " + cookies;
+    } else {
+        std::wstring ff = ToolExe(L"ffmpeg");
+        cmd += L" --newline --no-playlist --no-mtime --windows-filenames --no-part -o " +
+               Quote(j->dir + L"\\%(title).100B.%(ext)s");
+        if (!ff.empty()) cmd += L" --ffmpeg-location " + Quote(ff.substr(0, ff.find_last_of(L'\\')));
+        // (YouTube now asks a JavaScript puzzle: yt-dlp solves it with deno, when it's there)
+        std::wstring deno = ToolExe(L"deno");
+        if (!deno.empty()) cmd += L" --js-runtimes " + Quote(L"deno:" + deno);
+        std::wstring q = j->quality.empty() ? DlQuality() : j->quality;
+        std::wstring res = q == L"melhor" ? L"" : q;
+        if (j->mode == 1) cmd += ff.empty() ? L" -f \"ba[ext=m4a]/ba\"" : L" -f ba -x --audio-format mp3";
+        else if (ff.empty())
+            cmd += res.empty() ? L" -f \"b[ext=mp4]/b\"" : L" -f \"b[height<=" + res + L"][ext=mp4]/b[height<=" + res + L"]/b\"";
+        else  // (H.264 and AAC first: every player opens them; past 1080p YouTube has only VP9/AV1)
+            cmd += L" -f \"bv*+ba/b\" -S \"" + (res.empty() ? std::wstring(L"res,") : L"res:" + res + L",") +
+                   L"vcodec:h264,acodec:aac\" --merge-output-format mp4";
+        if (!cookies.empty()) cmd += L" --cookies-from-browser " + cookies;
+    }
+    cmd += L" -- " + Quote(j->url);
+
+    SECURITY_ATTRIBUTES sa = {sizeof(sa), nullptr, TRUE};
+    HANDLE rd = nullptr, wr = nullptr;
+    if (!CreatePipe(&rd, &wr, &sa, 0)) return DlFail(j, L2(L"Não deu pra abrir o programa.", L"Couldn't start the program.")), false;
+    SetHandleInformation(rd, HANDLE_FLAG_INHERIT, 0);
+    // Only the pipe goes to the program (nothing else of Explorer's).
+    SIZE_T asz = 0;
+    InitializeProcThreadAttributeList(nullptr, 1, 0, &asz);
+    std::vector<BYTE> attrBuf(asz);
+    auto attrs = (LPPROC_THREAD_ATTRIBUTE_LIST)attrBuf.data();
+    InitializeProcThreadAttributeList(attrs, 1, 0, &asz);
+    UpdateProcThreadAttribute(attrs, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, &wr, sizeof(wr), nullptr, nullptr);
+    STARTUPINFOEXW si = {};
+    si.StartupInfo.cb = sizeof(si);
+    si.StartupInfo.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
+    si.StartupInfo.wShowWindow = SW_HIDE;
+    si.StartupInfo.hStdOutput = wr;
+    si.StartupInfo.hStdError = wr;
+    si.StartupInfo.hStdInput = nullptr;
+    si.lpAttributeList = attrs;
+    // Its output in UTF-8, whatever the console's code page.
+    std::wstring env;
+    if (wchar_t* e = GetEnvironmentStringsW()) {
+        for (const wchar_t* p = e; *p; p += wcslen(p) + 1)
+            if (_wcsnicmp(p, L"PYTHONIOENCODING=", 17) && _wcsnicmp(p, L"PYTHONUTF8=", 11)) env.append(p).push_back(L'\0');
+        FreeEnvironmentStringsW(e);
+    }
+    env.append(L"PYTHONIOENCODING=utf-8").push_back(L'\0');
+    env.append(L"PYTHONUTF8=1").push_back(L'\0');
+    env.push_back(L'\0');
+    PROCESS_INFORMATION pi = {};
+    BOOL started = CreateProcessW(exe.c_str(), cmd.data(), nullptr, nullptr, TRUE,
+                                  CREATE_NO_WINDOW | CREATE_SUSPENDED | BELOW_NORMAL_PRIORITY_CLASS | CREATE_UNICODE_ENVIRONMENT |
+                                      EXTENDED_STARTUPINFO_PRESENT,
+                                  env.data(), j->dir.c_str(), &si.StartupInfo, &pi);
+    DeleteProcThreadAttributeList(attrs);
+    CloseHandle(wr);
+    if (!started) {
+        CloseHandle(rd);
+        Wh_Log(L"download: %s didn't start (%u)", exe.c_str(), GetLastError());
+        return DlFail(j, L2(L"Não deu pra abrir o programa.", L"Couldn't start the program.")), false;
+    }
+    HANDLE jo = CreateJobObjectW(nullptr, nullptr);
+    if (jo) {
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION li = {};
+        li.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        SetInformationJobObject(jo, JobObjectExtendedLimitInformation, &li, sizeof(li));
+        if (!AssignProcessToJobObject(jo, pi.hProcess)) {  // (then cancel ends the process itself)
+            CloseHandle(jo);
+            jo = nullptr;
+        }
+    }
+    AcquireSRWLockExclusive(&j->lock);
+    j->job = jo;
+    ReleaseSRWLockExclusive(&j->lock);
+    ResumeThread(pi.hThread);
+    Wh_Log(L"download: %s started", images ? L"gallery-dl" : L"yt-dlp");
+    std::string pending;
+    std::wstring lastErr;
+    DWORD start = GetTickCount(), exitCode = 1;
+    bool cut = false;
+    auto drain = [&] {
+        DWORD avail = 0, got = 0;
+        char buf[4096];
+        while (PeekNamedPipe(rd, nullptr, 0, nullptr, &avail, nullptr) && avail &&
+               ReadFile(rd, buf, std::min<DWORD>(avail, sizeof(buf)), &got, nullptr) && got) {
+            pending.append(buf, got);
+            size_t a;
+            while ((a = pending.find_first_of("\r\n")) != std::string::npos) {
+                DlLine(j, images, pending.substr(0, a), lastErr);
+                pending.erase(0, a + 1);
+            }
+            if (pending.size() > 64 * 1024) pending.clear();
+        }
+    };
+    for (;;) {
+        drain();
+        if (WaitForSingleObject(pi.hProcess, 150) == WAIT_OBJECT_0) {
+            drain();
+            GetExitCodeProcess(pi.hProcess, &exitCode);
+            break;
+        }
+        if (j->stop || GetTickCount() - start > 2 * 60 * 60 * 1000) {  // (two hours at most)
+            cut = !j->stop;
+            if (jo) TerminateJobObject(jo, 1);
+            else TerminateProcess(pi.hProcess, 1);
+            WaitForSingleObject(pi.hProcess, 3000);
+            break;
+        }
+    }
+    if (!pending.empty()) DlLine(j, images, pending, lastErr);
+    AcquireSRWLockExclusive(&j->lock);
+    if (jo) {
+        TerminateJobObject(jo, 1);  // (anything it left running)
+        CloseHandle(jo);
+    }
+    j->job = nullptr;
+    ReleaseSRWLockExclusive(&j->lock);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    CloseHandle(rd);
+    Wh_Log(L"download: ended (%lu)", exitCode);
+    if (j->stop) return false;
+    if (cut) return DlFail(j, L2(L"Demorou demais.", L"It took too long.")), false;
+    if (exitCode != 0 && !lastErr.empty()) {
+        std::wstring l = Lower(lastErr);
+        std::wstring m = lastErr.size() > 160 ? lastErr.substr(0, 160) + L"…" : lastErr;
+        if (!cookies.empty() && l.find(L"cookie") != std::wstring::npos &&
+            (l.find(L"could not") != std::wstring::npos || l.find(L"failed to") != std::wstring::npos ||
+             l.find(L"decrypt") != std::wstring::npos || l.find(L"copy") != std::wstring::npos)) {
+            j->cookieFail = true;
+            m = L2(L"Não deu pra ler o login desse navegador (o Chrome e o Edge travam os cookies enquanto estão abertos). Use o Firefox nos Ajustes, ou deixe sem login.",
+                   L"Couldn't read that browser's sign-in (Chrome and Edge lock their cookies while open). Use Firefox in Settings, or no sign-in.");
+        } else if (l.find(L"unsupported url") != std::wstring::npos || l.find(L"no suitable") != std::wstring::npos)
+            m = L2(L"Esse site não é conhecido por este programa.", L"This program doesn't know this site.");
+        else if (l.find(L"login") != std::wstring::npos || l.find(L"sign in") != std::wstring::npos || l.find(L"cookies") != std::wstring::npos)
+            m = L2(L"Esse precisa de login. Nos Ajustes dá pra usar o login do navegador.",
+                   L"This one needs a sign-in. Settings can use the browser's sign-in.");
+        else if (l.find(L"unable to extract") != std::wstring::npos || l.find(L"extractor") != std::wstring::npos)
+            m = std::wstring(L2(L"O site mudou. Atualize o programa: ", L"The site changed. Update the program: ")) +
+                (images ? L"winget upgrade gallery-dl" : L"yt-dlp -U");
+        DlFail(j, m);
+    }
+    return exitCode == 0;
+}
+
+static DWORD WINAPI DlThread(LPVOID p) {
+    auto* j = (DlJob*)p;
+    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    bool ok = false;
+    if (j->kind == DlDirect || j->kind == DlUnknown) {
+        ok = DlDirectRun(j);
+        // A page: when site downloads are on, yt-dlp may still know it (the user picks video or audio).
+        if (!ok && j->page && !j->stop) {
+            if (DlSitesOn()) {
+                AcquireSRWLockExclusive(&j->lock);
+                j->kind = DlVideo;
+                j->phase = DlChoose;
+                j->msg.clear();
+                ReleaseSRWLockExclusive(&j->lock);
+            } else {
+                DlFail(j, L2(L"É uma página, não um arquivo. Pra vídeos e imagens de sites, ligue nos Ajustes (Status > Prateleira).",
+                             L"It's a page, not a file. For videos and pictures on sites, turn it on in Settings (Status > Shelf)."));
+            }
+        }
+    } else {
+        ok = DlToolRun(j);
+        // The browser's sign-in couldn't be read: once more without it (most things don't need it).
+        if (!ok && j->cookieFail && !j->noCookies && !j->stop) {
+            Wh_Log(L"download: again without the browser's cookies");
+            std::wstring why;
+            AcquireSRWLockExclusive(&j->lock);
+            why = j->msg;
+            j->msg.clear();
+            ReleaseSRWLockExclusive(&j->lock);
+            j->noCookies = true;
+            j->cookieFail = false;
+            j->pct = -1;
+            DlPost(j, true);
+            ok = DlToolRun(j);
+            if (!ok && !j->stop) {
+                AcquireSRWLockExclusive(&j->lock);
+                if (j->msg.empty() || j->msg.find(L"login") != std::wstring::npos || j->msg.find(L"sign-in") != std::wstring::npos) j->msg = why;
+                ReleaseSRWLockExclusive(&j->lock);
+            }
+        }
+    }
+    j->ok = ok;
+    CoUninitialize();
+    j->finished = true;
+    DlPost(j, true);
+    return 0;
+}
+
+static DlJob* DlFind(int id) {
+    for (auto& j : g_dl)
+        if (j->id == id) return j.get();
+    return nullptr;
+}
+
+static void DlRunJob(DlJob* j) {
+    if (j->thread) return;
+    j->dir = ShelfDir() + L"\\dl-" + std::to_wstring(GetCurrentProcessId()) + L"-" + std::to_wstring(j->id);
+    CreateDirectoryW(j->dir.c_str(), nullptr);
+    j->phase = DlRun;
+    j->pct = -1;
+    j->count = 0;
+    j->ok = j->page = false;
+    j->finished = false;
+    j->msg.clear();
+    j->thread = CreateThread(nullptr, 0, DlThread, j, 0, nullptr);
+    if (!j->thread) {
+        j->phase = DlFailed;
+        j->msg = L2(L"Não deu pra começar.", L"Couldn't start.");
+    }
+}
+
+// What a tool job needs before it runs: site downloads on, and the program installed.
+static void DlStartTool(DlJob* j, int mode) {
+    j->mode = mode;
+    const wchar_t* tool = mode == 2 ? L"gallery-dl" : L"yt-dlp";
+    if (!DlSitesOn()) {
+        j->phase = DlMissing;
+        j->msg = L2(L"Vídeos e imagens de sites estão desligados. Ligue nos Ajustes (Status > Prateleira).",
+                    L"Videos and pictures on sites are off. Turn them on in Settings (Status > Shelf).");
+    } else if (ToolExe(tool).empty()) {
+        j->phase = DlMissing;
+        j->msg = std::wstring(L2(L"Precisa do ", L"Needs ")) + tool + L2(L". Instale com: winget install ", L". Install it with: winget install ") +
+                 tool;
+    } else {
+        DlRunJob(j);
+    }
+    StatusChanged();
+}
+
+static void DlRemoveDir(const std::wstring& dir) {
+    if (dir.empty() || !InShelfDir(dir)) return;  // (only our own folders)
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((dir + L"\\*").c_str(), &fd);
+    if (h != INVALID_HANDLE_VALUE) {
+        do {
+            if (!wcscmp(fd.cFileName, L".") || !wcscmp(fd.cFileName, L"..")) continue;
+            std::wstring p = dir + L"\\" + fd.cFileName;
+            if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && !(fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) DlRemoveDir(p);
+            else if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) RemoveDirectoryW(p.c_str());
+            else DeleteFileW(p.c_str());
+        } while (FindNextFileW(h, &fd));
+        FindClose(h);
+    }
+    RemoveDirectoryW(dir.c_str());
+}
+
+// Downloaded files carry the internet mark, like a browser's ("this came from the internet").
+static void MarkFromInternet(const std::wstring& path, const std::wstring& url) {
+    std::wstring ads = path + L":Zone.Identifier";
+    std::string u8 = "[ZoneTransfer]\r\nZoneId=3\r\n";
+    std::wstring h, last;
+    if (UrlParts(url, h, last)) {
+        int n = WideCharToMultiByte(CP_UTF8, 0, url.c_str(), -1, nullptr, 0, nullptr, nullptr);
+        std::string uu(n > 0 ? n - 1 : 0, '\0');
+        if (n > 1) WideCharToMultiByte(CP_UTF8, 0, url.c_str(), -1, uu.data(), n, nullptr, nullptr);
+        if (uu.find_first_of("\r\n") == std::string::npos) u8 += "HostUrl=" + uu + "\r\n";
+    }
+    HANDLE f = CreateFileW(ads.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (f == INVALID_HANDLE_VALUE) return;
+    DWORD w = 0;
+    WriteFile(f, u8.data(), (DWORD)u8.size(), &w, nullptr);
+    CloseHandle(f);
+}
+
+static std::wstring FreeName(const std::wstring& dir, const std::wstring& name) {
+    std::wstring p = dir + L"\\" + name;
+    size_t dot = name.find_last_of(L'.');
+    std::wstring base = dot == std::wstring::npos ? name : name.substr(0, dot), ext = dot == std::wstring::npos ? L"" : name.substr(dot);
+    for (int n = 2; PathExists(p) && n < 1000; n++) p = dir + L"\\" + base + L" (" + std::to_wstring(n) + L")" + ext;
+    return p;
+}
+
+// The job ended: its files go to the shelf. Many pictures (an album) stay together in one folder.
+static std::wstring DlCollect(DlJob* j) {
+    std::wstring first;
+    std::vector<std::wstring> files;
+    std::function<void(const std::wstring&)> walk = [&](const std::wstring& d) {
+        WIN32_FIND_DATAW fd;
+        HANDLE h = FindFirstFileW((d + L"\\*").c_str(), &fd);
+        if (h == INVALID_HANDLE_VALUE) return;
+        do {
+            if (!wcscmp(fd.cFileName, L".") || !wcscmp(fd.cFileName, L"..") || (fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) continue;
+            std::wstring p = d + L"\\" + fd.cFileName, ext = ExtOf(fd.cFileName);
+            if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) walk(p);
+            else if (ext != L".part" && ext != L".ytdl" && ext != L".temp" && ext != L".tmp" && files.size() < 2000) files.push_back(p);
+        } while (FindNextFileW(h, &fd));
+        FindClose(h);
+    };
+    walk(j->dir);
+    for (auto& f : files) MarkFromInternet(f, j->url);
+    std::wstring shelf = ShelfDir();
+    int added = 0;
+    // More than 6, or more than the shelf holds (the oldest would go, the new ones among them): one folder.
+    if (files.size() > 6 || (files.size() > 1 && (int)(g_shelf.size() + files.size()) > g_set.shelfLimit)) {
+        std::wstring name = SafeName(j->host + L" (" + std::to_wstring(files.size()) + L")");
+        std::wstring to = FreeName(shelf, name);
+        // (the folder keeps its pictures flat)
+        CreateDirectoryW(to.c_str(), nullptr);
+        for (auto& f : files) {
+            std::wstring n = f.substr(f.find_last_of(L'\\') + 1);
+            MoveFileExW(f.c_str(), FreeName(to, n).c_str(), MOVEFILE_COPY_ALLOWED);
+        }
+        if (ShelfAdd(to, true)) added++, first = to;
+    } else {
+        for (auto& f : files) {
+            std::wstring n = f.substr(f.find_last_of(L'\\') + 1);
+            std::wstring to = FreeName(shelf, n);
+            if (MoveFileExW(f.c_str(), to.c_str(), MOVEFILE_COPY_ALLOWED) && ShelfAdd(to, true)) {
+                if (!added) first = to;
+                added++;
+            }
+        }
+    }
+    DlRemoveDir(j->dir);
+    j->dir.clear();
+    Wh_Log(L"download: %d added to the shelf", added);
+    if (!added && j->phase != DlChoose) {
+        j->phase = DlFailed;
+        if (j->msg.empty()) j->msg = L2(L"Nada veio.", L"Nothing came.");
+    }
+    if (added) ShelfChanged();
+    return added > 1 ? std::wstring(L"*") + std::to_wstring(added) + L"|" + first : first;
+}
+
+// Finished or failed while the shelf was closed: a notice says so.
+static void DlNotify(DlJob* j, const std::wstring& got) {
+    if (g_fly.open && g_fly.kind == StShelf) return;  // (the card shows it)
+    if (got.empty()) {
+        AcquireSRWLockShared(&j->lock);
+        std::wstring msg = j->msg;
+        ReleaseSRWLockShared(&j->lock);
+        NotifPush(std::wstring(L2(L"Não deu pra baixar · ", L"Couldn't download · ")) + j->host, msg, {}, false, false);
+        return;
+    }
+    std::wstring path = got;
+    int n = 1;
+    if (got[0] == L'*') {
+        size_t bar = got.find(L'|');
+        n = _wtoi(got.substr(1, bar - 1).c_str());
+        path = got.substr(bar + 1);
+    }
+    std::wstring name = path.substr(path.find_last_of(L'\\') + 1);
+    std::wstring body = n > 1 ? name + L2(L" e mais ", L" and ") + std::to_wstring(n - 1) + L2(L" na prateleira", L" more on the shelf")
+                              : name + L2(L" está na prateleira", L" is on the shelf");
+    NotifPush(L2(L"Download pronto", L"Download done"), body,
+              {{L2(L"Abrir", L"Open"), L"dl-open|" + path, L"nimbus"}, {L2(L"Mostrar na prateleira", L"Show on the shelf"), L"dl-shelf", L"nimbus"}},
+              false, false);
+}
+
+// From the message window: progress (a redraw) or the end of a job.
+static void DlMessage(int id) {
+    DlJob* j = DlFind(id);
+    if (!j) return;
+    if (j->thread && (j->finished ? WaitForSingleObject(j->thread, 2000) : WaitForSingleObject(j->thread, 0)) == WAIT_OBJECT_0) {
+        CloseHandle(j->thread);
+        j->thread = nullptr;
+        bool stopped = j->stop;
+        if (stopped) {
+            DlRemoveDir(j->dir);
+            g_dl.erase(std::remove_if(g_dl.begin(), g_dl.end(), [&](auto& x) { return x.get() == j; }), g_dl.end());
+            StatusChanged();
+            return;
+        }
+        if (j->phase == DlChoose) {  // (a page yt-dlp may know: waits for video or audio)
+            DlRemoveDir(j->dir);
+            j->dir.clear();
+        } else {
+            std::wstring got = DlCollect(j);
+            DlNotify(j, j->phase == DlRun ? got : L"");
+            if (j->phase == DlRun) {
+                g_dl.erase(std::remove_if(g_dl.begin(), g_dl.end(), [&](auto& x) { return x.get() == j; }), g_dl.end());
+            } else {
+                j->phase = DlFailed;
+            }
+        }
+        StatusChanged();
+        return;
+    }
+    if (g_fly.open && g_fly.kind == StShelf) FlyRender();
+}
+
+static void DlCancel(int id) {
+    DlJob* j = DlFind(id);
+    if (!j) return;
+    if (j->thread) {
+        j->stop = true;
+        DlKill(j);
+        return;  // (it goes when its thread says so)
+    }
+    DlRemoveDir(j->dir);
+    g_dl.erase(std::remove_if(g_dl.begin(), g_dl.end(), [&](auto& x) { return x.get() == j; }), g_dl.end());
+    StatusChanged();
+}
+
+// A link came in (dropped or pasted).
+static bool DlStart(std::wstring url) {
+    while (!url.empty() && iswspace(url.back())) url.pop_back();
+    while (!url.empty() && iswspace(url.front())) url.erase(0, 1);
+    std::wstring host, last;
+    if (url.size() > 4096 || url.find_first_of(L" \t\r\n\"") != std::wstring::npos || !UrlParts(url, host, last)) return false;
+    for (auto& x : g_dl)
+        if (x->url == url && (x->phase == DlRun || x->phase == DlChoose)) return true;  // (already here)
+    // (the same link again after it failed or missed a program: a new try)
+    g_dl.erase(std::remove_if(g_dl.begin(), g_dl.end(), [&](auto& x) { return x->url == url && !x->thread; }), g_dl.end());
+    if (g_dl.size() >= 8) return false;
+    auto j = std::make_unique<DlJob>();
+    j->id = g_dlNext++;
+    j->url = url;
+    j->host = host;
+    j->title = last.empty() ? host : UrlDecode(last);
+    j->kind = DlClassify(host, last);
+    if (j->kind != DlDirect) j->title = host;  // ("watch" says nothing: the real title comes with the download)
+    DlJob* p = j.get();
+    g_dl.push_back(std::move(j));
+    Wh_Log(L"download: a link from %s (kind %d)", host.c_str(), p->kind);
+    if (p->kind == DlImages) DlStartTool(p, 2);
+    else if (p->kind == DlVideo || p->kind == DlEither) {
+        p->phase = DlChoose;
+        p->mode = p->kind == DlEither && !ToolExe(L"yt-dlp").empty() ? 0 : p->kind == DlEither ? 2 : 0;
+        StatusChanged();
+    } else {
+        DlRunJob(p);
+        StatusChanged();
+    }
+    return true;
+}
+
+static bool LooksLikeUrl(const wchar_t* t) {
+    if (!t) return false;
+    while (iswspace(*t)) t++;
+    return !_wcsnicmp(t, L"http://", 7) || !_wcsnicmp(t, L"https://", 8);
+}
+
+static void DlUninit() {
+    for (auto& j : g_dl) {
+        j->stop = true;
+        DlKill(j.get());
+    }
+    DWORD deadline = GetTickCount() + 1500;
+    for (auto& j : g_dl) {
+        if (j->thread) {
+            DWORD now = GetTickCount();
+            if (WaitForSingleObject(j->thread, (LONG)(deadline - now) > 0 ? deadline - now : 0) != WAIT_OBJECT_0) {
+                j.release();  // (still running: left alone rather than freed under it)
+                continue;
+            }
+            CloseHandle(j->thread);
+            j->thread = nullptr;
+        }
+        DlRemoveDir(j->dir);
+    }
+    g_dl.clear();
+}
+
+// ---- The job cards on the shelf ----
+
+static float PanelDownloads(float y) {
+    if (g_dl.empty()) return y;
+    float x0 = kFlyPad, x1 = kFlyW - kFlyPad;
+    for (auto& up : g_dl) {
+        DlJob* j = up.get();
+        int id = j->id;
+        AcquireSRWLockShared(&j->lock);
+        std::wstring title = j->title, msg = j->msg;
+        int phase = j->phase, kind = j->kind;
+        ReleaseSRWLockShared(&j->lock);
+        bool warn = phase == DlMissing || phase == DlFailed;
+        float tx = x0 + 64, tw = x1 - tx - 40;
+        float h = phase == DlChoose ? 100 : 70;
+        // (the choices row: when it doesn't fit, Download goes to a row of its own)
+        bool either = kind == DlEither, video = j->mode == 0;
+        if (j->quality.empty()) j->quality = DlQuality();
+        std::wstring qName = DlQualityName(j->quality);
+        auto chipW = [](const std::wstring& t) { return TextSize(t, g_fly.fSmall.Get()).width + 22; };
+        float bw = TextSize(L2(L"Baixar", L"Download"), g_fly.fSmall.Get()).width + 28;
+        float rowW = chipW(L2(L"Vídeo", L"Video")) + chipW(L2(L"Só áudio", L"Audio only")) + 12 +
+                     (either ? chipW(L2(L"Imagens", L"Pictures")) + 6 : 0) + (video ? chipW(qName + L" \u25BE") + 6 : 0);
+        bool twoRows = phase == DlChoose && rowW + 10 + bw > x1 - x0 - 24;
+        if (twoRows) h += 38;
+        if (warn) {
+            float msgH = 18;
+            ComPtr<IDWriteTextLayout> l;
+            if (g_fly.fWrap && SUCCEEDED(g_dw->CreateTextLayout(msg.c_str(), (UINT32)msg.size(), g_fly.fWrap.Get(), x1 - tx - 14, 200, &l))) {
+                DWRITE_TEXT_METRICS m = {};
+                l->GetMetrics(&m);
+                msgH = std::min(m.height, 60.0f);
+            }
+            h = 56 + msgH + 12;
+        }
+        D2D1_RECT_F r = D2D1::RectF(x0, y, x1, y + h);
+        FFill(r, 12, FCol(g_theme.text, 0.06f));
+        // The badge: what kind of link it is.
+        bool tool = kind != DlDirect && kind != DlUnknown;
+        const wchar_t* tag = !tool ? L"LINK" : j->mode == 2 ? L"IMG" : j->mode == 1 ? L"\u266A" : L"\u25B6";
+        D2D1_RECT_F th = D2D1::RectF(x0 + 12, y + 12, x0 + 52, y + 52);
+        FFill(th, 9, FCol(g_theme.text, 0.12f));
+        FText(tag, g_fly.fSmall.Get(), th.left, th.top, 40, 40, FInk(), DWRITE_TEXT_ALIGNMENT_CENTER);
+        FText(title.empty() ? j->host : title, g_fly.fText.Get(), tx, y + 12, tw, 20, FInk());
+        std::wstring state;
+        if (phase == DlChoose) state = j->host + L2(L" · escolha o que baixar", L" · pick what to download");
+        else if (phase == DlRun) {
+            int pc = j->pct, n = j->count;
+            state = j->host + L" · ";
+            state += j->mode == 2 && tool
+                        ? std::wstring(L2(L"baixando imagens", L"downloading pictures")) + (n ? L" · " + std::to_wstring(n) : L"")
+                        : pc >= 0 ? std::wstring(L2(L"baixando · ", L"downloading · ")) + std::to_wstring(pc) + L"%"
+                                  : std::wstring(L2(L"baixando…", L"downloading…"));
+        } else if (phase == DlMissing) state = j->host + L2(L" · falta um passo", L" · one step missing");
+        else state = j->host + L2(L" · não deu certo", L" · didn't work");
+        FText(state, g_fly.fSmall.Get(), tx, y + 32, tw, 18, FSub());
+        // ×: cancel, or put away.
+        D2D1_RECT_F xr = D2D1::RectF(x1 - 36, y + 10, x1 - 10, y + 36);
+        if (FHot(xr)) FFill(xr, 13, FHov());
+        FIcon(L"M8 8l8 8 M16 8l-8 8", (xr.left + xr.right) / 2, (xr.top + xr.bottom) / 2, 13, FHot(xr) ? FInk() : FSub(), 1.8f);
+        FHitAdd(xr, [id] { DlCancel(id); });
+        if (phase == DlRun) {
+            D2D1_RECT_F bar = D2D1::RectF(tx, y + 54, x1 - 14, y + 59);
+            FFill(bar, 2.5f, FCol(g_theme.text, 0.14f));
+            int pc = j->pct;
+            if (pc >= 0) FFill(D2D1::RectF(bar.left, bar.top, bar.left + (bar.right - bar.left) * std::max(0.03f, pc / 100.0f), bar.bottom), 2.5f, FInk());
+        } else if (phase == DlChoose) {
+            float cx = x0 + 12, cy = y + 60;
+            cx += FChip(cx, cy, L2(L"Vídeo", L"Video"), j->mode == 0, [id] {
+                if (DlJob* k = DlFind(id)) k->mode = 0, StatusChanged();
+            }) + 6;
+            if (video)  // (next to Video: a click goes to the next quality, for this download)
+                cx += FChip(cx, cy, qName + L" \u25BE", false, [id] {
+                    DlJob* k = DlFind(id);
+                    if (!k) return;
+                    static const wchar_t* order[] = {L"1080", L"720", L"480", L"melhor"};
+                    int i = 0;
+                    while (i < 4 && k->quality != order[i]) i++;
+                    k->quality = order[(i + 1) % 4];
+                    FlyRender();
+                }) + 6;
+            cx += FChip(cx, cy, L2(L"Só áudio", L"Audio only"), j->mode == 1, [id] {
+                if (DlJob* k = DlFind(id)) k->mode = 1, StatusChanged();
+            }) + 6;
+            if (either)
+                cx += FChip(cx, cy, L2(L"Imagens", L"Pictures"), j->mode == 2, [id] {
+                    if (DlJob* k = DlFind(id)) k->mode = 2, StatusChanged();
+                }) + 6;
+            if (twoRows) cy += 38;
+            D2D1_RECT_F b = D2D1::RectF(x1 - 12 - bw, cy, x1 - 12, cy + 30);
+            FFill(b, 9, FHot(b) ? FCol(g_theme.text, 0.85f) : FInk());
+            FText(L2(L"Baixar", L"Download"), g_fly.fSmall.Get(), b.left, b.top, bw, 30, FSolidTint(), DWRITE_TEXT_ALIGNMENT_CENTER);
+            FHitAdd(b, [id] {
+                if (DlJob* k = DlFind(id)) DlStartTool(k, k->mode);
+            });
+        } else {
+            FWrapText(msg, tx, y + 56, x1 - tx - 14, 60, FCol(g_theme.text, 0.85f));
+        }
+        y += h + 8;
+    }
+    return y;
+}
+
 // Ctrl+V (or "Paste"): files copied in Explorer come in as they are; a picture or text becomes a file.
+// A link alone is downloaded instead.
 // The clipboard is read only now, never watched, and what a password manager marks private is skipped.
 static void ShelfPaste() {
     if (!OpenClipboard(g_fly.hwnd)) return;
@@ -8923,8 +12249,11 @@ static void ShelfPaste() {
                 int n = WideCharToMultiByte(CP_UTF8, 0, t, -1, nullptr, 0, nullptr, nullptr);
                 std::string u8(n > 0 ? n - 1 : 0, '\0');
                 if (n > 1) WideCharToMultiByte(CP_UTF8, 0, t, -1, u8.data(), n, nullptr, nullptr);
+                bool link = LooksLikeUrl(t) && DlStart(t);
                 GlobalUnlock(h);
-                if (!u8.empty()) {
+                if (link) {
+                    added = -1;
+                } else if (!u8.empty()) {
                     std::wstring path = PasteName(L"Texto colado", L"Pasted text", L".txt");
                     if (WriteBytes(path, u8.data(), (DWORD)u8.size()) && ShelfAdd(path, true)) added++;
                 }
@@ -8933,7 +12262,7 @@ static void ShelfPaste() {
     }
     CloseClipboard();
     Wh_Log(L"shelf: pasted %d", added);
-    if (added) ShelfChanged();
+    if (added > 0) ShelfChanged();
 }
 
 static ComPtr<IDataObject> ShelfDataObject(const std::wstring& path) {
@@ -9060,11 +12389,34 @@ class ShelfDrop final : public IDropTarget {
         if (!r) delete this;
         return r;
     }
+    // A link dragged from a browser (its address, or text that is one).
+    static std::wstring LinkOf(IDataObject* o) {
+        static UINT urlW = RegisterClipboardFormatW(L"UniformResourceLocatorW");
+        for (UINT cf : {urlW, (UINT)CF_UNICODETEXT}) {
+            FORMATETC fe = {(CLIPFORMAT)cf, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
+            STGMEDIUM sm = {};
+            if (FAILED(o->GetData(&fe, &sm))) continue;
+            std::wstring s;
+            if (const wchar_t* t = (const wchar_t*)GlobalLock(sm.hGlobal)) {
+                s.assign(t, wcsnlen(t, GlobalSize(sm.hGlobal) / sizeof(wchar_t)));
+                GlobalUnlock(sm.hGlobal);
+            }
+            ReleaseStgMedium(&sm);
+            if (size_t nl = s.find_first_of(L"\r\n"); nl != std::wstring::npos) s = s.substr(0, nl);
+            if (LooksLikeUrl(s.c_str())) return s;
+        }
+        return L"";
+    }
+    bool link_ = false;
     STDMETHODIMP DragEnter(IDataObject* o, DWORD, POINTL pt, DWORD* e) override {
         FORMATETC fe = {CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
-        ok_ = g_set.shelfPlace != 0 && !g_shelfUi.draggingOut && o && o->QueryGetData(&fe) == S_OK;
-        // A link: the shelf only keeps where the file is (the source mustn't think it was copied).
-        eff_ = !ok_ ? DROPEFFECT_NONE : (*e & DROPEFFECT_LINK) ? DROPEFFECT_LINK : (*e & DROPEFFECT_COPY) ? DROPEFFECT_COPY : DROPEFFECT_NONE;
+        bool files = o && o->QueryGetData(&fe) == S_OK;
+        link_ = !files && o && !LinkOf(o).empty();
+        ok_ = g_set.shelfPlace != 0 && !g_shelfUi.draggingOut && (files || link_);
+        // A file: the shelf only keeps where it is (the source mustn't think it was copied). A link is copied.
+        eff_ = !ok_ ? DROPEFFECT_NONE
+               : link_ ? ((*e & DROPEFFECT_COPY) ? DROPEFFECT_COPY : (*e & DROPEFFECT_LINK) ? DROPEFFECT_LINK : DROPEFFECT_NONE)
+               : (*e & DROPEFFECT_LINK) ? DROPEFFECT_LINK : (*e & DROPEFFECT_COPY) ? DROPEFFECT_COPY : DROPEFFECT_NONE;
         *e = eff_;
         POINT p = {pt.x, pt.y};
         if (helper_) helper_->DragEnter(hwnd_, o, &p, *e);
@@ -9098,6 +12450,14 @@ class ShelfDrop final : public IDropTarget {
         *e = eff_;
         g_shelfUi.over = false;
         if (!ok_) return S_OK;
+        if (link_) {
+            std::wstring url = LinkOf(o);
+            bool started = !url.empty() && DlStart(url);
+            Wh_Log(L"shelf: a link dropped in (%d)", (int)started);
+            if (dock_) ShelfOpenFor(*dock_);
+            StatusChanged();
+            return S_OK;
+        }
         FORMATETC fe = {CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
         STGMEDIUM sm = {};
         int added = 0;
@@ -9221,6 +12581,7 @@ static float PanelShelf(float y) {
             y += ((g_shelf.size() + 2) / 3) * (ch + 4) + 6;
         }
     }
+    y = PanelDownloads(y);
     D2D1_RECT_F dz = D2D1::RectF(kFlyPad, y, kFlyW - kFlyPad, y + 50);
     bool over = g_shelfUi.over;
     if (over) FFill(dz, 12, FHov());
@@ -9228,7 +12589,7 @@ static float PanelShelf(float y) {
         g_fly.rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(dz.left + 0.75f, dz.top + 0.75f, dz.right - 0.75f, dz.bottom - 0.75f), 12, 12),
                                        FBr(FCol(g_theme.text, over ? 0.55f : 0.2f)), 1.5f, ShelfDash());
     FText(over ? L2(L"Solte pra guardar aqui", L"Drop to keep it here")
-               : L2(L"Solte arquivos aqui ou cole com Ctrl+V", L"Drop files here or paste with Ctrl+V"),
+               : L2(L"Solte arquivos ou um link aqui · Ctrl+V cola", L"Drop files or a link here · Ctrl+V pastes"),
           g_fly.fSmall.Get(), dz.left, dz.top, dz.right - dz.left, 50, over ? FInk() : FSub(), DWRITE_TEXT_ALIGNMENT_CENTER);
     y += 50;
     FSep(y);
@@ -9267,6 +12628,8 @@ struct WinSql {
 struct NotifApp {
     std::wstring name;
     ComPtr<IWICBitmapSource> icon;
+    bool found = false;   // name and icon both found (a miss is looked for again a minute later)
+    DWORD triedAt = 0;
 };
 std::unordered_map<std::wstring, NotifApp> g_notifApps;
 std::vector<long long> g_notifCleared;  // hidden in Nimbus (saved)
@@ -9384,6 +12747,14 @@ static void ParseToast(const std::wstring& x, NotifItem& n) {
     }
     if (!texts.empty()) n.title = texts[0];
     for (size_t i = 1; i < texts.size(); i++) n.body += (n.body.empty() ? L"" : L"\n") + texts[i];
+    // Its picture: the app logo one first, else the first one (a tray balloon's icon comes this way).
+    for (size_t p = b; b != std::wstring::npos && (p = x.find(L"<image", p)) != std::wstring::npos && p < be;) {
+        size_t te = x.find(L'>', p);
+        if (te == std::wstring::npos) break;
+        std::wstring tag = x.substr(p, te - p), src = XmlAttr(tag, L"src");
+        if (!src.empty() && (n.image.empty() || XmlAttr(tag, L"placement") == L"appLogoOverride")) n.image = src;
+        p = te;
+    }
     for (size_t p = x.find(L"<actions"); p != std::wstring::npos && (p = x.find(L"<action ", p)) != std::wstring::npos;) {
         size_t te = x.find(L'>', p);
         if (te == std::wstring::npos) break;
@@ -9399,12 +12770,64 @@ static void ParseToast(const std::wstring& x, NotifItem& n) {
     }
 }
 
+// A picture file, read now into memory (the file may be a temporary one Windows deletes later).
+static ComPtr<IWICBitmapSource> WicFromFile(const std::wstring& path, UINT size) {
+    ComPtr<IWICBitmapDecoder> dec;
+    ComPtr<IWICBitmapFrameDecode> fr;
+    ComPtr<IWICFormatConverter> conv;
+    if (!g_wic || FAILED(g_wic->CreateDecoderFromFilename(path.c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnLoad, &dec)) ||
+        FAILED(dec->GetFrame(0, &fr)) || FAILED(g_wic->CreateFormatConverter(&conv)) ||
+        FAILED(conv->Initialize(fr.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0, WICBitmapPaletteTypeCustom)))
+        return nullptr;
+    UINT w = 0, h = 0;
+    conv->GetSize(&w, &h);
+    if (!w || !h) return nullptr;
+    ComPtr<IWICBitmapSource> src = conv;
+    if (w > size || h > size) {
+        ComPtr<IWICBitmapScaler> sc;
+        float k = (float)size / std::max(w, h);
+        if (SUCCEEDED(g_wic->CreateBitmapScaler(&sc)) &&
+            SUCCEEDED(sc->Initialize(conv.Get(), std::max(1u, (UINT)(w * k)), std::max(1u, (UINT)(h * k)), WICBitmapInterpolationModeFant)))
+            src = sc;
+    }
+    ComPtr<IWICBitmap> bmp;
+    if (FAILED(g_wic->CreateBitmapFromSource(src.Get(), WICBitmapCacheOnLoad, &bmp))) return nullptr;
+    return bmp;
+}
+
+// A toast's picture, only when it's a local file in a temporary or app-data folder.
+static std::wstring NotifImagePath(std::wstring src) {
+    if (!_wcsnicmp(src.c_str(), L"file:///", 8)) src = src.substr(8);
+    else if (!_wcsnicmp(src.c_str(), L"file://", 7)) src = src.substr(7);
+    else if (src.size() < 3 || src[1] != L':') return L"";
+    std::wstring dec;
+    for (size_t i = 0; i < src.size(); i++) {
+        if (src[i] == L'%' && i + 2 < src.size() && iswxdigit(src[i + 1]) && iswxdigit(src[i + 2])) {
+            dec += (wchar_t)wcstol(src.substr(i + 1, 2).c_str(), nullptr, 16);
+            i += 2;
+        } else dec += src[i] == L'/' ? L'\\' : src[i];
+    }
+    wchar_t full[MAX_PATH * 2];
+    if (!GetFullPathNameW(dec.c_str(), ARRAYSIZE(full), full, nullptr)) return L"";
+    std::wstring f = full;
+    auto under = [&](const wchar_t* var) {
+        wchar_t d[MAX_PATH] = {};
+        if (!GetEnvironmentVariableW(var, d, ARRAYSIZE(d))) return false;
+        std::wstring dir = d;
+        if (dir.back() != L'\\') dir += L'\\';
+        return f.size() > dir.size() && !_wcsnicmp(f.c_str(), dir.c_str(), dir.size());
+    };
+    return (under(L"TEMP") || under(L"LOCALAPPDATA") || under(L"APPDATA")) ? f : L"";
+}
+
 static const NotifApp& NotifAppOf(const std::wstring& aumid) {
     auto it = g_notifApps.find(aumid);
-    if (it != g_notifApps.end()) return it->second;
+    if (it != g_notifApps.end() && (it->second.found || GetTickCount() - it->second.triedAt < 60000)) return it->second;
     NotifApp a;
+    a.triedAt = GetTickCount();
     if (aumid == L"#nimbus") {  // Nimbus' own (test, questions, reminders)
         a.name = L"Nimbus Menu";
+        a.found = true;
         if (HBITMAP hb = DrawNimbusIcon(64)) {
             a.icon = WicFromHBitmap(hb);
             DeleteObject(hb);
@@ -9420,6 +12843,29 @@ static const NotifApp& NotifAppOf(const std::wstring& aumid) {
         }
         a.icon = IconFromItem(si.Get(), 64);
     }
+    // Apps that aren't in the apps list (a tray icon's balloon among them) register a name and an icon
+    // for their notifications here.
+    if (a.name.empty() || !a.icon) {
+        HKEY k = nullptr;
+        if (!RegOpenKeyExW(HKEY_CURRENT_USER, (L"Software\\Classes\\AppUserModelId\\" + aumid).c_str(), 0, KEY_READ, &k)) {
+            auto str = [&](const wchar_t* v) {
+                wchar_t b[MAX_PATH * 2] = {};
+                DWORD sz = sizeof(b) - sizeof(wchar_t);
+                if (RegGetValueW(k, nullptr, v, RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ, nullptr, b, &sz)) return std::wstring();
+                return std::wstring(b);
+            };
+            std::wstring dn = str(L"DisplayName"), iu = str(L"IconUri");
+            RegCloseKey(k);
+            if (!dn.empty() && dn[0] == L'@') {
+                wchar_t b[512] = {};
+                dn = SUCCEEDED(SHLoadIndirectString(dn.c_str(), b, ARRAYSIZE(b), nullptr)) ? b : L"";
+            }
+            if (dn.size() > 4 && !_wcsicmp(dn.c_str() + dn.size() - 4, L".exe")) dn.resize(dn.size() - 4);
+            if (a.name.empty() && !dn.empty()) a.name = dn;
+            if (!a.icon && !iu.empty() && PathExists(iu)) a.icon = WicFromFile(iu, 64);
+        }
+    }
+    a.found = !a.name.empty() && a.icon;
     if (a.name.empty()) {
         // "{...}\Folder\App.exe" or "Company.App": the last word.
         size_t c = aumid.find_last_of(L"\\.!");
@@ -9429,8 +12875,63 @@ static const NotifApp& NotifAppOf(const std::wstring& aumid) {
             size_t c2 = rest.find_last_of(L"\\");
             a.name = c2 == std::wstring::npos ? rest : rest.substr(c2 + 1);
         }
+        if (!aumid.compare(0, 25, L"NotifyIconGeneratedAumid_")) a.name = L2(L"Aviso da bandeja", L"Tray notice");
     }
+    if (!a.icon && it != g_notifApps.end()) a.icon = it->second.icon;  // (one from the toast's own picture)
     return g_notifApps[aumid] = a;
+}
+
+// ---- Unread badges on the dock's icons ----
+// An app's notifications that came since it was last in front (or since Nimbus started).
+std::unordered_map<std::wstring, long long> g_badgeSeen;  // app key -> FILETIME
+static long long NowFiletime() {
+    FILETIME ft;
+    GetSystemTimeAsFileTime(&ft);
+    return ((long long)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
+}
+static long long g_badgeSince = NowFiletime();
+
+static bool NotifIsFor(const NotifItem& n, const App& a) {
+    if (n.id <= 0 || n.aumid.empty()) return false;  // (Nimbus' own)
+    if (!a.aumid.empty() && !_wcsicmp(a.aumid.c_str(), n.aumid.c_str())) return true;
+    std::wstring exe = a.exe.empty() ? L"" : PathFindFileNameW(a.exe.c_str());
+    if (!exe.empty() && n.aumid.size() > exe.size() && n.aumid[n.aumid.size() - exe.size() - 1] == L'\\' &&
+        !_wcsicmp(n.aumid.c_str() + n.aumid.size() - exe.size(), exe.c_str()))
+        return true;
+    auto it = g_notifApps.find(n.aumid);  // (only what's already known: no lookups while drawing)
+    if (it == g_notifApps.end() || it->second.name.empty()) return false;
+    const std::wstring& nm = it->second.name;
+    if (!a.label.empty() && !_wcsicmp(nm.c_str(), a.label.c_str())) return true;
+    if (exe.size() > 4 && nm.size() == exe.size() - 4 && !_wcsnicmp(nm.c_str(), exe.c_str(), nm.size())) return true;
+    return false;
+}
+
+static int AppBadge(const App& a) {
+    if (!CfgInt(L"dockBadges") || g_notifs.empty() || a.key.empty()) return 0;
+    HWND fg = GetForegroundWindow();
+    if (fg && std::find(a.wins.begin(), a.wins.end(), fg) != a.wins.end()) return 0;  // (in front: read)
+    auto s = g_badgeSeen.find(a.key);
+    long long since = s == g_badgeSeen.end() ? g_badgeSince : s->second;
+    int n = 0;
+    for (auto& x : g_notifs)
+        if (x.arrival > since && NotifIsFor(x, a)) n++;
+    return n;
+}
+
+// A window came to the front: its app's notifications count as seen.
+static void BadgeSeen(HWND h) {
+    for (auto& a : g_apps)
+        if (std::find(a.wins.begin(), a.wins.end(), h) != a.wins.end()) g_badgeSeen[a.key] = NowFiletime();
+}
+
+// No icon from Windows' lists: the toast's own picture, read now (the file is temporary).
+static void NotifImageIcon(const NotifItem& n) {
+    if (n.image.empty() || n.aumid.empty()) return;
+    const NotifApp& a = NotifAppOf(n.aumid);
+    if (a.icon) return;
+    std::wstring f = NotifImagePath(n.image);
+    if (f.empty() || !PathExists(f)) return;
+    if (auto ic = WicFromFile(f, 64)) g_notifApps[n.aumid].icon = ic;
 }
 
 static bool NotifIsCleared(long long id) { return std::find(g_notifCleared.begin(), g_notifCleared.end(), id) != g_notifCleared.end(); }
@@ -9494,6 +12995,13 @@ static bool NotifPoll(bool first) {
         }
         n.arrival = g_sql.colInt64(st, 3);
         if (n.title.empty() && n.body.empty()) continue;
+        NotifImageIcon(n);
+        // (a tray balloon often has the app's name as its title: the message is the title then)
+        if (!n.body.empty() && !_wcsicmp(n.title.c_str(), NotifAppOf(n.aumid).name.c_str())) {
+            size_t nl = n.body.find(L'\n');
+            n.title = n.body.substr(0, nl);
+            n.body = nl == std::wstring::npos ? L"" : n.body.substr(nl + 1);
+        }
         g_notifs.insert(g_notifs.begin(), n);
         if (!first) {
             NotifMuteNewApp(n.aumid);
@@ -9692,6 +13200,23 @@ static void NotifNimbusAction(const std::wstring& args) {
         SyncBanners();
     } else if (args == L"banners-no") {
         Wh_SetStringValue((UserPrefix() + L"notif.askedBanners").c_str(), L"1");
+    } else if (!args.compare(0, 8, L"dl-open|")) {
+        // (only what is still on the shelf: the notice may be older than the file)
+        std::wstring path = args.substr(8);
+        if (ShelfFind(path) >= 0 && PathExists(path)) ShelfOpen(path);
+    } else if (args == L"dl-shelf") {
+        // The shelf, on the dock of the monitor with the mouse.
+        POINT pt;
+        GetCursorPos(&pt);
+        HMONITOR mon = MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
+        Dock* target = nullptr;
+        for (auto* d : g_docks)
+            if (d->mon == mon) target = d;
+        if (!target && !g_docks.empty()) target = g_docks[0];
+        if (target) {
+            CloseFlyout();
+            OpenFlyout(*target, StShelf, false);
+        }
     }
 }
 
@@ -10090,7 +13615,7 @@ static void ToastRender() {
     int x = g_set.notifH == 0 ? m.left + (int)(8 * t.scale)
             : g_set.notifH == 1 ? (m.left + m.right - pw) / 2
                                 : m.right - pw - (int)(8 * t.scale);
-    int dockRoom = d->ch - (int)d->pill.top;
+    int dockRoom = d->cfg.edge == 0 ? d->ch - (int)d->pill.top : 0;  // (a dock at another edge leaves the bottom free)
     int y = g_set.notifTop ? m.top + (int)(4 * t.scale) : m.bottom - dockRoom - ph + (int)(kToastM * t.scale) - (int)(4 * t.scale);
     t.rc = {x, y, x + pw, y + ph};
 
@@ -11146,6 +14671,447 @@ static void LoadNotes() {
         r.text = Unesc(f[4]);
         g_rems.push_back(r);
     }
+}
+
+// ---- Quick results in the Start's search ----
+
+static bool CopyToClipboard(const std::wstring& t) {
+    if (!OpenClipboard(g_msgWnd)) return false;  // (an owner: with none, SetClipboardData may fail)
+    EmptyClipboard();
+    bool ok = false;
+    if (HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, (t.size() + 1) * sizeof(wchar_t))) {
+        memcpy(GlobalLock(h), t.c_str(), (t.size() + 1) * sizeof(wchar_t));
+        GlobalUnlock(h);
+        ok = SetClipboardData(CF_UNICODETEXT, h) != nullptr;
+        if (!ok) GlobalFree(h);
+    }
+    CloseClipboard();
+    return ok;
+}
+
+// A number as the user writes them (their decimal mark), up to 10 significant digits.
+static std::wstring NumText(double v) {
+    if (!std::isfinite(v)) return L"";
+    wchar_t b[64];
+    swprintf_s(b, L"%.10g", v);
+    std::wstring s = b;
+    if (s.find(L'e') != std::wstring::npos) return s;
+    wchar_t dec[8] = L".";
+    GetLocaleInfoEx(g_locale, LOCALE_SDECIMAL, dec, ARRAYSIZE(dec));
+    for (auto& c : s)
+        if (c == L'.') c = dec[0];
+    return s;
+}
+
+// A small calculator: + - * / ^, parentheses, "x" and "×" for times, "÷", a trailing % (of 100).
+struct Calc {
+    const std::wstring& s;
+    size_t i = 0;
+    bool bad = false;
+    void ws() {
+        while (i < s.size() && s[i] == L' ') i++;
+    }
+    double num() {
+        ws();
+        size_t a = i;
+        while (i < s.size() && (iswdigit(s[i]) || s[i] == L'.')) i++;
+        if (a == i) {
+            bad = true;
+            return 0;
+        }
+        return wcstod(s.substr(a, i - a).c_str(), nullptr);
+    }
+    double atom() {
+        ws();
+        if (i < s.size() && (s[i] == L'-' || s[i] == L'+')) {
+            bool neg = s[i++] == L'-';
+            double v = atom();
+            return neg ? -v : v;
+        }
+        double v;
+        if (i < s.size() && s[i] == L'(') {
+            i++;
+            v = expr();
+            ws();
+            if (i < s.size() && s[i] == L')') i++;
+            else bad = true;
+        } else {
+            v = num();
+        }
+        ws();
+        while (i < s.size() && s[i] == L'%') {
+            v /= 100;
+            i++;
+            ws();
+        }
+        return v;
+    }
+    double power() {
+        double v = atom();
+        ws();
+        if (i < s.size() && s[i] == L'^') {
+            i++;
+            v = pow(v, power());
+        }
+        return v;
+    }
+    double term() {
+        double v = power();
+        for (;;) {
+            ws();
+            if (i >= s.size()) return v;
+            wchar_t c = s[i];
+            if (c == L'*' || c == L'x' || c == L'X' || c == 0xD7) {
+                i++;
+                v *= power();
+            } else if (c == L'/' || c == 0xF7) {
+                i++;
+                double d = power();
+                if (d == 0) bad = true;
+                v = d == 0 ? 0 : v / d;
+            } else {
+                return v;
+            }
+        }
+    }
+    double expr() {
+        double v = term();
+        for (;;) {
+            ws();
+            if (i >= s.size()) return v;
+            if (s[i] == L'+') {
+                i++;
+                v += term();
+            } else if (s[i] == L'-') {
+                i++;
+                v -= term();
+            } else {
+                return v;
+            }
+        }
+    }
+};
+
+// The decimal mark: "1,5" and "1.5" are both one and a half; with both, the last one is the decimal mark.
+static std::wstring NumNormalize(std::wstring t) {
+    size_t c = t.rfind(L','), d = t.rfind(L'.');
+    wchar_t thou = c != std::wstring::npos && d != std::wstring::npos ? (c > d ? L'.' : L',') : 0;
+    std::wstring o;
+    for (wchar_t ch : t) {
+        if (ch == thou) continue;
+        o += ch == L',' ? L'.' : ch;
+    }
+    return o;
+}
+
+static bool CalcTry(const std::wstring& q, double& out) {
+    std::wstring t = q;
+    if (!t.empty() && t[0] == L'=') t = t.substr(1);
+    bool op = false, digit = false;
+    for (size_t k = 0; k < t.size(); k++) {
+        wchar_t ch = t[k];
+        if (iswdigit(ch)) digit = true;
+        else if (wcschr(L"+-*/^%x×÷", ch) && k > 0) op = true;
+        else if (!wcschr(L" .,()+-", ch)) return false;
+    }
+    if (!digit || (!op && q[0] != L'=')) return false;
+    t = NumNormalize(t);
+    Calc c{t};
+    out = c.expr();
+    c.ws();
+    return !c.bad && c.i == t.size() && std::isfinite(out);
+}
+
+// "10 km em mi", "5 kg to lb", "100 f em c", "2 gb em mb".
+static bool ConvertTry(const std::wstring& fq, std::wstring& title) {
+    struct U {
+        const wchar_t* names;  // space-separated, folded
+        int dim;               // 0 length, 1 mass, 2 volume, 3 data, 4 time, 5 speed, 6 temperature, 7 area
+        double f;              // to the base unit
+        const wchar_t* show;
+    };
+    static const U units[] = {
+        {L"mm milimetro milimetros millimeter millimeters", 0, 0.001, L"mm"}, {L"cm centimetro centimetros centimeter centimeters", 0, 0.01, L"cm"},
+        {L"m metro metros meter meters", 0, 1, L"m"}, {L"km quilometro quilometros kilometer kilometers", 0, 1000, L"km"},
+        {L"in pol polegada polegadas inch inches", 0, 0.0254, L"in"}, {L"ft pe pes foot feet", 0, 0.3048, L"ft"},
+        {L"yd jarda jardas yard yards", 0, 0.9144, L"yd"}, {L"mi milha milhas mile miles", 0, 1609.344, L"mi"},
+        {L"mg miligrama miligramas", 1, 0.000001, L"mg"}, {L"g grama gramas gram grams", 1, 0.001, L"g"},
+        {L"kg quilo quilos quilograma quilogramas kilogram kilograms", 1, 1, L"kg"}, {L"t ton tonelada toneladas tonne tonnes", 1, 1000, L"t"},
+        {L"lb lbs libra libras pound pounds", 1, 0.45359237, L"lb"}, {L"oz onca oncas ounce ounces", 1, 0.028349523125, L"oz"},
+        {L"ml mililitro mililitros milliliter milliliters", 2, 0.001, L"ml"}, {L"l litro litros liter liters", 2, 1, L"L"},
+        {L"gal galao galoes gallon gallons", 2, 3.785411784, L"gal"}, {L"floz", 2, 0.0295735295625, L"fl oz"},
+        {L"b byte bytes", 3, 1, L"B"}, {L"kb", 3, 1024, L"KB"}, {L"mb", 3, 1048576, L"MB"}, {L"gb", 3, 1073741824.0, L"GB"},
+        {L"tb", 3, 1099511627776.0, L"TB"},
+        {L"s seg segundo segundos sec second seconds", 4, 1, L"s"}, {L"min minuto minutos minute minutes", 4, 60, L"min"},
+        {L"h hora horas hour hours", 4, 3600, L"h"}, {L"d dia dias day days", 4, 86400, L"dias"},
+        {L"kmh km/h", 5, 1 / 3.6, L"km/h"}, {L"mph", 5, 0.44704, L"mph"}, {L"m/s ms", 5, 1, L"m/s"}, {L"no nos knot knots", 5, 0.514444, L"nós"},
+        {L"c celsius", 6, 0, L"°C"}, {L"f fahrenheit", 6, 1, L"°F"}, {L"k kelvin", 6, 2, L"K"},
+        {L"m2 m²", 7, 1, L"m²"}, {L"km2 km²", 7, 1000000, L"km²"}, {L"ha hectare hectares", 7, 10000, L"ha"},
+        {L"acre acres", 7, 4046.8564224, L"acres"}, {L"ft2 ft²", 7, 0.09290304, L"ft²"},
+    };
+    auto find = [&](std::wstring w) -> const U* {
+        while (!w.empty() && (w.back() == L'.' || w.back() == L'?')) w.pop_back();
+        if (!w.empty() && w[0] == 0xB0) w = w.substr(1);  // °C
+        if (w.empty()) return nullptr;
+        for (auto& u : units) {
+            std::wstring all = std::wstring(L" ") + u.names + L" ";
+            if (all.find(L" " + w + L" ") != std::wstring::npos) return &u;
+        }
+        return nullptr;
+    };
+    // number, unit, (em|to|in|para|->|=), unit
+    size_t i = 0;
+    while (i < fq.size() && (iswdigit(fq[i]) || fq[i] == L'.' || fq[i] == L',' || (i == 0 && fq[i] == L'-'))) i++;
+    if (!i || !iswdigit(fq[i - 1])) return false;
+    double v = wcstod(NumNormalize(fq.substr(0, i)).c_str(), nullptr);
+    std::vector<std::wstring> words;
+    for (size_t a = i; a < fq.size();) {
+        while (a < fq.size() && fq[a] == L' ') a++;
+        size_t b = fq.find(L' ', a);
+        if (a < fq.size()) words.push_back(fq.substr(a, b == std::wstring::npos ? std::wstring::npos : b - a));
+        if (b == std::wstring::npos) break;
+        a = b;
+    }
+    if (words.size() == 3 && (words[1] == L"em" || words[1] == L"to" || words[1] == L"in" || words[1] == L"para" || words[1] == L"->" ||
+                              words[1] == L"="))
+        words.erase(words.begin() + 1);
+    if (words.size() != 2) return false;
+    const U* a = find(words[0]);
+    const U* b = find(words[1]);
+    if (!a || !b || a->dim != b->dim || a == b) return false;
+    double r;
+    if (a->dim == 6) {
+        double c = a->f == 0 ? v : a->f == 1 ? (v - 32) * 5 / 9 : v - 273.15;
+        r = b->f == 0 ? c : b->f == 1 ? c * 9 / 5 + 32 : c + 273.15;
+    } else {
+        r = v * a->f / b->f;
+    }
+    if (fabs(r) >= 1e-9) r = std::round(r * 1e6) / 1e6;
+    title = NumText(v) + L" " + a->show + L" = " + NumText(r) + L" " + b->show;
+    return true;
+}
+
+static void SleepNow() {
+    using Fn = BOOLEAN(WINAPI*)(BOOLEAN, BOOLEAN, BOOLEAN);
+    if (HMODULE m = LoadLibraryExW(L"powrprof.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32))
+        if (auto fn = (Fn)GetProcAddress(m, "SetSuspendState")) fn(FALSE, FALSE, FALSE);
+}
+
+static std::vector<QuickHit> QuickFind(const std::wstring& raw) {
+    std::vector<QuickHit> out;
+    std::wstring q = raw;
+    while (!q.empty() && q.back() == L' ') q.pop_back();
+    while (!q.empty() && q.front() == L' ') q.erase(0, 1);
+    if (q.empty()) return out;
+    std::wstring fq = FoldText(q);
+    const wchar_t* copyHint = L2(L"Enter copia o resultado", L"Enter copies the result");
+    double v = 0;
+    if (CalcTry(q, v)) {
+        std::wstring r = NumText(v);
+        out.push_back({0xE8EF, L"= " + r, copyHint, true, [r] { CopyToClipboard(r); }});
+    }
+    std::wstring conv;
+    if (ConvertTry(fq, conv)) {
+        std::wstring r = conv.substr(conv.find(L" = ") + 3);
+        r = r.substr(0, r.find(L' '));
+        out.push_back({0xE8AB, conv, copyHint, true, [r] { CopyToClipboard(r); }});
+    }
+    // A path, like Win+R takes it: "%appdata%", "%temp%\pasta", "C:\Jogos", "~\Downloads", "\\pc\pasta", "shell:startup".
+    {
+        bool unc = !q.compare(0, 2, L"\\\\"), shell = !_wcsnicmp(q.c_str(), L"shell:", 6);
+        bool drive = q.size() >= 2 && iswalpha(q[0]) && q[1] == L':';
+        if (q[0] == L'%' || q[0] == L'~' || unc || shell || drive) {
+            std::wstring t = q[0] == L'~' ? L"%USERPROFILE%" + q.substr(1) : q;
+            for (auto& ch : t)
+                if (ch == L'/' && !shell) ch = L'\\';
+            if (drive && t.size() == 2) t += L'\\';  // ("d:" is the drive)
+            wchar_t ex[2048];
+            DWORD n = ExpandEnvironmentStringsW(t.c_str(), ex, ARRAYSIZE(ex));
+            std::wstring p = n && n <= ARRAYSIZE(ex) ? ex : L"";
+            bool ok = false, dir = true;
+            if (!p.empty() && p.find(L'%') == std::wstring::npos) {
+                // (a network path or a network drive isn't checked here: it could hang the menu while typing)
+                wchar_t root[4] = {p[0], L':', L'\\', 0};
+                bool remote = unc || (p.size() >= 2 && p[1] == L':' && GetDriveTypeW(root) == DRIVE_REMOTE);
+                if (shell || remote) {
+                    ok = true;
+                } else {
+                    DWORD at = GetFileAttributesW(p.c_str());
+                    ok = at != INVALID_FILE_ATTRIBUTES;
+                    dir = ok && (at & FILE_ATTRIBUTE_DIRECTORY);
+                }
+            }
+            if (ok)
+                out.push_back({(wchar_t)(dir ? 0xE838 : 0xE8E5), p, dir ? L2(L"Enter abre a pasta", L"Enter opens the folder") : L2(L"Enter abre", L"Enter opens"),
+                               true, [p] { ShellExecuteW(nullptr, L"open", p.c_str(), nullptr, nullptr, SW_SHOWNORMAL); }});
+        }
+    }
+    // A Win+R command: "regedit", "services.msc", "cmd /k ipconfig", "appwiz.cpl", "ms-settings:display",
+    // a site. Found like Win+R finds it (the PATH, then App Paths); with arguments or an extension it's
+    // chosen first, a bare word only when no app matches (typing "notepad" still gets the app).
+    if (q[0] != L'%' && q[0] != L'~') {  // (those are paths, above)
+        std::wstring tok, args;
+        if (q[0] == L'"') {
+            size_t e = q.find(L'"', 1);
+            tok = q.substr(1, e == std::wstring::npos ? std::wstring::npos : e - 1);
+            if (e != std::wstring::npos) args = q.substr(e + 1);
+        } else {
+            size_t e = q.find(L' ');
+            tok = q.substr(0, e);
+            if (e != std::wstring::npos) args = q.substr(e + 1);
+        }
+        while (!args.empty() && args.front() == L' ') args.erase(0, 1);
+        std::wstring ftok = FoldText(tok);
+        std::wstring target, show;
+        bool url = !ftok.compare(0, 7, L"http://") || !ftok.compare(0, 8, L"https://") ||
+                   (!ftok.compare(0, 4, L"www.") && ftok.find(L'.', 4) != std::wstring::npos);
+        size_t colon = tok.find(L':');
+        if (url && args.empty()) {
+            target = ftok.compare(0, 4, L"www.") ? tok : L"https://" + tok;
+        } else if (colon != std::wstring::npos && colon > 1 && _wcsnicmp(tok.c_str(), L"shell:", 6) && args.empty()) {
+            // a link like "ms-settings:display" or "steam:": only a scheme Windows knows
+            std::wstring scheme = tok.substr(0, colon);
+            bool known = std::all_of(scheme.begin(), scheme.end(), [](wchar_t c) { return iswalnum(c) || c == L'-' || c == L'.' || c == L'+'; });
+            HKEY k;
+            if (known && RegOpenKeyExW(HKEY_CLASSES_ROOT, scheme.c_str(), 0, KEY_READ, &k) == ERROR_SUCCESS) {
+                known = RegQueryValueExW(k, L"URL Protocol", nullptr, nullptr, nullptr, nullptr) == ERROR_SUCCESS;
+                RegCloseKey(k);
+                if (known) target = tok;
+            }
+        } else if (tok.size() >= 2 && tok.find_first_of(L"\\/:*?<>|") == std::wstring::npos) {
+            wchar_t found[MAX_PATH];
+            bool hasExt = tok.find(L'.') != std::wstring::npos;
+            if (hasExt && SearchPathW(nullptr, tok.c_str(), nullptr, MAX_PATH, found, nullptr)) target = found;
+            for (const wchar_t* ext : {L".exe", L".msc", L".cpl", L".com", L".bat", L".cmd"}) {
+                if (!target.empty() || hasExt) break;
+                if (SearchPathW(nullptr, tok.c_str(), ext, MAX_PATH, found, nullptr)) target = found;
+            }
+            if (target.empty()) {  // (App Paths: "chrome", "excel", "winword")
+                std::wstring key = L"Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\" + tok + (hasExt ? L"" : L".exe");
+                for (HKEY root : {HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE}) {
+                    DWORD sz = sizeof(found);
+                    if (RegGetValueW(root, key.c_str(), nullptr, RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ, nullptr, found, &sz) == ERROR_SUCCESS) {
+                        std::wstring p = found;
+                        if (p.size() >= 2 && p.front() == L'"') p = p.substr(1, p.find(L'"', 1) - 1);
+                        if (GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                            target = p;
+                            break;
+                        }
+                    }
+                }
+            }
+            show = target;
+        }
+        if (!target.empty()) {
+            bool strong = !args.empty() || url || colon != std::wstring::npos || tok.find(L'.') != std::wstring::npos;
+            std::wstring title = std::wstring(L2(L"Executar: ", L"Run: ")) + q;
+            std::wstring sub = url ? std::wstring(L2(L"Enter abre no navegador", L"Enter opens it in the browser"))
+                                   : show.empty() ? std::wstring(L2(L"Enter abre", L"Enter opens")) : show;
+            out.push_back({(wchar_t)(url ? 0xE774 : 0xE756), title, sub, strong, [target, args] {
+                               ShellExecuteW(nullptr, L"open", target.c_str(), args.empty() ? nullptr : args.c_str(), nullptr, SW_SHOWNORMAL);
+                           }});
+        }
+    }
+    // Commands (Portuguese or English).
+    auto is = [&](std::initializer_list<const wchar_t*> words) {
+        for (auto w : words)
+            if (fq == w) return true;
+        return false;
+    };
+    if (is({L"bloquear", L"bloquear o pc", L"lock", L"lock pc"}))
+        out.push_back({0xE72E, L2(L"Bloquear o PC", L"Lock the PC"), L2(L"Enter bloqueia", L"Enter locks"), true, [] { LockWorkStation(); }});
+    if (is({L"suspender", L"dormir", L"sleep", L"suspend"}))
+        out.push_back({0xE708, L2(L"Suspender", L"Sleep"), L2(L"Enter põe o PC pra dormir", L"Enter puts the PC to sleep"), true, [] { SleepNow(); }});
+    if (is({L"esvaziar lixeira", L"esvaziar a lixeira", L"limpar lixeira", L"empty recycle bin", L"empty trash", L"empty the recycle bin"}))
+        out.push_back({0xE74D, L2(L"Esvaziar a lixeira", L"Empty the Recycle Bin"), L2(L"O Windows pergunta antes", L"Windows asks first"), true,
+                       [] {
+                           // (on its own thread: a big bin takes a while, the bar keeps going)
+                           if (HANDLE t = CreateThread(nullptr, 0, [](LPVOID) WINAPI -> DWORD {
+                                   HRESULT co = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+                                   SHEmptyRecycleBinW(nullptr, nullptr, 0);
+                                   if (SUCCEEDED(co)) CoUninitialize();
+                                   return 0;
+                               }, nullptr, 0, nullptr))
+                               CloseHandle(t);
+                       }});
+    // "timer 10m", "timer 1h30", "timer 25"
+    if (!fq.compare(0, 6, L"timer ") || !fq.compare(0, 13, L"temporizador ")) {
+        std::wstring t = fq.substr(fq.find(L' ') + 1);
+        int mins = 0, cur = 0;
+        bool any = false, ok = true;
+        for (size_t k = 0; k < t.size() && ok; k++) {
+            wchar_t ch = t[k];
+            if (iswdigit(ch)) {
+                cur = cur * 10 + (ch - L'0');
+                any = true;
+            } else if (ch == L'h') {
+                mins += cur * 60;
+                cur = 0;
+            } else if (ch == L'm') {
+                mins += cur;
+                cur = 0;
+                while (k + 1 < t.size() && iswalpha(t[k + 1])) k++;  // ("min", "minutos")
+            } else if (ch == L's') {
+                mins += (cur + 59) / 60;
+                cur = 0;
+                while (k + 1 < t.size() && iswalpha(t[k + 1])) k++;
+            } else if (ch != L' ') {
+                ok = false;
+            }
+        }
+        mins += cur;
+        if (ok && any && mins > 0 && mins <= 24 * 60) {
+            std::wstring label = mins >= 60 ? std::to_wstring(mins / 60) + L" h" + (mins % 60 ? L" " + std::to_wstring(mins % 60) + L" min" : L"")
+                                            : std::to_wstring(mins) + L" min";
+            out.push_back({0xE916, std::wstring(L2(L"Timer de ", L"Timer for ")) + label,
+                           L2(L"Enter cria um lembrete pra daqui a pouco", L"Enter makes a reminder for then"), true, [mins, label] {
+                               Reminder r;
+                               r.id = NowFt();
+                               r.text = std::wstring(L2(L"Timer de ", L"Timer for ")) + label;
+                               r.late = true;
+                               r.due = r.id + mins * kFtMinute;
+                               g_rems.push_back(r);
+                               std::sort(g_rems.begin(), g_rems.end(), [](const Reminder& a, const Reminder& b) { return a.due < b.due; });
+                               SaveRems();
+                               StatusChanged();
+                           }});
+        }
+    }
+    // "nota comprar pão"
+    for (const wchar_t* pre : {L"nota ", L"note "}) {
+        size_t n = wcslen(pre);
+        if (fq.size() > n && !fq.compare(0, n, pre)) {
+            std::wstring text = q.substr(q.find(L' ') + 1);
+            out.push_back({0xE70B, std::wstring(L2(L"Nota: ", L"Note: ")) + text, L2(L"Enter guarda nas notas", L"Enter keeps it in the notes"), true,
+                           [text] {
+                               Note nt;
+                               nt.id = NowFt();
+                               nt.when = nt.id;
+                               nt.text = text;
+                               g_notes.insert(g_notes.begin(), nt);
+                               SaveNotes();
+                               StatusChanged();
+                           }});
+            break;
+        }
+    }
+    // Open windows by their title (not the app's name: the apps list already finds those).
+    if (fq.size() >= 3) {
+        int found = 0;
+        for (auto& a : g_apps) {
+            for (HWND h : a.wins) {
+                wchar_t t[256] = {};
+                if (!GetWindowTextW(h, t, ARRAYSIZE(t)) || !t[0]) continue;
+                std::wstring ft = FoldText(t);
+                if (ft.find(fq) == std::wstring::npos || ft == FoldText(a.label)) continue;
+                out.push_back({0xE8A7, t, (a.label.empty() ? std::wstring(L"") : a.label + L" · ") + L2(L"janela aberta", L"open window"), false,
+                               [h] { Activate(h); }});
+                if (++found >= 3) break;
+            }
+            if (found >= 3) break;
+        }
+    }
+    return out;
 }
 
 // Local date/time <-> FILETIME (UTC).
@@ -12847,10 +16813,265 @@ static const wchar_t* DevIcon(const std::wstring& kind) {
     return L"M6 7h11v10H6z M17 10h2v4h-2";
 }
 
+// ---- Microphone and camera in use ----
+// A worker looks every 2 s at the microphone's live capture sessions, and Windows tells it who is streaming
+// from a camera. Only who is using them is read: never any sound or picture.
+constexpr UINT WM_APP_PRIV = WM_APP + 23;
+struct PrivState {
+    SRWLOCK lock = SRWLOCK_INIT;
+    HANDLE thread = nullptr, ev = nullptr;
+    bool stop = false;
+    std::vector<PrivUse> now;
+} g_priv;
+
+static std::vector<PrivUse> PrivNow() {
+    std::vector<PrivUse> v;
+    if (!g_set.extraPlace[8]) return v;
+    AcquireSRWLockShared(&g_priv.lock);
+    v = g_priv.now;
+    ReleaseSRWLockShared(&g_priv.lock);
+    return v;
+}
+
+// The camera: Media Foundation's sensor activity monitor tells which processes are streaming. Its
+// interfaces are declared here (the compiler's headers don't have them).
+struct INimbusSensorProcess : IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE GetProcessId(ULONG*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetStreamingState(BOOL*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetStreamingMode(int*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetReportTime(FILETIME*) = 0;
+};
+struct INimbusSensorReport : IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE GetFriendlyName(LPWSTR, ULONG, ULONG*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetSymbolicLink(LPWSTR, ULONG, ULONG*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetProcessCount(ULONG*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetProcessActivity(ULONG, INimbusSensorProcess**) = 0;
+};
+struct INimbusSensorReports : IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE GetCount(ULONG*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetActivityReport(ULONG, INimbusSensorReport**) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetActivityReportByDeviceName(LPCWSTR, INimbusSensorReport**) = 0;
+};
+struct INimbusSensorCallback : IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE OnActivitiesReport(INimbusSensorReports*) = 0;
+};
+struct INimbusSensorMonitor : IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE Start() = 0;
+    virtual HRESULT STDMETHODCALLTYPE Stop() = 0;
+};
+static const IID kIID_SensorCallback = {0xDE5072EE, 0xDBE3, 0x46DC, {0x8A, 0x87, 0xB6, 0xF6, 0x31, 0x19, 0x47, 0x51}};
+SRWLOCK g_privCamLock = SRWLOCK_INIT;
+std::vector<DWORD> g_privCam;  // processes streaming from a camera now
+
+class PrivCamCallback final : public INimbusSensorCallback {
+    LONG ref_ = 1;
+
+   public:
+    STDMETHODIMP QueryInterface(REFIID riid, void** out) override {
+        if (riid == IID_IUnknown || riid == kIID_SensorCallback) {
+            *out = static_cast<INimbusSensorCallback*>(this);
+            AddRef();
+            return S_OK;
+        }
+        *out = nullptr;
+        return E_NOINTERFACE;
+    }
+    STDMETHODIMP_(ULONG) AddRef() override { return InterlockedIncrement(&ref_); }
+    STDMETHODIMP_(ULONG) Release() override {
+        LONG r = InterlockedDecrement(&ref_);
+        if (!r) delete this;
+        return r;
+    }
+    STDMETHODIMP OnActivitiesReport(INimbusSensorReports* all) override {
+        std::vector<DWORD> pids;
+        ULONG n = 0;
+        if (all) all->GetCount(&n);
+        for (ULONG i = 0; i < n; i++) {
+            ComPtr<INimbusSensorReport> r;
+            ULONG pc = 0;
+            if (FAILED(all->GetActivityReport(i, &r)) || !r || FAILED(r->GetProcessCount(&pc))) continue;
+            for (ULONG k = 0; k < pc; k++) {
+                ComPtr<INimbusSensorProcess> a;
+                ULONG pid = 0;
+                BOOL on = FALSE;
+                if (SUCCEEDED(r->GetProcessActivity(k, &a)) && a && SUCCEEDED(a->GetProcessId(&pid)) && SUCCEEDED(a->GetStreamingState(&on)) && on)
+                    pids.push_back(pid);
+            }
+        }
+        AcquireSRWLockExclusive(&g_privCamLock);
+        g_privCam = std::move(pids);
+        ReleaseSRWLockExclusive(&g_privCamLock);
+        if (g_priv.ev) SetEvent(g_priv.ev);  // (the worker reads it now)
+        return S_OK;
+    }
+};
+
+// What's using them now: the microphone from the live capture sessions, the camera from the monitor.
+static std::vector<PrivUse> PrivRead(IMMDeviceEnumerator* mm, std::unordered_map<DWORD, PrivUse>& names) {
+    std::vector<PrivUse> out;
+    DWORD self = GetCurrentProcessId();
+    auto add = [&](DWORD pid, bool cam) {
+        if (!pid || pid == self) return;
+        auto it = names.find(pid);
+        if (it == names.end()) {
+            PrivUse u;
+            u.path = ProcessPath(pid);
+            if (!u.path.empty()) {
+                u.name = FileDescription(u.path);
+                if (u.name.empty()) {
+                    u.name = PathFindFileNameW(u.path.c_str());
+                    if (u.name.size() > 4 && !_wcsicmp(u.name.c_str() + u.name.size() - 4, L".exe")) u.name.resize(u.name.size() - 4);
+                }
+            }
+            it = names.emplace(pid, u).first;
+        }
+        if (it->second.name.empty()) return;
+        PrivUse u = it->second;
+        u.cam = cam;
+        if (std::none_of(out.begin(), out.end(), [&](const PrivUse& x) { return x.cam == cam && x.name == u.name; })) out.push_back(u);
+    };
+    ComPtr<IMMDeviceCollection> col;
+    UINT n = 0;
+    if (mm && SUCCEEDED(mm->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &col))) col->GetCount(&n);
+    for (UINT i = 0; i < n; i++) {
+        ComPtr<IMMDevice> dev;
+        ComPtr<IAudioSessionManager2> mgr;
+        ComPtr<IAudioSessionEnumerator> en;
+        if (FAILED(col->Item(i, &dev)) || FAILED(dev->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL, nullptr, (void**)mgr.GetAddressOf())) ||
+            FAILED(mgr->GetSessionEnumerator(&en)))
+            continue;
+        int sn = 0;
+        en->GetCount(&sn);
+        for (int k = 0; k < sn; k++) {
+            ComPtr<IAudioSessionControl> c;
+            ComPtr<IAudioSessionControl2> c2;
+            AudioSessionState st;
+            DWORD pid = 0;
+            if (FAILED(en->GetSession(k, &c)) || FAILED(c.As(&c2)) || FAILED(c->GetState(&st)) || st != AudioSessionStateActive ||
+                c2->IsSystemSoundsSession() == S_OK || FAILED(c2->GetProcessId(&pid)))
+                continue;
+            add(pid, false);
+        }
+    }
+    AcquireSRWLockShared(&g_privCamLock);
+    std::vector<DWORD> cams = g_privCam;
+    ReleaseSRWLockShared(&g_privCamLock);
+    for (DWORD pid : cams) add(pid, true);
+    std::stable_sort(out.begin(), out.end(), [](const PrivUse& a, const PrivUse& b) { return !a.cam && b.cam; });
+    return out;
+}
+
+static DWORD WINAPI PrivThread(LPVOID) {
+    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    {
+        ComPtr<IMMDeviceEnumerator> mm;
+        CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, IID_PPV_ARGS(&mm));
+        ComPtr<INimbusSensorMonitor> monitor;
+        // (the monitor needs Media Foundation started: MF_VERSION, MFSTARTUP_LITE)
+        HMODULE mfplat = LoadLibraryExW(L"mfplat.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        auto mfStart = mfplat ? (HRESULT(WINAPI*)(ULONG, DWORD))GetProcAddress(mfplat, "MFStartup") : nullptr;
+        auto mfStop = mfplat ? (HRESULT(WINAPI*)())GetProcAddress(mfplat, "MFShutdown") : nullptr;
+        bool mfOn = mfStart && mfStop && SUCCEEDED(mfStart(0x00020070, 1));
+        HMODULE sensor = mfOn ? LoadLibraryExW(L"mfsensorgroup.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32) : nullptr;
+        using MakeFn = HRESULT(WINAPI*)(INimbusSensorCallback*, INimbusSensorMonitor**);
+        if (auto make = sensor ? (MakeFn)GetProcAddress(sensor, "MFCreateSensorActivityMonitor") : nullptr) {
+            auto* cb = new PrivCamCallback();
+            HRESULT hr = make(cb, &monitor);
+            if (SUCCEEDED(hr) && monitor) hr = monitor->Start();
+            if (FAILED(hr)) {
+                Wh_Log(L"camera monitor: not available (0x%08lx)", (unsigned long)hr);
+                monitor.Reset();
+            }
+            cb->Release();
+        }
+        std::unordered_map<DWORD, PrivUse> names;
+        DWORD namesAt = GetTickCount();
+        bool untold = false;
+        for (;;) {
+            if (GetTickCount() - namesAt > 60000) {  // (process ids get reused)
+                names.clear();
+                namesAt = GetTickCount();
+            }
+            std::vector<PrivUse> v = PrivRead(mm.Get(), names);
+            AcquireSRWLockExclusive(&g_priv.lock);
+            bool stop = g_priv.stop;
+            bool diff = v.size() != g_priv.now.size() ||
+                        !std::equal(v.begin(), v.end(), g_priv.now.begin(), [](const PrivUse& a, const PrivUse& b) { return a.cam == b.cam && a.name == b.name; });
+            if (diff && !stop) g_priv.now = v;
+            ReleaseSRWLockExclusive(&g_priv.lock);
+            if (stop) break;
+            // (a change seen before the message window exists is told as soon as it does)
+            untold |= diff;
+            if (untold && g_msgWnd && PostMessageW(g_msgWnd, WM_APP_PRIV, 0, 0)) untold = false;
+            WaitForSingleObject(g_priv.ev, 2000);  // (the stop, a camera report, or the next look)
+            AcquireSRWLockShared(&g_priv.lock);
+            stop = g_priv.stop;
+            ReleaseSRWLockShared(&g_priv.lock);
+            if (stop) break;
+        }
+        if (monitor) monitor->Stop();
+        monitor.Reset();
+        if (sensor) FreeLibrary(sensor);
+        if (mfOn) mfStop();
+        if (mfplat) FreeLibrary(mfplat);
+    }
+    CoUninitialize();
+    return 0;
+}
+
+static void PrivSetOn(bool on) {
+    if (on && !g_priv.thread) {
+        g_priv.stop = false;
+        g_priv.ev = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+        g_priv.thread = CreateThread(nullptr, 0, PrivThread, nullptr, 0, nullptr);
+    } else if (!on && g_priv.thread) {
+        AcquireSRWLockExclusive(&g_priv.lock);
+        g_priv.stop = true;
+        g_priv.now.clear();
+        ReleaseSRWLockExclusive(&g_priv.lock);
+        SetEvent(g_priv.ev);
+        WaitForSingleObject(g_priv.thread, 2000);
+        CloseHandle(g_priv.thread);
+        CloseHandle(g_priv.ev);
+        g_priv.thread = g_priv.ev = nullptr;
+    }
+}
+static void PrivStop() {
+    if (!g_priv.thread) return;
+    AcquireSRWLockExclusive(&g_priv.lock);
+    g_priv.stop = true;
+    ReleaseSRWLockExclusive(&g_priv.lock);
+    SetEvent(g_priv.ev);
+}
+static void PrivJoin(DWORD deadline) { JoinWorker(g_priv.thread, g_priv.ev, deadline); }
+
+static float PanelPrivacy(float y) {
+    auto u = PrivNow();
+    FHeader(y, L2(L"Microfone e câmera", L"Microphone and camera"), u.empty() ? L2(L"nada em uso", L"nothing in use") : L"");
+    for (auto& x : u) {
+        D2D1_COLOR_F c = x.cam ? D2D1::ColorF(0x34C759) : D2D1::ColorF(0xF5A623);
+        if (FDraw()) g_fly.rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(kFlyPad + 5, y + 16), 4.5f, 4.5f), FBr(c));
+        FText(x.name, g_fly.fText.Get(), kFlyPad + 18, y, kFlyW - kFlyPad * 2 - 110, 32, FInk());
+        FText(x.cam ? L2(L"câmera", L"camera") : L2(L"microfone", L"microphone"), g_fly.fSmall.Get(), kFlyW - kFlyPad - 100, y, 100, 32,
+              FSub(), DWRITE_TEXT_ALIGNMENT_TRAILING);
+        y += 34;
+    }
+    FSep(y);
+    FLink(y, L2(L"Privacidade do microfone no Windows", L"Windows' microphone privacy"), [] {
+        CloseFlyout();
+        OpenUri(L"ms-settings:privacy-microphone");
+    });
+    FLink(y, L2(L"Privacidade da câmera no Windows", L"Windows' camera privacy"), [] {
+        CloseFlyout();
+        OpenUri(L"ms-settings:privacy-webcam");
+    });
+    return y;
+}
+
 static float PanelDevices(float y) {
     BtAsk();
     auto devs = DevicesNow();
-    FHeader(y, L2(L"Dispositivos", L"Devices"), BatteryHubFound() ? L"+ BatteryHub" : L"");
+    FHeader(y, L2(L"Aparelhos", L"Devices"), BatteryHubFound() ? L"+ BatteryHub" : L"");
     if (devs.empty()) {
         FText(L2(L"Nenhum aparelho sem fio informando bateria agora.", L"No wireless device reporting a battery now."), g_fly.fSmall.Get(), kFlyPad, y,
               kFlyW - kFlyPad * 2, 22, FSub());
@@ -12891,7 +17112,7 @@ static float PanelDevices(float y) {
         y += 40;
         FLink(y, L2(L"Conhecer o BatteryHub", L"About BatteryHub"), [] {
             CloseFlyout();
-            OpenUri(L"https://github.com/krisgfx9/Wireless-Device-Battery-Monitor");
+            OpenUri(L"https://github.com/ferloom/Wireless-Device-Battery-Monitor");
         });
     }
     return y;
@@ -13505,6 +17726,49 @@ static float SecPower(float y, bool head) {
     return y + 36 + 4;
 }
 
+// Screen profiles: one chip each (the one in use lit), and "save" while the setup of now isn't one of them.
+static void OpenTelasSettings();
+static float SecTelas(float y, bool head) {
+    const auto& tc = TelasCached();
+    if (head) FSectionHead(y, L2(L"Arranjos de telas", L"Screen layouts"), L"", [] { FlyEnter(StTelas); });
+    if (tc.list.empty()) {
+        FText(L2(L"Nenhum arranjo salvo ainda: deixe as telas do jeito que quer e salve.", L"No layout saved yet: set the screens up the way you want and save."),
+              g_fly.fSmall.Get(), kFlyPad, y, kFlyW - kFlyPad * 2, 22, FSub());
+        y += 28;
+    }
+    float x = kFlyPad;
+    auto chip = [&](const std::wstring& name, bool on, std::function<void()> fn) {
+        float w = std::min(TextSize(name.c_str(), g_fly.fSmall.Get()).width + 30, kFlyW - kFlyPad * 2);
+        if (x + w > kFlyW - kFlyPad && x > kFlyPad) {
+            x = kFlyPad;
+            y += 36;
+        }
+        D2D1_RECT_F r = D2D1::RectF(x, y, x + w, y + 30);
+        if (on) FFill(r, 15, FInk());
+        else {
+            if (FHot(r)) FFill(r, 15, FHov());
+            if (FDraw()) g_fly.rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + .5f, r.top + .5f, r.right - .5f, r.bottom - .5f), 14.5f, 14.5f),
+                                                        FBr(FCol(g_theme.text, 0.16f)), 1);
+        }
+        FText(name, g_fly.fSmall.Get(), r.left + 15, y, w - 30, 30, on ? FSolidTint() : FCol(g_theme.text, 0.85f), DWRITE_TEXT_ALIGNMENT_CENTER);
+        FHitAdd(r, std::move(fn));
+        x += w + 6;
+    };
+    for (int i = 0; i < (int)tc.list.size(); i++) {
+        std::wstring dados = tc.list[i].dados;
+        chip(tc.list[i].nome, i == tc.cur, [dados] {
+            CloseFlyout();
+            TelaApply(dados);
+        });
+    }
+    if (!tc.saved)
+        chip(L2(L"+ Salvar a de agora", L"+ Save the one of now"), false, [] {
+            TelaSaveNow();
+            TelasForget();
+        });
+    return y + 36;
+}
+
 static float SecShort(float y) {
     struct Sc {
         const wchar_t* name;
@@ -13543,8 +17807,8 @@ static float SecShort(float y) {
 
 // ---- Start, Status tab: the control center's look in parts the user can put in any order ----
 
-enum StartSec { SsClock, SsPlayer, SsRings, SsSound, SsLight, SsTray, SsPower, SsShort, SsRows, SsCount };
-static const wchar_t* const kStartSecKey[SsCount] = {L"clock", L"player", L"rings", L"sound", L"light", L"tray", L"power", L"short", L"rows"};
+enum StartSec { SsClock, SsPlayer, SsRings, SsSound, SsLight, SsTray, SsPower, SsShort, SsRows, SsTelas, SsCount };
+static const wchar_t* const kStartSecKey[SsCount] = {L"clock", L"player", L"rings", L"sound", L"light", L"tray", L"power", L"short", L"rows", L"telas"};
 static std::vector<int> g_startSecOrder;
 static bool g_startSecLoaded = false;
 
@@ -13608,9 +17872,10 @@ static bool StartSecShown(int k) {
         case SsTray: return TrayInStart();
         case SsPower: return exS(StPower);
         case SsShort: return exS(StShort);
+        case SsTelas: return exS(StTelas);
         case SsRows:
             return (g_set.notifPlace & PlStart) || (g_set.notesPlace & PlStart) || (g_set.shelfPlace & PlStart) ||
-                   (exS(StDevices) && !DevicesNow().empty());
+                   (exS(StDevices) && !DevicesNow().empty()) || (exS(StPrivacy) && !PrivNow().empty());
     }
     return false;
 }
@@ -13956,6 +18221,41 @@ static void StartStatusTab(const StartPaint& p) {
                 y += SS(36);
                 break;
             }
+            case SsTelas: {
+                const auto& tc = TelasCached();
+                head(y, L2(L"Arranjos de telas", L"Screen layouts"), L"", StTelas);
+                float x = L;
+                auto chip = [&](const std::wstring& name, bool on, std::function<void()> fn) {
+                    float w = std::min(TextSize(name, s.small.Get()).width + SS(30), R - L);
+                    if (x + w > R && x > L) {
+                        x = L;
+                        y += SS(38);
+                    }
+                    D2D1_RECT_F r = D2D1::RectF(x, y, x + w, y + SS(32));
+                    bool hot = button(r, std::move(fn));
+                    if (on) rt->FillRoundedRectangle(D2D1::RoundedRect(r, SS(16), SS(16)), p.text);
+                    else {
+                        if (hot) rt->FillRoundedRectangle(D2D1::RoundedRect(r, SS(16), SS(16)), p.cardHi);
+                        rt->DrawRoundedRectangle(D2D1::RoundedRect(r, SS(16), SS(16)), p.line, std::max(1.0f, s.scale));
+                    }
+                    text(name, s.small.Get(), r.left + SS(15), y, w - SS(30), SS(32), on ? (ID2D1Brush*)tint.Get() : p.text, DWRITE_TEXT_ALIGNMENT_CENTER);
+                    x += w + SS(6);
+                };
+                for (int i = 0; i < (int)tc.list.size(); i++) {
+                    std::wstring dados = tc.list[i].dados;
+                    chip(tc.list[i].nome, i == tc.cur, [dados] {
+                        CloseStart(true);
+                        TelaApply(dados);
+                    });
+                }
+                if (!tc.saved)
+                    chip(L2(L"+ Salvar a de agora", L"+ Save the one of now"), false, [] {
+                        TelaSaveNow();
+                        TelasForget();
+                    });
+                y += SS(32);
+                break;
+            }
             case SsShort: {
                 struct Sc {
                     const wchar_t* name;
@@ -14004,8 +18304,10 @@ static void StartStatusTab(const StartPaint& p) {
                     std::wstring c;
                     for (auto& dv : DevicesNow())
                         if (dv.percent >= 0) c += (c.empty() ? L"" : L" · ") + std::to_wstring(dv.percent) + L"%";
-                    ls.push_back({StDevices, L2(L"Dispositivos", L"Devices"), c});
+                    ls.push_back({StDevices, L2(L"Aparelhos", L"Devices"), c});
                 }
+                if ((ExtraPlace(StPrivacy) & PlStart) && !PrivNow().empty())
+                    ls.push_back({StPrivacy, L2(L"Em uso", L"In use"), PrivNow()[0].name});
                 float cw = (R - L - SS(6)) / 2;
                 for (size_t i = 0; i < ls.size(); i++) {
                     float x = L + (i % 2) * (cw + SS(6)), ry = y + (i / 2) * SS(48);
@@ -14174,6 +18476,10 @@ static float PanelCentral(float y) {
         FSep(y);
         y = SecPower(y, true);
     }
+    if ((ExtraPlace(StTelas) & PlCentral)) {
+        FSep(y);
+        y = SecTelas(y, true);
+    }
     // Items with their own panel: a row that opens it.
     struct Ln {
         int id;
@@ -14185,10 +18491,16 @@ static float PanelCentral(float y) {
     if ((g_set.notesPlace & PlCentral)) links.push_back({StNotes, std::wstring(L2(L"Notas e lembretes", L"Notes and reminders")) + L" · " + std::to_wstring(RemPending())});
     if ((g_set.shelfPlace & PlCentral)) links.push_back({StShelf, std::wstring(L2(L"Prateleira", L"Shelf")) + L" · " + std::to_wstring(g_shelf.size())});
     if ((ExtraPlace(StDevices) & PlCentral) && !DevicesNow().empty()) {
-        std::wstring t = L2(L"Dispositivos", L"Devices");
+        std::wstring t = L2(L"Aparelhos", L"Devices");
         for (auto& dv : DevicesNow())
             if (dv.percent >= 0) t += L" · " + std::to_wstring(dv.percent) + L"%";
         links.push_back({StDevices, t});
+    }
+    if ((ExtraPlace(StPrivacy) & PlCentral) && !PrivNow().empty()) {
+        auto u = PrivNow();
+        std::wstring t = std::wstring(L2(L"Em uso: ", L"In use: ")) + u[0].name;
+        if (u.size() > 1) t += L" +" + std::to_wstring(u.size() - 1);
+        links.push_back({StPrivacy, t});
     }
     if (!links.empty()) {
         FSep(y);
@@ -14304,6 +18616,15 @@ static float PanelExtra(int id, float y) {
         case StPower:
             FHeader(y, L2(L"Energia", L"Power"), L"");
             return SecPower(y, false);
+        case StTelas:
+            FHeader(y, L2(L"Arranjos de telas", L"Screen layouts"), L"");
+            y = SecTelas(y, false);
+            FSep(y);
+            FLink(y, L2(L"Renomear, apagar e mais", L"Rename, delete and more"), [] {
+                CloseFlyout();
+                OpenTelasSettings();
+            });
+            return y;
     }
     return y;
 }
@@ -14315,7 +18636,7 @@ static float FlyContent() {
         bool hot = FHot(r);
         if (hot) FFill(r, 8, FHov());
         FIcon(L"M15 6l-6 6 6 6", kFlyPad + 3, y + 9, 13, hot ? FInk() : FSub());
-        FText(L2(L"Central de controle", L"Control center"), g_fly.fSmall.Get(), kFlyPad + 16, y - 6, 150, 30, hot ? FInk() : FSub());
+        FText(L2(L"Central", L"Control center"), g_fly.fSmall.Get(), kFlyPad + 16, y - 6, 150, 30, hot ? FInk() : FSub());
         int back = g_fly.back;
         FHitAdd(r, [back] { FlyEnter(back); });
         y += 34;
@@ -14336,9 +18657,11 @@ static float FlyContent() {
         case StNight:
         case StShort:
         case StLight:
-        case StPower: y = PanelExtra(g_fly.kind, y); break;
+        case StPower:
+        case StTelas: y = PanelExtra(g_fly.kind, y); break;
         case StPlayer: y = PanelPlayer(y); break;
         case StDevices: y = PanelDevices(y); break;
+        case StPrivacy: y = PanelPrivacy(y); break;
     }
     return y + kFlyPad - 6;
 }
@@ -14350,10 +18673,24 @@ static void FlyPlace(int w, int h) {
     Dock& d = *f.dock;
     float k = f.scale;
     int x, y;
+    if (g_snd.big && SndExtremeNow()) {  // (the big mixer: in the middle of the monitor)
+        x = d.rcMon.left + (d.rcMon.right - d.rcMon.left - w) / 2;
+        y = d.rcMon.top + (d.rcMon.bottom - d.rcMon.top - h) / 2;
+        f.rc = {x, y, x + w, y + h};
+        return;
+    }
     if (f.fromStart && g_start.open) {
         x = g_start.rc.right + (int)(12 * k);
         if (x + w > d.rcMon.right - 8) x = g_start.rc.left - (int)(12 * k) - w;
         y = g_start.rc.bottom - h;
+    } else if (d.cfg.edge != 0) {  // (a dock at another edge: beside its item)
+        int pk = f.back ? f.back : f.kind;
+        float ax = StatOnLeft() ? d.pill.left : d.pill.right;
+        for (auto& it : d.stat)
+            if (it.id == pk) ax = it.x + it.w / 2;
+        POINT at = DockPanelAt(d, ax, w, h, (int)(10 * k));
+        f.rc = {at.x, at.y, at.x + w, at.y + h};
+        return;
     } else {
         int dockTop = d.rcMon.bottom - d.ch + (int)d.pill.top;
         y = dockTop - (int)(10 * k) - h;
@@ -14375,7 +18712,7 @@ static void FlyPlace(int w, int h) {
 static void FlyRender() {
     auto& f = g_fly;
     if (!f.open || !f.dock) return;
-    kFlyW = SndWide() ? std::min(660.0f, SndRoomW()) : 360.0f;
+    kFlyW = SndExtremeNow() ? SndExtremeW() : SndWide() ? std::min(660.0f, SndRoomW()) : 360.0f;
     // (A slow frame is logged with its panel: they're drawn on every mouse move.)
     struct SlowFrame {
         DWORD t0 = GetTickCount();
@@ -14400,8 +18737,8 @@ static void FlyRender() {
     f.hits.clear();
     {
         Dock& d = *f.dock;
-        int dockTop = d.rcMon.bottom - d.ch + (int)d.pill.top;
-        f.maxH = std::max(200.0f, (dockTop - d.rcMon.top - 30) / f.scale);
+        f.maxH = std::max(200.0f, (DockRoomH(d) - 30) / f.scale);
+        if (g_snd.big && SndExtremeNow()) f.maxH = std::max(300.0f, std::floor((d.rcMon.bottom - d.rcMon.top) / f.scale * 0.86f));
     }
     float H;
     bool sliding = f.page < 1 && f.fromH > 0;
@@ -14519,6 +18856,16 @@ static void FlyRender() {
     POINT src = {0, 0};
     BLENDFUNCTION bf = {AC_SRC_OVER, 0, (BYTE)std::lround(255 * eased), AC_SRC_ALPHA};
     UpdateLayeredWindow(f.hwnd, nullptr, &dst, &size, f.memDC, &src, 0, &bf, ULW_ALPHA);
+    // The big mixer dims the screen under it (a click there closes it).
+    if (g_sndDim) {
+        if (g_snd.big && SndExtremeNow()) {
+            const RECT& m = f.dock->rcMon;
+            SetLayeredWindowAttributes(g_sndDim, 0, (BYTE)std::lround(110 * eased), LWA_ALPHA);
+            SetWindowPos(g_sndDim, f.hwnd, m.left, m.top, m.right - m.left, m.bottom - m.top, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        } else if (IsWindowVisible(g_sndDim)) {
+            ShowWindow(g_sndDim, SW_HIDE);
+        }
+    }
     NoteEditPlaceAll();
     // The blur only once the panel has landed (it can't fade or move with it).
     if (p >= 1)
@@ -14678,13 +19025,19 @@ void CloseFlyout() {
     auto& f = g_fly;
     if (!f.open) return;
     f.open = false;
+    g_snd.sxMenu.clear();
+    g_snd.big = g_snd.panning = false;
+    if (g_sndDim) ShowWindow(g_sndDim, SW_HIDE);
     KillTimer(f.hwnd, TIMER_FLY_ANIM);
     KillTimer(f.hwnd, TIMER_FLY_PAGE);
     f.page = 1;
     KillTimer(f.hwnd, TIMER_FLY_WIFI);
     KillTimer(f.hwnd, TIMER_FLY_WATCH);
-    if (f.dragging || f.press >= 0) ReleaseCapture();
+    // (any drag still holding the mouse: a slider, the grid being moved, an app or a tray icon being dragged)
+    if (GetCapture() == f.hwnd) ReleaseCapture();
     f.press = -1;
+    g_snd.dragging = false;
+    f.trayDrag.clear();
     if (g_notesUi.tab == 0 && g_notesUi.editing >= 0) NotesSave(true);  // (a note being written isn't lost)
     NoteEditHideAll();
     g_notesUi.editing = -1;
@@ -14695,6 +19048,9 @@ void CloseFlyout() {
     HideBands(f.bands, f.bandRc);
     f.bmps.clear();
     g_appVols.clear();
+    g_sndLevels.clear();
+    g_sndDefMeter.Reset();
+    SndMeterEnd(120);
     bool fromStart = f.fromStart;
     if (f.dock) Invalidate(*f.dock);
     f.dock = nullptr;
@@ -14727,6 +19083,19 @@ static void FlySlide(float mx) {
     if (h.slide && h.x1 > h.x0) h.slide(std::clamp((mx - h.x0) / (h.x1 - h.x0), 0.0f, 1.0f));
 }
 
+static LRESULT CALLBACK SndDimProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    switch (msg) {
+        case WM_MOUSEACTIVATE:
+            return MA_NOACTIVATE;
+        case WM_LBUTTONDOWN:
+        case WM_RBUTTONDOWN:
+        case WM_MBUTTONDOWN:
+            CloseFlyout();
+            return 0;
+    }
+    return DefWindowProcW(hwnd, msg, wp, lp);
+}
+
 LRESULT CALLBACK FlyProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     auto& f = g_fly;
     switch (msg) {
@@ -14734,6 +19103,7 @@ LRESULT CALLBACK FlyProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             return f.fromStart ? MA_NOACTIVATE : MA_ACTIVATE;
         case WM_ACTIVATE:
             if (LOWORD(wp) == WA_INACTIVE && f.open && !f.fromStart && GetTickCount() - f.openedAt > 150 && !TrayClickJustNow() &&
+                !TrayTouchedJustNow() &&
                 !(g_ned.host && (HWND)lp == g_ned.host) && !(g_ntime.host && (HWND)lp == g_ntime.host))
                 CloseFlyout();
             return 0;
@@ -14767,6 +19137,12 @@ LRESULT CALLBACK FlyProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 TRACKMOUSEEVENT tme = {sizeof(tme), TME_LEAVE, hwnd, 0};
                 TrackMouseEvent(&tme);
             }
+            if (g_snd.panning) {
+                g_snd.scrollX = std::clamp(g_snd.panX - (f.mouse.x - g_snd.panAt.x), 0.0f, g_snd.maxX);
+                g_snd.scrollR = std::clamp(g_snd.panY - (f.mouse.y - g_snd.panAt.y), 0.0f, g_snd.maxR);
+                FlyRender();
+                return 0;
+            }
             if (f.dragging) FlySlide(f.mouse.x);
             if (f.press >= 0 && (std::fabs(f.mouse.x - f.pressPt.x) > 4 || std::fabs(f.mouse.y - f.pressPt.y) > 4)) {
                 int i = f.press;
@@ -14799,6 +19175,16 @@ LRESULT CALLBACK FlyProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_LBUTTONDOWN: {
             if (!f.open) return 0;
             f.mouse = D2D1::Point2F(GET_X_LPARAM(lp) / f.scale, GET_Y_LPARAM(lp) / f.scale);
+            if (g_snd.popApp >= 0) {
+                const D2D1_RECT_F& pr = g_snd.popRc;
+                bool inPop = f.mouse.x >= pr.left && f.mouse.x < pr.right && f.mouse.y >= pr.top && f.mouse.y < pr.bottom;
+                int hi = FlyHitAt(f.mouse);
+                bool onPill = hi >= 0 && f.hits[hi].sndApp >= 0 && f.hits[hi].sndFrom >= 0;  // (a pill toggles it itself)
+                if (!inPop && !onPill) {
+                    g_snd.popApp = g_snd.popOut = -1;
+                    FlyRender();
+                }
+            }
             int i = FlyHitAt(f.mouse);
             if (i >= 0 && f.hits[i].slide) {
                 f.drag = f.hits[i];
@@ -14811,6 +19197,16 @@ LRESULT CALLBACK FlyProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 f.pressPt = f.mouse;
                 f.pressRight = false;
                 SetCapture(hwnd);
+            } else if (i < 0 && SndExtremeNow() && (g_snd.maxX > 0 || g_snd.maxR > 0)) {
+                // Extreme: dragging where there's nothing moves the grid.
+                auto in = [&](const D2D1_RECT_F& r) { return f.mouse.x >= r.left && f.mouse.x < r.right && f.mouse.y >= r.top && f.mouse.y < r.bottom; };
+                if (in(g_snd.colR) || in(g_snd.headR)) {
+                    g_snd.panning = true;
+                    g_snd.panAt = f.mouse;
+                    g_snd.panX = g_snd.scrollX;
+                    g_snd.panY = g_snd.scrollR;
+                    SetCapture(hwnd);
+                }
             }
             return 0;
         }
@@ -14828,6 +19224,11 @@ LRESULT CALLBACK FlyProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         }
         case WM_LBUTTONUP: {
             if (!f.open) return 0;
+            if (g_snd.panning) {
+                g_snd.panning = false;
+                ReleaseCapture();
+                return 0;
+            }
             if (g_snd.dragging) {
                 // Dropped on an output: from the list it plays there too; from another output it moves.
                 g_snd.dragging = false;
@@ -14894,9 +19295,49 @@ LRESULT CALLBACK FlyProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
         }
         case WM_MOUSEWHEEL:
+            if (f.open) {  // (the wheel carries the point: don't trust a mouse a leave may have cleared)
+                POINT wpt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
+                ScreenToClient(hwnd, &wpt);
+                f.mouse = D2D1::Point2F(wpt.x / f.scale, wpt.y / f.scale);
+            }
             if (f.open && SndWide()) {
-                float d = GET_WHEEL_DELTA_WPARAM(wp) / 120.0f * 64;
+                int hi = FlyHitAt(f.mouse);
+                if (SndExtremeNow())  // (over a crossing's slider too)
+                    for (size_t k = 0; k < f.hits.size(); k++) {
+                        const auto& r = f.hits[k].r;
+                        if (f.hits[k].sndApp >= 0 && f.hits[k].sndFrom >= 0 && f.mouse.x >= r.left && f.mouse.x < r.right && f.mouse.y >= r.top && f.mouse.y < r.bottom)
+                            hi = (int)k;
+                    }
                 auto in = [&](const D2D1_RECT_F& r) { return f.mouse.x >= r.left && f.mouse.x < r.right && f.mouse.y >= r.top && f.mouse.y < r.bottom; };
+                if (SndExtremeNow()) {
+                    // Extreme: the wheel moves the grid whenever it can (down, else sideways; Shift or over the
+                    // output cards: sideways). Ctrl + wheel over a crossing, or a grid with nothing to move, sets its volume.
+                    float dd = GET_WHEEL_DELTA_WPARAM(wp) / 120.0f;
+                    bool ctrl = GetKeyState(VK_CONTROL) < 0, inGrid = in(g_snd.colR) || in(g_snd.headR);
+                    bool side = g_snd.maxX > 0 && (GetKeyState(VK_SHIFT) < 0 || in(g_snd.headR) || g_snd.maxR <= 0);
+                    if (!ctrl && inGrid && side) {
+                        g_snd.scrollX = std::clamp(g_snd.scrollX - dd * 96, 0.0f, g_snd.maxX);
+                        FlyRender();
+                        return 0;
+                    }
+                    if (!ctrl && in(g_snd.colR) && g_snd.maxR > 0) {
+                        g_snd.scrollR = std::clamp(g_snd.scrollR - dd * 64, 0.0f, g_snd.maxR);
+                        FlyRender();
+                        return 0;
+                    }
+                }
+                if (hi >= 0 && f.hits[hi].sndApp >= 0 && f.hits[hi].sndFrom >= 0 && f.hits[hi].sndApp < (int)g_snd.apps.size()) {
+                    SndApp& a = g_snd.apps[f.hits[hi].sndApp];
+                    int oi = f.hits[hi].sndFrom;
+                    float nv = SndAppVolOn(a, oi) + GET_WHEEL_DELTA_WPARAM(wp) / 120.0f * 0.05f;
+                    std::wstring path = a.v.path;
+                    bool extreme = SndExtremeNow();  // (there, a program's sessions share a row)
+                    for (auto& b : g_snd.apps)
+                        if ((&b == &a || (extreme && !path.empty() && !_wcsicmp(b.v.path.c_str(), path.c_str()))) && SndHas(b.outs, oi)) SndAppVolSet(b, oi, nv);
+                    FlyRender();
+                    return 0;
+                }
+                float d = GET_WHEEL_DELTA_WPARAM(wp) / 120.0f * 64;
                 if (in(g_snd.colL)) g_snd.scrollL = std::clamp(g_snd.scrollL - d, 0.0f, g_snd.maxL);
                 else if (in(g_snd.colR)) g_snd.scrollR = std::clamp(g_snd.scrollR - d, 0.0f, g_snd.maxR);
                 FlyRender();
@@ -14918,6 +19359,7 @@ LRESULT CALLBACK FlyProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             if ((HWND)lp != hwnd) {
                 f.dragging = false;
                 f.press = -1;
+                g_snd.panning = false;
                 if (g_snd.dragging) {
                     g_snd.dragging = false;
                     FlyRender();
@@ -14939,7 +19381,13 @@ LRESULT CALLBACK FlyProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 FlyRender();
             } else if (wp == TIMER_FLY_SND) {
                 KillTimer(hwnd, TIMER_FLY_SND);
-                if (f.open && SndWide() && !g_snd.dragging) {
+                // (not while a slider or a drag holds an app by its place in the list: the reload re-sorts it)
+                bool busy = g_snd.dragging || f.dragging || f.press >= 0 || g_snd.panning;
+                if (f.open && SndWide() && busy) {
+                    SetTimer(hwnd, TIMER_FLY_SND, 400, nullptr);  // (after the drag)
+                    return 0;
+                }
+                if (f.open && SndWide()) {
                     SndLoad();
                     SndIcons();
                     FlyRender();
@@ -14968,6 +19416,7 @@ LRESULT CALLBACK FlyProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     }
                 }
                 f.wasDown = down;
+                if (f.open && f.kind == StVolume && !f.dragging && !g_snd.dragging && SndLevelsTick()) FlyRender();
             }
             return 0;
     }
@@ -15077,7 +19526,10 @@ static void StatusTick(bool second) {
 constexpr UINT_PTR TIMER_WIZARD = 36;
 static bool WizardFirstRun() {
     std::vector<wchar_t> b(16);
-    if (Wh_GetStringValue((UserPrefix() + L"wizard.done").c_str(), b.data(), b.size())) return false;
+    // (done: a round got to its summary; ver: the version whose questions were offered, written when it opens by
+    // itself, so a round left halfway doesn't open again on every start)
+    for (const wchar_t* k : {L"wizard.done", L"wizard.ver"})
+        if (Wh_GetStringValue((UserPrefix() + k).c_str(), b.data(), b.size())) return false;
     std::wstring v;
     for (const wchar_t* k : {L"style", L"format", L"statusClock", L"trayStyle", L"animation", L"winKeyMode"})
         if (ReadVal(UserPrefix() + L"cfg." + k, v)) return false;  // (already set up: a 1.x or earlier 2.0 user)
@@ -15113,8 +19565,12 @@ static void StatusUninit() {
     BtSignalStop();
     MediaSignalStop();
     DevSignalStop();
+    g_sndDefMeter.Reset();
+    SndMeterEnd(1500);
+    PrivStop();
     CloseFlyout();
     TrayUninit();
+    DlUninit();
     ShelfUninit();
     {
         DWORD deadline = GetTickCount() + 3000;  // (Windhawk gives the whole unload 5 s)
@@ -15122,6 +19578,7 @@ static void StatusUninit() {
         BtJoin(deadline);
         MediaJoin(deadline);
         DevJoin(deadline);
+        PrivJoin(deadline);
         SndCopiesStopAll(deadline);
         g_snd.outs.clear();
         g_snd.apps.clear();
@@ -15168,6 +19625,11 @@ LRESULT CALLBACK GlassProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
 LRESULT CALLBACK ContentProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     Dock* d = DockFrom(hwnd);
+    // (a dock at another edge: the mouse comes in turned back to dock space; see DockToWin)
+    if (d && d->cfg.edge && msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST && msg != WM_MOUSEWHEEL && msg != WM_MOUSEHWHEEL) {
+        D2D1_POINT_2F q = WinToDock(*d, (float)GET_X_LPARAM(lp), (float)GET_Y_LPARAM(lp));
+        lp = MAKELPARAM((SHORT)std::lround(q.x), (SHORT)std::lround(q.y));
+    }
     switch (msg) {
         case WM_MOUSEACTIVATE:
             return MA_NOACTIVATE;
@@ -15267,6 +19729,10 @@ LRESULT CALLBACK ContentProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     else StatClick(*d, d->stat[si].id, false, false);
                     return 0;
                 }
+                if (int dir = PinArrowAt(*d, mx, my)) {
+                    PinTurn(*d, dir * d->pinStep);
+                    return 0;
+                }
                 CloseFlyout();
                 int e = ElemAt(*d, mx, my);
                 KillTimer(hwnd, TIMER_PREVIEW);
@@ -15304,9 +19770,7 @@ LRESULT CALLBACK ContentProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 }
                 CloseFlyout();
                 int e = ElemAt(*d, x, y);
-                POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
-                ClientToScreen(hwnd, &pt);
-                pt.y = d->rcMon.bottom - d->ch + (LONG)d->pill.top - 6;
+                POINT pt = DockToScreen(*d, x, d->pill.top - 6);
                 HidePreview();
                 if (e >= 0) ShowMenu(*d, e, pt);
                 else if (x >= d->pill.left && x <= d->pill.right && y >= d->pill.top && y <= d->pill.bottom)
@@ -15345,8 +19809,9 @@ LRESULT CALLBACK ContentProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_MOUSEWHEEL:
             if (d) {
                 // Over the volume item: change the volume.
-                POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
-                ScreenToClient(hwnd, &pt);
+                POINT spt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
+                D2D1_POINT_2F dq = ScreenToDock(*d, spt);
+                POINT pt = {(LONG)std::lround(dq.x), (LONG)std::lround(dq.y)};
                 int si = StatAt(*d, (float)pt.x, (float)pt.y);
                 if (si >= 0 && d->stat[si].id == StVolume) {
                     SetVolume(g_stat.vol + GET_WHEEL_DELTA_WPARAM(wp) / 120.0f * 0.02f);
@@ -15359,6 +19824,7 @@ LRESULT CALLBACK ContentProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     TrayScroll(GET_WHEEL_DELTA_WPARAM(wp) > 0 ? -1 : 1);
                     d->trayHot = -1;
                 }
+                if (si < 0 && InPinCarousel(*d, (float)pt.x, (float)pt.y)) PinTurn(*d, GET_WHEEL_DELTA_WPARAM(wp) > 0 ? -1 : 1);
             }
             return 0;
         case WM_APP_APPBAR:
@@ -15401,7 +19867,13 @@ LRESULT CALLBACK ContentProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 if (d->mouseX >= 0 && d->hoverElem >= 0 && !d->menuOpen) ShowPreview(*d, d->hoverElem);
                 return 0;
             }
+            if (d && wp == TIMER_DOCK_RETRY) {
+                KillTimer(hwnd, TIMER_DOCK_RETRY);
+                RenderDock(*d);
+                return 0;
+            }
             if (d && wp == TIMER_ANIM) {
+                d->animTick = GetTickCount();
                 ComputeTargets(*d);
                 bool moving = StepAnim(*d);
                 RenderDock(*d);
@@ -15446,6 +19918,7 @@ void CreateDocks() {
         return;
     }
     DestroyDocks();
+    MonScopeMigrate();
     EnumDisplayMonitors(nullptr, nullptr, [](HMONITOR mon, HDC, LPRECT, LPARAM) WINAPI -> BOOL {
         MONITORINFO mi = {sizeof(mi)};
         if (!GetMonitorInfoW(mon, &mi)) return TRUE;
@@ -15461,13 +19934,15 @@ void CreateDocks() {
         UINT dx = 96, dy = 96;
         GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &dx, &dy);
         d->scale = dx / 96.0f;
-        d->cw = mi.rcMonitor.right - mi.rcMonitor.left;
-        d->ch = (int)std::ceil(PillH(*d) + S(*d) * (Zoom() - 1) + 48 * d->scale + BottomGap(*d));
+        // (along its edge, and across: a dock at a side is as long as the monitor is tall, and has room
+        // beside it for the names)
+        d->cw = DockVert(*d) ? mi.rcMonitor.bottom - mi.rcMonitor.top : mi.rcMonitor.right - mi.rcMonitor.left;
+        d->ch = (int)std::ceil(PillH(*d) + S(*d) * (Zoom(*d) - 1) + 48 * d->scale + BottomGap(*d) + (DockVert(*d) ? 220 * d->scale : 0));
 
         BITMAPINFO bi = {};
         bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
-        bi.bmiHeader.biWidth = d->cw;
-        bi.bmiHeader.biHeight = -d->ch;
+        bi.bmiHeader.biWidth = DockWinW(*d);
+        bi.bmiHeader.biHeight = -DockWinH(*d);
         bi.bmiHeader.biPlanes = 1;
         bi.bmiHeader.biBitCount = 32;
         bi.bmiHeader.biCompression = BI_RGB;
@@ -15489,8 +19964,8 @@ void CreateDocks() {
         }
 
         d->content = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST,
-                                     L"NimbusMenu_Content", L"Nimbus Menu", WS_POPUP, d->rcMon.left,
-                                     d->rcMon.bottom - d->ch, d->cw, d->ch, d->bands[0], nullptr, g_module, nullptr);
+                                     L"NimbusMenu_Content", L"Nimbus Menu", WS_POPUP, DockWinRect(*d).left,
+                                     DockWinRect(*d).top, DockWinW(*d), DockWinH(*d), d->bands[0], nullptr, g_module, nullptr);
         Wh_Log(L"dock mon=(%d,%d,%d,%d) scale=%.2f cw=%d ch=%d content=%p style=%s", d->rcMon.left, d->rcMon.top,
             d->rcMon.right, d->rcMon.bottom, d->scale, d->cw, d->ch, d->content, g_set.style.c_str());
         SetWindowLongPtrW(d->content, GWLP_USERDATA, (LONG_PTR)d);
@@ -15505,6 +19980,22 @@ void CreateDocks() {
         RenderDock(*d);
         return TRUE;
     }, 0);
+    // To the log: how many; none at all with monitors on is tried again in 3 s (a monitor waking up, a KVM).
+    int made = 0, monitors = GetSystemMetrics(SM_CMONITORS);
+    for (auto* d : g_docks) made += d->content ? 1 : 0;
+    static int lastMade = -1, lastMonitors = -1, retries = 0;
+    if (made != lastMade || monitors != lastMonitors) {
+        char line[120];
+        snprintf(line, sizeof(line), "docks | %d dock(s) em %d monitor(es)", made, monitors);
+        NimbusLog(line);
+        lastMade = made, lastMonitors = monitors;
+    }
+    if (!made && g_msgWnd && retries < 20) {
+        retries++;
+        SetTimer(g_msgWnd, TIMER_DOCKS, 3000, nullptr);
+    } else if (made) {
+        retries = 0;
+    }
 }
 
 static bool IsFullscreen(Dock& d) {
@@ -15515,9 +20006,90 @@ static bool IsFullscreen(Dock& d) {
     if (!wcscmp(cls, L"Progman") || !wcscmp(cls, L"WorkerW") || !wcscmp(cls, L"NimbusMenu_Content")) return false;
     if (MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST) != d.mon) return false;
     if (IsZoomed(fg)) return false;
+    // (an invisible, cloaked or click-through window over the screen, an overlay, isn't a game or a video)
+    if (!IsWindowVisible(fg) || (GetWindowLongPtrW(fg, GWL_EXSTYLE) & (WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW))) return false;
+    DWORD cloaked = 0;
+    if (SUCCEEDED(DwmGetWindowAttribute(fg, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked) return false;
     RECT r;
     if (!GetWindowRect(fg, &r)) return false;
     return r.left <= d.rcMon.left && r.top <= d.rcMon.top && r.right >= d.rcMon.right && r.bottom >= d.rcMon.bottom;
+}
+
+// Auto-hide docks were outside the vigia (DockHealth checks docks that should be on screen). Here: the mouse
+// held at a dock's edge ~2 s and the dock still not out. Which reason goes to the log, once per hold, and what
+// can be fixed in place is; otherwise the docks are made again (and Nimbus restarts itself if that didn't help).
+static void EdgeWatch(Dock& d, POINT pt, DWORD now) {
+    if (!d.edgeSince || d.edgeTold || now - d.edgeSince < 2000) return;
+    d.edgeTold = true;
+    char b[400] = {};
+    bool remake = true;
+    RECT wr{}, x;
+    DWORD cloaked = 0;
+    MONITORINFO mi = {sizeof(mi)};
+    if (!IsWindow(d.content)) {
+        snprintf(b, sizeof(b), "a janela sumiu");
+    } else if (!GetMonitorInfoW(d.mon, &mi)) {
+        snprintf(b, sizeof(b), "o monitor dela nao existe mais");
+    } else if (!EqualRect(&mi.rcMonitor, &d.rcMon)) {
+        snprintf(b, sizeof(b), "o monitor mudou (%ldx%ld) e a dock ficou com o tamanho antigo (%ldx%ld)",
+                 mi.rcMonitor.right - mi.rcMonitor.left, mi.rcMonitor.bottom - mi.rcMonitor.top,
+                 d.rcMon.right - d.rcMon.left, d.rcMon.bottom - d.rcMon.top);
+    } else if (!d.wantShown) {
+        D2D1_POINT_2F q = ScreenToDock(d, pt);
+        snprintf(b, sizeof(b), "o mouse na borda nao chamou a dock (y %.0f de %d, menu %d)", q.y, d.ch, d.menuOpen);
+    } else if (SUCCEEDED(DwmGetWindowAttribute(d.content, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked) {
+        snprintf(b, sizeof(b), "escondida pelo Windows (cloaked %lu)", cloaked);
+    } else if (d.drawErr) {
+        snprintf(b, sizeof(b), "o desenho nao chega na tela (erro %lu)", d.drawErr);
+    } else if (d.shown < 0.5f) {
+        snprintf(b, sizeof(b), "parada escondida (%.2f, animando %d, ultimo quadro ha %lu ms)", d.shown, d.animating,
+                 (unsigned long)(now - d.animTick));
+        d.animating = false;  // (its frames start again)
+        Animate(d);
+        remake = false;
+    } else if (!IsWindowVisible(d.content)) {
+        snprintf(b, sizeof(b), "janela escondida");
+    } else if (GetWindowRect(d.content, &wr) && !IntersectRect(&x, &wr, &d.rcMon)) {
+        snprintf(b, sizeof(b), "fora do monitor (%ld,%ld)", wr.left, wr.top);
+    } else {
+        // On screen as far as Windows says: is another window over it?
+        RECT pr = DockRectToScreen(d, d.pill);
+        POINT c = {(pr.left + pr.right) / 2, (pr.top + pr.bottom) / 2};
+        HWND over = GetAncestor(WindowFromPoint(c), GA_ROOT);
+        bool ours = over == d.content || std::find(d.bands.begin(), d.bands.end(), over) != d.bands.end();
+        wchar_t cls[64] = {};
+        if (over && !ours) GetClassNameW(over, cls, ARRAYSIZE(cls));
+        if (over && !ours && wcsncmp(cls, L"NimbusMenu", 10)) {
+            DWORD pid = 0;
+            GetWindowThreadProcessId(over, &pid);
+            snprintf(b, sizeof(b), "coberta por outra janela: %ls (%ls); posta na frente de novo", cls,
+                     PathFindFileNameW(ProcessPath(pid).c_str()));
+            SetWindowPos(d.content, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            remake = false;
+        } else if (!(GetWindowLongPtrW(d.content, GWL_EXSTYLE) & WS_EX_TOPMOST)) {
+            snprintf(b, sizeof(b), "tinha caido pra tras das janelas (posta na frente de novo)");
+            SetWindowPos(d.content, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            remake = false;
+        }
+    }
+    if (!b[0]) return;  // (it is out: the mouse just stayed there)
+    int idx = 1;
+    for (size_t i = 0; i < g_docks.size(); i++)
+        if (g_docks[i] == &d) idx = (int)i + 1;
+    char line[480];
+    snprintf(line, sizeof(line), "vigia | auto-esconder, dock %d: %s", idx, b);
+    NimbusLog(line);
+    if (!remake) return;
+    static DWORD remadeAt = 0;
+    if (!remadeAt || now - remadeAt > 5 * 60 * 1000) {
+        remadeAt = now;
+        NimbusLog("vigia | docks refeitas por causa disso");
+        SetTimer(g_msgWnd, TIMER_DOCKS, 100, nullptr);
+    } else if (now - remadeAt < 2 * 60 * 1000 && !g_selfRestart) {
+        NimbusLog("vigia | a dock continua sem aparecer depois de refeita: reiniciando o Nimbus sozinho");
+        g_selfRestart = true;
+        PostMessageW(g_msgWnd, WM_APP_QUIT, 0, 0);
+    }
 }
 
 static void Poll() {
@@ -15529,6 +20101,30 @@ static void Poll() {
         Dock& d = *dp;
         bool fs = IsFullscreen(d);
         anyFs = anyFs || fs;
+        {  // (a dock hidden by a full screen window for a minute: which window, to the log, once per window)
+            static std::unordered_map<Dock*, std::pair<HWND, DWORD>> since;
+            static std::unordered_set<HWND> told;
+            HWND fg = fs ? GetForegroundWindow() : nullptr;
+            auto& s = since[&d];
+            if (fg != s.first && s.first && told.count(s.first)) {  // (the logged one ended: when, to pair the lines)
+                char line[160];
+                snprintf(line, sizeof(line), "vigia | a tela cheia saiu depois de %lu min; a dock pode voltar",
+                         (unsigned long)((now - s.second) / 60000));
+                NimbusLog(line);
+            }
+            if (fg != s.first) s = {fg, now};
+            else if (fg && now - s.second > 60000 && told.insert(fg).second) {
+                wchar_t cls[64] = {};
+                GetClassNameW(fg, cls, ARRAYSIZE(cls));
+                DWORD pid = 0;
+                GetWindowThreadProcessId(fg, &pid);
+                char line[400];
+                snprintf(line, sizeof(line), "vigia | dock escondida ha 1 min por uma janela em tela cheia: %ls (%ls)", cls,
+                         PathFindFileNameW(ProcessPath(pid).c_str()));
+                NimbusLog(line);
+                if (told.size() > 200) told.clear();
+            }
+        }
         bool want = d.wantShown;
         if (fs) {
             want = false;
@@ -15536,16 +20132,16 @@ static void Poll() {
             want = true;
         } else {
             bool onMon = pt.x >= d.rcMon.left && pt.x < d.rcMon.right && pt.y >= d.rcMon.top && pt.y < d.rcMon.bottom;
-            bool atEdge = onMon && pt.y >= d.rcMon.bottom - 2;
-            float top = d.rcMon.bottom - d.ch + d.pill.top - S(d) * (Zoom() - 1);
-            bool overDock = d.visible && onMon && pt.y >= top && pt.x >= d.rcMon.left + d.pill.left - 8 &&
-                            pt.x <= d.rcMon.left + d.pill.right + 8;
+            D2D1_POINT_2F q = ScreenToDock(d, pt);  // (dock space: any edge)
+            bool atEdge = onMon && q.y >= d.ch - 2;
+            float top = d.pill.top - S(d) * (Zoom(d) - 1);
+            bool overDock = d.visible && onMon && q.y >= top && q.x >= d.pill.left - 8 && q.x <= d.pill.right + 8;
             if (g_prev.visible && g_prev.dock == &d && CursorInPreview(pt)) overDock = true;
             if (StartOpenOn(d) || FlyoutOpenOn(d)) overDock = true;
             if (atEdge || overDock || d.menuOpen) {
                 want = true;
                 d.outsideSince = now;
-            } else if (d.wantShown && now - d.outsideSince >= (DWORD)g_set.hideDelay) {
+            } else if (d.wantShown && now - d.outsideSince >= (DWORD)(d.cfg.hideDelay >= 0 ? d.cfg.hideDelay : g_set.hideDelay)) {
                 want = false;
             }
         }
@@ -15555,6 +20151,20 @@ static void Poll() {
             if (want) d.outsideSince = now;
             Animate(d);
         }
+        bool held = false;
+        if (d.cfg.autoHide && !fs) {
+            const RECT& m = d.rcMon;
+            bool in = pt.x >= m.left && pt.x < m.right && pt.y >= m.top && pt.y < m.bottom;
+            switch (d.cfg.edge) {
+                case 1: held = in && pt.y <= m.top + 1; break;
+                case 2: held = in && pt.x <= m.left + 1; break;
+                case 3: held = in && pt.x >= m.right - 2; break;
+                default: held = in && pt.y >= m.bottom - 2; break;
+            }
+        }
+        if (!held) d.edgeSince = 0, d.edgeTold = false;
+        else if (!d.edgeSince) d.edgeSince = now;
+        EdgeWatch(d, pt, now);
     }
     UpdateMoveHooks(anyFs);
 }
@@ -15568,12 +20178,137 @@ static std::wstring DockSig(const Dock& d) {
         sig += el.key;
         if (el.app >= 0 && el.app < (int)g_apps.size()) {
             const App& a = g_apps[el.app];
-            sig += L'|' + std::to_wstring(DockWins(d, a).size()) + (a.flash ? L"f" : L"") + (a.icon ? L"i" : L"");
+            sig += L'|' + std::to_wstring(DockWins(d, a).size()) + (a.flash ? L"f" : L"") + (a.icon ? L"i" : L"") + L"b" +
+                   std::to_wstring(AppBadge(a));
             sig += a.label;
         }
         sig += L';';
     }
     return sig;
+}
+
+// The docks' health, every 10 s (a "vigia"): a dock that should be on screen and isn't (its window hidden,
+// off its monitor, no longer on top, stuck hidden) and Windows' taskbar showing while it should be hidden.
+// Each goes to the log once (again only after it was fine); a dock lost for ~30 s gets the docks made again.
+static void DockHealth() {
+    static DWORD last = 0, remadeAt = 0;
+    DWORD now = GetTickCount();
+    if (now - last < 10000) return;
+    last = now;
+    static int badRuns = 0, trayRuns = 0;
+    static bool toldDocks = false, toldTray = false;
+    std::string why;
+    for (size_t i = 0; i < g_docks.size(); i++) {
+        Dock& d = *g_docks[i];
+        if (!d.content || d.fullscreen || d.cfg.autoHide || !d.wantShown || d.animating || d.menuOpen) continue;
+        char b[160] = {};
+        RECT wr{}, x;
+        DWORD cloaked = 0;
+        MONITORINFO mi = {sizeof(mi)};
+        if (!IsWindow(d.content)) {
+            snprintf(b, sizeof(b), "dock %zu: a janela sumiu", i + 1);
+        } else if (!GetMonitorInfoW(d.mon, &mi)) {
+            snprintf(b, sizeof(b), "dock %zu: o monitor dela nao existe mais", i + 1);
+        } else if (SUCCEEDED(DwmGetWindowAttribute(d.content, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked) {
+            snprintf(b, sizeof(b), "dock %zu: escondida pelo Windows (cloaked %lu)", i + 1, cloaked);
+        } else if (d.drawErr) {
+            snprintf(b, sizeof(b), "dock %zu: o desenho nao chega na tela (erro %lu)", i + 1, d.drawErr);
+        } else if (!IsWindowVisible(d.content)) {
+            snprintf(b, sizeof(b), "dock %zu: janela escondida", i + 1);
+        } else if (GetWindowRect(d.content, &wr) && !IntersectRect(&x, &wr, &d.rcMon)) {
+            snprintf(b, sizeof(b), "dock %zu: fora do monitor (%ld,%ld)", i + 1, wr.left, wr.top);
+        } else if (!(GetWindowLongPtrW(d.content, GWL_EXSTYLE) & WS_EX_TOPMOST)) {
+            snprintf(b, sizeof(b), "dock %zu: tinha caido pra tras das janelas (posta na frente de novo)", i + 1);
+            SetWindowPos(d.content, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        } else if (d.shown < 0.5f) {
+            snprintf(b, sizeof(b), "dock %zu: parada escondida (%.2f)", i + 1, d.shown);
+        }
+        if (b[0]) {
+            if (!why.empty()) why += "; ";
+            why += b;
+        }
+    }
+    badRuns = why.empty() ? 0 : badRuns + 1;
+    if (why.empty()) toldDocks = false;
+    if (badRuns >= 3 && !toldDocks) {  // (~30 s: not a passing moment)
+        toldDocks = true;
+        NimbusLog(("vigia | " + why).c_str());
+        if (now - remadeAt > 5 * 60 * 1000) {
+            remadeAt = now;
+            NimbusLog("vigia | docks refeitas por causa disso");
+            SetTimer(g_msgWnd, TIMER_DOCKS, 100, nullptr);
+            badRuns = 0;
+        }
+    }
+    // Still lost ~30 s after being made again: what turning Nimbus off and on fixes, Nimbus does itself.
+    // The bar ends cleanly (Windows' taskbar back) and the guard opens it again.
+    if (badRuns >= 3 && remadeAt && now - remadeAt < 2 * 60 * 1000 && !g_selfRestart) {
+        NimbusLog("vigia | a dock continua sumida depois de refeita: reiniciando o Nimbus sozinho");
+        g_selfRestart = true;
+        PostMessageW(g_msgWnd, WM_APP_QUIT, 0, 0);
+    }
+    bool trayUp = false;
+    if (g_set.hideTaskbar && !g_docks.empty())
+        for (const wchar_t* cls : {L"Shell_TrayWnd", L"Shell_SecondaryTrayWnd"})
+            for (HWND t = FindWindowExW(nullptr, nullptr, cls, nullptr); t; t = FindWindowExW(nullptr, t, cls, nullptr))
+                if (IsWindowVisible(t)) trayUp = true;
+    trayRuns = trayUp ? trayRuns + 1 : 0;
+    if (!trayUp) toldTray = false;
+    if (trayRuns >= 2 && !toldTray) {
+        toldTray = true;
+        NimbusLog("vigia | a barra do Windows ficou aparecendo (~20 s) mesmo com \"esconder\" ligado");
+    }
+}
+
+// Explorer restarted: did it crash? Windows notes it in the Application log (1000: a crash, 1002: hung and
+// closed). The crashing module goes to the mod's log, so a crash inside Nimbus' Explorer part shows up.
+static DWORD WINAPI ExplorerCrashLook(LPVOID) {
+    Sleep(4000);  // (Windows writes the entry a moment after)
+    static DWORD lastRec = 0;
+    HANDLE h = OpenEventLogW(nullptr, L"Application");
+    if (!h) return 0;
+    FILETIME ft;
+    GetSystemTimeAsFileTime(&ft);
+    ULONGLONG nowSec = ((((ULONGLONG)ft.dwHighDateTime << 32) | ft.dwLowDateTime) - 116444736000000000ULL) / 10000000ULL;
+    std::vector<BYTE> buf(64 * 1024);
+    DWORD read = 0, need = 0, newest = 0;
+    bool done = false;
+    while (!done && ReadEventLogW(h, EVENTLOG_SEQUENTIAL_READ | EVENTLOG_BACKWARDS_READ, 0, buf.data(), (DWORD)buf.size(), &read, &need)) {
+        for (BYTE* p = buf.data(); p + sizeof(EVENTLOGRECORD) <= buf.data() + read;) {
+            auto* r = (EVENTLOGRECORD*)p;
+            if (!r->Length) {
+                done = true;
+                break;
+            }
+            if (nowSec > r->TimeGenerated + 300 || r->RecordNumber <= lastRec) {
+                done = true;
+                break;
+            }
+            newest = std::max(newest, r->RecordNumber);
+            const wchar_t* src = (const wchar_t*)(p + sizeof(EVENTLOGRECORD));
+            DWORD id = r->EventID & 0xFFFF;
+            if ((id == 1000 && !wcscmp(src, L"Application Error")) || (id == 1002 && !wcscmp(src, L"Application Hang"))) {
+                std::vector<const wchar_t*> s;
+                const wchar_t* q = (const wchar_t*)(p + r->StringOffset);
+                for (int k = 0; k < r->NumStrings && (BYTE*)q < p + r->Length; k++) {
+                    s.push_back(q);
+                    q += wcslen(q) + 1;
+                }
+                if (!s.empty() && !_wcsicmp(s[0], L"explorer.exe")) {
+                    char line[400];
+                    if (id == 1000 && s.size() >= 8)
+                        snprintf(line, sizeof(line), "evento | o Explorer caiu: modulo %ls, codigo %ls, offset %ls", s[3], s[6], s[7]);
+                    else
+                        snprintf(line, sizeof(line), "evento | o Explorer travou e o Windows fechou ele");
+                    NimbusLog(line);
+                }
+            }
+            p += r->Length;
+        }
+    }
+    if (newest) lastRec = newest;
+    CloseEventLog(h);
+    return 0;
 }
 
 // A monitor's scale changed without a display change (Settings > Display > Scale): rebuild the docks.
@@ -15594,7 +20329,14 @@ static bool DockScalesChanged() {
 constexpr UINT_PTR TIMER_APPLY = 4;
 constexpr UINT WM_APP_OPEN_SETTINGS = WM_APP + 9;  // wParam = page
 constexpr UINT_PTR TIMER_SW_SCROLL = 30;
-constexpr wchar_t kVersion[] = L"2.0.0";
+constexpr UINT_PTR TIMER_SW_CARET = 31;
+constexpr UINT_PTR TIMER_SW_CONFIRM = 32;  // a row asking "sure?" goes back by itself
+constexpr UINT_PTR TIMER_SW_ANIM = 33;     // repaints while something in Settings is moving (see SwAnimKeep)
+constexpr UINT_PTR TIMER_SW_TIP = 34;      // the mouse stayed 500 ms on a row's button back: its tip shows
+constexpr UINT_PTR TIMER_SW_PEEK = 35;     // the mouse stayed on a monitor's number: it shows big on that monitor
+constexpr UINT_PTR TIMER_SW_UNDO = 38;     // 6 s went by: the "Undo" on offer goes away (see SwUndoOffer)
+constexpr UINT_PTR TIMER_SW_TOAST = 39;    // a short notice at the window's foot goes away (see SwToast)
+constexpr wchar_t kVersion[] = L"2.1.0";
 constexpr wchar_t kHelpUrl[] = L"https://github.com/igoredm/nimbus-menu";
 
 static const wchar_t* SettingsTitle() { return L2(L"Ajustes do Nimbus", L"Nimbus settings"); }
@@ -15622,14 +20364,14 @@ static void ApplySoon() {
 }
 
 static void CfgSet(const std::wstring& name, const std::wstring& v) {
-    g_cfg[name] = v;
+    CfgPut(name, v);
     WriteVal(UserPrefix() + L"cfg." + name, v);
     ApplySoon();
 }
 
 static void SwInvalidate();
 static void CfgSetQuiet(const std::wstring& name, const std::wstring& v) {
-    g_cfg[name] = v;
+    CfgPut(name, v);
     WriteVal(UserPrefix() + L"cfg." + name, v);
     SwInvalidate();
 }
@@ -15646,6 +20388,49 @@ static void MonSet(const std::wstring& id, const wchar_t* field, const std::wstr
     ApplySoon();
 }
 
+// A monitor's own position, look and status items ("stat.<item>") only count while its "advanced" is 1. That
+// used to be a switch in Settings > Monitors; now the window turns it on by itself (see MonOwnSet).
+static const wchar_t* const kMonLook[] = {L"edge", L"align", L"iconSize", L"iconGap", L"animation", L"magnification", L"tintColor",
+                                          L"tintOpacity", L"bottomGap", L"hideDelay"};
+static bool MonGuarded(const std::wstring& field) {
+    if (!field.rfind(L"stat.", 0)) return true;
+    for (auto* k : kMonLook)
+        if (field == k) return true;
+    return false;
+}
+
+// Whether a monitor has its own value for a field: the one rule, for every page. Format and auto-hide: anything
+// but "geral"; the Start button: hidden there; the apps and the windows: any value; the guarded ones: a value,
+// and "advanced" on.
+static bool MonOwn(const std::wstring& id, const wchar_t* group, const std::wstring& field) {
+    std::wstring v = MonCfg(id, group, field.c_str());
+    if (field == L"showStart") return v == L"0";
+    if (field == L"format" || field == L"autoHide") return !v.empty() && v != L"geral";
+    if (field == L"apps" || field == L"windows") {  // (saved empty: follows All; never the position group's old value)
+        std::wstring own;
+        return !id.empty() && ReadVal(UserPrefix() + L"mon." + id + L"." + field, own) && !own.empty();
+    }
+    return !v.empty() && MonCfg(id, group, L"advanced") == L"1";
+}
+
+// Gives a monitor its own value. A guarded field needs "advanced" on; values saved while it was off are asleep
+// (they don't apply), and turning it on would wake them all and change the dock by itself. So they are parked
+// first ("parked.<field>", read by nobody, kept as a backup), then "advanced" goes on, then the value is saved.
+static void MonOwnSet(const std::wstring& id, const wchar_t* group, const std::wstring& field, const std::wstring& v) {
+    if (!v.empty() && MonGuarded(field) && MonCfg(id, group, L"advanced") != L"1") {
+        auto park = [&](const std::wstring& f) {
+            std::wstring was;
+            if (!ReadVal(UserPrefix() + L"mon." + id + L"." + f, was) || was.empty()) return;
+            WriteVal(UserPrefix() + L"mon." + id + L".parked." + f, was);
+            WriteVal(UserPrefix() + L"mon." + id + L"." + f, L"");
+        };
+        for (auto* k : kMonLook) park(k);
+        for (int i = 0; kDockStatKeys[i]; i++) park(std::wstring(L"stat.") + kDockStatKeys[i]);
+        MonSet(id, L"advanced", L"1");
+    }
+    MonSet(id, field.c_str(), v);
+}
+
 static void ResetCfg() {
     for (auto& k : kCfgKeys) CfgSet(k.name, CfgDefault(k.name));
     for (auto& k : kOwnKeys) CfgSet(k.first, k.second);
@@ -15654,8 +20439,18 @@ static void ResetCfg() {
             std::wstring n = std::wstring(g) + L"." + f.name;
             CfgSet(n, CfgDefault(n));
         }
-    for (auto& id : MonIdsWithChoices())
-        for (auto& f : kMonFields) Wh_DeleteValue((UserPrefix() + L"mon." + id + L"." + f.name).c_str());
+    for (auto& id : MonIdsWithChoices()) {
+        auto del = [&](const std::wstring& f) {
+            Wh_DeleteValue((UserPrefix() + L"mon." + id + L"." + f).c_str());
+            Wh_DeleteValue((UserPrefix() + L"mon." + id + L".parked." + f).c_str());
+        };
+        for (auto& f : kMonFields) del(f.name);
+        for (auto* f : kMonLook) del(f);
+        for (int i = 0; kDockStatKeys[i]; i++) del(std::wstring(L"stat.") + kDockStatKeys[i]);
+        del(L"advanced");
+        del(L"apps");
+        del(L"alignAuto");
+    }
     Wh_DeleteValue((UserPrefix() + L"monIds").c_str());
 }
 
@@ -15847,11 +20642,17 @@ static HICON IconFromBitmap(HBITMAP color, int px) {
 
 // ---- The window ------------------------------------------------------------
 
-enum SwPage { PgGeral, PgDock, PgIniciar, PgStatus, PgMonitores, PgSobre, PgComecar, PgCount };
+// (the first eight keep their old numbers: WM_APP_OPEN_SETTINGS and the flyout open a page by number; see SwOpenLegacy)
+enum SwPage { PgGeral, PgDock, PgIniciar, PgStatus, PgMonitores, PgSobre, PgComecar, PgNovidades,
+              PgBandeja, PgNotif, PgSom, PgPrateleira, PgCount };
+constexpr int PgItens = PgStatus;  // 3: the old "Status area" page is now Items
+// PgNovidades (7) is only an old number: it opens About and backup on its What's new tab.
 
 struct SwHit {
     D2D1_RECT_F r{};
     std::function<void()> click;
+    bool plain = false;  // no hand cursor over it (the caption buttons)
+    std::function<void()> menu;  // the right button's (a row's scope: which monitors have their own value)
     bool slider = false;
     std::wstring key;  // slider: value key (see SwVal)
     float tx = 0, tw = 0;
@@ -15865,6 +20666,7 @@ struct SwMon {
     const wchar_t* group;
     bool primary;
     int w, h;
+    RECT rc;  // where it is on the desktop (the map in Settings > Monitors)
 };
 
 struct SettingsWin {
@@ -15886,28 +20688,82 @@ struct SettingsWin {
     bool dragging = false;
     SwHit drag;
     std::unordered_map<std::wstring, int> pending;  // slider values while dragging
-    bool confirmReset = false;
-    bool confirmBanners = false;
-    int statusTab = 0;  // status page: items, tray, shelf, notifications
-    int wizStep = 0;            // the guided setup: the question shown (past the last: done)
-    std::vector<int> wizAns;    // what was picked in each (-1: skipped)
+    std::wstring confirmId;  // the row asking "sure?" in place (SwAsk); any other click, Esc, a page change or 8 s end it
+    DWORD confirmAt = 0;
+    std::wstring flashId;    // the row to go to and light up after a jump (WhereLine sets it)
+    DWORD flashAt = 0;
+    bool flashScroll = false;
+    int monTab = 0;    // Monitors: 0 overview, 1 screen layouts
+    int sobreTab = 1;  // About and backup: 0 backup, 1 what's new, 2 diagnostics (shown as 1 · 0 · 2; the last one used is kept in "sw.sobreTab")
+    int wizStep = -1;           // the guided setup: the place in wizList (-1: its home; past the last: done)
+    std::vector<int> wizList;   // this round's questions (WizId): all, the new ones, or one page's
+    int wizFrom = -1;           // the page whose questions this round is (-1: started from the home)
+    int wizMode = -1;           // the round: every question (-1), the new ones (-2), a page's (100 + its SwPage)
+    int wizPick = -1;           // an answer clicked that would erase a monitor's own choices: marked, waiting for "Confirm"
+    bool wizBack = false;       // this question was opened from the summary's "Change": answered, back to the summary
+    std::vector<int> wizAns;    // by WizId: the answer (-1: skipped, -2: "my own" kept)
+    std::vector<char> wizMine;  // by WizId: already changed in Settings when the round started
+    int confirmPreset = -1;     // the status area's "all at once": the answer waiting for a second click
     HICON iconBig = nullptr, iconSmall = nullptr;
     D2D1_RECT_F preview{};
     bool inPreview = false;
     std::vector<SwMon> mons;
+    int monSel = 0;  // Settings > Monitors: the one whose settings show
+    std::wstring query;  // the search in the sidebar (typing anywhere in the window goes there)
+    bool searchFocus = false, caretOn = true;  // clicked or being typed in: a ring and a blinking caret
+    D2D1_RECT_F searchRc{};
 } g_sw;
 
+// The search: every page is run once without drawing, and its cards keep only the rows that match.
+struct SwFound;
+bool g_swCollect = false;
+int g_swCurPage = 0, g_swCurTab = 0, g_swCurMon = -1;  // (the tab of Monitors or About; the monitor, in Monitors)
+std::wstring g_swCurWhere, g_swCurSection;
+
+// Everything drawn through Br is faded by this (a switched-off row: 0.4), and nothing is hot while g_swDead.
+float g_swAlpha = 1;
+bool g_swDead = false;
+
+// The scrolled page's top edge while it is drawn (0 for everything else): the caption buttons' height, the fixed
+// bar's once it is in, the bottom of a table's stuck header while there is one. Above it nothing of the page is
+// drawn, hot or clickable (see SwRender), so a row can never be clicked through the bar.
+float g_swTop = 0;
+static const float kBarH = 48;       // the fixed bar that comes in once the page's title has scrolled away
+static const float kJumpGap = 12;    // a row jumped to stops this far under the bar and a stuck header
+
 static ID2D1SolidColorBrush* Br(UINT32 rgb, float a = 1) {
-    g_sw.br->SetColor(D2D1::ColorF(rgb, a));
+    g_sw.br->SetColor(D2D1::ColorF(rgb, a * g_swAlpha));
     return g_sw.br.Get();
 }
 static ID2D1SolidColorBrush* Br(const D2D1_COLOR_F& c) {
-    g_sw.br->SetColor(c);
+    g_sw.br->SetColor(D2D1::ColorF(c.r, c.g, c.b, c.a * g_swAlpha));
     return g_sw.br.Get();
 }
 
 static bool InRect(const D2D1_RECT_F& r, D2D1_POINT_2F p) { return p.x >= r.left && p.x < r.right && p.y >= r.top && p.y < r.bottom; }
-static bool Hot(const D2D1_RECT_F& r) { return g_sw.mouseIn && !g_sw.dragging && InRect(r, g_sw.mouse); }
+static bool Hot(const D2D1_RECT_F& r) {
+    return g_sw.mouseIn && !g_sw.dragging && !g_swDead && g_sw.mouse.y >= g_swTop && InRect(r, g_sw.mouse);
+}
+// The hit about to be added at r is the one being pressed (call it right before its AddHit).
+static bool Pressed(const D2D1_RECT_F& r) {
+    return !g_swDead && g_sw.pressed >= 0 && g_sw.pressed == (int)g_sw.hits.size() && InRect(r, g_sw.mouse);
+}
+
+// A dimmed stretch of drawing: fainter, and (dead) with no hover and none of the hits it added.
+struct SwDim {
+    float alpha;
+    bool dead, kill;
+    size_t hits;
+    SwDim(float k, bool off) : alpha(g_swAlpha), dead(g_swDead), kill(off), hits(g_sw.hits.size()) {
+        g_swAlpha *= k;
+        if (off) g_swDead = true;
+    }
+    ~SwDim() {
+        g_swAlpha = alpha;
+        g_swDead = dead;
+        if (kill) g_sw.hits.resize(hits);
+    }
+};
 
 static ComPtr<IDWriteTextLayout> Lay(const std::wstring& s, IDWriteTextFormat* f, float w, float h = 4000) {
     ComPtr<IDWriteTextLayout> l;
@@ -15968,6 +20824,164 @@ static void SwInvalidate() {
     if (g_sw.hwnd) InvalidateRect(g_sw.hwnd, nullptr, FALSE);
 }
 
+// Something drawn in this frame is still moving: a 10 ms timer repaints until a frame asks for nothing.
+bool g_swAnimLive = false, g_swAnimTimer = false;
+static void SwAnimKeep() {
+    g_swAnimLive = true;
+    if (!g_swAnimTimer && g_sw.hwnd) g_swAnimTimer = SetTimer(g_sw.hwnd, TIMER_SW_ANIM, 10, nullptr) != 0;
+}
+
+// The few things that move in Settings (a switch, a check, a chosen segment): a value by id, going to its
+// target on one curve, a strong ease-out (1 - (1 - t)^4). A new target starts from where the value is now. A
+// control first drawn, or back after a frame without it, is simply at its value: nothing animates on entering.
+// Windows' "Animation effects" off: every time is 0.
+struct SwAnimV {
+    float from = 0, to = 0;
+    double start = 0;
+    int dur = 0;
+    unsigned frame = 0;
+};
+std::unordered_map<std::wstring, SwAnimV> g_swAnim;
+unsigned g_swFrame = 0;  // (counts SwRender's frames)
+static double SwNow() {  // ms
+    static LARGE_INTEGER f = {};
+    if (!f.QuadPart) QueryPerformanceFrequency(&f);
+    LARGE_INTEGER c;
+    QueryPerformanceCounter(&c);
+    return c.QuadPart * 1000.0 / f.QuadPart;
+}
+static float SwAnim(const std::wstring& id, float to, int ms) {
+    double now = SwNow();
+    auto [it, fresh] = g_swAnim.try_emplace(id);
+    SwAnimV& a = it->second;
+    auto value = [&] {
+        if (a.dur <= 0) return a.to;
+        float t = (float)((now - a.start) / a.dur);
+        if (t >= 1) return a.to;
+        float k = (1 - t) * (1 - t);
+        return a.from + (a.to - a.from) * (1 - k * k);
+    };
+    if (fresh || a.frame + 1 < g_swFrame) {  // (new, or not drawn in the last frame)
+        a.from = a.to = to;
+        a.dur = 0;
+    } else if (a.to != to) {
+        a.from = value();
+        a.to = to;
+        a.start = now;
+        a.dur = ReduceMotion() ? 0 : ms;
+    }
+    a.frame = g_swFrame;
+    float v = value();
+    if (v != a.to) SwAnimKeep();
+    return v;
+}
+
+// What is being pressed is drawn 3% smaller, around its own middle, and comes back in 120 ms once let go (at once
+// with Windows' animations off). Declare one right before drawing a control whose hit is the next AddHit; it ends
+// with its scope. One thing is pressed at a time, so one record is all it keeps.
+struct SwPressFx {
+    int hit = -1;        // the hit's place in the frame
+    float x = 0, y = 0;  // and where it was, so another control at that place isn't taken for it
+    double at = 0;       // when it was let go (0: still down)
+} g_swPressFx;
+struct SwPress {
+    D2D1_MATRIX_3X2_F old{};
+    bool on = false;
+    explicit SwPress(const D2D1_RECT_F& r, bool use = true) {
+        if (!use || g_swCollect) return;
+        int idx = (int)g_sw.hits.size();
+        float k = 1;
+        if (Pressed(r)) {
+            g_swPressFx = {idx, r.left, r.top, 0};
+            k = 0.97f;
+        } else if (g_swPressFx.hit == idx && fabsf(g_swPressFx.x - r.left) < 1 && fabsf(g_swPressFx.y - r.top) < 1) {
+            double now = SwNow();
+            if (!g_swPressFx.at) g_swPressFx.at = now;
+            float t = ReduceMotion() ? 1.0f : (float)((now - g_swPressFx.at) / 120);
+            if (t >= 1) {
+                g_swPressFx.hit = -1;
+            } else {
+                float e = (1 - t) * (1 - t);
+                k = 1 - 0.03f * e * e;
+                SwAnimKeep();
+            }
+        }
+        if (k >= 1) return;
+        g_sw.rt->GetTransform(&old);
+        g_sw.rt->SetTransform(D2D1::Matrix3x2F::Scale(k, k, D2D1::Point2F((r.left + r.right) / 2, (r.top + r.bottom) / 2)) * old);
+        on = true;
+    }
+    ~SwPress() {
+        if (on) g_sw.rt->SetTransform(old);
+    }
+    SwPress(const SwPress&) = delete;
+    SwPress& operator=(const SwPress&) = delete;
+};
+
+// A tip for what is under the mouse: after the mouse stays on it for 500 ms, fading in over 120 ms; gone at once
+// when the mouse leaves. With one up, or gone less than 400 ms ago, the next shows at once: reading several in a
+// row doesn't wait each time. Drawn last, over the page (see SwRender).
+struct SwTip {
+    std::wstring key, text;  // (key: the row)
+    D2D1_RECT_F at{};        // the button
+    double since = 0;
+    bool seen = false;       // drawn under the mouse in this frame
+    bool shown = false;      // up in the last frame
+    double goneAt = 0;       // when the last one up went away
+} g_swTip;
+static void SwTipShow(const D2D1_RECT_F& at, const std::wstring& key, const std::wstring& text);
+
+// The tray list's own filter ("Filter apps"): a second text field. It takes the typing while it is clicked into
+// (otherwise typing goes to the search). Only in memory; emptied when the page changes.
+struct SwFilter {
+    std::wstring text;
+    bool focus = false, seen = false;  // (seen: drawn in this frame)
+    D2D1_RECT_F rc{};
+} g_swFilter;
+static void SwFilterFocus(bool on) {
+    if (on == g_swFilter.focus) return;
+    g_swFilter.focus = on;
+    g_sw.caretOn = true;
+    if (on) SetTimer(g_sw.hwnd, TIMER_SW_CARET, GetCaretBlinkTime(), nullptr);
+    else if (!g_sw.searchFocus) KillTimer(g_sw.hwnd, TIMER_SW_CARET);
+    SwInvalidate();
+}
+// The tray list's rows, in the order worked out when the page opened (the apps' keys): see PageBandeja.
+std::vector<std::wstring> g_trayRowOrder;
+
+// The jump to a row (g_sw.flashId): the page is laid out once to find the row, then drawn at its place (see
+// SwRender); the row is lit and fades in 900 ms. The window's only "entrance" effect.
+bool g_swFlashSeen = false, g_swFlashJumped = false;
+float g_swFlashJump = 0;
+// A jump to another page (a "Change in Items" button, a link, a search result): the page, its tab (-1: as it
+// is), and the row to go to and light up there ("": just the page).
+static void SwJump(int page, const std::wstring& flash, int tab = -1);
+static std::wstring SwPageName(int page);
+// The way back from a jump: where one was (page, tabs, scroll, and the search when the jump was from a result).
+// Only the last jump, only in memory; gone once used, or when a page is opened any other way (see SwSetPage).
+// The chip "‹ Back to Tray" over the page's title, Alt+Left and the mouse's back button all take it (SwBackGo).
+struct SwBack {
+    bool on = false;
+    int page = 0, monTab = 0, sobreTab = 0;
+    float scroll = 0;
+    std::wstring query;
+} g_swBack;
+
+// A short notice at the foot of the page, gone by itself in 3.5 s ("Done.", after a round of one question).
+std::wstring g_swToast;
+static void SwToast(const std::wstring& text) {
+    g_swToast = text;
+    if (g_sw.hwnd) SetTimer(g_sw.hwnd, TIMER_SW_TOAST, 3500, nullptr);
+    SwInvalidate();
+}
+
+// This frame's section titles and where they were drawn: the last one gone under the fixed bar is the bar's path.
+struct SwSecMark {
+    float y;
+    std::wstring title;
+};
+std::vector<SwSecMark> g_swSecs;
+
 // A setting's number, or the slider's while it's dragged.
 static int SwVal(const std::wstring& key) {
     auto it = g_sw.pending.find(key);
@@ -15976,10 +20990,12 @@ static int SwVal(const std::wstring& key) {
 
 static const UINT32 kInk = 0xECECEE, kSub = 0xA0A0A8, kIdle = 0xB4B4BB, kMuted = 0x8A8A92, kBg = 0x0E0E10,
                     kSide = 0x121215, kAccent = 0xECECEE;
+static const UINT32 kWarn = 0xE9C27B, kDanger = 0xF2938A;  // state only, as text or a thin border (never a fill)
 
 // ---- Rows ------------------------------------------------------------------
 
-enum SwCtl { CtlNone, CtlToggle, CtlSeg, CtlSlider, CtlButtons, CtlSwatches };
+enum SwCtl { CtlNone, CtlToggle, CtlSeg, CtlSlider, CtlButtons, CtlSwatches, CtlPlace, CtlStepper, CtlSound, CtlPos, CtlMons };
+enum SwChip { ChipOutline, ChipFull, ChipWarn };
 
 struct SwRow {
     std::wstring label, desc;
@@ -15993,7 +21009,59 @@ struct SwRow {
     int min = 0, max = 0, step = 1;
     std::function<std::wstring(int)> fmt;
     std::vector<std::pair<std::wstring, std::function<void()>>> buttons;
-    bool multi = false;  // a segmented row where several can be on (cur: values with commas)
+    std::function<int()> geti;           // CtlSlider: its value elsewhere than a general setting (a monitor's)
+    std::function<void(int)> seti;
+    // A monitor's row for a setting that also exists for all (reset set): while own() says no, the control shows
+    // All's value, faint, beside the words "same as All"; with its own value, the button "Same as All" (reset) in
+    // the scope's slot. See Card.
+    std::function<bool()> own;
+    std::function<void()> reset;
+    std::function<std::wstring()> general;  // the general value in words, for the tip of the button back ("60 px", "on")
+    std::wstring id;                     // the setting it shows (the guided setup finds the rows by it)
+    std::wstring id2;                    // a second setting on the same row (the position picker: notifV and notifH)
+    std::function<bool()> enabled;       // empty: always on. False: the whole row is drawn faint and takes no click
+    bool child = false;                  // depends on the row above: its text starts 20 further in
+    std::wstring alias;                  // other words the search finds it by (old names, PT and EN together)
+    std::function<std::pair<std::wstring, int>()> chip;  // a small tag left of the control: text ("" for none), SwChip
+    std::wstring link;                   // words after the description that go somewhere (a monitor with its own value)
+    std::function<void()> linkGo;
+    bool small = false;                  // CtlButtons: 28 high instead of 34
+    std::function<void(D2D1_RECT_F)> icon;  // a 24x24 picture before the text, which then starts 36 further in (the tray's list)
+    bool descLine = false;               // the description on one line, cut with an ellipsis
+    float fixH = 0;                      // the row is this high whatever it says, its label on one line (the tray's list: 56)
+    std::wstring drop;                   // a small pull-down button left of the control (which docks a tray app is pinned on)
+    std::function<void()> dropGo;
+    // A setting a monitor may have its own value for (see WithMons). On everyone's row: the scope cells
+    // "All 1 2 3" in a slot at a fixed place (see DrawScope); scopeMons are the numbers of the monitors with their
+    // own value. Each of those has a band right under the row (monN: its number, the label its name): "Only on
+    // 2 NAME", the button back to All in the slot, and the same control. gone: the band of a value just taken
+    // away, saying so and offering "Undo" while the offer lasts.
+    bool scope = false;
+    std::vector<int> scopeMons;
+    std::wstring scopeField;             // the field the cells give and take (a monitor's "mon.<id>.<field>")
+    bool scopeOpp = false;               // a yes/no setting: a new band is born with the opposite of All's value
+    int monN = 0;
+    bool gone = false;
+    std::wstring offWhy;                 // said in the description's place while `enabled` says no ("Zoom only.")
+    float segPad = 24;                   // CtlSeg: the room around each option's word (less, to fit beside the scope)
+    std::wstring mon;                    // the search: the monitor a found row is of (its path says so)
+    // CtlMons: a check cell per dock, and one in front for all of them (see DrawMons). By g_sw.mons' places.
+    std::function<bool(int)> monOn;
+    std::function<void(int)> monFlip;
+    std::function<void()> allFlip;       // (empty: every dock flipped to what the "all" cell is going to)
+    std::wstring head;                   // CtlMons: the word over the labels, in the strip that names the cells ("App")
+    bool monsEvery = false;              // CtlMons: a cell for every monitor, with a dock or not (the row that gives and takes the dock)
+    bool placeGrid = false;              // CtlMons: its cells sit under the places table's (the room of that table's other two columns is kept)
+    std::function<void()> labelGo;       // the label is a link (drawn with a "›"): the item has a page of its own
+    std::wstring word;                   // a faint word left of the control, saying its state ("with a dock")
+    std::wstring moreTip;                // CtlButtons: the tip of its "..." button (what its menu does)
+    int strongBtn = -1, dangerBtn = -1;  // CtlButtons: the one drawn strong, the one with its text in the danger color
+    // Asking in place before doing it (SwAsk(id) starts it): the question takes the description's place and
+    // the control becomes askYes and Cancel.
+    std::wstring ask, askYes;
+    bool askDanger = false;
+    std::function<void()> askDo;
+    bool asking = false;                 // drawn as a row that is asking (set by Card, or by a row with its own confirm)
 };
 
 static SwRow RToggle(const wchar_t* label, const wchar_t* desc, const wchar_t* key) {
@@ -16001,6 +21069,7 @@ static SwRow RToggle(const wchar_t* label, const wchar_t* desc, const wchar_t* k
     r.label = label;
     r.desc = desc ? desc : L"";
     r.ctl = CtlToggle;
+    r.id = key;
     std::wstring k = key;
     r.on = [k] { return CfgInt(k.c_str()) != 0; };
     r.flip = [k] { CfgSet(k, CfgInt(k.c_str()) ? L"0" : L"1"); };
@@ -16013,6 +21082,7 @@ static SwRow RSeg(const wchar_t* label, const wchar_t* desc, const wchar_t* key,
     r.label = label;
     r.desc = desc ? desc : L"";
     r.ctl = CtlSeg;
+    r.id = key;
     r.opts = std::move(opts);
     std::wstring k = key, def = r.opts.empty() ? L"" : r.opts[0].first;
     r.cur = [k, def] { return CfgStr(k.c_str(), def.c_str()); };
@@ -16020,33 +21090,23 @@ static SwRow RSeg(const wchar_t* label, const wchar_t* desc, const wchar_t* key,
     return r;
 }
 
-// Dock, Start or off, for a status item or the tray.
+// Where a status item or the tray shows now (PlDock | PlStart | PlCentral), with each key's own default.
+static int PlaceMask(const std::wstring& k) {
+    if (k == L"trayPlace" && CfgStr(L"trayStyle") == L"off") return 0;
+    bool extra = k == L"dndPlace" || k == L"btPlace" || k == L"nightPlace" || k == L"shortPlace" || k == L"lightPlace" || k == L"powerPlace" ||
+                 k == L"playerPlace" || k == L"devPlace" || k == L"privPlace" || k == L"telasPlace";
+    bool dockFirst = k == L"playerPlace" || k == L"devPlace" || k == L"privPlace";
+    return PlaceOf(CfgStr(k.c_str(), dockFirst ? L"dock" : k == L"telasPlace" ? L"off" : extra ? L"central" : L"1"), k == L"trayPlace" || extra);
+}
+
+// Where a status item or the tray shows: a row of the places table (see DrawPlace), its key's only owner.
 static SwRow RPlace(const wchar_t* label, const wchar_t* desc, const wchar_t* key) {
-    SwRow r = RSeg(label, desc, key,
-                   {{L"dock", L"Dock"}, {L"central", L2(L"Central", L"Center")}, {L"iniciar", L2(L"Iniciar", L"Start")}, {L"off", L2(L"Desligado", L"Off")}});
-    std::wstring k = key;
-    r.multi = true;
-    r.cur = [k] {
-        if (k == L"trayPlace" && CfgStr(L"trayStyle") == L"off") return std::wstring(L"off");
-        bool extra = k == L"dndPlace" || k == L"btPlace" || k == L"nightPlace" || k == L"shortPlace" || k == L"lightPlace" || k == L"powerPlace" ||
-                     k == L"playerPlace" || k == L"devPlace";
-        bool dockFirst = k == L"playerPlace" || k == L"devPlace";
-        return std::wstring(
-            PlaceName(PlaceOf(CfgStr(k.c_str(), dockFirst ? L"dock" : extra ? L"central" : L"1"), k == L"trayPlace" || extra)));
-    };
-    r.pick = [k](const std::wstring& v) {
-        // A place switches on or off; "Desligado" clears them all.
-        bool extra = k == L"dndPlace" || k == L"btPlace" || k == L"nightPlace" || k == L"shortPlace" || k == L"lightPlace" || k == L"powerPlace" ||
-                     k == L"playerPlace" || k == L"devPlace";
-        bool dockFirst = k == L"playerPlace" || k == L"devPlace";
-        int m = PlaceOf(CfgStr(k.c_str(), dockFirst ? L"dock" : extra ? L"central" : L"1"), k == L"trayPlace" || extra);
-        if (k == L"trayPlace" && CfgStr(L"trayStyle") == L"off") m = 0;
-        int b = PlaceOf(v, true);
-        m = v == L"off" ? 0 : (m ^ b);
-        std::wstring nv = PlaceName(m);
-        CfgSet(k, nv);
-        if (k == L"trayPlace" && nv != L"off" && CfgStr(L"trayStyle") == L"off") CfgSet(L"trayStyle", L"botao");
-    };
+    SwRow r;
+    r.label = label;
+    r.desc = desc ? desc : L"";
+    r.ctl = CtlPlace;
+    r.key = key;
+    r.id = key;
     return r;
 }
 
@@ -16057,6 +21117,7 @@ static SwRow RSlider(const wchar_t* label, const wchar_t* desc, const wchar_t* k
     r.desc = desc ? desc : L"";
     r.ctl = CtlSlider;
     r.key = key;
+    r.id = key;
     r.min = min;
     r.max = max;
     r.step = step;
@@ -16074,20 +21135,38 @@ static SwRow RButtons(const wchar_t* label, const wchar_t* desc,
     return r;
 }
 
-// A sound to pick: ‹ and › go through them (each one plays), "Ouvir" plays it again.
+// A sound to pick (see DrawSound). The description is only the sentence: the sound's name is in the control.
 static SwRow SoundRow(const wchar_t* label, const wchar_t* key, const wchar_t* note) {
-    std::wstring k = key;
-    int v = SoundValue(CfgStr(key));
-    std::wstring desc = SoundName(v) + L" · " + note;
-    auto step = [k](int d) {
-        int n = kSoundCount + 2;
-        int nv = ((SoundValue(CfgStr(k.c_str())) + d) % n + n) % n;
-        CfgSet(k, SoundSetting(nv));
-        PlayNimbusSound(nv);
-    };
-    return RButtons(label, desc.c_str(),
-                    {{L"‹", [step] { step(-1); }}, {L"›", [step] { step(1); }},
-                     {L2(L"Ouvir", L"Listen"), [k] { PlayNimbusSound(SoundValue(CfgStr(k.c_str()))); }}});
+    SwRow r;
+    r.label = label;
+    r.desc = note ? note : L"";
+    r.ctl = CtlSound;
+    r.key = key;
+    r.id = key;
+    return r;
+}
+
+// A row named by hand (one that isn't a plain setting).
+static SwRow WithId(SwRow r, const wchar_t* id) {
+    r.id = id;
+    return r;
+}
+
+// A row that only says something.
+static SwRow RInfo(const wchar_t* label, const wchar_t* desc) {
+    SwRow r;
+    r.label = label;
+    r.desc = desc ? desc : L"";
+    return r;
+}
+
+// A row that depends on something: faint and dead while `on` says no; a child when the row right above decides it.
+// why: what it depends on, said in its description's place while it is off.
+static SwRow When(SwRow r, std::function<bool()> on, bool child = false, const wchar_t* why = nullptr) {
+    r.enabled = std::move(on);
+    r.child = child;
+    if (why) r.offWhy = why;
+    return r;
 }
 
 static std::wstring Px(int v) { return std::to_wstring(v) + L" px"; }
@@ -16100,37 +21179,57 @@ static std::wstring Secs(int ms) {
 }
 
 static const float kSegH = 30, kSegPad = 3;
+// The places table: three check cells, side by side. With two or three docks each dock has a cell of its own
+// between "Dock" (then: all of them) and the other two places (see PlaceW).
+static const float kPlaceCell = 68, kCellAll = 60, kCellMon = 36;
+static float PlaceW();
+static float MonsW(const SwRow& r);
 
-static float SegOptW(const std::wstring& s) { return Measure(s, g_sw.fSeg.Get()).width + 24; }
+static float SegOptW(const std::wstring& s, float pad = 24) { return Measure(s, g_sw.fSeg.Get()).width + pad; }
 
 static const wchar_t* const kSwatches[] = {L"050506", L"0B1220", L"1A0A12", L"07140F", L"140A22", L"1E1408"};
+
+static float AutoPillW() { return Measure(L"Auto", g_sw.fSmall.Get()).width + 18; }
+// A CtlButtons button with this label is the small "more" one: 28 x 28, three dots (it opens a menu).
+static const wchar_t kMoreBtn[] = L"\u2026";
 
 static float ControlWidth(const SwRow& r) {
     switch (r.ctl) {
         case CtlToggle: return 40;
         case CtlSeg: {
             float w = kSegPad * 2;
-            for (auto& o : r.opts) w += SegOptW(o.second) + 2;
+            for (auto& o : r.opts) w += SegOptW(o.second, r.segPad) + 2;
             return w - 2;
         }
         case CtlSlider: return 200 + 12 + 60;
         case CtlButtons: {
             float w = 0;
-            for (auto& b : r.buttons) w += Measure(b.first, g_sw.fSeg.Get()).width + 28 + 8;
+            for (auto& b : r.buttons) w += (b.first == kMoreBtn ? 0 : Measure(b.first, g_sw.fSeg.Get()).width) + 28 + 8;
             return w - 8;
         }
-        case CtlSwatches: return (2 + (float)ARRAYSIZE(kSwatches)) * 30 - 8;
+        case CtlSwatches: return AutoPillW() + 8 + (float)ARRAYSIZE(kSwatches) * 30 + 22;
+        case CtlPlace: return PlaceW();
+        case CtlMons: return r.placeGrid ? PlaceW() : MonsW(r);
+        case CtlStepper: return 110;
+        case CtlSound: return 162 + 8 + Measure(L2(L"Ouvir", L"Listen"), g_sw.fSeg.Get()).width + 28;
+        case CtlPos: return 120;
         default: return 0;
     }
 }
+// A control taller than a row's usual 52 makes its row grow.
+static float ControlHeight(const SwRow& r) { return r.ctl == CtlPos ? 72.0f : 0; }
 
-static void DrawToggle(float x, float cy, bool on, std::function<void()> flip) {
+// (id: names its movement. The knob slides and the two looks mix by the same t, 140 ms.)
+static void DrawToggle(float x, float cy, bool on, std::function<void()> flip, const std::wstring& id) {
     D2D1_RECT_F r = D2D1::RectF(x, cy - 11, x + 40, cy + 11);
+    SwPress press(r);
     bool hot = Hot(r);
-    g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(r, 11, 11),
-                                  on ? Br(kAccent, hot ? 0.88f : 1) : Br(0xFFFFFF, hot ? 0.22f : 0.16f));
-    float kx = on ? x + 29 : x + 11;
-    g_sw.rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(kx, cy), 8, 8), on ? Br(kBg) : Br(0xBDBDC4));
+    float t = id.empty() ? (on ? 1.0f : 0.0f) : SwAnim(L"t:" + id, on ? 1.0f : 0.0f, 140);
+    if (t < 1) g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(r, 11, 11), Br(0xFFFFFF, (hot ? 0.22f : 0.16f) * (1 - t)));
+    if (t > 0) g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(r, 11, 11), Br(kAccent, (hot ? 0.88f : 1) * t));
+    D2D1_COLOR_F off = D2D1::ColorF(0xBDBDC4), onC = D2D1::ColorF(kBg);
+    g_sw.rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x + 11 + 18 * t, cy), 8, 8),
+                         Br(D2D1::ColorF(off.r + (onC.r - off.r) * t, off.g + (onC.g - off.g) * t, off.b + (onC.b - off.b) * t, 1)));
     AddHit(r, std::move(flip));
 }
 
@@ -16138,25 +21237,41 @@ static void DrawSeg(float x, float cy, const SwRow& row) {
     float w = ControlWidth(row);
     D2D1_RECT_F wrap = D2D1::RectF(x, cy - kSegH / 2 - kSegPad, x + w, cy + kSegH / 2 + kSegPad);
     g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(wrap, 9, 9), Br(0xFFFFFF, 0.05f));
-    std::wstring cur = row.cur();
-    float ox = x + kSegPad;
+    std::wstring cur = row.cur(), aid = row.id.empty() ? row.label : row.id;
+    // One indicator, under the chosen option: on a new choice it slides there, place and width, in 160 ms.
+    float ox = x + kSegPad, selX = 0, selW = 0;
     for (auto& o : row.opts) {
-        float ow = SegOptW(o.second);
+        float ow = SegOptW(o.second, row.segPad);
+        if (o.first == cur) {
+            selX = ox - x;
+            selW = ow;
+        }
+        ox += ow + 2;
+    }
+    if (selW > 0) {
+        float ix = x + SwAnim(L"sx:" + aid, selX, 160), iw = SwAnim(L"sw:" + aid, selW, 160);
+        g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(ix, cy - kSegH / 2, ix + iw, cy + kSegH / 2), 7, 7), Br(0xFFFFFF, 0.14f));
+    }
+    ox = x + kSegPad;
+    for (auto& o : row.opts) {
+        float ow = SegOptW(o.second, row.segPad);
         D2D1_RECT_F r = D2D1::RectF(ox, cy - kSegH / 2, ox + ow, cy + kSegH / 2);
         bool on = o.first == cur;
-        if (row.multi) on = (L"," + cur + L",").find(L"," + o.first + L",") != std::wstring::npos;
-        if (on) g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(r, 7, 7), Br(0xFFFFFF, 0.14f));
-        else if (Hot(r)) g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(r, 7, 7), Br(0xFFFFFF, 0.06f));
+        // (a monitor's row following the general value: the value shown takes the click too, and becomes its own)
+        bool takes = !on || (row.reset && row.own && !row.own());
+        SwPress press(r, takes);
+        if (!on && Hot(r)) g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(r, 7, 7), Br(0xFFFFFF, 0.06f));
         TxtC(o.second, g_sw.fSeg.Get(), r, on ? 0xFFFFFF : kIdle);
         auto pick = row.pick;
         std::wstring v = o.first;
-        if (!on || row.multi) AddHit(r, [pick, v] { pick(v); });
+        if (takes) AddHit(r, [pick, v] { pick(v); });
         ox += ow + 2;
     }
 }
 
 static void DrawSlider(float x, float cy, const SwRow& row) {
-    int v = SwVal(row.key);
+    auto pend = g_sw.pending.find(row.key);
+    int v = pend != g_sw.pending.end() ? pend->second : row.geti ? row.geti() : SwVal(row.key);
     float t = row.max > row.min ? (float)(Clamp(v, row.min, row.max) - row.min) / (row.max - row.min) : 0;
     float tw = 200, tx = x;
     D2D1_RECT_F track = D2D1::RectF(tx, cy - 2, tx + tw, cy + 2);
@@ -16164,9 +21279,10 @@ static void DrawSlider(float x, float cy, const SwRow& row) {
     g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(track, 2, 2), Br(0xFFFFFF, 0.16f));
     g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(tx, cy - 2, tx + tw * t, cy + 2), 2, 2), Br(kAccent));
     D2D1_POINT_2F c = D2D1::Point2F(tx + tw * t, cy);
-    g_sw.rt->FillEllipse(D2D1::Ellipse(c, hot ? 10.5f : 9.5f, hot ? 10.5f : 9.5f), Br(0xFFFFFF, 0.25f));
-    g_sw.rt->FillEllipse(D2D1::Ellipse(c, hot ? 9.5f : 8.5f, hot ? 9.5f : 8.5f), Br(0x18181B));
-    g_sw.rt->FillEllipse(D2D1::Ellipse(c, hot ? 6.5f : 5.5f, hot ? 6.5f : 5.5f), Br(kAccent));
+    float grow = SwAnim(L"th:" + row.key, hot ? 1.0f : 0.0f, 100);  // (the thumb, 1 px bigger under the mouse)
+    g_sw.rt->FillEllipse(D2D1::Ellipse(c, 9.5f + grow, 9.5f + grow), Br(0xFFFFFF, 0.25f));
+    g_sw.rt->FillEllipse(D2D1::Ellipse(c, 8.5f + grow, 8.5f + grow), Br(0x18181B));
+    g_sw.rt->FillEllipse(D2D1::Ellipse(c, 5.5f + grow, 5.5f + grow), Br(kAccent));
     std::wstring text = row.fmt ? row.fmt(v) : std::to_wstring(v);
     auto l = Lay(text, g_sw.fSeg.Get(), 60);
     if (l) {
@@ -16184,27 +21300,330 @@ static void DrawSlider(float x, float cy, const SwRow& row) {
     h.max = row.max;
     h.step = row.step;
     std::wstring key = row.key;
-    h.commit = [key](int nv) { CfgSet(key, std::to_wstring(nv)); };
+    if (row.seti) h.commit = row.seti;
+    else h.commit = [key](int nv) { CfgSet(key, std::to_wstring(nv)); };
 }
 
-static void DrawButton(D2D1_RECT_F r, const std::wstring& label, std::function<void()> click, bool strong = false) {
-    bool hot = Hot(r);
+static void DrawButton(D2D1_RECT_F r, const std::wstring& label, std::function<void()> click, bool strong = false, UINT32 ink = kInk) {
+    SwPress press(r);
+    bool hot = Hot(r), down = Pressed(r);
     D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(r, 8, 8);
-    if (strong) g_sw.rt->FillRoundedRectangle(rr, Br(kAccent, hot ? 0.88f : 1));
-    else g_sw.rt->FillRoundedRectangle(rr, Br(0xFFFFFF, hot ? 0.1f : 0.06f));
+    if (strong) g_sw.rt->FillRoundedRectangle(rr, Br(kAccent, down ? 0.8f : hot ? 0.88f : 1));
+    else g_sw.rt->FillRoundedRectangle(rr, Br(0xFFFFFF, down ? 0.12f : hot ? 0.1f : 0.06f));
     if (!strong) g_sw.rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + 0.5f, r.top + 0.5f, r.right - 0.5f, r.bottom - 0.5f), 8, 8),
                                                Br(0xFFFFFF, 0.1f), 1);
-    TxtC(label, g_sw.fSeg.Get(), r, strong ? kBg : kInk);
+    TxtC(label, g_sw.fSeg.Get(), r, strong ? kBg : ink);
     AddHit(r, std::move(click));
 }
 
 static void DrawButtons(float x, float cy, const SwRow& row) {
-    float ox = x;
-    for (auto& b : row.buttons) {
+    float ox = x, hh = row.small ? 14.0f : 17.0f;
+    for (int i = 0; i < (int)row.buttons.size(); i++) {
+        auto& b = row.buttons[i];
+        if (b.first == kMoreBtn) {
+            D2D1_RECT_F r = D2D1::RectF(ox, cy - 14, ox + 28, cy + 14);
+            SwPress press(r);
+            bool hot = Hot(r), down = Pressed(r);
+            if (hot || down) g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(r, 8, 8), Br(0xFFFFFF, down ? 0.12f : 0.08f));
+            Icon(L"M6 12h.01 M12 12h.01 M18 12h.01", ox + 5, cy - 9, 18, hot ? kInk : kIdle, 1, 2.6f);
+            if (hot && !row.moreTip.empty()) SwTipShow(r, L"more:" + row.id, row.moreTip);
+            AddHit(r, b.second);
+            ox += 28 + 8;
+            continue;
+        }
         float bw = Measure(b.first, g_sw.fSeg.Get()).width + 28;
-        DrawButton(D2D1::RectF(ox, cy - 17, ox + bw, cy + 17), b.first, b.second);
+        DrawButton(D2D1::RectF(ox, cy - hh, ox + bw, cy + hh), b.first, b.second, i == row.strongBtn, i == row.dangerBtn ? kDanger : kInk);
         ox += bw + 8;
     }
+}
+
+// One line centered in a box, cut with an ellipsis when it doesn't fit (tabular: digits all the same width).
+static void TxtC1(const std::wstring& s, IDWriteTextFormat* f, D2D1_RECT_F r, UINT32 rgb, float a = 1, bool tabular = false) {
+    auto l = Lay(s, f, r.right - r.left);
+    if (!l) return;
+    l->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+    l->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+    DWRITE_TRIMMING trim = {DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0};
+    ComPtr<IDWriteInlineObject> dots;
+    g_dw->CreateEllipsisTrimmingSign(l.Get(), &dots);
+    l->SetTrimming(&trim, dots.Get());
+    if (tabular) {
+        ComPtr<IDWriteTypography> ty;
+        if (SUCCEEDED(g_dw->CreateTypography(&ty)) && ty) {
+            ty->AddFontFeature({DWRITE_FONT_FEATURE_TAG_TABULAR_FIGURES, 1});
+            l->SetTypography(ty.Get(), {0, (UINT32)s.size()});
+        }
+    }
+    DWRITE_TEXT_METRICS m = {};
+    l->GetMetrics(&m);
+    g_sw.rt->DrawTextLayout(D2D1::Point2F(r.left, (r.top + r.bottom - m.height) / 2), l.Get(), Br(rgb, a), D2D1_DRAW_TEXT_OPTIONS_CLIP);
+}
+
+// One line starting at x, cut with an ellipsis when it doesn't fit. Returns its height.
+static float Txt1(const std::wstring& s, IDWriteTextFormat* f, float x, float y, float w, UINT32 rgb, float a = 1) {
+    auto l = Lay(s, f, w);
+    if (!l) return 0;
+    l->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+    DWRITE_TRIMMING trim = {DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0};
+    ComPtr<IDWriteInlineObject> dots;
+    g_dw->CreateEllipsisTrimmingSign(l.Get(), &dots);
+    l->SetTrimming(&trim, dots.Get());
+    DWRITE_TEXT_METRICS m = {};
+    l->GetMetrics(&m);
+    g_sw.rt->DrawTextLayout(D2D1::Point2F(x, y), l.Get(), Br(rgb, a), D2D1_DRAW_TEXT_OPTIONS_CLIP);
+    return m.height;
+}
+
+// The monitors with a dock, in the map's order: their places in g_sw.mons (the number shown is that + 1, the
+// same as the map's and Identify's).
+static void LoadSwMonitors();
+static std::vector<int> SwMonsOn() {
+    if (g_sw.mons.empty()) LoadSwMonitors();
+    std::vector<int> on;
+    for (int i = 0; i < (int)g_sw.mons.size(); i++)
+        if (!g_sw.mons[i].who.id.empty() && _wtoi(MonCfg(g_sw.mons[i].who.id, g_sw.mons[i].group, L"enabled").c_str())) on.push_back(i);
+    return on;
+}
+static bool SwMonHasDock(int i) {
+    return !g_sw.mons[i].who.id.empty() && _wtoi(MonCfg(g_sw.mons[i].who.id, g_sw.mons[i].group, L"enabled").c_str()) != 0;
+}
+static std::wstring MonNameOf(int i) {
+    return g_sw.mons[i].who.name.empty() ? std::wstring(L2(L"Monitor ", L"Monitor ")) + std::to_wstring(i + 1) : g_sw.mons[i].who.name;
+}
+// A native menu's name for a monitor. (Plain digits: the menu's font isn't sure to have the circled ones.)
+static std::wstring MonMenuName(int i) {
+    return std::to_wstring(i + 1) + L" · " + MonNameOf(i) + (g_sw.mons[i].primary ? L2(L" · principal", L" · primary") : L"");
+}
+
+// A tip for what is under the mouse (see g_swTip): shown once the mouse has stayed.
+static void SwTipShow(const D2D1_RECT_F& at, const std::wstring& key, const std::wstring& text) {
+    g_swTip.seen = true;
+    g_swTip.at = at;
+    g_swTip.text = text;
+    if (g_swTip.key != key) {
+        double now = SwNow();
+        bool quick = g_swTip.shown || (g_swTip.goneAt && now - g_swTip.goneAt < 400);
+        g_swTip.key = key;
+        g_swTip.since = quick ? now - 500 - 120 : now;  // (quick: no wait and no fade)
+        if (g_sw.hwnd && !quick) SetTimer(g_sw.hwnd, TIMER_SW_TIP, 500, nullptr);
+    }
+}
+
+// "Undo", on offer for 6 s after something erased a monitor's own values (only in memory; one at a time, the
+// newest). id says what it undoes, so the place that erased shows the offer: "exc:<field>:<monitor>" (one band:
+// its line stays, saying so), "scope:<field>" (a row matched to All). Anything else that erases can use it too.
+struct SwUndo {
+    std::wstring id;
+    std::function<void()> back;
+    double closing = 0;  // the offer ran out: a band's line shrinks away from then (see Card)
+} g_swUndo;
+static void SwUndoOffer(const std::wstring& id, std::function<void()> back) {
+    g_swUndo = {id, std::move(back), 0};
+    if (g_sw.hwnd) SetTimer(g_sw.hwnd, TIMER_SW_UNDO, 6000, nullptr);
+}
+static bool SwUndoIs(const std::wstring& id) { return !g_swUndo.id.empty() && g_swUndo.id == id; }
+static void SwUndoDo() {
+    auto back = std::move(g_swUndo.back);
+    g_swUndo = {};
+    if (back) back();
+    SwInvalidate();
+}
+// The band just made by a click on a monitor's cell: it grows in (180 ms) and stays lit a moment (1.2 s).
+struct SwBorn {
+    std::wstring id;
+    double at = 0;
+} g_swBorn;
+
+// The monitor the mouse is on in Settings (its number, a dock's cell, its own row, its tile): that number shows big
+// on the monitor itself while the mouse stays, so "2" is never a guess. Set during a frame; MonPeekSync acts after it.
+static int g_peekWant = -1, g_peekCand = -1, g_peekShown = -1;
+static DWORD g_peekSince = 0;
+static HWND g_peekWnd = nullptr;
+static bool g_peekMenu = false;  // a menu of monitors is open: its highlighted item says which (WM_MENUSELECT)
+static std::vector<std::pair<D2D1_RECT_F, int>> g_peekRects;  // this frame's areas (a move between them repaints)
+static void MonPeekShow(int i);
+static void MonStrip(float& y, float x, float w);
+static void MonPeekArea(const D2D1_RECT_F& r, int i) {
+    if (g_swCollect || i < 0 || i >= (int)g_sw.mons.size()) return;
+    D2D1_RECT_F a = r;
+    a.top = std::max(a.top, g_swTop);  // (the part under the fixed bar doesn't count)
+    if (a.bottom <= a.top) return;
+    g_peekRects.push_back({a, i});
+    if (Hot(a)) g_peekWant = i;
+}
+static int MonPeekAt(D2D1_POINT_2F p) {
+    for (auto& a : g_peekRects)
+        if (InRect(a.first, p)) return a.second;
+    return -1;
+}
+
+// A monitor's number in a small disc: its short name all over the window. tip: its full name, on hover.
+// solid: the full disc, which everywhere means "this monitor's own value".
+static void MonBadge(float x, float cy, int n, bool tip = true, bool solid = false) {
+    D2D1_RECT_F r = D2D1::RectF(x, cy - 9, x + 18, cy + 9);
+    MonPeekArea(D2D1::RectF(r.left - 3, r.top - 3, r.right + 3, r.bottom + 3), n - 1);
+    g_sw.rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x + 9, cy), 9, 9), solid ? Br(kInk) : Br(0xFFFFFF, 0.16f));
+    TxtC(std::to_wstring(n), solid ? g_sw.fSec.Get() : g_sw.fSmall.Get(), r, solid ? kBg : kInk);
+    if (tip && n >= 1 && n <= (int)g_sw.mons.size() && Hot(r)) SwTipShow(r, L"monitor:" + std::to_wstring(n), MonNameOf(n - 1));
+}
+
+// ---- The scope of a row some monitor may have its own value for (SwRow::scope) ----
+// A slot 150 wide at the same place on every row: "All" (46) and a cell (32) per monitor. A round badge with a
+// number, never a check box: a full one means "has its own value" (a ticked box, in the tables, means "on").
+// A click on an empty number makes that monitor's band right under the row; on a full one, takes it away (with
+// "Undo" for 6 s). "All", while some monitor differs, asks to match them. The mouse on a number shows it on the
+// monitor itself. Four docks or more don't fit: one button with the native menu, which the right button opens
+// on any slot.
+static const float kScopeW = 150, kCtlSlotW = 296, kLabelCol = 208, kBandH = 44;
+static void SwAsk(const std::wstring& id);
+static void MonExceptMenu(const std::wstring& field, bool opp, D2D1_RECT_F under);
+static void MonExceptFlip(const std::wstring& field, int mi, bool opp);
+static void MonMatchAll(const std::wstring& field);
+// The monitors that get a cell: all of them up to three (one with no dock keeps its place, faint and dead, so
+// the numbers never move); with more, the ones with a dock if those are three at most; else none (the menu).
+static std::vector<int> ScopeCells() {
+    std::vector<int> on = SwMonsOn(), all;
+    if (g_sw.mons.size() > 3) return on.size() <= 3 ? on : all;
+    for (int i = 0; i < (int)g_sw.mons.size(); i++) all.push_back(i);
+    return all;
+}
+static void DrawScope(float x, float cy, const SwRow& row) {
+    auto* rt = g_sw.rt.Get();
+    std::wstring f = row.scopeField, askId = L"scope:" + f;
+    bool opp = row.scopeOpp;
+    int exc = (int)row.scopeMons.size();
+    D2D1_RECT_F slot = D2D1::RectF(x, cy - 14, x + kScopeW, cy + 14);
+    float th = Measure(L"X", g_sw.fSeg.Get()).height;
+    size_t hits0 = g_sw.hits.size();
+    if (exc && g_sw.confirmId == askId) {  // ("All" was clicked: the slot is the button that does it, for 8 s)
+        wchar_t yes[60];
+        swprintf_s(yes, exc == 1 ? L2(L"Igualar %d monitor", L"Match %d monitor") : L2(L"Igualar %d monitores", L"Match %d monitors"), exc);
+        DrawButton(slot, yes, [f] {
+            g_sw.confirmId.clear();
+            MonMatchAll(f);
+        });
+        return;
+    }
+    if (SwUndoIs(askId)) {  // (just matched: the way back, in the same place)
+        std::wstring done = L2(L"Igualado ·", L"Matched ·"), undo = L2(L"Desfazer", L"Undo");
+        float dw = Measure(done, g_sw.fSeg.Get()).width, uw = Measure(undo, g_sw.fSeg.Get()).width;
+        Txt(done, g_sw.fSeg.Get(), x + 2, cy - th / 2, dw + 2, kSub);
+        D2D1_RECT_F ur = D2D1::RectF(x + dw + 4, cy - 14, x + dw + 4 + uw + 12, cy + 14);
+        bool hot = Hot(ur);
+        if (hot) rt->FillRoundedRectangle(D2D1::RoundedRect(ur, 7, 7), Br(0xFFFFFF, 0.08f));
+        Txt(undo, g_sw.fSeg.Get(), ur.left + 6, cy - th / 2, uw + 2, kInk);
+        rt->FillRectangle(D2D1::RectF(ur.left + 6, cy + th / 2 - 1, ur.left + 6 + uw, cy + th / 2), Br(kInk, hot ? 0.9f : 0.45f));
+        AddHit(ur, [] { SwUndoDo(); });
+        return;
+    }
+    std::vector<int> cells = ScopeCells();
+    std::wstring all = L2(L"Todos", L"All");
+    if (cells.empty()) {  // (too many docks for cells: the whole slot is a button, its menu opens right under it)
+        SwPress press(slot);
+        bool hot = Hot(slot), down = Pressed(slot);
+        if (hot || down) rt->FillRoundedRectangle(D2D1::RoundedRect(slot, 8, 8), Br(0xFFFFFF, down ? 0.12f : 0.06f));
+        rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(slot.left + 0.5f, slot.top + 0.5f, slot.right - 0.5f, slot.bottom - 0.5f), 8, 8),
+                                 Br(0xFFFFFF, exc ? 0.24f : 0.12f), 1);
+        std::wstring text = exc ? std::wstring(L2(L"Todos, menos", L"All but")) : all;
+        float tw = Measure(text, g_sw.fSeg.Get()).width, px = x + 10;
+        Txt1(text, g_sw.fSeg.Get(), px, cy - th / 2, tw + 2, kInk);
+        px += tw + 6;
+        for (int n : row.scopeMons) {  // (as many numbers as fit before the arrow)
+            if (px + 18 > slot.right - 26) break;
+            MonBadge(px, cy, n, false, true);
+            px += 21;
+        }
+        Icon(L"M6 9l6 6 6-6", slot.right - 10 - 12, cy - 6, 12, kIdle, 1, 2);
+        AddHit(slot, [f, opp, slot] { MonExceptMenu(f, opp, slot); });
+    } else {
+        D2D1_RECT_F pill = D2D1::RectF(x, cy - 14, x + 46, cy + 14);
+        {
+            SwPress press(pill, exc != 0);
+            bool hot = Hot(pill), down = Pressed(pill);
+            if (!exc) {  // (every monitor follows it: the full pill, and nothing to click)
+                rt->FillRoundedRectangle(D2D1::RoundedRect(pill, 14, 14), Br(0xFFFFFF, 0.13f));
+                if (hot) SwTipShow(pill, L"all:" + f, L2(L"Vale para todos os monitores", L"Applies to every monitor"));
+            } else {
+                if (hot || down) rt->FillRoundedRectangle(D2D1::RoundedRect(pill, 14, 14), Br(0xFFFFFF, down ? 0.12f : 0.08f));
+                rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(pill.left + 0.5f, pill.top + 0.5f, pill.right - 0.5f, pill.bottom - 0.5f), 13.5f, 13.5f),
+                                         Br(0xFFFFFF, 0.24f), 1);
+            }
+            TxtC(all, g_sw.fSeg.Get(), pill, kInk);
+            if (!exc) AddHit(pill, nullptr).plain = true;
+            else AddHit(pill, [askId] { SwAsk(askId); });
+        }
+        float l = x + 46 + 8;
+        for (int i : cells) {
+            D2D1_RECT_F cell = D2D1::RectF(l, cy - 16, l + 32, cy + 16), num = D2D1::RectF(l + 6, cy - 10, l + 26, cy + 10);
+            D2D1_POINT_2F c = D2D1::Point2F(l + 16, cy);
+            l += 32;
+            std::wstring n = std::to_wstring(i + 1);
+            if (!SwMonHasDock(i)) {  // (its place is kept, so 2 is always the second cell)
+                {
+                    SwDim dim(0.4f, false);
+                    rt->DrawEllipse(D2D1::Ellipse(c, 9.5f, 9.5f), Br(0xFFFFFF, 0.26f), 1);
+                    TxtC(n, g_sw.fSec.Get(), num, kSub);
+                }
+                if (Hot(cell)) SwTipShow(cell, L"nodock:" + f + n, L2(L"Este monitor está sem dock.", L"This monitor has no dock."));
+                continue;
+            }
+            SwPress press(cell);
+            bool own = MonOwn(g_sw.mons[i].who.id, g_sw.mons[i].group, f), chot = Hot(cell), cdown = Pressed(cell);
+            if (chot || cdown) rt->FillRoundedRectangle(D2D1::RoundedRect(cell, 8, 8), Br(0xFFFFFF, cdown ? 0.12f : 0.08f));
+            if (own) rt->FillEllipse(D2D1::Ellipse(c, 10, 10), Br(kInk));
+            else rt->DrawEllipse(D2D1::Ellipse(c, 9.5f, 9.5f), Br(0xFFFFFF, chot ? 0.5f : 0.26f), 1);
+            TxtC(n, g_sw.fSec.Get(), num, own ? kBg : chot ? kInk : kSub);
+            MonPeekArea(cell, i);
+            AddHit(cell, [f, i, opp] { MonExceptFlip(f, i, opp); });
+        }
+    }
+    for (size_t h = hits0; h < g_sw.hits.size(); h++) g_sw.hits[h].menu = [f, opp, slot] { MonExceptMenu(f, opp, slot); };
+}
+// In the same slot, on a monitor's own row: the button back to All's value, always in words.
+static void DrawSameAsAll(float x, float cy, const SwRow& row) {
+    std::wstring t = L2(L"Igual a Todos", L"Same as All");
+    D2D1_SIZE_F ts = Measure(t, g_sw.fSeg.Get());
+    D2D1_RECT_F b = D2D1::RectF(x, cy - 14, x + 10 + 14 + 6 + ts.width + 10, cy + 14);
+    SwPress press(b);
+    bool hot = Hot(b), down = Pressed(b);
+    if (hot || down) g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(b, 8, 8), Br(0xFFFFFF, down ? 0.12f : 0.08f));
+    g_sw.rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(b.left + 0.5f, b.top + 0.5f, b.right - 0.5f, b.bottom - 0.5f), 8, 8), Br(0xFFFFFF, 0.12f), 1);
+    Icon(L"M5 12a7 7 0 1 0 2.05-4.95 M5 4.5v3.5h3.5", x + 10, cy - 7, 14, hot ? kInk : kSub, 1, 1.9f);
+    Txt(t, g_sw.fSeg.Get(), x + 30, cy - ts.height / 2, ts.width + 2, kInk);
+    if (hot && row.general) {  // (what it would go back to)
+        std::wstring gen = row.general();
+        if (!gen.empty()) SwTipShow(b, L"same:" + row.id, std::wstring(L2(L"Todos: ", L"All: ")) + gen);
+    }
+    AddHit(b, row.reset);
+}
+
+// The pull-down beside a control (SwRow::drop): its words, cut at 180, and a small arrow.
+static float DropW(const std::wstring& text) { return std::min(180.0f, Measure(text, g_sw.fSmall.Get()).width + 1) + 10 + 6 + 12 + 10; }
+static void DrawDrop(float x, float cy, const std::wstring& text, std::function<void()> go) {
+    float w = DropW(text);
+    D2D1_RECT_F r = D2D1::RectF(x, cy - 14, x + w, cy + 14);
+    SwPress press(r);
+    bool hot = Hot(r), down = Pressed(r);
+    if (hot || down) g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(r, 8, 8), Br(0xFFFFFF, down ? 0.12f : 0.06f));
+    g_sw.rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + 0.5f, r.top + 0.5f, r.right - 0.5f, r.bottom - 0.5f), 8, 8), Br(0xFFFFFF, 0.16f), 1);
+    float th = Measure(L"X", g_sw.fSmall.Get()).height;
+    Txt1(text, g_sw.fSmall.Get(), x + 10, cy - th / 2, w - 10 - 6 - 12 - 10, kInk);
+    Icon(L"M6 9l6 6 6-6", r.right - 10 - 12, cy - 6, 12, kIdle, 1, 2);
+    AddHit(r, std::move(go));
+}
+
+// A small tag (20 high): outlined, filled or a warning. Returns its width (ChipW: without drawing).
+static float ChipW(const std::wstring& text) { return Measure(text, g_sw.fSmall.Get()).width + 16; }
+static float Chip(float x, float cy, const std::wstring& text, int kind) {
+    float w = ChipW(text);
+    D2D1_RECT_F r = D2D1::RectF(x, cy - 10, x + w, cy + 10);
+    if (kind == ChipFull)
+        g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(r, 10, 10), Br(kInk, 0.13f));
+    else
+        g_sw.rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + 0.5f, r.top + 0.5f, r.right - 0.5f, r.bottom - 0.5f), 10, 10),
+                                      kind == ChipWarn ? Br(kWarn, 0.35f) : Br(0xFFFFFF, 0.16f), 1);
+    TxtC(text, g_sw.fSmall.Get(), r, kind == ChipWarn ? kWarn : kInk);
+    return w;
 }
 
 static COLORREF HexColor(const std::wstring& hex, COLORREF def) {
@@ -16215,22 +21634,25 @@ static COLORREF HexColor(const std::wstring& hex, COLORREF def) {
     return RGB((v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF);
 }
 
-static void PickCustomTint() {
+static void PickCustomTint(std::function<std::wstring()> get, std::function<void(const std::wstring&)> set) {
     static COLORREF custom[16] = {};
     CHOOSECOLORW cc = {sizeof(cc)};
     cc.hwndOwner = g_sw.hwnd;
-    cc.rgbResult = HexColor(CfgStr(L"tintColor"), RGB(5, 5, 6));
+    cc.rgbResult = HexColor(get(), RGB(5, 5, 6));
     cc.lpCustColors = custom;
     cc.Flags = CC_FULLOPEN | CC_RGBINIT;
     if (!ChooseColorW(&cc)) return;
     wchar_t b[8];
     swprintf_s(b, L"%02X%02X%02X", GetRValue(cc.rgbResult), GetGValue(cc.rgbResult), GetBValue(cc.rgbResult));
-    CfgSet(L"tintColor", b);
+    set(b);
 }
 
-// Glass color: the look's own, a few dark tints, or any color.
-static void DrawSwatches(float x, float cy) {
-    std::wstring cur = CfgStr(L"tintColor");
+// Glass color: the look's own ("Auto"), a few dark tints, or any color. (row.cur / row.pick: a monitor's own)
+static void DrawSwatches(float x, float cy, const SwRow& row) {
+    std::function<std::wstring()> get = row.cur ? row.cur : std::function<std::wstring()>([] { return CfgStr(L"tintColor"); });
+    std::function<void(const std::wstring&)> set =
+        row.pick ? row.pick : std::function<void(const std::wstring&)>([](const std::wstring& v) { CfgSet(L"tintColor", v); });
+    std::wstring cur = get();
     for (auto& c : cur) c = towupper(c);
     if (!cur.empty() && cur[0] == L'#') cur = cur.substr(1);
     bool preset = false;
@@ -16252,85 +21674,924 @@ static void DrawSwatches(float x, float cy) {
         AddHit(r, std::move(click));
     };
     float sx = x;
-    // the look's own color, drawn as a half and half disc
+    // the look's own color: a pill in that color that says "Auto"
     {
         Theme t = MakeTheme(CfgStr(L"style", L"nevoa"), 1);
-        D2D1_POINT_2F c = D2D1::Point2F(sx + 11, cy);
-        D2D1_RECT_F r = D2D1::RectF(sx - 3, cy - 14, sx + 25, cy + 14);
+        float pw = AutoPillW();
+        D2D1_RECT_F p = D2D1::RectF(sx, cy - 11, sx + pw, cy + 11), r = D2D1::RectF(sx - 3, cy - 14, sx + pw + 3, cy + 14);
         bool on = cur.empty();
-        if (on || Hot(r)) g_sw.rt->DrawEllipse(D2D1::Ellipse(c, 14, 14), Br(kAccent, on ? 1 : 0.35f), 1.6f);
+        if (on || Hot(r)) g_sw.rt->DrawRoundedRectangle(D2D1::RoundedRect(r, 14, 14), Br(kAccent, on ? 1 : 0.35f), 1.6f);
         D2D1_COLOR_F f = t.tint;
         f.a = 1;
-        g_sw.rt->FillEllipse(D2D1::Ellipse(c, 11, 11), Br(f));
-        TxtC(L"A", g_sw.fSmall.Get(), D2D1::RectF(c.x - 11, c.y - 11, c.x + 11, c.y + 11), (f.r + f.g + f.b) > 1.5f ? 0x1B1B1F : kInk);
-        g_sw.rt->DrawEllipse(D2D1::Ellipse(c, 10.5f, 10.5f), Br(0xFFFFFF, 0.22f), 1);
-        AddHit(r, [] { CfgSet(L"tintColor", L""); });
-        sx += 30;
+        g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(p, 11, 11), Br(f));
+        TxtC(L"Auto", g_sw.fSmall.Get(), p, (f.r + f.g + f.b) > 1.5f ? 0x1B1B1F : kInk);
+        g_sw.rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(p.left + 0.5f, p.top + 0.5f, p.right - 0.5f, p.bottom - 0.5f), 10.5f, 10.5f),
+                                      Br(0xFFFFFF, 0.22f), 1);
+        AddHit(r, [set] { set(L""); });
+        sx += pw + 8;
     }
     for (auto* s : kSwatches) {
         COLORREF c = HexColor(s, 0);
         std::wstring v = s;
-        swatch(sx, Rgba(GetRValue(c), GetGValue(c), GetBValue(c), 1), cur == s, [v] { CfgSet(L"tintColor", v); });
+        swatch(sx, Rgba(GetRValue(c), GetGValue(c), GetBValue(c), 1), cur == s, [v, set] { set(v); });
         sx += 30;
     }
     if (!cur.empty() && !preset) {
         COLORREF c = HexColor(cur, 0);
-        swatch(sx, Rgba(GetRValue(c), GetGValue(c), GetBValue(c), 1), true, [] { PickCustomTint(); });
+        swatch(sx, Rgba(GetRValue(c), GetGValue(c), GetBValue(c), 1), true, [get, set] { PickCustomTint(get, set); });
     } else {
-        swatch(sx, {}, false, [] { PickCustomTint(); }, true);
+        swatch(sx, {}, false, [get, set] { PickCustomTint(get, set); }, true);
     }
 }
 
+// ---- The places table: a row per item, a check cell per place (Dock, Center, Start) ----
+static const struct {
+    int bit;
+    const wchar_t *pt, *en;
+} kPlaceCols[3] = {{PlDock, L"Dock", L"Dock"}, {PlCentral, L"Central", L"Center"}, {PlStart, L"Iniciar", L"Start"}};
+
+// The word beside the cells of a row with no place on (its room is always kept: see Card).
+static float PlaceOffW() { return Measure(L2(L"desligado", L"off"), g_sw.fSmall.Get()).width; }
+
+// The docks that get a cell of their own in a table: two or three. One dock needs none; four or more don't
+// fit, and get a menu instead (see MonsMenu).
+static std::vector<int> CellMons() {
+    std::vector<int> on = SwMonsOn();
+    if (on.size() < 2 || on.size() > 3) on.clear();
+    return on;
+}
+static float PlaceW() {
+    size_t n = CellMons().size();
+    return n ? kCellAll + kCellMon * (float)n + 10 + 64 + 60 : 3 * kPlaceCell;
+}
+// A CtlMons row's monitors: the ones with a dock; for the row that gives and takes the dock itself, every one.
+static std::vector<int> RowMons(const SwRow& r) {
+    if (!r.monsEvery) return SwMonsOn();
+    if (g_sw.mons.empty()) LoadSwMonitors();
+    std::vector<int> all;
+    for (int i = 0; i < (int)g_sw.mons.size(); i++) all.push_back(i);
+    return all;
+}
+static std::vector<int> CellMonsOf(const SwRow& r) {
+    std::vector<int> v = RowMons(r);
+    if (v.size() < 2 || v.size() > 3) v.clear();
+    return v;
+}
+static float MonsW(const SwRow& r) { return kCellAll + kCellMon * (float)CellMonsOf(r).size(); }
+
+// A place key's item as a dock's own status item ("stat.<item>"); "" when it has none.
+static const wchar_t* DockStatOfPlace(const std::wstring& k) {
+    static const wchar_t* const map[][2] = {
+        {L"trayPlace", L"bandeja"},      {L"notifPlace", L"avisos"},       {L"notesPlace", L"notas"},     {L"shelfPlace", L"prateleira"},
+        {L"playerPlace", L"player"},     {L"devPlace", L"dispositivos"},   {L"privPlace", L"privacidade"}, {L"dndPlace", L"naoincomodar"},
+        {L"nightPlace", L"luznoturna"},  {L"btPlace", L"bluetooth"},       {L"shortPlace", L"atalhos"},   {L"lightPlace", L"brilho"},
+        {L"powerPlace", L"energia"},     {L"telasPlace", L"telas"},        {L"statusClock", L"relogio"},  {L"statusBattery", L"bateria"},
+        {L"statusVolume", L"volume"},    {L"statusNetwork", L"rede"},      {L"statusKeyboard", L"teclado"}};
+    for (auto& e : map)
+        if (k == e[0]) return e[1];
+    return L"";
+}
+// Whether a status item shows on a monitor's dock: the dock's own choice, else what goes for every dock.
+static bool StatOnDock(int mi, const std::wstring& stat, bool general) {
+    const SwMon& m = g_sw.mons[mi];
+    std::wstring f = L"stat." + stat;
+    return MonOwn(m.who.id, m.group, f) ? MonCfg(m.who.id, m.group, f.c_str()) == L"1" : general;
+}
+// One dock's cell: the dock keeps its own choice only while it differs from every dock's.
+static void StatFlip(int mi, const std::wstring& stat, bool general) {
+    const SwMon& m = g_sw.mons[mi];
+    bool want = !StatOnDock(mi, stat, general);
+    MonOwnSet(m.who.id, m.group, L"stat." + stat, want == general ? L"" : want ? L"1" : L"0");
+    PostMessageW(g_msgWnd, WM_APP_SETTINGS, 0, 0);  // (a worker the item needs may have to start)
+}
+static void StatClear(const std::wstring& stat) {  // (every dock follows what goes for all again)
+    std::wstring f = L"stat." + stat;
+    for (int i : SwMonsOn())
+        if (!MonCfg(g_sw.mons[i].who.id, g_sw.mons[i].group, f.c_str()).empty()) MonSet(g_sw.mons[i].who.id, f.c_str(), L"");
+}
+// The docks' cells as one: 2 on every dock, 1 on some, 0 on none; -1 with no dock at all.
+static int DocksState(const std::function<bool(int)>& on) {
+    std::vector<int> mons = SwMonsOn();
+    int n = 0;
+    for (int i : mons) n += on(i) ? 1 : 0;
+    return mons.empty() ? -1 : !n ? 0 : n == (int)mons.size() ? 2 : 1;
+}
+static bool PlaceOnDock(const std::wstring& k, int mi) { return StatOnDock(mi, DockStatOfPlace(k), (PlaceMask(k) & PlDock) != 0); }
+static int PlaceDocks(const std::wstring& k) {
+    int st = DocksState([&k](int i) { return PlaceOnDock(k, i); });
+    return st < 0 ? ((PlaceMask(k) & PlDock) ? 2 : 0) : st;
+}
+// Whether the item shows anywhere: some dock (even by that dock's own choice), the center or Start.
+static bool PlaceShown(const std::wstring& k) { return PlaceMask(k) != 0 || PlaceDocks(k) != 0; }
+static void PlaceSet(const std::wstring& k, int mask) {
+    std::wstring nv = PlaceName(mask);
+    CfgSet(k, nv);
+    // (the tray's old "off" lived in its style: a place turned on brings the button back)
+    if (k == L"trayPlace" && nv != L"off" && CfgStr(L"trayStyle") == L"off") CfgSet(L"trayStyle", L"botao");
+}
+// The "Dock" cell: every dock at once. On all of them: off all; else on all. No dock keeps a choice of its own.
+static void PlaceDockAll(const std::wstring& k) {
+    int m = PlaceMask(k);
+    PlaceSet(k, PlaceDocks(k) == 2 ? m & ~PlDock : m | PlDock);
+    StatClear(DockStatOfPlace(k));
+    PostMessageW(g_msgWnd, WM_APP_SETTINGS, 0, 0);
+}
+
+// Four docks or more don't fit as cells: the same choices, in a menu.
+static void MonsMenu(std::function<bool(int)> on, std::function<void(int)> flip, const std::vector<int>& mons) {
+    HMENU m = CreatePopupMenu();
+    AppendMenuW(m, MF_STRING | MF_GRAYED, 0, L2(L"Em quais docks", L"On which docks"));
+    for (int i : mons) AppendMenuW(m, MF_STRING | (on(i) ? MF_CHECKED : 0), 10 + (UINT)i, MonMenuName(i).c_str());
+    POINT pt;
+    GetCursorPos(&pt);
+    SetForegroundWindow(g_sw.hwnd);
+    g_peekMenu = true;  // (no TPM_NONOTIFY: WM_MENUSELECT says which item is lit)
+    MonPeekShow(-1);
+    int cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_RIGHTBUTTON, pt.x, pt.y, 0, g_sw.hwnd, nullptr);
+    g_peekMenu = false;
+    MonPeekShow(-1);
+    DestroyMenu(m);
+    if (cmd >= 10 && cmd - 10 < (int)g_sw.mons.size()) flip(cmd - 10);
+    SwInvalidate();
+}
+
+// The strip over a run of place rows (or of rows with the docks' cells): one line naming the columns, the same
+// on every table. No click; a column's word tells what it is on hover, and a dock's number its name.
+static const float kPlaceHeadH = 32;
+// The table whose header has gone under the fixed bar while its rows are still in sight: SwRender draws the
+// header again right under the bar. Set by Card as it meets the header.
+struct SwStuck {
+    bool on = false;
+    float x = 0, w = 0;
+    SwRow row;
+} g_swStuck;
+// (a column's word says what it is on hover: the page says it nowhere else)
+static void DrawPlaceHead(float x, float y, float w, const SwRow& row) {
+    bool place = row.ctl == CtlPlace, docks = SwMonsOn().size() > 1;
+    std::vector<int> mons = place ? CellMons() : CellMonsOf(row);
+    std::wstring first = place ? L"Item" : row.head;
+    float cx = x + w - 18 - ControlWidth(row), lh = Measure(L"Item", g_sw.fSmall.Get()).height, ty = y + (kPlaceHeadH - lh) / 2;
+    if (!first.empty()) Txt(first, g_sw.fSmall.Get(), x + 18, ty, 120, kMuted);
+    auto word = [&](float l, float cw, const std::wstring& t, const wchar_t* tip) {
+        D2D1_RECT_F r = D2D1::RectF(l, y, l + cw, y + kPlaceHeadH);
+        TxtC(t, g_sw.fSmall.Get(), D2D1::RectF(l, ty, l + cw, ty + lh), kSub);
+        if (Hot(r)) SwTipShow(r, L"col:" + t, tip);
+    };
+    const wchar_t* all = L2(L"Todas", L"All");
+    const wchar_t* tipAll = row.monsEvery ? L2(L"Dá uma dock a todos os monitores.", L"Gives every monitor a dock.")
+                                          : L2(L"Marca todas as docks de uma vez.", L"Ticks every dock at once.");
+    const wchar_t* tipCenter = L2(L"Num botão só, que abre tudo junto.", L"In one button that opens them all.");
+    const wchar_t* tipStart = L2(L"Na aba Status do Iniciar.", L"In Start's Status tab.");
+    if (place && mons.empty()) {  // (one dock: "Dock"; four or more: "All", and each dock in the row's menu)
+        word(cx, kPlaceCell, docks ? all : L"Dock", docks ? tipAll : L2(L"Na dock.", L"On the dock."));
+        word(cx + kPlaceCell, kPlaceCell, L2(kPlaceCols[1].pt, kPlaceCols[1].en), tipCenter);
+        word(cx + 2 * kPlaceCell, kPlaceCell, L2(kPlaceCols[2].pt, kPlaceCols[2].en), tipStart);
+    } else {
+        float aw = mons.empty() && row.placeGrid ? kPlaceCell : kCellAll;
+        word(cx, aw, all, tipAll);
+        float l = cx + aw;
+        for (int i : mons) {
+            MonBadge(l + (kCellMon - 18) / 2, y + kPlaceHeadH / 2, i + 1);
+            l += kCellMon;
+        }
+        if (place) {
+            g_sw.rt->FillRectangle(D2D1::RectF(l + 4.5f, y, l + 5.5f, y + kPlaceHeadH), Br(0xFFFFFF, 0.1f));
+            word(l + 10, 64, L2(kPlaceCols[1].pt, kPlaceCols[1].en), tipCenter);
+            word(l + 74, 60, L2(kPlaceCols[2].pt, kPlaceCols[2].en), tipStart);
+        }
+    }
+    g_sw.rt->FillRectangle(D2D1::RectF(x + 1, y + kPlaceHeadH - 1, x + w - 1, y + kPlaceHeadH), Br(0xFFFFFF, 0.05f));
+}
+
+// One check cell: the same box in every column, 18 wide in the middle of its cell, and the whole cell (as tall as
+// its row: g_swCellHalf, set by Card) takes the click. state: 2 ticked, 0 empty, 1 "on some" (the cell for all the
+// docks): a full box with a dark dash, which reads as "partly on", never as off.
+float g_swCellHalf = 18;
+static void DrawCell(const D2D1_RECT_F& cell, int state, const std::wstring& anim, std::function<void()> go) {
+    const float half = 9, rad = 5;
+    float mx = (cell.left + cell.right) / 2, cy = (cell.top + cell.bottom) / 2;
+    SwPress press(cell);
+    bool hot = Hot(cell), down = Pressed(cell);
+    if (hot || down) g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(mx - 16, cy - 16, mx + 16, cy + 16), 8, 8), Br(0xFFFFFF, down ? 0.1f : 0.06f));
+    float a = SwAnim(anim, state == 2 ? 1.0f : 0.0f, 100);
+    if (state != 2) a = 0;
+    D2D1_ROUNDED_RECT box = D2D1::RoundedRect(D2D1::RectF(mx - half, cy - half, mx + half, cy + half), rad, rad);
+    if (state == 1) {
+        g_sw.rt->FillRoundedRectangle(box, Br(kInk, hot ? 0.88f : 1));
+        g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(mx - 4.5f, cy - 1, mx + 4.5f, cy + 1), 1, 1), Br(kBg));
+    } else {
+        float o = half - 0.75f;
+        if (a < 1)
+            g_sw.rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(mx - o, cy - o, mx + o, cy + o), rad, rad),
+                                          Br(0xFFFFFF, (hot ? 0.4f : 0.24f) * (1 - a)), 1.5f);
+        if (a > 0) {
+            float is = half * 14 / 11;
+            g_sw.rt->FillRoundedRectangle(box, Br(kInk, (hot ? 0.88f : 1) * a));
+            Icon(L"M5 12.5l4.5 4.5L19 7.5", mx - is / 2, cy - is / 2, is, kBg, a, 2.4f);
+        }
+    }
+    AddHit(cell, std::move(go));
+}
+
+// The cells of a place row. A click turns that place on or off; nothing on anywhere is "off". "All" is every
+// dock at once; with two or three docks, each one's own cell follows it. A thin rule parts the docks from the
+// two other places.
+static void DrawPlace(float x, float cy, const SwRow& row) {
+    std::wstring k = row.key;
+    int m = PlaceMask(k);
+    if (!PlaceShown(k)) {
+        std::wstring off = L2(L"desligado", L"off");
+        D2D1_SIZE_F os = Measure(off, g_sw.fSmall.Get());
+        Txt(off, g_sw.fSmall.Get(), x - 12 - os.width, cy - os.height / 2, os.width + 2, kMuted);
+    }
+    std::vector<int> mons = CellMons();
+    float l = x, aw = mons.empty() ? kPlaceCell : kCellAll, hh = g_swCellHalf;
+    DrawCell(D2D1::RectF(l, cy - hh, l + aw, cy + hh), PlaceDocks(k), L"p:" + k + L":1", [k] { PlaceDockAll(k); });
+    l += aw;
+    for (int i : mons) {
+        D2D1_RECT_F cell = D2D1::RectF(l, cy - hh, l + kCellMon, cy + hh);
+        DrawCell(cell, PlaceOnDock(k, i) ? 2 : 0, L"p:" + k + L":m" + std::to_wstring(i),
+                 [k, i] { StatFlip(i, DockStatOfPlace(k), (PlaceMask(k) & PlDock) != 0); });
+        MonPeekArea(cell, i);
+        l += kCellMon;
+    }
+    if (!mons.empty()) {
+        g_sw.rt->FillRectangle(D2D1::RectF(l + 4.5f, cy - hh, l + 5.5f, cy + hh), Br(0xFFFFFF, 0.1f));
+        l += 10;
+    }
+    for (int c = 1; c < 3; c++) {
+        int bit = kPlaceCols[c].bit;
+        float cw = mons.empty() ? kPlaceCell : c == 1 ? 64.0f : 60.0f;
+        DrawCell(D2D1::RectF(l, cy - hh, l + cw, cy + hh), (m & bit) ? 2 : 0, L"p:" + k + L":" + std::to_wstring(bit),
+                 [k, bit] { PlaceSet(k, PlaceMask(k) ^ bit); });
+        l += cw;
+    }
+}
+
+// The docks' cells alone (CtlMons): "all" in front, then one per dock (with four docks or more, only "all": the
+// rest is in the row's menu).
+static int MonsState(const SwRow& row) {  // (2 on every one, 1 on some, 0 on none)
+    std::vector<int> mons = RowMons(row);
+    int n = 0;
+    for (int i : mons) n += row.monOn(i) ? 1 : 0;
+    return !n ? 0 : n == (int)mons.size() ? 2 : 1;
+}
+static void MonsAllFlip(const SwRow& row) {
+    if (row.allFlip) return row.allFlip();
+    bool to = MonsState(row) != 2;
+    for (int i : RowMons(row))
+        if (row.monOn(i) != to) row.monFlip(i);
+}
+static void DrawMons(float x, float cy, const SwRow& row) {
+    std::wstring id = row.id.empty() ? row.label : row.id;
+    SwRow r = row;
+    std::vector<int> mons = CellMonsOf(row);
+    float hh = g_swCellHalf, aw = mons.empty() && row.placeGrid ? kPlaceCell : kCellAll;
+    DrawCell(D2D1::RectF(x, cy - hh, x + aw, cy + hh), MonsState(row), L"m:" + id + L":all", [r] { MonsAllFlip(r); });
+    float l = x + aw;
+    for (int i : mons) {
+        auto flip = row.monFlip;
+        D2D1_RECT_F cell = D2D1::RectF(l, cy - hh, l + kCellMon, cy + hh);
+        DrawCell(cell, row.monOn(i) ? 2 : 0, L"m:" + id + L":" + std::to_wstring(i), [flip, i] { flip(i); });
+        MonPeekArea(cell, i);
+        l += kCellMon;
+    }
+}
+
+// ---- Small controls ----
+
+// The base of the stepper and of the sound picker: a pill with a button at each end and the value between.
+// (an empty prev or next: at its limit, drawn faint and not clickable)
+static void DrawStepBase(float x, float cy, float midW, const std::wstring& text, bool tabular, const wchar_t* icoPrev, const wchar_t* icoNext,
+                         std::function<void()> prev, std::function<void()> next) {
+    float w = 3 + 30 + midW + 30 + 3;
+    g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(x, cy - 18, x + w, cy + 18), 9, 9), Br(0xFFFFFF, 0.05f));
+    auto btn = [&](float bx, const wchar_t* ico, std::function<void()> fn) {
+        D2D1_RECT_F r = D2D1::RectF(bx, cy - 15, bx + 30, cy + 15);
+        if (fn) {
+            bool hot = Hot(r), down = Pressed(r);
+            if (hot || down) g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(r, 7, 7), Br(0xFFFFFF, down ? 0.12f : 0.06f));
+        }
+        Icon(ico, bx + 8, cy - 7, 14, kIdle, fn ? 1 : 0.35f);
+        if (fn) AddHit(r, std::move(fn));
+    };
+    btn(x + 3, icoPrev, std::move(prev));
+    TxtC1(text, g_sw.fSeg.Get(), D2D1::RectF(x + 35, cy - 15, x + 31 + midW, cy + 15), kInk, 1, tabular);
+    btn(x + 33 + midW, icoNext, std::move(next));
+}
+
+// A small whole number: one click, one step (no repeat while held).
+static SwRow RStepper(const wchar_t* label, const wchar_t* desc, const wchar_t* key, int min, int max, int step) {
+    SwRow r;
+    r.label = label;
+    r.desc = desc ? desc : L"";
+    r.ctl = CtlStepper;
+    r.key = key;
+    r.id = key;
+    r.min = min;
+    r.max = max;
+    r.step = step;
+    return r;
+}
+static void DrawStepper(float x, float cy, const SwRow& row) {
+    std::wstring k = row.key;
+    int v = Clamp(CfgInt(k.c_str()), row.min, row.max), lo = std::max(row.min, v - row.step), hi = std::min(row.max, v + row.step);
+    DrawStepBase(x, cy, 44, std::to_wstring(v), true, L"M6 12h12", L"M12 6v12 M6 12h12",
+                 v > row.min ? std::function<void()>([k, lo] { CfgSet(k, std::to_wstring(lo)); }) : nullptr,
+                 v < row.max ? std::function<void()>([k, hi] { CfgSet(k, std::to_wstring(hi)); }) : nullptr);
+}
+
+// The sound picker: the arrows go through the sounds (around, each one plays), "Ouvir" plays it again.
+static void DrawSound(float x, float cy, const SwRow& row) {
+    std::wstring k = row.key;
+    int v = SoundValue(CfgStr(k.c_str()));
+    auto step = [k](int d) {
+        int n = kSoundCount + 2;
+        int nv = ((SoundValue(CfgStr(k.c_str())) + d) % n + n) % n;
+        CfgSet(k, SoundSetting(nv));
+        PlayNimbusSound(nv);
+    };
+    DrawStepBase(x, cy, 96, SoundName(v), false, L"M14.5 6l-6 6 6 6", L"M9.5 6l6 6-6 6", [step] { step(-1); }, [step] { step(1); });
+    std::wstring hear = L2(L"Ouvir", L"Listen");
+    float bx = x + 162 + 8, bw = Measure(hear, g_sw.fSeg.Get()).width + 28;
+    SwDim dim(v <= 0 ? 0.4f : 1, v <= 0);  // (no sound: nothing to hear)
+    DrawButton(D2D1::RectF(bx, cy - 17, bx + bw, cy + 17), hear, [k] { PlayNimbusSound(SoundValue(CfgStr(k.c_str()))); });
+}
+
+// The position picker: a little screen with six spots (id: top or bottom, id2: left, center or right).
+static std::wstring PosText(const std::wstring& v, const std::wstring& h) {
+    bool top = v == L"cima";
+    if (h == L"esquerda") return top ? L2(L"Em cima, à esquerda", L"Top, left") : L2(L"Embaixo, à esquerda", L"Bottom, left");
+    if (h == L"centro") return top ? L2(L"Em cima, no centro", L"Top, center") : L2(L"Embaixo, no centro", L"Bottom, center");
+    return top ? L2(L"Em cima, à direita", L"Top, right") : L2(L"Embaixo, à direita", L"Bottom, right");
+}
+static SwRow RPos(const wchar_t* label, const wchar_t* keyV, const wchar_t* keyH) {
+    SwRow r;
+    r.label = label;
+    r.desc = PosText(CfgStr(keyV, L"baixo"), CfgStr(keyH, L"direita"));  // (the place in words, as it is now)
+    r.ctl = CtlPos;
+    r.id = keyV;
+    r.id2 = keyH;
+    return r;
+}
+static void DrawPos(float x, float cy, const SwRow& row) {
+    static const wchar_t* const cols[] = {L"esquerda", L"centro", L"direita"};
+    static const wchar_t* const lines[] = {L"cima", L"baixo"};
+    std::wstring kv = row.id, kh = row.id2, v = CfgStr(kv.c_str(), L"baixo"), h = CfgStr(kh.c_str(), L"direita");
+    D2D1_RECT_F scr = D2D1::RectF(x, cy - 36, x + 120, cy + 36);
+    g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(scr, 8, 8), Br(0xFFFFFF, 0.04f));
+    g_sw.rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(scr.left + 0.5f, scr.top + 0.5f, scr.right - 0.5f, scr.bottom - 0.5f), 8, 8),
+                                  Br(0xFFFFFF, 0.16f), 1);
+    for (int li = 0; li < 2; li++) {
+        for (int ci = 0; ci < 3; ci++) {
+            D2D1_RECT_F t = D2D1::RectF(scr.left + 3 + ci * 38, scr.top + 3 + li * 33, scr.left + 3 + (ci + 1) * 38, scr.top + 3 + (li + 1) * 33);
+            float mx = (t.left + t.right) / 2, my = (t.top + t.bottom) / 2;
+            bool on = v == lines[li] && h == cols[ci];
+            if (Hot(t)) g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(t, 6, 6), Br(0xFFFFFF, 0.06f));
+            if (on)
+                g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(mx - 12, my - 5, mx + 12, my + 5), 3, 3), Br(kInk));
+            else
+                g_sw.rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(mx - 11.5f, my - 4.5f, mx + 11.5f, my + 4.5f), 3, 3), Br(0xFFFFFF, 0.22f), 1);
+            std::wstring nv = lines[li], nh = cols[ci];
+            if (!on) AddHit(t, [kv, kh, nv, nh] {
+                CfgSet(kv, nv);
+                CfgSet(kh, nh);
+            });
+        }
+    }
+}
+
+// A row starts asking in place (see SwRow::ask); TIMER_SW_CONFIRM gives up after 8 s.
+static void SwAsk(const std::wstring& id) {
+    g_sw.confirmId = id;
+    g_sw.confirmAt = GetTickCount();
+    if (g_sw.hwnd) SetTimer(g_sw.hwnd, TIMER_SW_CONFIRM, 8000, nullptr);
+}
+
 // A card with rows (label and description on the left, the control on the right).
+struct SwFound {
+    int page = 0, tab = 0, mon = -1;  // (tab: Monitors' or About's; mon: which monitor, in Monitors)
+    std::wstring where;
+    std::vector<SwRow> rows;
+};
+std::vector<SwFound> g_swFound;
+// The guided setup: every row by its setting (see SwCollectRows).
+bool g_swCollectIds = false;
+std::unordered_map<std::wstring, SwRow> g_swById;
+// Other words the search finds a row by: the names things had before (PT and EN together), by the setting the
+// row shows (a monitor's row: by its field), plus the row's own alias.
+static std::wstring SwAliasOf(const SwRow& r) {
+    static const struct {
+        const wchar_t *id, *alias;
+    } table[] = {
+        {L"dockBadges", L"avisos balão banner badge"},
+        {L"notifPlace", L"avisos balão banner badge"},
+        {L"devPlace", L"dispositivos devices batteryhub"},
+        {L"devAlerts", L"dispositivos devices batteryhub"},
+        {L"devHub", L"dispositivos devices batteryhub"},
+        {L"telasPlace", L"perfis de tela perfil screen profiles"},
+        {L"soundPanel", L"extremo extreme mixer saída output"},
+        {L"edge", L"lado posição da dock em cima embaixo lateral esquerda direita monitor side position top bottom left right"},
+        {L"align", L"alinhamento canto meio posição lado esquerda direita monitor alignment corner middle position side left right"},
+        {L"stat.central", L"central de controle control center"},
+        {L"hideWindowsTaskbar", L"taskbar barra de tarefas"},
+        {L"style", L"geral tema theme"},
+        {L"#reset", L"manutenção reset restaurar os ajustes padrão restore"},
+        {L"notifV", L"altura lado height side"},
+        {L"magnification", L"magnificação zoom ao passar o mouse"},
+        {L"startHotkey", L"atalho extra hotkey"},
+    };
+    std::wstring a = r.alias, id = r.id;
+    if (!id.rfind(L"mon:", 0)) id = id.substr(id.rfind(L':') + 1);
+    for (auto& t : table)
+        if (id == t.id) a += std::wstring(L" ") + t.alias;
+    if (!r.id.rfind(L"#tray:", 0)) a += L" tray bandeja fixar pin";  // (an app of the tray's "always visible" list)
+    if (g_swCurPage == PgNotif) a += L" avisos balão banner badge";
+    if (g_swCurPage == PgMonitores && g_swCurTab == 1) a += L" perfis de tela perfil screen profiles";
+    return a;
+}
+// The search's words, folded, without the little ones that say nothing ("de", "a", "o"...): "cor do vidro" finds
+// what "cor vidro" finds. A search made only of those keeps them.
+static const std::vector<std::wstring>& SwQueryWords() {
+    static std::wstring last;
+    static std::vector<std::wstring> words;
+    if (g_sw.query == last) return words;
+    last = g_sw.query;
+    words.clear();
+    static const wchar_t* const stopPt[] = {L"de", L"a", L"o", L"da", L"do", L"na", L"no", L"em", L"para"};
+    static const wchar_t* const stopEn[] = {L"the", L"of", L"a", L"in", L"to", L"for"};
+    bool pt = IsPortugueseUi();
+    std::vector<std::wstring> every;
+    std::wstring q = FoldText(g_sw.query);
+    size_t a = 0;
+    while (a < q.size()) {
+        while (a < q.size() && q[a] == L' ') a++;
+        size_t b = q.find(L' ', a);
+        std::wstring wd = q.substr(a, b == std::wstring::npos ? std::wstring::npos : b - a);
+        a = b == std::wstring::npos ? q.size() : b;
+        if (wd.empty()) continue;
+        every.push_back(wd);
+        bool stop = false;
+        if (pt) for (auto* w : stopPt) stop |= wd == w;
+        else for (auto* w : stopEn) stop |= wd == w;
+        if (!stop) words.push_back(wd);
+    }
+    if (words.empty()) words = every;
+    return words;
+}
+// The search names this monitor (one of its words is in the monitor's name): the monitor's rows are found even
+// while they follow All. (Not by "monitor" or "display": a name like "Generic PnP Monitor" would bring every row.)
+static bool SwQueryNamesMon(int i) {
+    if (i < 0 || i >= (int)g_sw.mons.size() || g_sw.mons[i].who.name.empty()) return false;
+    std::wstring name = FoldText(g_sw.mons[i].who.name);
+    for (auto& wd : SwQueryWords())
+        if (wd.size() >= 2 && wd != L"monitor" && wd != L"display" && name.find(wd) != std::wstring::npos) return true;
+    return false;
+}
+static bool SwRowMatches(const SwRow& r, const std::wstring& where) {
+    std::wstring all = r.label + L" " + r.desc + L" " + where + L" " + SwAliasOf(r);
+    for (auto& o : r.opts) all += L" " + o.second;
+    for (auto& b : r.buttons) all += L" " + b.first;
+    std::wstring f = FoldText(all);
+    for (auto& wd : SwQueryWords())  // every word of the search somewhere in it
+        if (f.find(wd) == std::wstring::npos) return false;
+    return true;
+}
+// Text that ends in a link: the link's words in ink, underlined, and clickable on each of their lines.
+// (a link that would break in the middle goes whole to a line of its own)
+static std::wstring LinkJoin(const std::wstring& text, const std::wstring& link, IDWriteTextFormat* f, float w) {
+    if (text.empty() || link.empty()) return text + link;
+    std::wstring all = text + L" " + link;
+    if (auto l = Lay(all, f, w)) {
+        DWRITE_HIT_TEST_METRICS hm[4];
+        UINT32 n = 0;
+        HRESULT hr = l->HitTestTextRange((UINT32)(all.size() - link.size()), (UINT32)link.size(), 0, 0, hm, ARRAYSIZE(hm), &n);
+        if ((FAILED(hr) || n > 1) && Measure(link, f).width <= w) return text + L"\n" + link;
+    }
+    return all;
+}
+static float TxtLink(const std::wstring& text, const std::wstring& link, IDWriteTextFormat* f, float x, float y, float w, UINT32 rgb,
+                     std::function<void()> go) {
+    std::wstring all = LinkJoin(text, link, f, w);
+    auto l = Lay(all, f, w);
+    if (!l) return 0;
+    DWRITE_TEXT_RANGE rg = {(UINT32)(all.size() - link.size()), (UINT32)link.size()};
+    ComPtr<ID2D1SolidColorBrush> ink;  // (its own brush: the layout keeps it until it is drawn)
+    g_sw.rt->CreateSolidColorBrush(D2D1::ColorF(kInk, g_swAlpha), &ink);
+    if (ink) l->SetDrawingEffect(ink.Get(), rg);
+    l->SetUnderline(TRUE, rg);
+    g_sw.rt->DrawTextLayout(D2D1::Point2F(x, y), l.Get(), Br(rgb), D2D1_DRAW_TEXT_OPTIONS_CLIP);
+    DWRITE_HIT_TEST_METRICS hm[4];
+    UINT32 n = 0;
+    if (go && SUCCEEDED(l->HitTestTextRange(rg.startPosition, rg.length, x, y, hm, ARRAYSIZE(hm), &n)))
+        for (UINT32 i = 0; i < n; i++) AddHit(D2D1::RectF(hm[i].left, hm[i].top - 2, hm[i].left + hm[i].width, hm[i].top + hm[i].height + 2), go);
+    DWRITE_TEXT_METRICS m = {};
+    l->GetMetrics(&m);
+    return m.height;
+}
+
+// The row as it is drawn: one that is asking shows its question and two buttons in place of its control.
+static void SwRowAsk(SwRow& r) {
+    if (!r.askDo || r.id.empty() || r.id != g_sw.confirmId) return;
+    auto go = r.askDo;
+    r.asking = true;
+    r.desc = r.ask;
+    r.ctl = CtlButtons;
+    r.small = false;
+    r.buttons = {{r.askYes, [go] {
+                      g_sw.confirmId.clear();
+                      go();
+                  }},
+                 {L2(L"Cancelar", L"Cancel"), [] { g_sw.confirmId.clear(); }}};
+    r.strongBtn = r.askDanger ? -1 : 0;
+    r.dangerBtn = r.askDanger ? 0 : -1;
+    r.chip = nullptr;
+    r.enabled = nullptr;
+    r.link.clear();
+    r.drop.clear();
+    r.scope = false;
+}
+
 static void Card(std::vector<SwRow> rows, float& y, float x, float w) {
-    std::vector<float> hs, ths;
+    if (g_swCollect) {
+        if (g_swCollectIds) {
+            for (auto& r : rows) {
+                if (!r.id.empty() && r.id[0] != L'#') g_swById[r.id] = r;
+                if (!r.id2.empty()) g_swById[r.id2] = r;
+            }
+            return;
+        }
+        std::wstring where = g_swCurWhere + (g_swCurSection.empty() ? L"" : L" \u203A " + g_swCurSection);
+        SwFound fnd;
+        fnd.page = g_swCurPage;
+        fnd.tab = g_swCurTab;
+        fnd.mon = g_swCurMon;
+        fnd.where = where;
+        bool parentIn = false;  // (a child found without the row it depends on stands by itself: no indent)
+        for (auto& r : rows) {
+            if (!r.mon.empty()) {  // (a monitor's own row: its own group, named by the monitor)
+                std::wstring mw = g_swCurWhere + L" › " + r.mon;
+                if (!SwRowMatches(r, mw)) continue;
+                SwFound* at = nullptr;
+                for (auto& f : g_swFound)
+                    if (f.page == g_swCurPage && f.where == mw) at = &f;
+                if (!at) {
+                    SwFound f;
+                    f.page = g_swCurPage;
+                    f.tab = g_swCurTab;
+                    f.where = mw;
+                    g_swFound.push_back(std::move(f));
+                    at = &g_swFound.back();
+                }
+                at->rows.push_back(r);
+                at->rows.back().child = false;
+                continue;
+            }
+            bool hit = SwRowMatches(r, where);
+            if (!r.child) parentIn = hit;
+            if (!hit) continue;
+            fnd.rows.push_back(r);
+            if (r.child && !parentIn) fnd.rows.back().child = false;
+        }
+        if (!fnd.rows.empty()) g_swFound.push_back(std::move(fnd));
+        return;
+    }
+    struct RowLay {
+        float h, th, tw, cw, head, chipW, dropW, lead, inset, wordW, slotX, grow, lit;
+        std::pair<std::wstring, int> chip;
+        bool off, slot, band, stack;
+    };
+    std::vector<RowLay> ls;
     float total = 0;
-    for (auto& r : rows) {
-        float cw = ControlWidth(r);
-        float tw = w - 36 - (cw > 0 ? cw + 20 : 0);
-        float th = Measure(r.label, g_sw.fLbl.Get(), tw).height;
-        if (!r.desc.empty()) th += 3 + Measure(r.desc, g_sw.fDesc.Get(), tw).height;
-        float h = std::max(52.0f, th + 26);
-        hs.push_back(h);
-        ths.push_back(th);
-        total += h;
+    double nowMs = SwNow();
+    for (size_t i = 0; i < rows.size(); i++) {
+        auto& r = rows[i];
+        SwRowAsk(r);
+        RowLay l = {};
+        l.grow = 1;
+        if (((r.ctl == CtlPlace && SwMonsOn().size() > 3) || (r.ctl == CtlMons && RowMons(r).size() > 3)) && r.drop.empty()) {  // (too many docks for cells: a menu)
+            r.drop = L2(L"por dock", L"per dock");
+            if (r.ctl == CtlPlace) {
+                std::wstring k = r.key;
+                r.dropGo = [k] {
+                    MonsMenu([k](int i) { return PlaceOnDock(k, i); }, [k](int i) { StatFlip(i, DockStatOfPlace(k), (PlaceMask(k) & PlDock) != 0); },
+                             SwMonsOn());
+                };
+            } else {
+                auto on = r.monOn;
+                auto flip = r.monFlip;
+                std::vector<int> of = RowMons(r);
+                r.dropGo = [on, flip, of] { MonsMenu(on, flip, of); };
+            }
+        }
+        l.off = r.enabled && !r.enabled();
+        if (l.off && !r.offWhy.empty() && !r.asking) r.desc = r.offWhy;  // (why it is off, where its description was)
+        // A row with a scope, and a monitor's own row: the slot at its fixed place, the control in its own slot.
+        l.slot = !r.asking && (r.scope || r.reset);
+        l.band = r.monN > 0;
+        if (l.slot && r.ctl == CtlSeg) {  // (its options closer together, down to 12, so it fits beside the slot)
+            float words = 0, n = (float)r.opts.size();
+            for (auto& o : r.opts) words += Measure(o.second, g_sw.fSeg.Get()).width;
+            if (n > 0) r.segPad = std::clamp((kCtlSlotW - kSegPad * 2 - 2 * (n - 1) - words) / n, 12.0f, 24.0f);
+        }
+        l.cw = ControlWidth(r);
+        if (r.chip) l.chip = r.chip();
+        l.chipW = l.chip.first.empty() ? 0 : ChipW(l.chip.first);
+        l.dropW = r.drop.empty() ? 0 : DropW(r.drop);
+        l.lead = r.icon ? 36.0f : 0;
+        l.wordW = r.word.empty() ? 0 : Measure(r.word, g_sw.fSmall.Get()).width + 2;
+        l.inset = r.child && !l.band ? 20.0f : 0;  // (only a row that depends on the one above; a band never)
+        if (l.slot) {
+            // At the card's full width the slot starts at the same x on every row (the label has 208). In a
+            // narrower window it goes right before the row's own control; with no room for that either, the
+            // control goes to a second line.
+            float fixedX = x + w - 18 - kCtlSlotW - 12 - kScopeW, room = fixedX - 18 - (x + 18);
+            if (l.cw <= kCtlSlotW && room >= kLabelCol - 1) {
+                l.slotX = fixedX;
+            } else if (w - 36 - l.cw - 12 - kScopeW - 18 - l.inset - l.lead >= 120) {
+                l.slotX = x + w - 18 - l.cw - 12 - kScopeW;
+            } else {
+                l.stack = true;
+                l.slotX = x + w - 18 - kScopeW;
+            }
+            l.tw = l.slotX - 18 - (x + 18) - l.inset - l.lead;
+        } else {
+            // (a place row always keeps room for its "off" word, so the text doesn't jump when it turns on and off)
+            l.tw = w - 36 - (l.cw > 0 ? l.cw + 20 : 0) - (l.chipW > 0 ? l.chipW + (l.cw > 0 ? 10 : 20) : 0) -
+                   (r.ctl == CtlPlace ? PlaceOffW() + 12 : 0) - l.inset - l.lead - (l.dropW > 0 ? l.dropW + 10 : 0) -
+                   (l.wordW > 0 ? l.wordW + 12 : 0);
+        }
+        l.tw = std::max(40.0f, l.tw);
+        if (l.band) {
+            l.h = kBandH + (l.stack ? 40.0f : 0);
+            if (!r.id.empty() && r.id == g_swBorn.id) {  // (just made: it grows in, and stays lit a moment)
+                float t = ReduceMotion() ? 1.0f : (float)((nowMs - g_swBorn.at) / 180);
+                if (t < 1) l.grow = 1 - (1 - t) * (1 - t) * (1 - t) * (1 - t);
+                l.lit = std::max(0.0f, 1 - (float)((nowMs - g_swBorn.at) / 1200));
+                if (l.lit > 0) SwAnimKeep();
+                else g_swBorn.id.clear();
+            }
+            if (r.gone && g_swUndo.closing > 0) {  // (its "Undo" ran out: it shrinks away)
+                float t = (float)((nowMs - g_swUndo.closing) / 120);
+                l.grow = std::max(0.0f, 1 - t);
+                if (t < 1) {
+                    SwAnimKeep();
+                } else {
+                    g_swUndo = {};
+                    SwInvalidate();
+                }
+            }
+            l.h *= l.grow;
+        } else {
+            l.th = Measure(r.fixH > 0 ? std::wstring(L"X") : r.label, g_sw.fLbl.Get(), l.tw).height;
+            std::wstring desc = LinkJoin(r.desc, r.link, g_sw.fDesc.Get(), l.tw);
+            if (!desc.empty()) l.th += 3 + Measure(r.descLine ? std::wstring(L"X") : desc, g_sw.fDesc.Get(), l.tw).height;
+            l.h = (r.fixH > 0 ? r.fixH : std::max({52.0f, l.th + 26, ControlHeight(r) + 24})) + (l.stack ? 44.0f : 0);
+        }
+        // (a strip names the columns before each run of place rows)
+        l.head = (r.ctl == CtlPlace || r.ctl == CtlMons) && (!i || rows[i - 1].ctl != r.ctl) ? kPlaceHeadH : 0;
+        total += l.head + l.h;
+        ls.push_back(std::move(l));
     }
     D2D1_RECT_F card = D2D1::RectF(x, y, x + w, y + total);
     g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(card, 12, 12), Br(0xFFFFFF, 0.035f));
     g_sw.rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(x + 0.5f, y + 0.5f, x + w - 0.5f, y + total - 0.5f), 12, 12),
                                   Br(0xFFFFFF, 0.06f), 1);
-    float ry = y;
+    float ry = y, th13 = Measure(L"X", g_sw.fSeg.Get()).height;
     for (size_t i = 0; i < rows.size(); i++) {
         auto& r = rows[i];
-        if (i) g_sw.rt->FillRectangle(D2D1::RectF(x + 1, ry, x + w - 1, ry + 1), Br(0xFFFFFF, 0.05f));
-        float cw = ControlWidth(r);
-        float tw = w - 36 - (cw > 0 ? cw + 20 : 0);
-        float ty = ry + (hs[i] - ths[i]) / 2;
-        float lh = Txt(r.label, g_sw.fLbl.Get(), x + 18, ty, tw, kInk);
-        if (!r.desc.empty()) Txt(r.desc, g_sw.fDesc.Get(), x + 18, ty + lh + 3, tw, kSub);
-        float cx = x + w - 18 - cw, cy = ry + hs[i] / 2;
-        switch (r.ctl) {
-            case CtlToggle: DrawToggle(cx, cy, r.on(), r.flip); break;
-            case CtlSeg: DrawSeg(cx, cy, r); break;
-            case CtlSlider: DrawSlider(cx, cy, r); break;
-            case CtlButtons: DrawButtons(cx, cy, r); break;
-            case CtlSwatches: DrawSwatches(cx, cy); break;
-            default: break;
+        const RowLay& l = ls[i];
+        float tx = x + 18 + l.inset;
+        // (no line over a band: its tint is what joins it to its setting)
+        if (i && !l.band) g_sw.rt->FillRectangle(D2D1::RectF(r.child ? tx : x + 1, ry, x + w - 1, ry + 1), Br(0xFFFFFF, 0.05f));
+        if (l.head > 0) {
+            // (stuck from the moment it goes under the bar until less than one row of its table is left)
+            float end = ry + l.head, last = l.h;
+            for (size_t j = i; j < rows.size() && rows[j].ctl == r.ctl; j++) end += ls[j].h, last = ls[j].h;
+            if (ry < kBarH && end - last >= kBarH + kPlaceHeadH) {
+                g_swStuck.on = true;
+                g_swStuck.x = x;
+                g_swStuck.w = w;
+                g_swStuck.row = r;
+                g_swTop = kBarH + kPlaceHeadH;  // (its rows are cut and dead under it)
+            }
+            DrawPlaceHead(x, ry, w, r);
+            ry += l.head;
         }
-        ry += hs[i];
+        D2D1_RECT_F rowR = D2D1::RectF(x, ry, x + w, ry + l.h);
+        // (a fill inside the card's own corners, whichever row it is)
+        auto tint = [&](const D2D1_RECT_F& part, UINT32 rgb, float a) {
+            if (a <= 0 || part.bottom <= part.top) return;
+            g_sw.rt->PushAxisAlignedClip(part, D2D1_ANTIALIAS_MODE_ALIASED);
+            g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(card, 12, 12), Br(rgb, a));
+            g_sw.rt->PopAxisAlignedClip();
+        };
+        if (l.band) {  // (an exception: a step lighter over the whole width, and a rail on its left edge)
+            tint(rowR, 0xFFFFFF, 0.03f + 0.08f * l.lit);
+            tint(D2D1::RectF(x, ry, x + 2, ry + l.h), kInk, 0.3f);
+        }
+        if (!g_sw.flashId.empty() && (r.id == g_sw.flashId || r.id2 == g_sw.flashId)) {
+            g_swFlashSeen = true;
+            if (g_sw.flashScroll) {  // (found: SwRender draws the page again from here, with no scrolling animation)
+                g_sw.flashScroll = false;
+                g_swFlashJumped = true;
+                // (clear of the fixed bar and of a stuck header: nothing covers the lit row)
+                g_swFlashJump = std::max(0.0f, ry + g_sw.scroll - (kBarH + kPlaceHeadH + kJumpGap));
+            } else {
+                DWORD now = GetTickCount();
+                if (!g_sw.flashAt) g_sw.flashAt = now ? now : 1;
+                float t = (now - g_sw.flashAt) / 900.0f;
+                if (t >= 1) {
+                    g_sw.flashId.clear();
+                } else {
+                    tint(rowR, 0xFFFFFF, 0.10f * (1 - t));
+                    SwAnimKeep();
+                }
+            }
+        }
+        if (r.asking) tint(rowR, 0xFFFFFF, 0.07f);  // (lit while it asks)
+        // The text and the slot share the row's first line; the control, the second when the row is stacked.
+        float fullH = l.band ? kBandH + (l.stack ? 40.0f : 0) : l.h, topH = l.stack ? fullH - (l.band ? 40.0f : 44.0f) : fullH;
+        float cyT = ry + topH / 2, cy = l.stack ? ry + fullH - (l.band ? 22.0f : 24.0f) : ry + fullH / 2;
+        float cx = x + w - 18 - l.cw;
+        bool moving = l.grow < 1;
+        if (moving) g_sw.rt->PushAxisAlignedClip(rowR, D2D1_ANTIALIAS_MODE_ALIASED);
+        {
+            SwDim grow(l.grow, moving);  // (fading and dead while it grows in or shrinks away)
+            if (l.band) MonPeekArea(rowR, r.monN - 1);
+            // The slot first, outside the row's own dimming: a band whose setting doesn't apply there still goes back.
+            bool monOwn = l.slot && r.reset && (!r.own || r.own()), monGeneral = l.slot && r.reset && !monOwn;
+            if (l.slot && r.scope) {
+                DrawScope(l.slotX, cyT, r);
+            } else if (monOwn) {
+                DrawSameAsAll(l.slotX, cyT, r);
+            } else if (monGeneral) {  // (following All: said in plain words)
+                Txt(L2(L"igual a Todos", L"same as All"), g_sw.fSeg.Get(), l.slotX + 2, cyT - th13 / 2, kScopeW, kMuted);
+            }
+            SwDim dim(l.off ? 0.4f : 1, l.off);  // (a switched-off row: faint, and none of its hits stay)
+            bool placeOff = r.ctl == CtlPlace && !PlaceShown(r.key);
+            if (l.band) {  // ("Only on 2 NAME"; the one just taken away: "2 NAME is back to All.")
+                float bx = x + 18, endX = (l.slot ? l.slotX : cx) - 12;
+                if (!r.gone) {
+                    std::wstring only = L2(L"Só no", L"Only on");
+                    float ow = Measure(only, g_sw.fSeg.Get()).width;
+                    Txt(only, g_sw.fSeg.Get(), bx, cyT - th13 / 2, ow + 2, kSub);
+                    bx += ow + 6;
+                }
+                MonBadge(bx, cyT, r.monN, false, !r.gone);
+                bx += 18 + 6;
+                Txt1(r.label + (r.gone ? L2(L" voltou a Todos.", L" is back to All.") : L""), g_sw.fSeg.Get(), bx, cyT - th13 / 2,
+                     std::max(20.0f, endX - bx), r.gone ? kSub : kInk);
+            } else {
+                float ty = ry + (topH - l.th) / 2;
+                if (r.icon) {
+                    r.icon(D2D1::RectF(tx, cyT - 12, tx + 24, cyT + 12));
+                    tx += l.lead;
+                }
+                float lh;
+                if (r.fixH > 0) {  // (one line, cut with an ellipsis; then the whole name in a tip)
+                    lh = Txt1(r.label, g_sw.fLbl.Get(), tx, ty, l.tw, kInk);
+                    D2D1_RECT_F nr = D2D1::RectF(tx, ty, tx + l.tw, ty + lh);
+                    if (Hot(nr) && Measure(r.label, g_sw.fLbl.Get()).width > l.tw) SwTipShow(nr, L"name:" + r.id, r.label);
+                } else {
+                    lh = Txt(r.labelGo ? r.label + L"  \u203A" : r.label, g_sw.fLbl.Get(), tx, ty, l.tw, placeOff ? kMuted : kInk);
+                }
+                if (r.labelGo) {  // (the name goes to the item's own page; underlined under the mouse)
+                    float lw = std::min(l.tw, Measure(r.label + L"  \u203A", g_sw.fLbl.Get()).width);
+                    D2D1_RECT_F lr = D2D1::RectF(tx - 4, ty - 3, tx + lw + 4, ty + lh + 3);
+                    if (Hot(lr)) g_sw.rt->FillRectangle(D2D1::RectF(tx, ty + lh - 1, tx + lw, ty + lh), Br(kInk, 0.6f));
+                    AddHit(lr, r.labelGo);
+                }
+                if (!r.link.empty())
+                    TxtLink(r.desc, r.link, g_sw.fDesc.Get(), tx, ty + lh + 3, l.tw, kSub, r.linkGo);
+                else if (!r.desc.empty() && r.descLine && !r.asking)
+                    Txt1(r.desc, g_sw.fDesc.Get(), tx, ty + lh + 3, l.tw, kSub);
+                else if (!r.desc.empty())
+                    Txt(r.desc, g_sw.fDesc.Get(), tx, ty + lh + 3, l.tw, r.asking ? kInk : placeOff ? kMuted : kSub, placeOff ? 0.75f : 1);
+            }
+            if (!l.slot && l.dropW > 0) DrawDrop(cx - (l.cw > 0 ? 10 : 0) - l.dropW, cy, r.drop, r.dropGo);
+            if (l.wordW > 0) Txt(r.word, g_sw.fSmall.Get(), cx - 12 - l.wordW, cy - Measure(r.word, g_sw.fSmall.Get()).height / 2, l.wordW + 2, kMuted);
+            if (l.chipW > 0) Chip(cx - (l.cw > 0 ? 10 : 0) - l.chipW, cy, l.chip.first, l.chip.second);
+            SwDim general(monGeneral ? 0.55f : 1, false);  // (All's value shows fainter; it still takes the click that makes it this monitor's)
+            g_swCellHalf = l.stack ? 18.0f : fullH / 2;  // (a check cell is as tall as its row)
+            switch (r.ctl) {
+                case CtlToggle: DrawToggle(cx, cy, r.on(), r.flip, r.id.empty() ? r.label : r.id); break;
+                case CtlSeg: DrawSeg(cx, cy, r); break;
+                case CtlSlider: DrawSlider(cx, cy, r); break;
+                case CtlButtons: DrawButtons(cx, cy, r); break;
+                case CtlSwatches: DrawSwatches(cx, cy, r); break;
+                case CtlPlace: DrawPlace(cx, cy, r); break;
+                case CtlMons: DrawMons(cx, cy, r); break;
+                case CtlStepper: DrawStepper(cx, cy, r); break;
+                case CtlSound: DrawSound(cx, cy, r); break;
+                case CtlPos: DrawPos(cx, cy, r); break;
+                default: break;
+            }
+        }
+        if (moving) g_sw.rt->PopAxisAlignedClip();
+        ry += l.h;
     }
     y += total;
 }
 
+static std::wstring JoinNames(const std::vector<std::wstring>& v) {
+    std::wstring b;
+    for (size_t i = 0; i < v.size(); i++) b += (!i ? L"" : i + 1 < v.size() ? L", " : L2(L" e ", L" and ")) + v[i];
+    return b;
+}
+
+// On a feature's own page: where it shows, in words, and a button to the places table (the key's owner).
+// Only reads the key; the search finds nothing here. It says the docks one by one when they differ: an item
+// that is off for every dock but on in one dock's own choice is never "off".
+static void WhereLine(float& y, float x, float w, const wchar_t* key, const wchar_t* prefix = nullptr, const wchar_t* offLead = nullptr) {
+    if (g_swCollect) return;
+    int m = PlaceMask(key), docks = PlaceDocks(key);
+    g_sw.rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(x + 0.5f, y + 0.5f, x + w - 0.5f, y + 43.5f), 10, 10), Br(0xFFFFFF, 0.06f), 1);
+    std::wstring a, b;
+    bool shown = m || docks;
+    if (shown) {
+        a = std::wstring(prefix ? prefix : L2(L"Aparece em:", L"Shows in:")) + L" ";
+        std::vector<std::wstring> names;
+        std::vector<int> on = SwMonsOn();
+        if (docks == 2) {
+            names.push_back(on.size() > 1 ? L2(L"Todas as docks", L"All docks") : L"Dock");
+        } else if (docks == 1) {  // (some docks: which)
+            std::vector<std::wstring> which;
+            for (int i : on)
+                if (PlaceOnDock(key, i)) which.push_back(L2(L"do ", L"") + MonNameOf(i));
+            names.push_back(L2(L"Dock ", L"Dock on ") + JoinNames(which));
+        }
+        for (auto& c : kPlaceCols)
+            if (c.bit != PlDock && (m & c.bit)) names.push_back(L2(c.pt, c.en));
+        b = JoinNames(names);
+    } else {
+        a = offLead ? offLead : L2(L"Desligado.", L"Off.");  // (offLead: what is off, where the page's title doesn't say)
+        b = L2(L" Não aparece em lugar nenhum.", L" It shows nowhere.");
+    }
+    std::wstring btn = shown ? L2(L"Mudar em Itens", L"Change in Items") : L2(L"Ligar em Itens", L"Turn on in Items");
+    float bw = Measure(btn, g_sw.fSeg.Get()).width + 28, tx = x + 14, tw = w - 14 - bw - 18;
+    D2D1_SIZE_F as = Measure(a, g_sw.fSeg.Get());
+    float ty = y + (44 - as.height) / 2;
+    Txt(a, g_sw.fSeg.Get(), tx, ty, tw, shown ? kSub : kInk);
+    Txt1(b, g_sw.fSeg.Get(), tx + as.width, ty, tw - as.width, shown ? kInk : kSub);
+    std::wstring k = key;
+    DrawButton(D2D1::RectF(x + w - 6 - bw, y + 8, x + w - 6, y + 36), btn, [k] { SwJump(PgItens, k); });
+    y += 44;
+}
+
+// A line of help under a card. With an id, the search and the guided setup find it as a text-only row.
+static void Hint(float& y, float x, float w, const wchar_t* text, const wchar_t* id = nullptr, UINT32 rgb = kMuted) {
+    if (g_swCollect) {
+        if (id) Card({WithId(RInfo(text, nullptr), id)}, y, x, w);
+        return;
+    }
+    y += 9;
+    y += Txt(text, g_sw.fDesc.Get(), x + 4, y, w - 8, rgb);
+}
+
 static void Heading(float& y, float x, float w, const wchar_t* title, const wchar_t* sub) {
+    if (g_swCollect) {
+        g_swCurSection.clear();
+        return;
+    }
     y += Txt(title, g_sw.fH1.Get(), x, y, w, kInk);
     if (sub) y += 6 + Txt(sub, g_sw.fSub.Get(), x, y + 6, w, kSub);
 }
 
 static void Section(float& y, float x, float w, const wchar_t* title) {
+    if (g_swCollect) {
+        g_swCurSection = title;
+        return;
+    }
     y += 24;
+    g_swSecs.push_back({y, title});
     y += Txt(title, g_sw.fSec.Get(), x + 4, y, w, kSub);
     y += 9;
+}
+
+// A page's tabs: plain words over a base line, the open one underlined. They aren't rows (the search doesn't
+// see them). Changing tab starts at the top and ends any row that was asking. dot: the tab with news in it.
+static void Tabs(float& y, float x, float w, const std::vector<std::wstring>& labels, int cur, std::function<void(int)> pick, int dot = -1) {
+    if (g_swCollect) return;
+    g_sw.rt->FillRectangle(D2D1::RectF(x, y + 35, x + w, y + 36), Br(0xFFFFFF, 0.06f));
+    float tx = x;
+    for (int i = 0; i < (int)labels.size(); i++) {
+        D2D1_SIZE_F ts = Measure(labels[i], g_sw.fNav.Get());
+        D2D1_RECT_F r = D2D1::RectF(tx - 8, y, tx + ts.width + 8, y + 36);
+        bool on = i == cur;
+        Txt(labels[i], g_sw.fNav.Get(), tx, y + (36 - ts.height) / 2, ts.width + 2, on ? 0xFFFFFF : Hot(r) ? kInk : kIdle);
+        if (on) g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(tx, y + 34, tx + ts.width, y + 36), 1, 1), Br(kAccent));
+        if (i == dot) g_sw.rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(tx + ts.width + 10, y + 18), 3, 3), Br(kAccent));
+        if (!on) AddHit(r, [pick, i] {
+            g_sw.scroll = g_sw.scrollTo = 0;
+            g_sw.confirmId.clear();
+            g_sw.confirmPreset = -1;
+            pick(i);
+            SwInvalidate();
+        });
+        tx += ts.width + 22 + (i == dot ? 10 : 0);
+    }
+    y += 36;
 }
 
 // ---- Illustrations ---------------------------------------------------------
@@ -16399,6 +22660,7 @@ static void DrawStartTile(D2D1_RECT_F r, const Theme& t) {
 
 // The dock, as the current settings draw it, with the user's own apps. The mouse zooms it like the real one.
 static void DockPreview(D2D1_RECT_F box) {
+    if (g_swCollect) return;  // (only finding rows)
     g_sw.preview = box;
     Wallpaper(box, 12);
     g_sw.rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(box.left + 0.5f, box.top + 0.5f, box.right - 0.5f, box.bottom - 0.5f), 12, 12),
@@ -16412,9 +22674,9 @@ static void DockPreview(D2D1_RECT_F box) {
         t.tint = Rgba(GetRValue(c), GetGValue(c), GetBValue(c), t.tint.a);
     }
     bool fixed = CfgStr(L"format", L"dock") == L"fixa";
-    float k = 0.62f;
+    float k = 0.62f, maxS = std::min(58.0f, (box.bottom - box.top) * 0.44f);  // (the icons at rest fit a box 100 high)
     float isz = (float)Clamp(SwVal(L"iconSize"), 24, 128);
-    if (isz * k > 58) k = 58 / isz;
+    if (isz * k > maxS) k = maxS / isz;
     float S = isz * k, G = Clamp(SwVal(L"iconGap"), 0, 64) * k, padY = 10 * k, dotRoom = 7 * k;
     float pillH = S + padY * 2 + dotRoom, Z = Clamp(SwVal(L"magnification"), 100, 250) / 100.0f;
 
@@ -16431,7 +22693,7 @@ static void DockPreview(D2D1_RECT_F box) {
     float x0 = fixed ? box.left + 18 : (box.left + box.right - baseW) / 2 + padX;
     // magnification by the mouse distance, like the dock's wave
     std::vector<float> m(n, 1.0f);
-    bool over = g_sw.mouseIn && InRect(box, g_sw.mouse);
+    bool over = g_sw.mouseIn && g_sw.mouse.y >= g_swTop && InRect(box, g_sw.mouse);
     int nearest = -1;
     if (over) {
         float best = 1e9f;
@@ -16481,10 +22743,27 @@ struct SwPick {
     std::wstring id, name, hint;
 };
 static void PickGrid(float& y, float x, float w, const std::vector<SwPick>& items, const std::wstring& cur,
-                     std::function<void(const SwPick&, D2D1_RECT_F)> draw, std::function<void(const std::wstring&)> pick) {
+                     std::function<void(const SwPick&, D2D1_RECT_F)> draw, std::function<void(const std::wstring&)> pick, int hintLines = 1,
+                     const wchar_t* id = nullptr) {
     int cols = (int)items.size();
     float gap = 10, cw = (w - gap * (cols - 1)) / cols;
-    float h = 12 + 76 + 10 + 19 + 2 + 17 + 12;
+    float h = 12 + 76 + 10 + 19 + 2 + 17 * hintLines + 12;
+    if (g_swCollect) {  // (only finding rows)
+        // The search finds the cards as one line of text: the section's title, the choices' names and a button
+        // to the page (the cards themselves don't fit in a result).
+        if (id && !g_swCollectIds) {
+            std::wstring names;
+            for (auto& it : items) names += (names.empty() ? L"" : L", ") + it.name;
+            int pg = g_swCurPage;
+            SwRow r = RButtons(g_swCurSection.c_str(), names.c_str(), {{L2(L"Abrir", L"Open"), [pg] { SwJump(pg, L""); }}});
+            r.small = true;
+            r.id = id;
+            float yy = 0;
+            Card({r}, yy, x, w);
+        }
+        y += h;
+        return;
+    }
     for (int i = 0; i < cols; i++) {
         auto& it = items[i];
         D2D1_RECT_F r = D2D1::RectF(x + i * (cw + gap), y, x + i * (cw + gap) + cw, y + h);
@@ -16504,20 +22783,8 @@ static void PickGrid(float& y, float x, float w, const std::vector<SwPick>& item
 
 // ---- Pages -----------------------------------------------------------------
 
-static void WizStart();
-static void PageGeral(float& y, float x, float w) {
-    Heading(y, x, w, L2(L"Geral", L"General"), L2(L"O visual vale pra dock, o Iniciar e as prévias das janelas.",
-                                                      L"The look applies to the dock, Start and the window previews."));
-    y += 14;
-    Card({RButtons(L2(L"Configurar com perguntas", L"Set up with questions"),
-                   L2(L"Umas perguntas rápidas deixam tudo pronto. Dá pra mudar depois aqui nos Ajustes.",
-                      L"A few quick questions set everything up. You can change it later here in Settings."),
-                   {{L2(L"Começar", L"Start"), [] {
-                         WizStart();
-                         SwSetPage(PgComecar);
-                     }}})},
-         y, x, w);
-    Section(y, x, w, L2(L"Visual", L"Look"));
+// The four looks, each with a little glass bar.
+static void LooksGrid(float& y, float x, float w) {
     std::vector<SwPick> looks = {
         {L"nevoa", L"Névoa", L2(L"Vidro fumê", L"Smoked glass")},
         {L"cristal", L"Cristal", L2(L"Vidro claro", L"Light glass")},
@@ -16537,276 +22804,1089 @@ static void PageGeral(float& y, float x, float w) {
                      g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(ir, 3, 3), Br(i ? t.text : t.startTile));
                  }
              },
-             [](const std::wstring& id) { CfgSet(L"style", id); });
-    y += 12;
+             [](const std::wstring& id) { CfgSet(L"style", id); }, 1, L"style");
+}
+
+// The three sound panels, each with a little picture. (The saved value "extremo" is the one shown as "Grade".)
+static void SoundGrid(float& y, float x, float w) {
+    std::vector<SwPick> panels = {
+        {L"simples", L2(L"Simples", L"Simple"), L2(L"O volume geral e o de cada app.", L"The main volume and each app's.")},
+        {L"completo", L2(L"Completo", L"Complete"),
+         L2(L"Apps de um lado, saídas do outro. Arraste para mudar.", L"Apps on one side, outputs on the other. Drag to change.")},
+        {L"extremo", L2(L"Grade", L"Grid"),
+         L2(L"Cada app em cada saída, com volume em cada cruzamento.", L"Every app on every output, with a volume at each crossing.")},
+    };
+    PickGrid(y, x, w, panels, CfgStr(L"soundPanel", L"simples"),
+             [](const SwPick& p, D2D1_RECT_F ill) {
+                 auto* rt = g_sw.rt.Get();
+                 float cx = (ill.left + ill.right) / 2, cy = (ill.top + ill.bottom) / 2;
+                 if (p.id == L"simples") {  // three volume bars, each filled a different amount
+                     const float fill[] = {0.7f, 0.4f, 0.85f};
+                     for (int i = 0; i < 3; i++) {
+                         float by = cy - 16 + i * 16;
+                         rt->DrawLine(D2D1::Point2F(cx - 40, by), D2D1::Point2F(cx + 40, by), Br(kIdle, 0.3f), 1.7f, g_sw.round.Get());
+                         rt->DrawLine(D2D1::Point2F(cx - 40, by), D2D1::Point2F(cx - 40 + 80 * fill[i], by), Br(kIdle), 1.7f, g_sw.round.Get());
+                         rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx - 40 + 80 * fill[i], by), 3.2f, 3.2f), Br(kIdle));
+                     }
+                 } else if (p.id == L"completo") {  // three apps on the left, two outputs on the right, three wires
+                     const float ay[] = {cy - 18, cy, cy + 18}, oy[] = {cy - 10, cy + 10};
+                     for (float v : ay)
+                         rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(cx - 44, v - 5, cx - 30, v + 5), 3, 3), Br(kIdle), 1.7f);
+                     for (float v : oy)
+                         rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(cx + 30, v - 5, cx + 44, v + 5), 3, 3), Br(kIdle), 1.7f);
+                     const int to[] = {0, 0, 1};
+                     ComPtr<ID2D1PathGeometry> g;
+                     ComPtr<ID2D1GeometrySink> s;
+                     if (SUCCEEDED(g_d2d->CreatePathGeometry(&g)) && SUCCEEDED(g->Open(&s))) {
+                         for (int i = 0; i < 3; i++) {
+                             s->BeginFigure(D2D1::Point2F(cx - 30, ay[i]), D2D1_FIGURE_BEGIN_HOLLOW);
+                             s->AddBezier(D2D1::BezierSegment(D2D1::Point2F(cx - 4, ay[i]), D2D1::Point2F(cx + 4, oy[to[i]]), D2D1::Point2F(cx + 30, oy[to[i]])));
+                             s->EndFigure(D2D1_FIGURE_END_OPEN);
+                         }
+                         s->Close();
+                         rt->DrawGeometry(g.Get(), Br(kIdle, 0.7f), 1.7f, g_sw.round.Get());
+                     }
+                 } else {  // a grid of thin lines, with a dot where an app plays on an output
+                     for (int i = 0; i < 3; i++) {
+                         float gx = cx - 26 + i * 26, gy = cy - 18 + i * 18;
+                         rt->DrawLine(D2D1::Point2F(gx, cy - 26), D2D1::Point2F(gx, cy + 26), Br(kIdle, 0.35f), 1);
+                         rt->DrawLine(D2D1::Point2F(cx - 38, gy), D2D1::Point2F(cx + 38, gy), Br(kIdle, 0.35f), 1);
+                     }
+                     const int dots[][2] = {{0, 0}, {1, 1}, {2, 0}, {1, 2}};
+                     for (auto& d : dots)
+                         rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx - 26 + d[0] * 26, cy - 18 + d[1] * 18), 3.6f, 3.6f), Br(kIdle));
+                 }
+             },
+             // What the panels do, in full (the page used to say all of it; it now says it in one warning line):
+             // Simple: the volume and each app's. Complete: apps on the left and every output on the right; drag an app
+             // onto an output (it plays there too), from one output to another (it moves), or take it off with ×.
+             // Complete changes Windows' sound output: the default one and each app's (Windows keeps that choice, as in
+             // the Sound settings), and plays a copy of an app on a second output while Nimbus runs. Back to Simple,
+             // what Nimbus changed goes back (each app's output as it was, copies off, its mutes undone); an output
+             // chosen in Windows' own mixer stays. Grid ("extremo"): does what Complete does, in a grid of every app on
+             // every output, with the volume and a sound bar at each crossing.
+             // PT, as it was: "Simples: o volume e o de cada app. Completo: os apps à esquerda e todas as saídas à
+             // direita; arraste um app pra uma saída (ele toca nela também), de uma saída pra outra (troca), ou tire com
+             // o ×. O completo mexe na saída de som do Windows: a padrão e a de cada app (o Windows guarda essa escolha,
+             // como nas Configurações de som), e toca uma cópia do app numa segunda saída enquanto o Nimbus roda.
+             // Voltando pro Simples, o que o Nimbus mudou volta (a saída de cada app como era, sem cópias e sem os mudos
+             // do painel); a saída escolhida no mixer do próprio Windows fica. Extremo: faz o mesmo que o Completo, numa
+             // grade com cada app em cada saída, com o volume e uma barrinha do som em cada cruzamento."
+             [](const std::wstring& v) {
+                 if (v == L"simples" && SoundFull()) SndResetAll();
+                 CfgSet(L"soundPanel", v);
+             },
+             2, L"soundPanel");
+}
+
+static void WizStart(int mode = -1);
+// A paragraph of support text right under a section's title.
+static void Note(float& y, float x, float w, const wchar_t* text) {
+    if (g_swCollect) return;
+    y += Txt(text, g_sw.fDesc.Get(), x + 4, y - 4, w - 8, kSub) + 6;
+}
+
+// ---- A monitor's own rows ----
+// One per setting a monitor may have its own value for (id "mon:<monitor>:<field>"). own() and reset are what
+// Card draws around the control. What "follows everyone" is stored as never changed: "geral" for format and
+// autoHide, empty for the rest.
+static std::wstring MonBackOf(const std::wstring& f) {
+    return f == L"format" || f == L"autoHide" ? L"geral" : f == L"showStart" ? L"1" : L"";
+}
+// The value a monitor's own row starts with: everyone's, as that field stores it.
+static std::wstring MonBornOf(const std::wstring& f) {
+    if (f == L"autoHide") return CfgInt(L"autoHide") ? L"sim" : L"nao";
+    std::wstring v = CfgStr(f.c_str(), CfgDefault(f));
+    return v.empty() && f == L"tintColor" ? L"auto" : v;
+}
+static SwRow MonRowBase(int mi, const std::wstring& label, const wchar_t* field, bool follows) {
+    std::wstring id = g_sw.mons[mi].who.id, f = field;
+    const wchar_t* group = g_sw.mons[mi].group;
+    SwRow r;
+    r.label = label;
+    r.id = L"mon:" + id + L":" + f;
+    if (follows) {
+        r.own = [id, group, f] { return MonOwn(id, group, f); };
+        r.reset = [id, group, f] { MonOwnSet(id, group, f, MonBackOf(f)); };
+    }
+    return r;
+}
+// A plain switch (a field with no general value: the dock itself).
+static SwRow MonRowToggle(int mi, const std::wstring& label, const wchar_t* desc, const wchar_t* field) {
+    SwRow r = MonRowBase(mi, label, field, false);
+    std::wstring id = g_sw.mons[mi].who.id, f = field;
+    const wchar_t* group = g_sw.mons[mi].group;
+    r.desc = desc ? desc : L"";
+    r.ctl = CtlToggle;
+    r.on = [id, group, f] { return _wtoi(MonCfg(id, group, f.c_str()).c_str()) != 0; };
+    r.flip = [id, group, f] { MonOwnSet(id, group, f, _wtoi(MonCfg(id, group, f.c_str()).c_str()) ? L"0" : L"1"); };
+    return r;
+}
+// A segmented row. With `general` (everyone's value now), it follows it until the monitor gets its own.
+static SwRow MonRowSeg(int mi, const std::wstring& label, const wchar_t* field, std::function<std::wstring()> general,
+                       std::vector<std::pair<std::wstring, std::wstring>> opts) {
+    SwRow r = MonRowBase(mi, label, field, general != nullptr);
+    std::wstring id = g_sw.mons[mi].who.id, f = field, def = opts.empty() ? L"" : opts[0].first;
+    const wchar_t* group = g_sw.mons[mi].group;
+    r.ctl = CtlSeg;
+    r.opts = std::move(opts);
+    r.cur = [id, group, f, def, general] {
+        if (general) return MonOwn(id, group, f) ? MonCfg(id, group, f.c_str()) : general();
+        std::wstring v = MonCfg(id, group, f.c_str());
+        return v.empty() ? def : v;
+    };
+    r.pick = [id, group, f](const std::wstring& v) { MonOwnSet(id, group, f, v); };
+    if (general) {
+        auto names = r.opts;
+        r.general = [general, names] {
+            std::wstring v = general();
+            for (auto& o : names)
+                if (o.first == v) return o.second;
+            return std::wstring();
+        };
+    }
+    return r;
+}
+static SwRow MonRowSlider(int mi, const std::wstring& label, const wchar_t* field, int lo, int hi, int step, int general,
+                          std::function<std::wstring(int)> fmt) {
+    SwRow r = MonRowBase(mi, label, field, true);
+    std::wstring id = g_sw.mons[mi].who.id, f = field;
+    const wchar_t* group = g_sw.mons[mi].group;
+    r.ctl = CtlSlider;
+    r.key = L"mon|" + id + L"|" + f;  // (only names the drag)
+    r.min = lo, r.max = hi, r.step = step;
+    r.fmt = std::move(fmt);
+    r.geti = [id, group, f, general] {  // (a drag on a row that follows everyone's value starts from it)
+        return MonOwn(id, group, f) ? _wtoi(MonCfg(id, group, f.c_str()).c_str()) : general;
+    };
+    r.seti = [id, group, f](int v) { MonOwnSet(id, group, f, std::to_wstring(v)); };
+    auto say = r.fmt;
+    r.general = [say, general] { return say ? say(general) : std::to_wstring(general); };
+    return r;
+}
+// Auto-hide in force on a monitor: its own "sim" / "nao", or everyone's.
+static bool MonHideOn(int mi) {
+    std::wstring a = MonCfg(g_sw.mons[mi].who.id, g_sw.mons[mi].group, L"autoHide");
+    return a == L"sim" ? true : a == L"nao" ? false : (bool)g_set.autoHide;
+}
+static SwRow MonRowHide(int mi) {
+    SwRow r = MonRowBase(mi, L2(L"Esconder sozinha", L"Auto-hide"), L"autoHide", true);
+    std::wstring id = g_sw.mons[mi].who.id;
+    const wchar_t* group = g_sw.mons[mi].group;
+    r.ctl = CtlToggle;
+    r.on = [mi] { return MonHideOn(mi); };
+    r.flip = [mi, id, group] { MonOwnSet(id, group, L"autoHide", MonHideOn(mi) ? L"nao" : L"sim"); };
+    r.general = [] { return std::wstring(g_set.autoHide ? L2(L"ligado", L"on") : L2(L"desligado", L"off")); };
+    return r;
+}
+// The glass color. A monitor's own "Auto" (the look's color, whatever everyone's is) is saved as "auto".
+static SwRow MonRowSwatches(int mi) {
+    SwRow r = MonRowBase(mi, L2(L"Cor do vidro", L"Glass color"), L"tintColor", true);
+    std::wstring id = g_sw.mons[mi].who.id;
+    const wchar_t* group = g_sw.mons[mi].group;
+    r.ctl = CtlSwatches;
+    r.cur = [id, group] {
+        std::wstring v = MonOwn(id, group, L"tintColor") ? MonCfg(id, group, L"tintColor") : CfgStr(L"tintColor");
+        return v == L"auto" ? std::wstring() : v;
+    };
+    r.pick = [id, group](const std::wstring& v) { MonOwnSet(id, group, L"tintColor", v.empty() ? L"auto" : v); };
+    r.general = [] {
+        std::wstring v = CfgStr(L"tintColor");
+        return v.empty() ? std::wstring(L"Auto") : (v[0] == L'#' ? v : L"#" + v);
+    };
+    return r;
+}
+
+// A field's value in force on a monitor: its own, else everyone's.
+static std::wstring MonValOf(const SwMon& m, const wchar_t* field) {
+    return MonOwn(m.who.id, m.group, field) ? MonCfg(m.who.id, m.group, field) : MonBornOf(field);
+}
+static std::wstring MonVal(int mi, const wchar_t* field) { return MonValOf(g_sw.mons[mi], field); }
+
+// A monitor gets its own value for a field, or gives it up: what a click on its cell does, and its item in the
+// menu. Its band is born with All's value, to change from there; for a yes/no setting (opp) with the opposite
+// one, the only reason to make the band. Giving it up leaves "Undo" on offer where the band was.
+static void MonExceptDrop(const std::wstring& field, int mi) {
+    std::wstring id = g_sw.mons[mi].who.id, f = field, was = MonCfg(id, g_sw.mons[mi].group, f.c_str());
+    const wchar_t* group = g_sw.mons[mi].group;
+    MonOwnSet(id, group, f, MonBackOf(f));
+    SwUndoOffer(L"exc:" + f + L":" + id, [id, group, f, was] { MonOwnSet(id, group, f, was); });
+    SwInvalidate();
+}
+static void MonExceptFlip(const std::wstring& field, int mi, bool opp) {
+    if (mi < 0 || mi >= (int)g_sw.mons.size()) return;
+    const SwMon& mo = g_sw.mons[mi];
+    if (MonOwn(mo.who.id, mo.group, field)) return MonExceptDrop(field, mi);
+    std::wstring born = MonBornOf(field);
+    if (opp && field == L"autoHide") born = born == L"sim" ? L"nao" : L"sim";
+    MonOwnSet(mo.who.id, mo.group, field, born);
+    if (SwUndoIs(L"exc:" + field + L":" + mo.who.id)) g_swUndo = {};
+    g_swBorn = {L"mon:" + mo.who.id + L":" + field, SwNow()};
+    SwInvalidate();
+}
+// Every monitor follows All again for a field ("Undo" gives each one back what it had).
+static void MonMatchAll(const std::wstring& field) {
+    struct Was {
+        std::wstring id, v;
+        const wchar_t* group;
+    };
+    std::vector<Was> was;
+    std::wstring f = field;
+    for (int i : SwMonsOn()) {
+        const SwMon& m = g_sw.mons[i];
+        if (!MonOwn(m.who.id, m.group, f)) continue;
+        was.push_back({m.who.id, MonCfg(m.who.id, m.group, f.c_str()), m.group});
+        MonOwnSet(m.who.id, m.group, f, MonBackOf(f));
+    }
+    if (!was.empty())
+        SwUndoOffer(L"scope:" + f, [was, f] {
+            for (auto& w : was) MonOwnSet(w.id, w.group, f, w.v);
+        });
+    SwInvalidate();
+}
+
+// The scope's menu: the same choices as its cells, for four docks or more and for the right button on any slot.
+// It opens right under the slot, not at the mouse. (Only the monitors with a dock, connected now.)
+static void MonExceptMenu(const std::wstring& field, bool opp, D2D1_RECT_F under) {
+    std::vector<int> on = SwMonsOn();
+    HMENU m = CreatePopupMenu();
+    AppendMenuW(m, MF_STRING | MF_GRAYED, 0, L2(L"Só neste monitor", L"Only on this monitor"));
+    bool any = false;
+    for (int i : on) {
+        bool own = MonOwn(g_sw.mons[i].who.id, g_sw.mons[i].group, field);
+        any |= own;
+        AppendMenuW(m, MF_STRING | (own ? MF_CHECKED : 0), 10 + (UINT)i, MonMenuName(i).c_str());
+    }
+    AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(m, MF_STRING | (any ? 0 : MF_GRAYED), 1, L2(L"Igualar todos os monitores", L"Match all monitors"));
+    POINT pt = {(LONG)(under.left * g_sw.scale), (LONG)(under.bottom * g_sw.scale) + 2};
+    ClientToScreen(g_sw.hwnd, &pt);
+    SetForegroundWindow(g_sw.hwnd);
+    g_peekMenu = true;  // (no TPM_NONOTIFY: WM_MENUSELECT says which item is lit)
+    MonPeekShow(-1);
+    int cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_LEFTALIGN | TPM_TOPALIGN, pt.x, pt.y, 0, g_sw.hwnd, nullptr);
+    g_peekMenu = false;
+    MonPeekShow(-1);
+    DestroyMenu(m);
+    if (cmd == 1) MonMatchAll(field);
+    else if (cmd >= 10 && cmd - 10 < (int)g_sw.mons.size()) MonExceptFlip(field, cmd - 10, opp);
+    SwInvalidate();
+}
+
+// A monitor's own row for the setting of a general row: the same control, on that monitor's value.
+static SwRow MonRowFrom(const SwRow& gen, int mi, const wchar_t* field) {
+    std::wstring f = field;
+    switch (gen.ctl) {
+        case CtlSlider: return MonRowSlider(mi, gen.label, field, gen.min, gen.max, gen.step, CfgInt(field), gen.fmt);
+        case CtlSwatches: return MonRowSwatches(mi);
+        case CtlToggle: return MonRowHide(mi);
+        default: return MonRowSeg(mi, gen.label, field, [f] { return MonBornOf(f); }, gen.opts);
+    }
+}
+
+// Adds All's row of a setting a monitor may have its own value for, and right under it one band per monitor that
+// has one, in the monitors' order: the exception first, glued to its setting, before any row that depends on it.
+// With two docks or more the row gets the scope cells, which make and remove those bands.
+// fix: what differs on a monitor's row (what it depends on, there). The search finds the monitors' rows as
+// "Page > Monitor"; the guided setup gets every monitor's (it looks rows up by "mon:<id>:<field>").
+static void WithMons(std::vector<SwRow>& rows, SwRow gen, const wchar_t* field, std::function<void(SwRow&, int)> fix = nullptr) {
+    std::vector<int> on = SwMonsOn();
+    std::wstring f = field;
+    auto make = [&](int i) {
+        SwRow r = MonRowFrom(gen, i, field);
+        r.enabled = gen.enabled;
+        if (fix) fix(r, i);
+        return r;
+    };
+    if (g_swCollect) {
+        rows.push_back(gen);
+        for (int i = 0; i < (int)g_sw.mons.size(); i++) {
+            const SwMon& m = g_sw.mons[i];
+            // (the search: a monitor's row only while it has its own value, or when the search names the monitor)
+            if (m.who.id.empty() || (!g_swCollectIds && !MonOwn(m.who.id, m.group, f) && !SwQueryNamesMon(i))) continue;
+            SwRow r = make(i);
+            r.mon = MonNameOf(i);
+            r.alias += L" modo completo personalizar este monitor por monitor complete mode customize this monitor per monitor";
+            rows.push_back(std::move(r));
+        }
+        return;
+    }
+    gen.scope = on.size() > 1;
+    gen.scopeField = f;
+    gen.scopeOpp = gen.ctl == CtlToggle;
+    std::vector<SwRow> bands;
+    std::vector<std::function<bool()>> applies;  // (a row with a condition: whether it holds, dock by dock)
+    for (int i : on) {
+        const SwMon& m = g_sw.mons[i];
+        if (fix && gen.enabled && gen.scope) applies.push_back(make(i).enabled);
+        if (!MonOwn(m.who.id, m.group, f)) {
+            if (SwUndoIs(L"exc:" + f + L":" + m.who.id)) {  // (just taken away: its line says so, with the way back)
+                SwRow u = RButtons(MonNameOf(i).c_str(), nullptr, {{L2(L"Desfazer", L"Undo"), [] { SwUndoDo(); }}});
+                u.small = true;
+                u.monN = i + 1;
+                u.gone = true;
+                bands.push_back(std::move(u));
+            }
+            continue;
+        }
+        gen.scopeMons.push_back(i + 1);
+        SwRow r = make(i);
+        r.monN = i + 1;
+        r.label = MonNameOf(i);
+        r.desc.clear();
+        r.offWhy.clear();
+        r.own = nullptr;  // (it only exists while the monitor has its own value)
+        r.child = false;
+        r.reset = [f, i] { MonExceptDrop(f, i); };
+        bands.push_back(std::move(r));
+    }
+    // A row that depends on another counts while its condition holds on some dock; where it doesn't, that dock's
+    // band is the faint one, not the row.
+    if (!applies.empty())
+        gen.enabled = [applies] {
+            for (auto& a : applies)
+                if (!a || a()) return true;
+            return false;
+        };
+    rows.push_back(std::move(gen));
+    for (auto& r : bands) rows.push_back(std::move(r));
+}
+
+// "Place on the edge": along a side edge the ends are the top and the bottom.
+static std::vector<std::pair<std::wstring, std::wstring>> AlignOpts(const std::wstring& edge) {
+    bool vert = edge == L"esquerda" || edge == L"direita";
+    return {{L"centro", L2(L"No meio", L"Middle")},
+            {L"esquerda", vert ? L2(L"Em cima", L"Top") : L2(L"À esquerda", L"Left")},
+            {L"direita", vert ? L2(L"Embaixo", L"Bottom") : L2(L"À direita", L"Right")}};
+}
+
+static void PageGeral(float& y, float x, float w) {
+    Heading(y, x, w, L2(L"Aparência", L"Appearance"), L2(L"O visual vale para a dock, o Iniciar e os painéis.",
+                                                         L"The look applies to the dock, Start and the panels."));
+    MonStrip(y, x, w);
+    y += g_swCollect ? 0 : 16;
+    DockPreview(D2D1::RectF(x, y, x + w, y + 100));  // (the Dock page's own: the look and the color change in sight)
+    y += 100;
+    Section(y, x, w, L2(L"Visual", L"Look"));
+    LooksGrid(y, x, w);
+    Section(y, x, w, L2(L"Vidro", L"Glass"));
     SwRow color;
     color.label = L2(L"Cor do vidro", L"Glass color");
-    color.desc = L2(L"A: a do visual escolhido. O + escolhe qualquer cor.", L"A: the chosen look's own. + picks any color.");
     color.ctl = CtlSwatches;
-    Card({color,
-          RSlider(L2(L"Força da cor do vidro", L"Glass color strength"),
-                  L2(L"Mais baixo deixa ver mais o fundo. O Grafite é sempre sólido.", L"Lower shows more of what's behind. Grafite is always solid."),
-                  L"tintOpacity", 0, 100, 1, Pct),
-          RSeg(L2(L"Animação ao passar o mouse", L"Hover animation"),
-               L2(L"Zoom faz a onda do macOS; Elevar sobe só o ícone; Foco apaga os outros.",
-                  L"Zoom makes the macOS wave; Lift raises the icon; Focus dims the others."),
-               L"animation",
-               {{L"zoom", L"Zoom"}, {L"elevar", L2(L"Elevar", L"Lift")}, {L"foco", L2(L"Foco", L"Focus")}, {L"nenhuma", L2(L"Nenhuma", L"None")}})},
+    color.id = L"tintColor";
+    bool solid = CfgStr(L"style", L"nevoa") == L"grafite";
+    std::vector<SwRow> glass;
+    WithMons(glass, color, L"tintColor");
+    WithMons(glass,
+             When(RSlider(L2(L"Força da cor do vidro", L"Glass color strength"),
+                          solid ? L2(L"O Grafite é sempre sólido.", L"Grafite is always solid.")
+                                : L2(L"Mais baixo deixa ver mais o fundo.", L"Lower shows more of what's behind."),
+                          L"tintOpacity", 0, 100, 1, Pct),
+                  [] { return CfgStr(L"style", L"nevoa") != L"grafite"; }),
+             L"tintOpacity");
+    Card(std::move(glass), y, x, w);
+}
+
+// "Place on the edge" follows the edge by itself. Its words are the edge's ("Left" along the bottom is "Top" along
+// a side), so All's row can't speak for a monitor whose edge runs the other way: that monitor gets its own band
+// the moment its edge turns, born with All's saved value (the middle stays the middle, an end the same end).
+// "mon.<id>.alignAuto" is 1 while that band is the one made here, untouched: it goes away again when the edge
+// turns back. 0 once the user changed or removed it (it isn't made twice). No value while the edges run alike.
+static std::wstring AlignAutoKey(const std::wstring& id) { return UserPrefix() + L"mon." + id + L".alignAuto"; }
+static void AlignAutoSync() {
+    auto side = [](const std::wstring& e) { return e == L"esquerda" || e == L"direita"; };
+    bool all = side(CfgStr(L"edge", L"baixo"));
+    for (int i : SwMonsOn()) {
+        const SwMon& m = g_sw.mons[i];
+        std::wstring flag, key = AlignAutoKey(m.who.id);
+        bool has = ReadVal(key, flag), own = MonOwn(m.who.id, m.group, L"align");
+        if (side(MonVal(i, L"edge")) != all) {
+            if (!has) {
+                if (!own) {
+                    MonOwnSet(m.who.id, m.group, L"align", CfgStr(L"align", L"centro"));
+                    g_swBorn = {L"mon:" + m.who.id + L":align", SwNow()};
+                }
+                WriteVal(key, own ? L"0" : L"1");
+            } else if (flag == L"1" && !own) {
+                WriteVal(key, L"0");
+            }
+        } else if (has) {
+            if (flag == L"1" && own) MonOwnSet(m.who.id, m.group, L"align", L"");
+            Wh_DeleteValue(key.c_str());
+        }
+    }
+}
+
+// "Dock on this monitor": the one thing here with no value for all, a monitor has a dock or it doesn't. A check
+// cell per monitor (every one: a monitor with no dock needs its cell to get one back); a single monitor, a
+// plain switch. The search and the guided setup get each monitor's own switch, named by its monitor.
+static void DockOnRows(std::vector<SwRow>& rows) {
+    if (g_sw.mons.empty()) LoadSwMonitors();
+    const wchar_t* why = L2(L"Desmarque para um monitor ficar sem dock.", L"Untick it to leave a monitor without a dock.");
+    if (g_swCollect) {
+        for (int i = 0; i < (int)g_sw.mons.size(); i++) {
+            if (g_sw.mons[i].who.id.empty()) continue;
+            SwRow r = MonRowToggle(i, L2(L"Mostrar a dock neste monitor", L"Show the dock on this monitor"), nullptr, L"enabled");
+            r.mon = MonNameOf(i);
+            r.alias = L"dock neste monitor sem dock com dock dock on this monitor no dock";
+            rows.push_back(std::move(r));
+        }
+        return;
+    }
+    if (g_sw.mons.size() < 2) {
+        if (g_sw.mons.empty() || g_sw.mons[0].who.id.empty()) return;
+        SwRow r = MonRowToggle(0, L2(L"Dock neste monitor", L"Dock on this monitor"), nullptr, L"enabled");
+        r.id2 = L"dockOn";
+        rows.push_back(std::move(r));
+        return;
+    }
+    auto set = [](int i, bool on) {
+        const SwMon& m = g_sw.mons[i];
+        if (!m.who.id.empty() && SwMonHasDock(i) != on) MonOwnSet(m.who.id, m.group, L"enabled", on ? L"1" : L"0");
+    };
+    SwRow r;
+    r.label = L2(L"Dock neste monitor", L"Dock on this monitor");
+    r.desc = why;
+    r.ctl = CtlMons;
+    r.id = L"dockOn";
+    r.monsEvery = true;
+    r.monOn = [](int i) { return SwMonHasDock(i); };
+    r.monFlip = [set](int i) { set(i, !SwMonHasDock(i)); };
+    // ("All" only gives: taking every dock away at once would leave nothing on screen to come back by)
+    r.allFlip = [set] {
+        for (int i = 0; i < (int)g_sw.mons.size(); i++) set(i, true);
+    };
+    rows.push_back(std::move(r));
+}
+
+static void PageDock(float& y, float x, float w) {
+    bool many = !g_swCollect && SwMonsOn().size() > 1;
+    if (!g_swCollect) AlignAutoSync();
+    Heading(y, x, w, L"Dock",
+            many ? L2(L"Posição, forma, tamanho e quando ela aparece. Clique em ① ② ③ numa linha para mudar só naquele monitor.",
+                      L"Position, shape, size and when it shows. Click ① ② ③ on a row to change it on that monitor only.")
+                 : L2(L"Posição, forma, tamanho e quando ela aparece. Passe o mouse na prévia.",
+                      L"Position, shape, size and when it shows up. Hover the preview."));
+    MonStrip(y, x, w);
+    y += g_swCollect ? 0 : 16;
+    DockPreview(D2D1::RectF(x, y, x + w, y + 100));
+    y += 100;
+    // (WithMons: a monitor with its own value for a row has it right under the row)
+    Section(y, x, w, L2(L"Posição", L"Position"));
+    std::vector<SwRow> pos;
+    WithMons(pos, RSeg(L2(L"Borda da tela", L"Screen edge"), nullptr, L"edge",
+                       {{L"baixo", L2(L"Embaixo", L"Bottom")}, {L"cima", L2(L"Em cima", L"Top")}, {L"esquerda", L2(L"Esquerda", L"Left")},
+                        {L"direita", L2(L"Direita", L"Right")}}),
+             L"edge");
+    WithMons(pos, RSeg(L2(L"Posição na borda", L"Place on the edge"), nullptr, L"align", AlignOpts(CfgStr(L"edge", L"baixo"))), L"align",
+             [](SwRow& r, int i) {
+                 r.opts = AlignOpts(MonVal(i, L"edge"));
+                 std::wstring id = g_sw.mons[i].who.id;
+                 auto pick = r.pick;
+                 r.pick = [pick, id](const std::wstring& v) {  // (changed by hand: no longer the band that goes away by itself)
+                     std::wstring flag;
+                     if (ReadVal(AlignAutoKey(id), flag) && flag == L"1") WriteVal(AlignAutoKey(id), L"0");
+                     pick(v);
+                 };
+             });
+    Card(std::move(pos), y, x, w);
+    Section(y, x, w, L2(L"O que a dock mostra", L"What the dock shows"));
+    std::vector<SwRow> shows;
+    DockOnRows(shows);
+    WithMons(shows, RSeg(L2(L"Apps nesta dock", L"Apps on this dock"), L2(L"Nenhum deixa só a área de status.", L"None leaves only the status area."),
+                         L"apps",
+                         {{L"todos", L2(L"Todos", L"All")}, {L"abertos", L2(L"Abertos", L"Open")}, {L"fixados", L2(L"Fixados", L"Pinned")},
+                          {L"nenhum", L2(L"Nenhum", L"None")}}),
+             L"apps");
+    WithMons(shows, RSeg(L2(L"Janelas abertas", L"Open windows"),
+                         L2(L"Quais janelas viram ícone nesta dock.", L"Which windows become an icon on this dock."), L"windows",
+                         {{L"todas", L2(L"Todas", L"All")}, {L"deste", L2(L"Só as deste monitor", L"This monitor's only")}}),
+             L"windows");
+    Card(std::move(shows), y, x, w);
+    Section(y, x, w, L2(L"Forma e tamanho", L"Shape and size"));
+    std::vector<SwRow> shape;
+    WithMons(shape, RSeg(L2(L"Formato", L"Format"),
+                         L2(L"A barra inteira cola na borda e reserva o espaço.", L"Full width sits on the edge and reserves its space."),
+                         L"format", {{L"dock", L2(L"Flutuante", L"Floating")}, {L"fixa", L2(L"Barra inteira", L"Full width")}}),
+             L"format");
+    WithMons(shape, RSlider(L2(L"Tamanho dos ícones", L"Icon size"), nullptr, L"iconSize", 24, 128, 1, Px), L"iconSize");
+    WithMons(shape, RSlider(L2(L"Espaço entre os ícones", L"Space between icons"), nullptr, L"iconGap", 0, 48, 1, Px), L"iconGap");
+    // (the rows with a condition follow what is in force on that monitor: its own value, or everyone's)
+    WithMons(shape, When(RSlider(L2(L"Distância da borda", L"Distance from the edge"), nullptr, L"bottomGap", 0, 60, 1, Px),
+                         [] { return CfgStr(L"format", L"dock") == L"dock"; }, false,
+                         L2(L"Só com a dock flutuante.", L"Floating dock only.")),
+             L"bottomGap", [](SwRow& r, int i) { r.enabled = [i] { return MonVal(i, L"format") != L"fixa"; }; });
+    Card(std::move(shape), y, x, w);
+    Section(y, x, w, L2(L"Ao passar o mouse", L"On hover"));
+    std::vector<SwRow> hover;
+    WithMons(hover, RSeg(L2(L"Animação", L"Animation"),
+                         L2(L"Zoom faz a onda; Elevar sobe só o ícone; Foco apaga os outros.",
+                            L"Zoom makes the wave; Lift raises the icon; Focus dims the others."),
+                         L"animation",
+                         {{L"zoom", L"Zoom"}, {L"elevar", L2(L"Elevar", L"Lift")}, {L"foco", L2(L"Foco", L"Focus")}, {L"nenhuma", L2(L"Nenhuma", L"None")}}),
+             L"animation");
+    // (100 still means no zoom)
+    WithMons(hover, When(RSlider(L2(L"Tamanho do zoom", L"Zoom size"), nullptr, L"magnification", 100, 250, 5, Pct),
+                         [] { return CfgStr(L"animation", L"zoom") == L"zoom"; }, true, L2(L"Só com Zoom.", L"Zoom only.")),
+             L"magnification", [](SwRow& r, int i) { r.enabled = [i] { return MonVal(i, L"animation") == L"zoom"; }; });
+    Card(std::move(hover), y, x, w);
+    Section(y, x, w, L2(L"Esconder", L"Hiding"));
+    std::vector<SwRow> hide;
+    WithMons(hide, RToggle(L2(L"Esconder sozinha", L"Auto-hide"),
+                           L2(L"Volta quando o mouse encosta na borda.", L"Comes back when the mouse touches the edge."), L"autoHide"),
+             L"autoHide");
+    WithMons(hide, When(RSlider(L2(L"Tempo até esconder", L"Delay before hiding"), nullptr, L"hideDelay", 0, 3000, 50, Secs),
+                        [] { return CfgInt(L"autoHide") != 0; }, true,
+                        L2(L"Só com Esconder sozinha ligada.", L"Only with Auto-hide on.")),
+             L"hideDelay", [](SwRow& r, int i) { r.enabled = [i] { return MonHideOn(i); }; });
+    Card(std::move(hide), y, x, w);
+    Section(y, x, w, L2(L"Ícones dos apps", L"App icons"));
+    Card({RToggle(L2(L"Número de notificações nos ícones", L"Notification count on the icons"),
+                  L2(L"As que chegaram desde a última vez que o app esteve na frente.", L"The ones that came since the app was last in front."),
+                  L"dockBadges"),
+          RSeg(L2(L"Finalizar tarefa no menu dos apps", L"End task in the apps' menu"),
+               L2(L"“Como no Windows” segue a opção de Desenvolvedores do sistema.",
+                  L"“Like Windows” follows the system's For developers option."),
+               L"endTask",
+               {{L"windows", L2(L"Como no Windows", L"Like Windows")}, {L"on", L2(L"Sempre", L"Always")}, {L"off", L2(L"Nunca", L"Never")}}),
+          WithId(RInfo(L2(L"Botão direito num app", L"Right-clicking an app"),
+                       L2(L"Também mostra os arquivos recentes dele e Executar como administrador.",
+                          L"Also shows its recent files and Run as administrator.")),
+                 L"info.menu")},
          y, x, w);
-    Section(y, x, w, L"Windows");
+    Section(y, x, w, L2(L"Barra do Windows", L"Windows taskbar"));
     Card({RToggle(L2(L"Esconder a barra do Windows", L"Hide the Windows taskbar"),
-                  L2(L"Pra ela não reservar espaço, o Nimbus liga o \"Ocultar automaticamente a barra de tarefas\" do Windows. Tudo volta como era quando o Nimbus para (também ao sair da conta ou depois de um travamento).",
-                     L"So it doesn't reserve space, Nimbus turns on Windows' \"Automatically hide the taskbar\". Everything goes back when Nimbus stops (also on sign-out or after a crash)."),
+                  L2(L"Liga o ocultar automático da barra de tarefas. Desfaz ao parar o Nimbus.",
+                     L"Turns on the taskbar's auto-hide. Undone when Nimbus stops."),
                   L"hideWindowsTaskbar")},
          y, x, w);
 }
 
-static void PageDock(float& y, float x, float w) {
-    Heading(y, x, w, L"Dock", L2(L"Tamanho, formato e quando ela aparece. Passe o mouse na prévia.",
-                                 L"Size, format and when it shows up. Hover the preview."));
-    y += 18;
-    DockPreview(D2D1::RectF(x, y, x + w, y + 160));
-    y += 160;
-    Section(y, x, w, L2(L"Formato", L"Format"));
-    Card({RSeg(L2(L"Formato", L"Format"),
-               L2(L"Flutuante é a pílula solta. A barra inteira cola embaixo e reserva o espaço.",
-                  L"Floating is the loose pill. The full-width bar sits at the bottom and reserves its space."),
-               L"format", {{L"dock", L2(L"Flutuante", L"Floating")}, {L"fixa", L2(L"Barra inteira", L"Full width")}}),
-          RSlider(L2(L"Tamanho dos ícones", L"Icon size"), nullptr, L"iconSize", 24, 128, 1, Px),
-          RSlider(L2(L"Espaço entre os ícones", L"Space between icons"), nullptr, L"iconGap", 0, 48, 1, Px),
-          RSlider(L2(L"Zoom ao passar o mouse", L"Hover zoom"), L2(L"100% desliga.", L"100% turns it off."), L"magnification", 100, 250, 5, Pct)},
-         y, x, w);
-    Section(y, x, w, L2(L"Aparecer e esconder", L"Show and hide"));
-    Card({RToggle(L2(L"Esconder sozinha", L"Auto-hide"),
-                  L2(L"Aparece quando o mouse encosta na borda de baixo.", L"Shows up when the mouse touches the bottom edge."),
-                  L"autoHide"),
-          RSlider(L2(L"Tempo até esconder", L"Delay before hiding"), nullptr, L"hideDelay", 0, 3000, 50, Secs),
-          RSlider(L2(L"Distância da borda", L"Distance from the edge"), L2(L"Só na dock flutuante.", L"Floating dock only."), L"bottomGap", 0, 60, 1, Px)},
-         y, x, w);
+// The Start button dock by dock, in the keys there always were: the general switch, and each monitor's own.
+static bool StartOnDock(int mi) {
+    return CfgInt(L"showStart") != 0 && _wtoi(MonCfg(g_sw.mons[mi].who.id, g_sw.mons[mi].group, L"showStart").c_str()) != 0;
+}
+// which: a monitor's place in g_sw.mons, or -1 for the "all" cell. No dock left with it: the general switch off;
+// else it on, and each dock with a dock says 1 or 0 by itself.
+static void StartFlip(int which) {
+    std::vector<int> on = SwMonsOn(), next;
+    bool all = true;
+    for (int i : on) all &= StartOnDock(i);
+    for (int i : on)
+        if (which < 0 ? !all : (i == which) != StartOnDock(i)) next.push_back(i);
+    if (next.empty()) {
+        CfgSet(L"showStart", L"0");
+        return;
+    }
+    for (int i : on) MonSet(g_sw.mons[i].who.id, L"showStart", std::find(next.begin(), next.end(), i) != next.end() ? L"1" : L"0");
+    CfgSet(L"showStart", L"1");
 }
 
 static void PageIniciar(float& y, float x, float w) {
-    Heading(y, x, w, L2(L"Iniciar", L"Start"), L2(L"O Iniciar do Nimbus, a tecla Windows e a busca.", L"Nimbus' Start, the Windows key and search."));
+    Heading(y, x, w, L2(L"Iniciar e busca", L"Start and search"),
+            L2(L"O Iniciar do Nimbus, a tecla Windows e a busca.", L"Nimbus' Start, the Windows key and search."));
+    MonStrip(y, x, w);
     Section(y, x, w, L2(L"Abrir", L"Opening"));
     std::vector<std::pair<std::wstring, std::wstring>> who = {{L"nevoa", L"Nimbus"}, {L"windows", L"Windows"}};
-    Card({RToggle(L2(L"Botão Iniciar na dock", L"Start button on the dock"), nullptr, L"showStart"),
-          RSeg(L2(L"O botão Iniciar abre", L"The Start button opens"), nullptr, L"startMenu", who),
+    SwRow start = RToggle(L2(L"Botão Iniciar na dock", L"Start button on the dock"), nullptr, L"showStart");
+    if (!g_swCollect && SwMonsOn().size() > 1) {  // (a cell per dock instead of the switch)
+        start.ctl = CtlMons;
+        start.monOn = [](int i) { return StartOnDock(i); };
+        start.monFlip = [](int i) { StartFlip(i); };
+        start.allFlip = [] { StartFlip(-1); };
+    }
+    Card({start,
+          When(RSeg(L2(L"O botão Iniciar abre", L"The Start button opens"), nullptr, L"startMenu", who),
+               [] { return CfgInt(L"showStart") != 0; }, true,
+               L2(L"Só com o botão Iniciar em alguma dock.", L"Only with the Start button on some dock.")),
           RSeg(L2(L"A tecla Windows abre", L"The Windows key opens"),
                L2(L"Ctrl+Esc sempre abre o Iniciar do Windows.", L"Ctrl+Esc always opens Windows' Start."), L"winKeyMode", who),
-          RSeg(L2(L"Atalho extra", L"Extra shortcut"),
-               L2(L"O atalho para de funcionar nos outros apps enquanto o Nimbus roda.",
-                  L"The shortcut stops working in other apps while Nimbus runs."),
+          RSeg(L2(L"Atalho para abrir o Iniciar", L"Shortcut to open Start"),
+               L2(L"O atalho escolhido deixa de valer nos outros apps.", L"The chosen shortcut stops working in other apps."),
                L"startHotkey",
                {{L"none", L2(L"Nenhum", L"None")}, {L"altSpace", L2(L"Alt+Espaço", L"Alt+Space")}, {L"ctrlSpace", L2(L"Ctrl+Espaço", L"Ctrl+Space")}})},
          y, x, w);
     Section(y, x, w, L2(L"Busca", L"Search"));
+    // (what the search does besides finding, said under the section's name; the search finds it as a row of text)
+    if (!g_swCollect) y -= 14;
+    Hint(y, x, w,
+         L2(L"Também faz contas (12*3,5), converte unidades (10 km em mi) e aceita comandos: timer 10m, nota comprar pão, bloquear.",
+            L"It also does sums (12*3.5), converts units (10 km to mi) and takes commands: timer 10m, note buy bread, lock."),
+         L"info.search", kSub);
+    if (!g_swCollect) y += 9;
     Card({RSeg(L2(L"Layout da busca", L"Search layout"),
-               L2(L"A larga mostra o painel do item e as telas das Configurações ao lado.",
-                  L"Wide shows the item panel and Windows Settings pages beside the results."),
+               L2(L"A larga mostra os detalhes do item ao lado dos resultados.", L"Wide shows the item's details beside the results."),
                L"searchLayout", {{L"larga", L2(L"Larga", L"Wide")}, {L"compacta", L2(L"Compacta", L"Compact")}}),
           RSeg(L2(L"Busca de arquivos", L"File search"),
-               L2(L"O Everything (grátis) acha qualquer arquivo na hora. Sem ele, abre a busca do Windows.",
-                  L"Everything (free) finds any file instantly. Without it, Windows Search opens."),
+               L2(L"O Everything (grátis) acha qualquer arquivo na hora.", L"Everything (free) finds any file instantly."),
                L"fileSearch",
                {{L"everything", L"Everything"}, {L"windows", L"Windows"}, {L"off", L2(L"Desligada", L"Off")}})},
          y, x, w);
-    Section(y, x, w, L"Menus");
-    Card({RSeg(L2(L"Finalizar tarefa no menu dos apps", L"End task in the apps' menu"),
-               L2(L"\"Como no Windows\" segue a opção de Desenvolvedores do sistema.",
-                  L"\"Like Windows\" follows the system's For developers option."),
-               L"endTask",
-               {{L"windows", L2(L"Como no Windows", L"Like Windows")}, {L"on", L2(L"Sempre", L"Always")}, {L"off", L2(L"Nunca", L"Never")}})},
-         y, x, w);
 }
 
-static void PageStatus(float& y, float x, float w) {
-    Heading(y, x, w, L2(L"Área de status", L"Status area"),
-            L2(L"Cada item na dock, na central de controle (um botão na dock abre tudo junto), no Iniciar ou desligado.",
-               L"Each item in the dock, in the control center (one dock button opens them all), in Start or off."));
-    {
-        SwRow tabs = RSeg(L2(L"Seção", L"Section"), nullptr, L"#statusTab",
-                          {{L"0", L2(L"Itens", L"Items")}, {L"1", L2(L"Bandeja", L"Tray")}, {L"2", L2(L"Prateleira", L"Shelf")},
-                           {L"3", L2(L"Notificações", L"Notifications")}, {L"4", L"Player"}, {L"5", L2(L"Som", L"Sound")}});
-        tabs.cur = [] { return std::to_wstring(g_sw.statusTab); };
-        tabs.pick = [](const std::wstring& v) {
-            g_sw.statusTab = _wtoi(v.c_str());
-            SwInvalidate();
-        };
-        y += 14;
-        Card({tabs}, y, x, w);
-    }
-    if (g_sw.statusTab == 0) {
-    Section(y, x, w, L2(L"Onde fica cada um", L"Where each goes"));
-    Card({RPlace(L2(L"Relógio e data", L"Clock and date"), L2(L"O clique abre o calendário do mês.", L"A click opens the month's calendar."),
-                 L"statusClock"),
-          RPlace(L"Volume",
-                 L2(L"Rolar o mouse no ícone muda o volume; o botão do meio deixa mudo.",
-                    L"Scroll on the icon to change the volume; the middle button mutes."),
-                 L"statusVolume"),
+static void PageTelas(float& y, float x, float w);
+static void LoadSwMonitors();
+static SwRow StatusPresetRow();
+static void SwOpenLegacy(int page, int tab);
+// ---- Items: where each one shows (the only owner of every place key) ----
+static void PageItens(float& y, float x, float w) {
+    bool docks = !g_swCollect && SwMonsOn().size() > 1;  // (then the tables say dock by dock)
+    Heading(y, x, w, L2(L"Itens", L"Items"),
+            docks ? L2(L"Marque onde cada item aparece: nas docks, na Central ou no Iniciar.",
+                       L"Tick where each item shows: on the docks, in the Center or in Start.")
+                  : L2(L"Escolha onde cada item aparece. Pode ser em mais de um lugar.", L"Choose where each item shows. It can be in more than one place."));
+    MonStrip(y, x, w);
+    y += g_swCollect ? 0 : 16;
+    Card({StatusPresetRow()}, y, x, w);
+    Section(y, x, w, L2(L"Sistema", L"System"));
+    // (the name of an item with a page of its own is a link to it: the way back from that page's "Change in Items")
+    auto to = [](SwRow r, int page, const wchar_t* flash = L"", int tab = -1) {
+        std::wstring f = flash;
+        r.labelGo = [page, f, tab] { SwJump(page, f, tab); };
+        return r;
+    };
+    Card({RPlace(L2(L"Relógio e data", L"Clock and date"), L2(L"Com o calendário do mês.", L"With the month's calendar."), L"statusClock"),
+          to(RPlace(L"Volume", L2(L"O som do PC e o de cada app.", L"The PC's sound and each app's."), L"statusVolume"), PgSom),
           RPlace(L2(L"Rede", L"Network"), L2(L"Cabo ou Wi-Fi, com a lista de redes.", L"Cable or Wi-Fi, with the list of networks."),
                  L"statusNetwork"),
-          RPlace(L2(L"Bateria", L"Battery"), L2(L"Só aparece em notebook.", L"Only shows on laptops."), L"statusBattery"),
-          RPlace(L2(L"Idioma do teclado", L"Keyboard language"),
-                 L2(L"Um clique troca; o botão direito abre a lista.", L"A click switches; right-click opens the list."),
+          RPlace(L2(L"Bateria", L"Battery"), L2(L"Só em notebook.", L"Laptops only."), L"statusBattery"),
+          RPlace(L2(L"Idioma do teclado", L"Keyboard language"), L2(L"Troca o idioma num clique.", L"Switches the language in one click."),
                  L"statusKeyboard"),
-          RPlace(L2(L"Bandeja", L"Tray"), L2(L"Os ícones dos programas em segundo plano.", L"The icons of the apps running in the background."),
-                 L"trayPlace"),
-          RPlace(L2(L"Não incomodar", L"Do not disturb"), L2(L"Pausa os avisos do Nimbus (o sino continua guardando).", L"Pauses Nimbus' notifications (the bell still keeps them)."),
-                 L"dndPlace"),
-          RPlace(L"Bluetooth", L2(L"Só aparece quando o PC tem Bluetooth.", L"Only shows when the PC has Bluetooth."), L"btPlace"),
-          RPlace(L2(L"Luz noturna", L"Night light"), nullptr, L"nightPlace"),
-          RPlace(L2(L"Atalhos", L"Shortcuts"), L2(L"Projetar, transmitir, legendas e acessibilidade.", L"Project, cast, captions and accessibility."), L"shortPlace"),
-          RPlace(L2(L"Brilho", L"Brightness"), L2(L"De cada monitor (os que aceitam DDC/CI).", L"Of each monitor (those with DDC/CI)."), L"lightPlace"),
+          RPlace(L"Bluetooth", L2(L"Só quando o PC tem Bluetooth.", L"Only when the PC has Bluetooth."), L"btPlace"),
+          RPlace(L2(L"Brilho", L"Brightness"), L2(L"Dos monitores que permitem ajuste pelo PC.", L"Of the monitors that allow it from the PC."),
+                 L"lightPlace"),
+          RPlace(L2(L"Luz noturna", L"Night light"), L2(L"Liga e desliga a luz noturna do Windows.", L"Turns Windows' night light on and off."),
+                 L"nightPlace"),
           RPlace(L2(L"Energia", L"Power"), L2(L"Economia, equilibrado ou desempenho.", L"Efficiency, balanced or performance."), L"powerPlace"),
-          RPlace(L"Player", L2(L"O que está tocando em qualquer app. Mais opções na aba Player.", L"What any app is playing. More in the Player tab."),
-                 L"playerPlace"),
-          RPlace(L2(L"Dispositivos (baterias)", L"Devices (batteries)"),
-                 L2(L"Fones, mouses e controles sem fio (Bluetooth e Xbox). Só aparece com algum aparelho.",
-                    L"Wireless headsets, mice and controllers (Bluetooth and Xbox). Only shows with a device."),
-                 L"devPlace"),
-          RToggle(L2(L"Dispositivos: usar o BatteryHub", L"Devices: use BatteryHub"),
-                  CfgInt(L"devHub") && BatteryHubMissing()
-                      ? L2(L"Ligado, mas o BatteryHub 1.1 ou mais novo não foi encontrado neste PC (o antigo, Wireless Battery 1.0, não serve). Instale pela página dele no GitHub: \"Conhecer o BatteryHub\", no painel Dispositivos.",
-                           L"On, but BatteryHub 1.1 or newer wasn't found on this PC (the old Wireless Battery 1.0 won't do). Install it from its GitHub page: \"About BatteryHub\", in the Devices panel.")
-                      : L2(L"Pra receptores USB (Logitech, Razer…). Desligado por padrão: ligado, o Nimbus abre o BatteryHub (instalado à parte) escondido a cada 5 minutos, só pra ler as baterias; ele fecha sozinho.",
-                           L"For USB receivers (Logitech, Razer…). Off by default: on, Nimbus runs BatteryHub (installed separately) hidden every 5 minutes, just to read the batteries; it closes by itself."),
-                  L"devHub"),
-          RPlace(L2(L"Notas e lembretes", L"Notes and reminders"),
-                 L2(L"Notas que ficam até você apagar, e lembretes que avisam no dia (mesmo atrasados).",
-                    L"Notes that stay until you delete them, and reminders that tell you on the day (late too)."),
-                 L"notesPlace"),
-          RPlace(L2(L"Notificações", L"Notifications"),
-                 L2(L"O sino com o contador; abre a lista, da mais nova pra mais antiga.", L"The bell with the count; it opens the list, newest first."),
-                 L"notifPlace"),
-          RPlace(L2(L"Prateleira", L"Shelf"),
-                 L2(L"Guarda arquivos por um tempo: arraste pra dock, depois arraste pra onde quiser.",
-                    L"Keeps files for a moment: drag them to the dock, then drag them where you want."),
-                 L"shelfPlace")},
+          RPlace(L2(L"Atalhos do Windows", L"Windows shortcuts"),
+                 L2(L"Projetar, transmitir, legendas e acessibilidade.", L"Project, cast, captions and accessibility."), L"shortPlace")},
          y, x, w);
-    Section(y, x, w, L2(L"Na dock", L"In the dock"));
-    SwRow side = RSeg(L2(L"Lado", L"Side"),
-                      L2(L"Na barra inteira, os itens ficam no canto.", L"On the full-width bar, the items go to the corner."), L"statusPos",
-                      {{L"direita", L2(L"Direita", L"Right")}, {L"esquerda", L2(L"Esquerda", L"Left")}});
+    Section(y, x, w, L"Nimbus");
+    Card({to(RPlace(L2(L"Notificações", L"Notifications"), L2(L"O sino com o contador e a lista.", L"The bell with the count and the list."),
+                    L"notifPlace"),
+             PgNotif),
+          RPlace(L2(L"Não incomodar", L"Do not disturb"),
+                 L2(L"Pausa as notificações na tela. Elas ficam guardadas no sino.", L"Pauses on-screen notifications. The bell keeps them."),
+                 L"dndPlace"),
+          RPlace(L2(L"Notas e lembretes", L"Notes and reminders"),
+                 L2(L"Notas que ficam e lembretes que avisam no dia.", L"Notes that stay and reminders that tell you on the day."), L"notesPlace"),
+          to(RPlace(L2(L"Prateleira", L"Shelf"), L2(L"Guarda arquivos por um tempo e baixa links.", L"Keeps files for a moment and downloads links."),
+                    L"shelfPlace"),
+             PgPrateleira),
+          to(RPlace(L"Player", L2(L"O que está tocando em qualquer app.", L"What any app is playing."), L"playerPlace"), PgSom, L"playerDock"),
+          to(RPlace(L2(L"Bandeja", L"Tray"), L2(L"Os ícones dos programas em segundo plano.", L"The icons of the apps running in the background."),
+                    L"trayPlace"),
+             PgBandeja),
+          to(RPlace(L2(L"Arranjos de telas", L"Screen layouts"),
+                    L2(L"Troca o arranjo dos monitores num clique.", L"Switches the monitors' layout in one click."), L"telasPlace"),
+             PgMonitores, L"", 1)},
+         y, x, w);
+    Section(y, x, w, L2(L"Aparelhos", L"Devices"));
+    Card({RPlace(L2(L"Baterias dos aparelhos", L"Device batteries"),
+                 L2(L"Fones, mouses e controles sem fio. Só com algum conectado.", L"Wireless headsets, mice and controllers. Only with one connected."),
+                 L"devPlace"),
+          RPlace(L2(L"Microfone e câmera em uso", L"Microphone and camera in use"),
+                 L2(L"Só enquanto algum app usa. Clique para ver qual.", L"Only while an app uses them. Click to see which."), L"privPlace")},
+         y, x, w);
+    Section(y, x, w, L2(L"Baterias dos aparelhos", L"Device batteries"));
+    {
+        // (the two below only matter with the devices' batteries showing somewhere)
+        auto devOn = [] { return PlaceMask(L"devPlace") != 0; };
+        bool hubGone = CfgInt(L"devHub") && BatteryHubMissing();
+        SwRow hub = RToggle(L2(L"Ler receptores USB com o BatteryHub", L"Read USB receivers with BatteryHub"),
+                            hubGone ? L2(L"Instale o BatteryHub 1.1 ou mais novo pela página dele no GitHub.",
+                                         L"Install BatteryHub 1.1 or newer from its GitHub page.")
+                                    : L2(L"Para mouses e fones Logitech, Razer e outros. Precisa do BatteryHub instalado.",
+                                         L"For Logitech, Razer and other mice and headsets. Needs BatteryHub installed."),
+                            L"devHub");
+        if (hubGone) hub.chip = [] { return std::pair<std::wstring, int>(L2(L"BatteryHub não encontrado", L"BatteryHub not found"), ChipWarn); };
+        Card({When(RToggle(L2(L"Avisar quando a bateria de um aparelho estiver fraca", L"Warn when a device's battery is low"),
+                           L2(L"Uma notificação em 20% e outra em 10%.", L"One notification at 20% and another at 10%."), L"devAlerts"),
+                   devOn),
+              When(hub, devOn)},
+             y, x, w);
+    }
+    Section(y, x, w, L2(L"Itens na dock", L"Items on the dock"));
+    SwRow side = RSeg(L2(L"Lado dos itens na dock", L"Side of the items in the dock"), nullptr, L"statusPos",
+                      {{L"esquerda", L2(L"Esquerda", L"Left")}, {L"direita", L2(L"Direita", L"Right")}});
+    side.cur = [] { return CfgStr(L"statusPos", L"direita"); };  // (the default is the right, whatever the order shown)
     side.pick = [](const std::wstring& v) {
         // Items still following the old "where" (Start tab, off) keep their place.
         for (const wchar_t* k : {L"statusClock", L"statusVolume", L"statusNetwork", L"statusBattery", L"statusKeyboard"})
             CfgSet(k, PlaceName(PlaceOf(CfgStr(k, L"1"))));
         CfgSet(L"statusPos", v);
     };
-    Card({side}, y, x, w);
-    Section(y, x, w, L2(L"Ao clicar", L"On click"));
-    Card({RSeg(L2(L"Abrir", L"Open"),
-               L2(L"O do Windows abre as Configurações rápidas ou o calendário do próprio Windows.",
-                  L"Windows' opens its own Quick Settings or calendar."),
-               L"statusPanels", {{L"nimbus", L2(L"Painel do Nimbus", L"Nimbus panel")}, {L"windows", L2(L"Painel do Windows", L"Windows panel")}})},
-         y, x, w);
+    std::vector<SwRow> inDock;
+    if (g_swCollect || docks) {  // (the one status item with no place of its own: which docks show its button)
+        SwRow c;
+        c.label = L2(L"Botão da Central", L"Center button");
+        c.desc = L2(L"Aparece sozinho quando algum item está na Central.", L"Shows by itself when some item is in the Center.");
+        c.ctl = CtlMons;
+        c.placeGrid = true;  // (under the same columns as the tables above)
+        c.id = L"stat.central";
+        c.monOn = [](int i) { return StatOnDock(i, L"central", CentralOn()); };
+        c.monFlip = [](int i) { StatFlip(i, L"central", CentralOn()); };
+        inDock.push_back(std::move(c));
     }
-    if (g_sw.statusTab == 1) {
-    Section(y, x, w, L2(L"Bandeja", L"Tray"));
-    Card({RSeg(L2(L"Estilo na dock", L"Style in the dock"),
-               L2(L"O botão do meio fixa um ícone; no \"Botão\", os fixados ficam sempre à mostra.",
-                  L"The middle button pins an icon; with \"Button\", pinned ones always show."),
-               L"trayStyle",
-               {{L"botao", L2(L"Botão", L"Button")}, {L"lado", L2(L"Lado a lado", L"Inline")}, {L"grade", L2(L"Grade", L"Grid")},
-                {L"lista", L2(L"Lista", L"List")}}),
-          RSlider(L2(L"Ícones à mostra", L"Icons shown"),
-                  L2(L"Quantos cabem de uma vez; o resto rola com as setas ou a roda do mouse.",
-                     L"How many fit at once; scroll the rest with the arrows or the mouse wheel."),
-                  L"trayVisible", 3, 9, 1, [](int v) { return std::to_wstring(v); })},
-         y, x, w);
+    inDock.push_back(side);
+    inDock.push_back(RSeg(L2(L"Ao clicar num item, abrir", L"Clicking an item opens"), nullptr, L"statusPanels",
+                          {{L"nimbus", L2(L"Painéis do Nimbus", L"Nimbus panels")}, {L"windows", L2(L"Painéis do Windows", L"Windows panels")}}));
+    Card(std::move(inDock), y, x, w);
+}
+
+// ---- Tray ----
+// A tray icon's tip as its row's second line: only when it reads as a name or a description that stays, never as
+// the state of the moment ("GlobalProtect Disconnected", "Docker Desktop running", "Battery 85%"), stale a minute
+// later. Up to 40 characters, no digits, none of the usual state words.
+static bool TrayTipStable(const std::wstring& tip, const std::wstring& name) {
+    if (tip.empty() || tip.size() > 40 || Lower(tip) == Lower(name)) return false;
+    static const wchar_t* const state[] = {
+        L"running",  L"connected",     L"disconnected", L"connecting",  L"stopped",    L"paused",       L"syncing",     L"synced",
+        L"updating", L"updated",       L"online",       L"offline",     L"ready",      L"enabled",      L"disabled",    L"active",
+        L"inactive", L"muted",         L"starting",     L"loading",     L"idle",       L"on",           L"off",         L"conectado",
+        L"conectada", L"desconectado", L"desconectada", L"conectando",  L"executando", L"execucao",     L"parado",      L"parada",
+        L"pausado",  L"pausada",       L"sincronizando", L"sincronizado", L"atualizando", L"atualizado", L"atualizada",  L"ligado",
+        L"ligada",   L"desligado",     L"desligada",    L"ativo",       L"ativa",      L"ativado",      L"ativada",     L"inativo",
+        L"inativa",  L"desativado",    L"desativada",   L"pronto",      L"pronta",     L"mudo",         L"iniciando",   L"carregando"};
+    std::wstring f = FoldText(tip);
+    if (f.find(L"up to date") != std::wstring::npos || f.find(L"em dia") != std::wstring::npos) return false;
+    size_t a = 0;
+    while (a < f.size()) {  // (word by word)
+        if (f[a] >= L'0' && f[a] <= L'9') return false;
+        size_t b = a;
+        while (b < f.size() && iswalpha(f[b])) b++;
+        if (b == a) {
+            a++;
+            continue;
+        }
+        std::wstring word = f.substr(a, b - a);
+        for (auto* st : state)
+            if (word == st) return false;
+        a = b;
     }
-    if (g_sw.statusTab == 2) {
-    Section(y, x, w, L2(L"Prateleira", L"Shelf"));
-    Card({RSeg(L2(L"Ao arrastar pra uma pasta", L"Dragged to a folder"),
-               L2(L"Arrastar com o botão direito sempre pergunta. O que foi colado (Ctrl+V) sempre é movido.",
-                  L"Dragging with the right button always asks. What was pasted (Ctrl+V) is always moved."),
-               L"shelfDrag",
+    return true;
+}
+// The filter's field: like the search's, smaller.
+static void SwFilterBox(D2D1_RECT_F r, const wchar_t* hint) {
+    auto* rt = g_sw.rt.Get();
+    SwFilter& f = g_swFilter;
+    f.seen = true;
+    f.rc = r;
+    f.rc.top = std::max(r.top, g_swTop);  // (the part under the fixed bar takes no click)
+    if (f.rc.bottom <= f.rc.top) f.rc = {};
+    bool typing = !f.text.empty(), lit = f.focus;
+    rt->FillRoundedRectangle(D2D1::RoundedRect(r, 8, 8), Br(0xFFFFFF, lit ? 0.09f : Hot(r) ? 0.07f : 0.045f));
+    if (lit) rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + .75f, r.top + .75f, r.right - .75f, r.bottom - .75f), 8, 8), Br(kAccent, 0.85f), 1.5f);
+    float cy = (r.top + r.bottom) / 2, th = Measure(L"X", g_sw.fSeg.Get()).height;
+    Icon(L"M10.5 4a6.5 6.5 0 1 1 0 13a6.5 6.5 0 1 1 0-13 M15.5 15.5L20 20", r.left + 9, cy - 7, 14, lit ? kInk : kIdle);
+    AddHit(r, [] {});  // (the click is taken at the press: see WM_LBUTTONDOWN)
+    float tx = r.left + 30, tw = r.right - tx - (typing ? 28 : 8);
+    if (typing) {
+        float qw = std::min(tw, Measure(f.text, g_sw.fSeg.Get()).width);
+        Txt1(f.text, g_sw.fSeg.Get(), tx, cy - th / 2, tw, kInk);
+        if (lit && g_sw.caretOn) rt->FillRectangle(D2D1::RectF(tx + qw + 1, cy - 8, tx + qw + 2.5f, cy + 8), Br(kInk, 0.8f));
+        D2D1_RECT_F xr = D2D1::RectF(r.right - 26, r.top + 2, r.right - 2, r.bottom - 2);
+        if (Hot(xr)) rt->FillRoundedRectangle(D2D1::RoundedRect(xr, 6, 6), Br(0xFFFFFF, 0.08f));
+        Icon(L"M8 8l8 8 M16 8l-8 8", xr.left + 5, cy - 7, 14, kIdle);
+        AddHit(xr, [] {
+            g_swFilter.text.clear();
+            SwInvalidate();
+        });
+    } else {
+        Txt1(hint, g_sw.fSeg.Get(), tx, cy - th / 2, tw, lit ? kSub : kMuted);
+        if (lit && g_sw.caretOn) rt->FillRectangle(D2D1::RectF(tx - 2, cy - 8, tx - 0.5f, cy + 8), Br(kInk, 0.8f));
+    }
+}
+
+static void PageBandeja(float& y, float x, float w) {
+    Heading(y, x, w, L2(L"Bandeja", L"Tray"),
+            L2(L"Os ícones dos programas em segundo plano.", L"The icons of the apps running in the background."));
+    MonStrip(y, x, w);
+    y += g_swCollect ? 0 : 16;
+    WhereLine(y, x, w, L"trayPlace");
+    Section(y, x, w, L2(L"Na dock", L"In the dock"));
+    auto trayInDock = [] { return PlaceDocks(L"trayPlace") != 0; };  // (in some dock, even by that dock's own choice)
+    Card({When(RSeg(L2(L"Estilo", L"Style"),
+                    L2(L"Botão abre uma lista; os outros mostram os ícones direto na dock.",
+                       L"Button opens a list; the others show the icons right in the dock."),
+                    L"trayStyle",
+                    {{L"botao", L2(L"Botão", L"Button")}, {L"lado", L2(L"Lado a lado", L"Inline")}, {L"grade", L2(L"Grade", L"Grid")},
+                     {L"lista", L2(L"Lista", L"List")}}),
+               trayInDock),
+          When(RStepper(L2(L"Ícones à mostra", L"Icons shown"),
+                        L2(L"O resto rola com as setas ou a roda do mouse.", L"The rest scrolls with the arrows or the mouse wheel."),
+                        L"trayVisible", 3, 9, 1),
+               trayInDock)},
+         y, x, w);
+    {
+        bool many = SwMonsOn().size() > 1;  // (then a cell per dock instead of the switch)
+        struct TrayRow {
+            std::wstring key, name;
+            bool pinned;
+            size_t at;
+            SwRow row;
+        };
+        std::vector<TrayRow> items;
+        std::vector<std::wstring> seen;  // (one row per app, even with two icons)
+        for (int ti : TrayOrder()) {
+            const TrayIcon& t = g_tray[ti];
+            auto trim = [](const std::wstring& v) {
+                size_t a = v.find_first_not_of(L" \t\r\n\u200B"), b = v.find_last_not_of(L" \t\r\n\u200B");
+                return a == std::wstring::npos ? std::wstring() : v.substr(a, b - a + 1);
+            };
+            // The label is the program's name, or its file's; the icon's tip (its first line) is only the
+            // description, and the label just when there is nothing else to call the app by.
+            std::wstring tip = trim(t.tip.substr(0, t.tip.find_first_of(L"\r\n")));
+            std::wstring name = trim(t.name);
+            if (name.empty() && !t.path.empty()) {
+                name = PathFindFileNameW(t.path.c_str());
+                size_t dot = name.rfind(L'.');
+                if (dot != std::wstring::npos && dot > 0) name = name.substr(0, dot);
+            }
+            bool fromTip = name.empty();  // (then the description would only say it again)
+            if (fromTip) name = tip;
+            if (name.empty() || std::find(seen.begin(), seen.end(), Lower(name)) != seen.end()) continue;
+            seen.push_back(Lower(name));
+            std::wstring key = t.key;
+            SwRow r;
+            r.label = name;
+            if (!fromTip && TrayTipStable(tip, name)) r.desc = tip;
+            r.descLine = true;
+            r.fixH = 56;  // (every row the same, with a second line or not)
+            r.id = L"#tray:" + key;  // (not a setting: only so a search result can go to it)
+            r.ctl = CtlToggle;
+            r.on = [key] { return std::find(g_trayPinned.begin(), g_trayPinned.end(), key) != g_trayPinned.end(); };
+            r.flip = [key] {  // (on: every dock; which ones, in the button beside it)
+                bool on = std::find(g_trayPinned.begin(), g_trayPinned.end(), key) != g_trayPinned.end();
+                TraySetPin(key, on ? 0 : 1);
+                NimbusLog("bandeja | app fixado mudou");
+                TrayChanged();
+            };
+            ComPtr<IWICBitmapSource> src = t.icon;
+            int ver = t.iconVer;
+            std::wstring initial(1, (wchar_t)towupper(name[0]));
+            r.icon = [key, src, ver, initial](D2D1_RECT_F ir) {
+                static std::unordered_map<std::wstring, int> vers;  // (the icon each bitmap was made from)
+                ID2D1Bitmap* bmp = nullptr;
+                if (src) {
+                    auto& b = g_sw.bmps[L"tray:" + key];
+                    auto v = vers.find(key);
+                    if (!b || v == vers.end() || v->second != ver) {
+                        b.Reset();
+                        g_sw.rt->CreateBitmapFromWicBitmap(src.Get(), &b);
+                        vers[key] = ver;
+                    }
+                    bmp = b.Get();
+                }
+                if (bmp) {
+                    if (g_sw.dc) g_sw.dc->DrawBitmap(bmp, ir, g_swAlpha, D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC, nullptr, nullptr);
+                    else g_sw.rt->DrawBitmap(bmp, ir, g_swAlpha);
+                } else {  // (no picture: a plain tile with the app's initial)
+                    g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(ir, 6, 6), Br(0xFFFFFF, 0.14f));
+                    TxtC(initial, g_sw.fSmall.Get(), ir, kIdle);
+                }
+            };
+            if (many) {  // ("All" pins it on every dock; a dock's own cell, on that one only)
+                auto changed = [] {
+                    NimbusLog("bandeja | app fixado mudou");
+                    TrayChanged();
+                };
+                auto onDock = [key](int i) {
+                    if (std::find(g_trayPinned.begin(), g_trayPinned.end(), key) == g_trayPinned.end()) return false;
+                    auto f = g_trayPinMon.find(key);
+                    return f == g_trayPinMon.end() || f->second.empty() ||
+                           std::find(f->second.begin(), f->second.end(), g_sw.mons[i].who.id) != f->second.end();
+                };
+                r.ctl = CtlMons;
+                r.head = L"App";
+                r.monOn = onDock;
+                r.monFlip = [key, changed](int i) {
+                    TraySetPin(key, 2, g_sw.mons[i].who.id);
+                    changed();
+                };
+                r.allFlip = [key, onDock, changed] {
+                    TraySetPin(key, DocksState(onDock) == 2 ? 0 : 1);
+                    changed();
+                };
+            }
+            bool pinned = std::find(g_trayPinned.begin(), g_trayPinned.end(), key) != g_trayPinned.end();
+            items.push_back({key, name, pinned, 0, std::move(r)});
+        }
+        // The apps ticked on some dock first, then the rest, each A to Z. Worked out when the page opens (SwSetPage
+        // empties it) and kept, so ticking an app never moves its row from under the mouse. One that shows up later
+        // goes last.
+        if (g_trayRowOrder.empty()) {
+            std::vector<const TrayRow*> v;
+            for (auto& it : items) v.push_back(&it);
+            std::stable_sort(v.begin(), v.end(), [](const TrayRow* a, const TrayRow* b) {
+                return a->pinned != b->pinned ? a->pinned : lstrcmpiW(a->name.c_str(), b->name.c_str()) < 0;
+            });
+            for (auto* p : v) g_trayRowOrder.push_back(p->key);
+        }
+        for (auto& it : items) {
+            auto f = std::find(g_trayRowOrder.begin(), g_trayRowOrder.end(), it.key);
+            it.at = f - g_trayRowOrder.begin();
+            if (f == g_trayRowOrder.end()) g_trayRowOrder.push_back(it.key);
+        }
+        std::stable_sort(items.begin(), items.end(), [](const TrayRow& a, const TrayRow& b) { return a.at < b.at; });
+        Section(y, x, w, L2(L"Sempre visíveis na dock", L"Always visible in the dock"));
+        // "Filter apps", level with the title: only worth it with a long list.
+        bool filter = !g_swCollect && (items.size() > 12 || !g_swFilter.text.empty());
+        if (filter) {
+            float mid = y - 9 - Measure(L"X", g_sw.fSec.Get()).height / 2;
+            SwFilterBox(D2D1::RectF(x + w - 200, mid - 14, x + w, mid + 14), L2(L"Filtrar apps", L"Filter apps"));
+        }
+        Note(y, x, w, many ? L2(L"Marque as docks em que o ícone fica sempre à mostra. Vale mesmo com a Bandeja na Central ou no Iniciar.",
+                                L"Tick the docks where the icon always shows. It holds even with the Tray in the Center or in Start.")
+                           : L2(L"Um app ligado aqui fica na dock mesmo com a Bandeja na Central ou no Iniciar.",
+                                L"An app turned on here stays in the dock even with the Tray in the Center or in Start."));
+        std::vector<SwRow> rows;
+        std::wstring want = filter ? FoldText(g_swFilter.text) : std::wstring();
+        for (auto& it : items)
+            if (want.empty() || FoldText(it.name).find(want) != std::wstring::npos) rows.push_back(std::move(it.row));
+        if (rows.empty() && !items.empty()) {
+            rows.push_back(RInfo((std::wstring(L2(L"Nenhum app com “", L"No app with “")) + g_swFilter.text + L"”.").c_str(), nullptr));
+        } else if (rows.empty()) {
+            if (TrayOn())
+                rows.push_back(RInfo(L2(L"Nenhum app na bandeja agora", L"No app in the tray now"), nullptr));
+            else
+                rows.push_back(RButtons(L2(L"Nenhum app na bandeja agora", L"No app in the tray now"), L2(L"A bandeja está desligada.", L"The tray is off."),
+                                        {{L2(L"Ligar em Itens", L"Turn on in Items"), [] { SwJump(PgItens, L"trayPlace"); }}}));
+        }
+        Card(std::move(rows), y, x, w);
+    }
+}
+
+// ---- Shelf ----
+static void PagePrateleira(float& y, float x, float w) {
+    Heading(y, x, w, L2(L"Prateleira", L"Shelf"),
+            L2(L"Guarda arquivos por um tempo: arraste para a dock, depois para onde quiser.",
+               L"Keeps files for a moment: drag them to the dock, then wherever you want."));
+    y += g_swCollect ? 0 : 16;
+    WhereLine(y, x, w, L"shelfPlace");
+    Section(y, x, w, L2(L"Arquivos", L"Files"));
+    Card({RSeg(L2(L"Ao arrastar para uma pasta", L"Dragged to a folder"),
+               L2(L"Com o botão direito, sempre pergunta.", L"With the right button, it always asks."), L"shelfDrag",
                {{L"copiar", L2(L"Copiar", L"Copy")}, {L"mover", L2(L"Mover", L"Move")}, {L"windows", L2(L"Como no Windows", L"Like Windows")}}),
           RSeg(L2(L"Estilo", L"Style"), nullptr, L"shelfStyle", {{L"grade", L2(L"Grade", L"Grid")}, {L"lista", L2(L"Lista", L"List")}}),
-          RSlider(L2(L"Itens no máximo", L"Most items"), L2(L"Passou disso, o mais antigo sai.", L"Past that, the oldest goes."),
-                  L"shelfLimit", 5, 20, 1, [](int v) { return std::to_wstring(v); })},
+          RStepper(L2(L"Máximo de itens", L"Most items"), L2(L"Ao passar, o mais antigo sai.", L"Past that, the oldest goes."), L"shelfLimit", 5, 20, 1)},
          y, x, w);
+    {
+        Section(y, x, w, L2(L"Baixar por link", L"Download by link"));
+        auto sitesOn = [] { return CfgInt(L"shelfSites") != 0; };
+        // One of the two programs: there or not (asked now), and how to get it. (Nimbus never downloads a program.)
+        auto tool = [&](const wchar_t* name, const wchar_t* what) {
+            bool there = !ToolExe(name).empty();
+            std::wstring cmd = std::wstring(L"winget install ") + name;
+            SwRow r = there ? RInfo(name, what)
+                            : RButtons(name, (std::wstring(what) + L2(L" Instale com: ", L" Install with: ") + cmd).c_str(),
+                                       {{L2(L"Copiar comando", L"Copy command"), [cmd] { CopyToClipboard(cmd); }}});
+            r.small = true;
+            r.chip = [there] {
+                return there ? std::pair<std::wstring, int>(L2(L"instalado", L"installed"), ChipOutline)
+                             : std::pair<std::wstring, int>(L2(L"não instalado", L"not installed"), ChipWarn);
+            };
+            return When(r, sitesOn, true);
+        };
+        Card({RToggle(L2(L"Baixar vídeos e imagens de sites", L"Download videos and pictures from sites"),
+                      L2(L"Usa o yt-dlp e o gallery-dl, instalados por você. Baixe só o que você tem direito.",
+                         L"Uses yt-dlp and gallery-dl, installed by you. Download only what you have the right to."),
+                      L"shelfSites"),
+              tool(L"yt-dlp", L2(L"Vídeos e áudio.", L"Videos and audio.")),
+              tool(L"gallery-dl", L2(L"Imagens e álbuns.", L"Pictures and albums.")),
+              When(RSeg(L2(L"Usar o login do navegador", L"Use the browser's sign-in"),
+                        L2(L"Para sites que só baixam com a conta aberta, como Instagram e X.",
+                           L"For sites that only download signed in, like Instagram and X."),
+                        L"shelfCookies",
+                        {{L"off", L2(L"Não", L"No")}, {L"edge", L"Edge"}, {L"chrome", L"Chrome"}, {L"firefox", L"Firefox"}}),
+                   sitesOn, true),
+              When(RSeg(L2(L"Qualidade do vídeo", L"Video quality"),
+                        L2(L"No cartão do download dá para trocar só naquele.", L"On the download's card you can change just that one."),
+                        L"shelfQuality",
+                        {{L"1080", L"1080p"}, {L"720", L"720p"}, {L"480", L"480p"}, {L"melhor", L2(L"Melhor", L"Best")}}),
+                   sitesOn, true)},
+             y, x, w);
     }
-    if (g_sw.statusTab == 4) {
+}
+
+// ---- Sound and player ----
+static void PageSom(float& y, float x, float w) {
+    Heading(y, x, w, L2(L"Som e player", L"Sound and player"), L2(L"O painel de som e o que está tocando.", L"The sound panel and what's playing."));
+    Section(y, x, w, L2(L"Painel de som", L"Sound panel"));
+    SoundGrid(y, x, w);
+    if (CfgStr(L"soundPanel", L"simples") != L"simples")
+        Hint(y, x, w,
+             L2(L"Completo e Grade mudam a saída de som dos apps no Windows. Voltar para Simples desfaz.",
+                L"Complete and Grid change the apps' sound output in Windows. Going back to Simple undoes it."),
+             L"info.soundWarn", kWarn);
     Section(y, x, w, L"Player");
-    Card({RPlace(L2(L"Onde fica", L"Where it goes"),
-                 L2(L"Mostra o que qualquer app está tocando nos controles de mídia do Windows: Spotify, YouTube no navegador, players de vídeo.",
-                    L"Shows what any app plays in Windows' media controls: Spotify, YouTube in a browser, video players."),
-                 L"playerPlace"),
-          RSeg(L2(L"Na dock", L"In the dock"), L2(L"Barras: se mexem com o som. Sem nada tocando, fica o ícone.", L"Bars: they move with the sound. With nothing playing, the icon."),
-               L"playerDock",
-               {{L"icone", L2(L"Ícone", L"Icon")}, {L"capa", L2(L"Capa", L"Cover")}, {L"titulo", L2(L"Título", L"Title")},
-                {L"ambos", L2(L"Capa e título", L"Both")}, {L"espectro", L2(L"Barras", L"Bars")}}),
-          RToggle(L2(L"Some quando nada está tocando", L"Hidden when nothing plays"), L2(L"Só na dock.", L"Only in the dock."), L"playerHide")},
+    auto playerInDock = [] { return PlaceDocks(L"playerPlace") != 0; };  // (in some dock, even by that dock's own choice)
+    WhereLine(y, x, w, L"playerPlace");
+    y += g_swCollect ? 0 : 12;
+    Card({When(RSeg(L2(L"Como aparece na dock", L"How it shows in the dock"), L2(L"Barras acompanham o som.", L"Bars follow the sound."), L"playerDock",
+                    {{L"icone", L2(L"Ícone", L"Icon")}, {L"capa", L2(L"Capa", L"Cover")}, {L"titulo", L2(L"Título", L"Title")},
+                     {L"ambos", L2(L"Capa e título", L"Both")}, {L"espectro", L2(L"Barras", L"Bars")}}),
+               playerInDock),
+          When(RToggle(L2(L"Esconder quando nada está tocando", L"Hide when nothing plays"), nullptr, L"playerHide"), playerInDock)},
          y, x, w);
-    Section(y, x, w, L2(L"Atalhos do mouse", L"Mouse shortcuts"));
-    Card({RButtons(L2(L"No item da dock", L"On the dock item"),
-                   L2(L"Clique abre o player; botão do meio toca ou pausa; a roda muda o volume só desse app.",
-                      L"A click opens the player; the middle button plays or pauses; the wheel changes only that app's volume."),
-                   {})},
-         y, x, w);
-    }
-    if (g_sw.statusTab == 5) {
-    Section(y, x, w, L2(L"Som", L"Sound"));
-    SwRow soundRow = RSeg(L2(L"Painel de som", L"Sound panel"),
-               L2(L"Simples: o volume e o de cada app. Completo: os apps à esquerda e todas as saídas à direita; arraste um app pra uma saída (ele toca nela também), de uma saída pra outra (troca), ou tire com o ×. O completo mexe na saída de som do Windows: a padrão e a de cada app (o Windows guarda essa escolha, como nas Configurações de som), e toca uma cópia do app numa segunda saída enquanto o Nimbus roda. Voltando pro Simples, o que o Nimbus mudou volta (a saída de cada app como era, sem cópias e sem os mudos do painel); a saída escolhida no mixer do próprio Windows fica.",
-                  L"Simple: the volume and each app's. Complete: apps on the left and every output on the right; drag an app onto an output (it plays there too), from one output to another (it moves), or take it off with ×. Complete changes Windows' sound output: the default one and each app's (Windows keeps that choice, as in the Sound settings), and plays a copy of an app on a second output while Nimbus runs. Back to Simple, what Nimbus changed goes back (each app's output as it was, copies off, its mutes undone); an output chosen in Windows' own mixer stays."),
-               L"soundPanel", {{L"simples", L2(L"Simples", L"Simple")}, {L"completo", L2(L"Completo", L"Complete")}});
-    soundRow.pick = [](const std::wstring& v) {
-        if (v == L"simples" && SoundFull()) SndResetAll();
-        CfgSet(L"soundPanel", v);
-    };
-    Card({soundRow}, y, x, w);
-    }
-    if (g_sw.statusTab == 3) {
-    Section(y, x, w, L2(L"Notificações", L"Notifications"));
-    Card({RToggle(L2(L"Mostrar os avisos com o visual do Nimbus", L"Show notifications in Nimbus' look"),
-                  L2(L"Os avisos do Windows também aparecem como cartões do Nimbus. Em tela cheia ou jogo, nada aparece.",
-                     L"Windows' notifications also show as Nimbus cards. Nothing shows over full-screen apps or games."),
+    Hint(y, x, w,
+         L2(L"Na dock: o clique abre o player, o botão do meio toca ou pausa e a roda muda o volume só desse app.",
+            L"In the dock: a click opens the player, the middle button plays or pauses, and the wheel changes only that app's volume."),
+         L"playerMouse");
+}
+
+// ---- Notifications ----
+static void PageNotif(float& y, float x, float w) {
+    Heading(y, x, w, L2(L"Notificações", L"Notifications"),
+            L2(L"As notificações do Windows e dos apps, com o visual do Nimbus.", L"Windows' and apps' notifications, in Nimbus' look."));
+    y += g_swCollect ? 0 : 16;
+    WhereLine(y, x, w, L"notifPlace", L2(L"O sino aparece em:", L"The bell shows in:"), L2(L"O sino está desligado.", L"The bell is off."));
+    auto notifOn = [] { return CfgInt(L"notifShow") != 0; };
+    Section(y, x, w, L2(L"Na tela", L"On screen"));
+    Card({RToggle(L2(L"Notificações com o visual do Nimbus", L"Notifications in Nimbus' look"),
+                  L2(L"As do Windows também viram cartões do Nimbus. Em tela cheia ou jogo, nada aparece.",
+                     L"Windows' ones also become Nimbus cards. Nothing shows over full-screen apps or games."),
                   L"notifShow"),
-          RSeg(L2(L"Altura", L"Height"), nullptr, L"notifV", {{L"baixo", L2(L"Embaixo", L"Bottom")}, {L"cima", L2(L"Em cima", L"Top")}}),
-          RSeg(L2(L"Lado", L"Side"), nullptr, L"notifH",
-               {{L"direita", L2(L"Direita", L"Right")}, {L"centro", L2(L"Centro", L"Center")}, {L"esquerda", L2(L"Esquerda", L"Left")}}),
-          RSlider(L2(L"Tempo na tela", L"Time on screen"), L2(L"Com o mouse em cima, o aviso espera.", L"With the mouse on it, it waits."),
-                  L"notifSecs", 3, 12, 1, [](int v) { return std::to_wstring(v) + L" s"; }),
-          [] {
-              bool on = g_set.notifHideWin, confirm = g_sw.confirmBanners;
-              return RButtons(L2(L"Esconder os avisos do Windows", L"Hide Windows' own banners"),
-                              on ? L2(L"Escondidos: o balão de cada app no Windows está desligado. Os avisos continuam na central do Windows.",
-                                      L"Hidden: each app's banner in Windows is off. Notifications still go to Windows' center.")
-                              : confirm ? L2(L"Clique de novo pra confirmar: o Nimbus desliga o balão de cada app no Windows e liga de volta quando você desligar isso ou o Nimbus.",
-                                             L"Click again to confirm: Nimbus turns off each app's banner in Windows and turns it back on when you turn this or Nimbus off.")
-                                        : L2(L"Pra não aparecerem dois avisos. Nada some: eles continuam na central do Windows.",
-                                             L"So there aren't two. Nothing is lost: they stay in Windows' center."),
-                              {{on ? L2(L"Mostrar de novo", L"Show them again") : confirm ? L2(L"Confirmar", L"Confirm") : L2(L"Esconder", L"Hide"), [] {
-                                    if (g_set.notifHideWin) {
-                                        CfgSet(L"notifHideWin", L"0");
-                                        g_sw.confirmBanners = false;
-                                    } else if (g_sw.confirmBanners) {
-                                        Wh_SetStringValue((UserPrefix() + L"notif.askedBanners").c_str(), L"1");
-                                        CfgSet(L"notifHideWin", L"1");
-                                        g_sw.confirmBanners = false;
-                                    } else {
-                                        g_sw.confirmBanners = true;
-                                    }
-                                }}});
-          }(),
-          RToggle(L2(L"Win+N abre as notificações do Nimbus", L"Win+N opens Nimbus' notifications"),
-                  L2(L"No lugar do painel do Windows, em qualquer janela. Desligado, o Win+N continua sendo do Windows.",
-                     L"Instead of Windows' panel, over any window. Off, Win+N stays Windows'."),
-                  L"notifWinN"),
-          SoundRow(L2(L"Som dos avisos", L"Notification sound"), L"notifSound",
-                   L2(L"Os de outros apps só tocam com os avisos do Windows escondidos (senão o Windows já toca o dele).",
-                      L"Other apps' only play with Windows' banners hidden (otherwise Windows plays its own).")),
-          SoundRow(L2(L"Som dos lembretes", L"Reminder sound"), L"remSound", L2(L"Os lembretes das suas notas.", L"Your notes' reminders.")),
-          RButtons(L2(L"Testar um aviso", L"Try a notification"), L2(L"Mostra um aviso de exemplo agora.", L"Shows a sample notification now."),
-                   {{L2(L"Testar", L"Try it"), [] { NotifTest(); }}})},
+          When(RPos(L2(L"Posição na tela", L"Position on screen"), L"notifV", L"notifH"), notifOn, true),
+          When(RSlider(L2(L"Tempo na tela", L"Time on screen"), L2(L"Com o mouse em cima, ela espera.", L"With the mouse on it, it waits."),
+                       L"notifSecs", 3, 12, 1, [](int v) { return std::to_wstring(v) + L" s"; }),
+               notifOn, true),
+          When(WithId(RButtons(L2(L"Testar uma notificação", L"Try a notification"), nullptr, {{L2(L"Testar", L"Try it"), [] { NotifTest(); }}}),
+                      L"notifTest"),
+               notifOn, true)},
          y, x, w);
-    }
+    Section(y, x, w, L"Windows");
+    // (turning it on asks first: it changes each app's banner switch in Windows; turning it off is direct)
+    SwRow hideWin = RToggle(L2(L"Esconder as notificações do Windows", L"Hide Windows' notifications"),
+                            L2(L"Evita notificação em dobro. Elas continuam no painel de notificações do Windows.",
+                               L"Avoids doubles. They still go to Windows' notification panel."),
+                            L"notifHideWin");
+    hideWin.flip = [] {
+        if (CfgInt(L"notifHideWin")) CfgSet(L"notifHideWin", L"0");
+        else SwAsk(L"notifHideWin");
+    };
+    hideWin.ask = L2(L"O Nimbus desliga a notificação na tela de cada app no Windows e liga de volta quando você desligar isto. Esconder?",
+                     L"Nimbus turns off each app's banner in Windows and turns it back on when you turn this off. Hide?");
+    hideWin.askYes = L2(L"Esconder", L"Hide");
+    hideWin.askDo = [] {
+        Wh_SetStringValue((UserPrefix() + L"notif.askedBanners").c_str(), L"1");
+        CfgSet(L"notifHideWin", L"1");
+    };
+    Card({hideWin,
+          RToggle(L2(L"Win+N abre as notificações do Nimbus", L"Win+N opens Nimbus' notifications"),
+                  L2(L"No lugar do painel do Windows.", L"Instead of Windows' panel."), L"notifWinN")},
+         y, x, w);
+    Section(y, x, w, L2(L"Sons das notificações e lembretes", L"Notification and reminder sounds"));
+    Card({SoundRow(L2(L"Som das notificações", L"Notification sound"), L"notifSound",
+                   L2(L"Em notificações de outros apps, toca só com as do Windows escondidas.",
+                      L"For other apps' notifications, it plays only with Windows' ones hidden.")),
+          SoundRow(L2(L"Som dos lembretes", L"Reminder sound"), L"remSound", L2(L"Os lembretes das suas notas.", L"Your notes' reminders."))},
+         y, x, w);
 }
 
 static void LoadSwMonitors() {
     g_sw.mons.clear();
+    MonScopeMigrate();  // (a monitor plugged in since the docks were made)
     EnumDisplayMonitors(nullptr, nullptr, [](HMONITOR mon, HDC, LPRECT, LPARAM) WINAPI -> BOOL {
         MONITORINFO mi = {sizeof(mi)};
         if (!GetMonitorInfoW(mon, &mi)) return TRUE;
@@ -16815,6 +23895,7 @@ static void LoadSwMonitors() {
         m.who = MonitorIdentity(mon);
         m.group = MonitorGroup(mon, mi.rcMonitor);
         m.primary = (mi.dwFlags & MONITORINFOF_PRIMARY) != 0;
+        m.rc = mi.rcMonitor;
         DEVMODEW dm = {};
         dm.dmSize = sizeof(dm);
         MONITORINFOEXW mx = {};
@@ -16833,170 +23914,1901 @@ static void LoadSwMonitors() {
     std::stable_sort(g_sw.mons.begin(), g_sw.mons.end(), [](const SwMon& a, const SwMon& b) { return a.primary > b.primary; });
 }
 
-static void PageMonitores(float& y, float x, float w) {
-    Heading(y, x, w, L2(L"Monitores", L"Monitors"),
-            L2(L"Cada monitor guarda os próprios ajustes, mesmo se você mudar a ordem ou a posição deles.",
-               L"Each monitor keeps its own settings, even if you change their order or position."));
+// "Identificar": each monitor's number, big in its middle, for a few seconds (like Windows' own).
+static LRESULT CALLBACK MonIdentProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
+    switch (msg) {
+        case WM_PAINT: {
+            PAINTSTRUCT ps;
+            HDC dc = BeginPaint(h, &ps);
+            RECT r;
+            GetClientRect(h, &r);
+            HBRUSH bg = CreateSolidBrush(RGB(18, 18, 21));
+            FillRect(dc, &r, bg);
+            DeleteObject(bg);
+            wchar_t t[8] = {};
+            GetWindowTextW(h, t, ARRAYSIZE(t));
+            HFONT f = CreateFontW(-(r.bottom - r.top) * 2 / 3, 0, 0, 0, FW_SEMIBOLD, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0,
+                                  L"Segoe UI Variable Display");
+            HGDIOBJ old = SelectObject(dc, f);
+            SetBkMode(dc, TRANSPARENT);
+            SetTextColor(dc, RGB(236, 236, 238));
+            DrawTextW(dc, t, -1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+            SelectObject(dc, old);
+            DeleteObject(f);
+            EndPaint(h, &ps);
+            return 0;
+        }
+        case WM_TIMER:
+            DestroyWindow(h);
+            return 0;
+        case WM_NCHITTEST:
+            return HTTRANSPARENT;
+    }
+    return DefWindowProcW(h, msg, wp, lp);
+}
+// One monitor's big number. In its middle; on the monitor Settings is on, in its bottom left corner (as Windows
+// does), so it never covers the row being looked at. ms: how long it stays (0: until it is destroyed).
+static HWND MonIdentWnd(int i, UINT ms) {
+    static bool reg = false;
+    if (!reg) {
+        WNDCLASSW wc = {};
+        wc.lpfnWndProc = MonIdentProc;
+        wc.hInstance = g_module;
+        wc.lpszClassName = L"NimbusMenu_Ident";
+        wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+        reg = RegisterClassW(&wc) != 0;
+    }
+    if (i < 0 || i >= (int)g_sw.mons.size()) return nullptr;
+    const SwMon& m = g_sw.mons[i];
+    UINT dpi = 96, dy = 96;
+    GetDpiForMonitor(m.mon, MDT_EFFECTIVE_DPI, &dpi, &dy);
+    int side = MulDiv(170, dpi, 96), gap = MulDiv(56, dpi, 96);
+    int left = (m.rc.left + m.rc.right) / 2 - side / 2, top = (m.rc.top + m.rc.bottom) / 2 - side / 2;
+    if (g_sw.hwnd && MonitorFromWindow(g_sw.hwnd, MONITOR_DEFAULTTONEAREST) == m.mon) {
+        left = m.rc.left + gap;
+        top = m.rc.bottom - gap - side;
+    }
+    HWND h = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED, L"NimbusMenu_Ident",
+                             std::to_wstring(i + 1).c_str(), WS_POPUP, left, top, side, side, nullptr, nullptr, g_module, nullptr);
+    if (!h) return nullptr;
+    SetLayeredWindowAttributes(h, 0, 235, LWA_ALPHA);
+    DWORD corner = 2; /* DWMWCP_ROUND */
+    DwmSetWindowAttribute(h, 33 /* DWMWA_WINDOW_CORNER_PREFERENCE */, &corner, sizeof(corner));
+    ShowWindow(h, SW_SHOWNOACTIVATE);
+    if (ms) SetTimer(h, 1, ms, nullptr);
+    return h;
+}
+static void MonIdentify() {
     if (g_sw.mons.empty()) LoadSwMonitors();
-    int n = 0;
+    for (int i = 0; i < (int)g_sw.mons.size(); i++) MonIdentWnd(i, 2500);
+}
+static void MonPeekShow(int i) {
+    if (i == g_peekShown && (i < 0 || (g_peekWnd && IsWindow(g_peekWnd)))) return;
+    if (g_peekWnd && IsWindow(g_peekWnd)) DestroyWindow(g_peekWnd);
+    g_peekWnd = nullptr;
+    g_peekShown = -1;
+    if (i >= 0 && (g_peekWnd = MonIdentWnd(i, 0))) g_peekShown = i;
+}
+// After each frame: the monitor under the mouse shows its number once the mouse has stayed 250 ms (one already
+// showing: the next at once); nothing under it, none.
+static void MonPeekSync() {
+    if (g_peekMenu) return;  // (the menu's highlighted item says which)
+    int want = g_peekWant;
+    if (want < 0) {
+        g_peekCand = -1;
+        MonPeekShow(-1);
+        return;
+    }
+    if (want != g_peekCand) {
+        g_peekCand = want;
+        g_peekSince = GetTickCount();
+        if (g_peekShown >= 0) MonPeekShow(want);
+        else if (g_sw.hwnd) SetTimer(g_sw.hwnd, TIMER_SW_PEEK, 260, nullptr);
+        return;
+    }
+    if (GetTickCount() - g_peekSince >= 250) MonPeekShow(want);
+}
+
+// The monitors as they sit on the desk, small: each one's shape and place, with its number inside. side: the
+// longest side of the biggest one. No tile is under 18, so the number always fits; a monitor standing up shows
+// standing up, which is what says "that is the vertical one".
+struct MiniMap {
+    std::vector<std::pair<int, D2D1_RECT_F>> tiles;  // a monitor's place in g_sw.mons, its tile
+    float w = 0, h = 0;
+};
+// Its left edge at x, centered on cy.
+static MiniMap MiniMapAt(float x, float cy, float side) {
+    MiniMap mm;
+    int n = (int)g_sw.mons.size();
+    if (!n) return mm;
+    const float kMin = 18, gap = 3;
+    RECT all = g_sw.mons[0].rc;
+    long big = 1;
     for (auto& m : g_sw.mons) {
-        n++;
-        wchar_t title[200];
-        std::wstring name = m.who.name.empty() ? std::wstring(L2(L"Monitor ", L"Monitor ")) + std::to_wstring(n) : m.who.name;
-        swprintf_s(title, L"%s%s  ·  %d × %d", name.c_str(), m.primary ? L2(L" (principal)", L" (primary)") : L"", m.w, m.h);
-        Section(y, x, w, title);
-        std::wstring id = m.who.id;
-        const wchar_t* group = m.group;
-        auto tog = [&](const wchar_t* label, const wchar_t* desc, const wchar_t* field) {
-            SwRow r;
-            r.label = label;
-            r.desc = desc ? desc : L"";
-            r.ctl = CtlToggle;
-            std::wstring f = field;
-            r.on = [id, group, f] { return _wtoi(MonCfg(id, group, f.c_str()).c_str()) != 0; };
-            r.flip = [id, group, f] { MonSet(id, f.c_str(), _wtoi(MonCfg(id, group, f.c_str()).c_str()) ? L"0" : L"1"); };
-            return r;
-        };
-        auto seg = [&](const wchar_t* label, const wchar_t* field, std::vector<std::pair<std::wstring, std::wstring>> opts) {
-            SwRow r;
-            r.label = label;
-            r.ctl = CtlSeg;
-            r.opts = std::move(opts);
-            std::wstring f = field, def = r.opts[0].first;
-            r.cur = [id, group, f, def] {
-                std::wstring v = MonCfg(id, group, f.c_str());
-                return v.empty() ? def : v;
-            };
-            r.pick = [id, f](const std::wstring& v) { MonSet(id, f.c_str(), v); };
-            return r;
-        };
-        Card({tog(L2(L"Mostrar a dock", L"Show the dock"), nullptr, L"enabled"),
-              seg(L2(L"Formato", L"Format"), L"format",
-                  {{L"geral", L2(L"Igual ao geral", L"Same as general")}, {L"dock", L2(L"Flutuante", L"Floating")}, {L"fixa", L2(L"Barra inteira", L"Full width")}}),
-              seg(L2(L"Esconder sozinha", L"Auto-hide"), L"autoHide",
-                  {{L"geral", L2(L"Igual ao geral", L"Same as general")}, {L"sim", L2(L"Sim", L"Yes")}, {L"nao", L2(L"Não", L"No")}}),
-              seg(L2(L"Janelas abertas", L"Open windows"), L"windows",
-                  {{L"todas", L2(L"Todas", L"All")}, {L"deste", L2(L"Só as deste monitor", L"This monitor's only")}}),
-              tog(L2(L"Botão Iniciar", L"Start button"), nullptr, L"showStart"),
-              tog(L2(L"Apps fixados", L"Pinned apps"), nullptr, L"showPinned")},
-             y, x, w);
+        UnionRect(&all, &all, &m.rc);
+        big = std::max({big, m.rc.right - m.rc.left, m.rc.bottom - m.rc.top});
+    }
+    std::vector<int> order(n);
+    for (int i = 0; i < n; i++) order[i] = i;
+    std::sort(order.begin(), order.end(), [](int a, int b) { return g_sw.mons[a].rc.left < g_sw.mons[b].rc.left; });
+    bool row = true;  // (side by side, the usual desk: laid left to right with a fixed gap, so the small sizes never overlap)
+    for (int k = 1; k < n; k++) {
+        const RECT &a = g_sw.mons[order[k - 1]].rc, &b = g_sw.mons[order[k]].rc;
+        if (b.left < a.right - (a.right - a.left) / 4) row = false;
+    }
+    if (row) {
+        float sc = side / big, px = 0;
+        for (int i : order) {
+            const RECT& rc = g_sw.mons[i].rc;
+            float tw = std::max(kMin, (rc.right - rc.left) * sc), th = std::max(kMin, (rc.bottom - rc.top) * sc);
+            float ty = std::min((rc.top - all.top) * sc, side - th);
+            mm.tiles.push_back({i, D2D1::RectF(px, ty, px + tw, ty + th)});
+            px += tw + gap;
+        }
+    } else {  // (some monitor over another: their real places, scaled to the same height)
+        float sc = std::min(side / std::max(1L, all.bottom - all.top), 2.5f * side / std::max(1L, all.right - all.left));
+        for (int i = 0; i < n; i++) {
+            const RECT& rc = g_sw.mons[i].rc;
+            D2D1_RECT_F r = D2D1::RectF((rc.left - all.left) * sc + gap / 2, (rc.top - all.top) * sc + gap / 2,
+                                        (rc.right - all.left) * sc - gap / 2, (rc.bottom - all.top) * sc - gap / 2);
+            float gw = std::max(0.0f, kMin - (r.right - r.left)) / 2, gh = std::max(0.0f, kMin - (r.bottom - r.top)) / 2;
+            mm.tiles.push_back({i, D2D1::RectF(r.left - gw, r.top - gh, r.right + gw, r.bottom + gh)});
+        }
+    }
+    float l = 1e9f, t = 1e9f, rr = -1e9f, b = -1e9f;
+    for (auto& tl : mm.tiles) {
+        l = std::min(l, tl.second.left), t = std::min(t, tl.second.top);
+        rr = std::max(rr, tl.second.right), b = std::max(b, tl.second.bottom);
+    }
+    mm.w = rr - l;
+    mm.h = b - t;
+    for (auto& tl : mm.tiles) {
+        D2D1_RECT_F& r = tl.second;
+        r = D2D1::RectF(x + r.left - l, cy - mm.h / 2 + r.top - t, x + r.right - l, cy - mm.h / 2 + r.bottom - t);
+    }
+    return mm;
+}
+static int MiniMapHot(const MiniMap& mm) {
+    for (auto& tl : mm.tiles)
+        if (Hot(tl.second)) return tl.first;
+    return -1;
+}
+// lit: the monitor under the mouse, here or on its name. A click on a tile is "Identify". tips: each tile tells
+// its monitor's name (where the names aren't written beside it). live: whether it takes the mouse at all.
+static void MiniMapDraw(const MiniMap& mm, int lit, bool tips, bool live = true) {
+    for (auto& tl : mm.tiles) {
+        int i = tl.first;
+        const D2D1_RECT_F& r = tl.second;
+        bool on = lit == i;
+        SwDim dim(SwMonHasDock(i) ? 1 : 0.4f, false);  // (a monitor with no dock: faint, here and in every row's cells)
+        g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(r, 4, 4), Br(0xFFFFFF, on ? 0.16f : 0.07f));
+        g_sw.rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + 0.5f, r.top + 0.5f, r.right - 0.5f, r.bottom - 0.5f), 4, 4),
+                                      Br(0xFFFFFF, on ? 0.4f : 0.2f), 1.0f);
+        TxtC(std::to_wstring(i + 1), g_sw.fSec.Get(), r, kInk);
+        if (!live) continue;
+        MonPeekArea(r, i);
+        if (tips && Hot(r))
+            SwTipShow(r, L"mini:" + std::to_wstring(i), MonNameOf(i) + (g_sw.mons[i].primary ? L2(L" · principal", L" · primary") : L""));
+        AddHit(r, [] { MonIdentify(); });
     }
 }
 
-static void PageSobre(float& y, float x, float w) {
-    Heading(y, x, w, L2(L"Sobre", L"About"), nullptr);
-    y += 18;
-    float h = 100;
-    D2D1_RECT_F card = D2D1::RectF(x, y, x + w, y + h);
+// Which monitor is which, on every page with a choice monitor by monitor, under its title: a strip 56 high with the
+// mini-map, each number with its name, and "Identificar". The mouse on a tile, a number or a name shows that number
+// big on the monitor itself. Once the page scrolls, the map goes on in the fixed bar (g_swStripSeen: see SwTopBar).
+bool g_swStripSeen = false;
+static void MonStrip(float& y, float x, float w) {
+    if (g_swCollect) return;
+    if (g_sw.mons.empty()) LoadSwMonitors();
+    int n = (int)g_sw.mons.size();
+    if (n < 2) return;
+    g_swStripSeen = true;
+    y += 16;
+    const float pad = 14, cardH = 56, cy = y + cardH / 2;
+    D2D1_RECT_F card = D2D1::RectF(x, y, x + w, y + cardH);
     g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(card, 12, 12), Br(0xFFFFFF, 0.035f));
-    g_sw.rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(x + 0.5f, y + 0.5f, x + w - 0.5f, y + h - 0.5f), 12, 12), Br(0xFFFFFF, 0.06f), 1);
-    D2D1_RECT_F tile = D2D1::RectF(x + 22, y + 22, x + 78, y + 78);
-    DrawNimbusLogo(g_sw.rt.Get(), tile);
-    std::wstring bw = L2(L"Ajuda e sugestões", L"Help and ideas");
-    float btnW = Measure(bw, g_sw.fSeg.Get()).width + 28;
-    float tx = tile.right + 18, tw = w - (tx - x) - btnW - 40;
-    float th = Txt(std::wstring(L"Nimbus Menu ") + kVersion, g_sw.fTitle.Get(), tx, y + 30, tw, kInk);
-    Txt(L2(L"Dock e Iniciar pro Windows 11, no Windhawk. Feito por igoredm.", L"A dock and Start for Windows 11, on Windhawk. Made by igoredm."),
-        g_sw.fDesc.Get(), tx, y + 30 + th + 3, tw, kSub);
-    DrawButton(D2D1::RectF(x + w - 22 - btnW, y + h / 2 - 17, x + w - 22, y + h / 2 + 17), bw,
-               [] { ShellExecuteW(nullptr, L"open", kHelpUrl, nullptr, nullptr, SW_SHOWNORMAL); });
-    y += h;
-    Section(y, x, w, L2(L"Ajustes", L"Settings"));
-    bool confirm = g_sw.confirmReset;
-    Card({RButtons(L2(L"Voltar ao padrão", L"Back to defaults"),
-                   confirm ? L2(L"Clique de novo pra confirmar. Os fixados ficam.", L"Click again to confirm. Pinned apps stay.")
-                           : L2(L"Os fixados ficam; só os ajustes voltam.", L"Pinned apps stay; only the settings go back."),
-                   {{confirm ? L2(L"Confirmar", L"Confirm") : L2(L"Voltar ao padrão", L"Reset"), [] {
-                         if (g_sw.confirmReset) {
-                             g_sw.confirmReset = false;
-                             ResetCfg();
-                         } else {
-                             g_sw.confirmReset = true;
-                         }
-                     }}})},
-         y, x, w);
+    g_sw.rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(x + 0.5f, y + 0.5f, x + w - 0.5f, y + cardH - 0.5f), 12, 12),
+                                  Br(0xFFFFFF, 0.06f), 1);
+    MiniMap mm = MiniMapAt(x + pad, cy, 36);
+    std::wstring ib = L2(L"Identificar", L"Identify");
+    float bw = Measure(ib, g_sw.fSeg.Get()).width + 24;
+    // The names: on one line, each after its number. Too long for the room: the long ones are cut, the short ones kept.
+    const float lead = 18 + 6, between = 16;
+    float lx = x + pad + mm.w + 18, room = x + w - pad - bw - 14 - lx - n * lead - (n - 1) * between;
+    std::vector<std::wstring> names;
+    std::vector<float> nw;
+    float total = 0;
+    for (int i = 0; i < n; i++) {
+        names.push_back(MonNameOf(i) + (g_sw.mons[i].primary ? L2(L" · principal", L" · primary") : L""));
+        nw.push_back(Measure(names.back(), g_sw.fDesc.Get()).width + 2);
+        total += nw.back();
+    }
+    if (total > room) {
+        float share = std::max(24.0f, room / n), spare = 0;
+        int longs = 0;
+        for (float v : nw) {
+            if (v > share) longs++;
+            else spare += share - v;
+        }
+        for (float& v : nw)
+            if (v > share) v = share + spare / std::max(1, longs);
+    }
+    float th = Measure(L"X", g_sw.fDesc.Get()).height, px = lx;
+    std::vector<D2D1_RECT_F> nameR;
+    int hot = MiniMapHot(mm);
+    for (int i = 0; i < n; i++) {
+        nameR.push_back(D2D1::RectF(px - 6, cy - 16, px + lead + nw[i] + 4, cy + 16));
+        if (Hot(nameR.back())) hot = i;
+        px += lead + nw[i] + between;
+    }
+    MiniMapDraw(mm, hot, false);
+    for (int i = 0; i < n; i++) {
+        const D2D1_RECT_F& nr = nameR[i];
+        if (hot == i) g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(nr, 7, 7), Br(0xFFFFFF, 0.05f));
+        SwDim dim(SwMonHasDock(i) ? 1 : 0.5f, false);
+        MonBadge(nr.left + 6, cy, i + 1, false);
+        Txt1(names[i], g_sw.fDesc.Get(), nr.left + 6 + lead, cy - th / 2, nw[i], hot == i ? kInk : kSub);
+        MonPeekArea(nr, i);
+    }
+    DrawButton(D2D1::RectF(x + w - pad - bw, cy - 14, x + w - pad, cy + 14), ib, [] { MonIdentify(); });
+    y += cardH;
 }
 
+// The monitors as they sit on the desktop, with the numbers they have all over the window. A click goes to that
+// monitor's card, below, and lights it up.
+static void MonMap(float& y, float x, float w) {
+    if (g_sw.mons.empty()) return;
+    RECT all = g_sw.mons[0].rc;
+    for (auto& m : g_sw.mons) UnionRect(&all, &all, &m.rc);
+    float aw = (float)std::max(1L, all.right - all.left), ah = (float)std::max(1L, all.bottom - all.top);
+    float mapH = 150, top = 52, cardH = top + mapH + 22;
+    D2D1_RECT_F card = D2D1::RectF(x, y, x + w, y + cardH);
+    g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(card, 12, 12), Br(0xFFFFFF, 0.035f));
+    g_sw.rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(x + 0.5f, y + 0.5f, x + w - 0.5f, y + cardH - 0.5f), 12, 12),
+                                  Br(0xFFFFFF, 0.06f), 1);
+    Txt(L2(L"Os números são os mesmos em todas as páginas.", L"The numbers are the same on every page."), g_sw.fDesc.Get(), x + 18, y + 18,
+        w - 200, kSub);
+    std::wstring ib = L2(L"Identificar", L"Identify");
+    float bw = Measure(ib, g_sw.fSeg.Get()).width + 28;
+    DrawButton(D2D1::RectF(x + w - 18 - bw, y + 12, x + w - 18, y + 46), ib, [] { MonIdentify(); });
+    float sc = std::min((w - 60) / aw, mapH / ah);
+    float ox = x + (w - aw * sc) / 2, oy = y + top + (mapH - ah * sc) / 2;
+    for (int i = 0; i < (int)g_sw.mons.size(); i++) {
+        const SwMon& m = g_sw.mons[i];
+        D2D1_RECT_F r = D2D1::RectF(ox + (m.rc.left - all.left) * sc + 3, oy + (m.rc.top - all.top) * sc + 3,
+                                    ox + (m.rc.right - all.left) * sc - 3, oy + (m.rc.bottom - all.top) * sc - 3);
+        bool hot = Hot(r);
+        MonPeekArea(r, i);
+        g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(r, 8, 8), Br(0xFFFFFF, hot ? 0.12f : 0.06f));
+        g_sw.rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + 0.5f, r.top + 0.5f, r.right - 0.5f, r.bottom - 0.5f), 8, 8),
+                                      Br(0xFFFFFF, hot ? 0.3f : 0.16f), 1.0f);
+        // The name only on a tile with room for it (a narrow or a short one keeps just its number), on one
+        // line, cut with an ellipsis: never any text outside the tile.
+        float rh = r.bottom - r.top;
+        bool named = rh >= 70 && r.right - r.left >= 90;
+        TxtC(std::to_wstring(i + 1), g_sw.fH1.Get(), D2D1::RectF(r.left, r.top, r.right, r.top + rh * (named ? 0.62f : 1)), kInk);
+        if (named) {
+            std::wstring nm = m.who.name.empty() ? std::wstring(L2(L"Monitor ", L"Monitor ")) + std::to_wstring(i + 1) : m.who.name;
+            if (m.primary) nm += L2(L" · principal", L" · primary");
+            TxtC1(nm, g_sw.fSmall.Get(), D2D1::RectF(r.left + 8, r.top + rh * 0.58f, r.right - 8, r.bottom - 6), kSub);
+        }
+        std::wstring id = m.who.id;
+        AddHit(r, [id] {
+            g_sw.flashId = L"mon:" + id + L":#card";
+            g_sw.flashAt = 0;
+            g_sw.flashScroll = true;
+            SwInvalidate();
+        });
+    }
+    y += cardH;
+}
+
+// ---- Screen profiles: Windows' own display setup (which monitors are on, the main one, where they sit,
+// the resolution), saved and put back in one click (Settings > Monitors, the dock's menu). Applied like
+// Windows' Settings applies it, with 15 s to keep it, or it goes back by itself.
+static std::wstring TelaKey(int i, const wchar_t* f) { return UserPrefix() + L"telas." + std::to_wstring(i) + L"." + f; }
+static std::vector<TelaPerfil> TelasLoad() {
+    std::vector<TelaPerfil> v;
+    int n = Wh_GetIntValue((UserPrefix() + L"telas.n").c_str(), 0);
+    std::vector<wchar_t> b(32768);
+    for (int i = 0; i < n && i < 20; i++) {
+        TelaPerfil t;
+        if (Wh_GetStringValue(TelaKey(i, L"nome").c_str(), b.data(), b.size())) t.nome = b.data();
+        if (Wh_GetStringValue(TelaKey(i, L"info").c_str(), b.data(), b.size())) t.info = b.data();
+        if (Wh_GetStringValue(TelaKey(i, L"dados").c_str(), b.data(), b.size())) t.dados = b.data();
+        if (!t.dados.empty()) v.push_back(t);
+    }
+    return v;
+}
+static void TelasSave(const std::vector<TelaPerfil>& v) {
+    int old = Wh_GetIntValue((UserPrefix() + L"telas.n").c_str(), 0);
+    for (int i = 0; i < (int)v.size(); i++) {
+        Wh_SetStringValue(TelaKey(i, L"nome").c_str(), v[i].nome.c_str());
+        Wh_SetStringValue(TelaKey(i, L"info").c_str(), v[i].info.c_str());
+        Wh_SetStringValue(TelaKey(i, L"dados").c_str(), v[i].dados.c_str());
+    }
+    for (int i = (int)v.size(); i < old; i++)
+        for (const wchar_t* f : {L"nome", L"info", L"dados"}) Wh_DeleteValue(TelaKey(i, f).c_str());
+    Wh_SetIntValue((UserPrefix() + L"telas.n").c_str(), (int)v.size());
+    TelasForget();
+}
+
+static bool TelaQuery(std::vector<DISPLAYCONFIG_PATH_INFO>& paths, std::vector<DISPLAYCONFIG_MODE_INFO>& modes, UINT32 flags) {
+    for (int tries = 0; tries < 4; tries++) {
+        UINT32 np = 0, nm = 0;
+        if (GetDisplayConfigBufferSizes(flags, &np, &nm) != ERROR_SUCCESS) return false;
+        paths.resize(np);
+        modes.resize(nm);
+        LONG r = QueryDisplayConfig(flags, &np, paths.data(), &nm, modes.data(), nullptr);
+        if (r == ERROR_INSUFFICIENT_BUFFER) continue;
+        if (r != ERROR_SUCCESS) return false;
+        paths.resize(np);
+        modes.resize(nm);
+        return true;
+    }
+    return false;
+}
+static std::wstring TelaHex(const void* p, size_t n) {
+    static const wchar_t* k = L"0123456789abcdef";
+    std::wstring o;
+    for (size_t i = 0; i < n; i++) {
+        BYTE c = ((const BYTE*)p)[i];
+        o += k[c >> 4];
+        o += k[c & 15];
+    }
+    return o;
+}
+static bool TelaUnhex(const std::wstring& s, void* out, size_t n) {
+    if (s.size() != n * 2) return false;
+    for (size_t i = 0; i < n; i++) {
+        int v = 0;
+        for (int j = 0; j < 2; j++) {
+            wchar_t c = s[i * 2 + j];
+            int d = c >= L'0' && c <= L'9' ? c - L'0' : c >= L'a' && c <= L'f' ? c - L'a' + 10 : -1;
+            if (d < 0) return false;
+            v = v * 16 + d;
+        }
+        ((BYTE*)out)[i] = (BYTE)v;
+    }
+    return true;
+}
+// "1|paths|modes|<paths in hex>|<modes in hex>"
+static std::wstring TelaPack(const std::vector<DISPLAYCONFIG_PATH_INFO>& paths, const std::vector<DISPLAYCONFIG_MODE_INFO>& modes) {
+    return L"1|" + std::to_wstring(paths.size()) + L"|" + std::to_wstring(modes.size()) + L"|" +
+           TelaHex(paths.data(), paths.size() * sizeof(paths[0])) + L"|" + TelaHex(modes.data(), modes.size() * sizeof(modes[0]));
+}
+static bool TelaUnpack(const std::wstring& d, std::vector<DISPLAYCONFIG_PATH_INFO>& paths, std::vector<DISPLAYCONFIG_MODE_INFO>& modes) {
+    std::vector<std::wstring> f;
+    size_t a = 0;
+    while (true) {
+        size_t b = d.find(L'|', a);
+        f.push_back(d.substr(a, b == std::wstring::npos ? std::wstring::npos : b - a));
+        if (b == std::wstring::npos) break;
+        a = b + 1;
+    }
+    if (f.size() != 5 || f[0] != L"1") return false;
+    int np = _wtoi(f[1].c_str()), nm = _wtoi(f[2].c_str());
+    if (np <= 0 || np > 64 || nm < 0 || nm > 128) return false;
+    paths.resize(np);
+    modes.resize(nm);
+    return TelaUnhex(f[3], paths.data(), np * sizeof(paths[0])) && TelaUnhex(f[4], modes.data(), nm * sizeof(modes[0]));
+}
+static std::wstring TelaMonName(LUID adapter, UINT32 id) {
+    DISPLAYCONFIG_TARGET_DEVICE_NAME n = {};
+    n.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME;
+    n.header.size = sizeof(n);
+    n.header.adapterId = adapter;
+    n.header.id = id;
+    if (DisplayConfigGetDeviceInfo(&n.header) == ERROR_SUCCESS && n.monitorFriendlyDeviceName[0]) return n.monitorFriendlyDeviceName;
+    return n.outputTechnology == DISPLAYCONFIG_OUTPUT_TECHNOLOGY_INTERNAL ? L2(L"Tela do notebook", L"Laptop screen") : L2(L"Monitor", L"Monitor");
+}
+// The main monitor of a setup (the one at 0,0) and the list of monitors in it.
+static void TelaDescribe(const std::vector<DISPLAYCONFIG_PATH_INFO>& paths, const std::vector<DISPLAYCONFIG_MODE_INFO>& modes,
+                         std::wstring& nome, std::wstring& info, UINT32* primaryTarget = nullptr) {
+    std::wstring main, list;
+    int n = 0, w = 0, h = 0;
+    for (auto& p : paths) {
+        if (!(p.flags & DISPLAYCONFIG_PATH_ACTIVE)) continue;
+        n++;
+        std::wstring nm = TelaMonName(p.targetInfo.adapterId, p.targetInfo.id);
+        UINT32 mi = p.sourceInfo.modeInfoIdx;
+        bool isMain = false;
+        if (mi < modes.size() && modes[mi].infoType == DISPLAYCONFIG_MODE_INFO_TYPE_SOURCE) {
+            auto& sm = modes[mi].sourceMode;
+            isMain = sm.position.x == 0 && sm.position.y == 0;
+            if (isMain) w = sm.width, h = sm.height;
+        }
+        if (isMain && main.empty()) {
+            main = nm;
+            if (primaryTarget) *primaryTarget = p.targetInfo.id;
+        }
+        list += (list.empty() ? L"" : L", ") + nm;
+    }
+    if (main.empty()) main = L"?";
+    nome = main + L2(L" como principal", L" as main") + L" · " + std::to_wstring(n) + (n == 1 ? L2(L" tela", L" screen") : L2(L" telas", L" screens"));
+    wchar_t res[40] = L"";
+    if (w) swprintf_s(res, L"%d × %d", w, h);
+    info = list + (w ? std::wstring(L" · ") + L2(L"principal em ", L"main at ") + res : L"");
+}
+// The set of monitors on and the main one: what tells if a profile is the setup in use.
+static std::wstring TelaSignature(const std::vector<DISPLAYCONFIG_PATH_INFO>& paths, const std::vector<DISPLAYCONFIG_MODE_INFO>& modes) {
+    std::vector<UINT32> ids;
+    UINT32 main = 0;
+    for (auto& p : paths) {
+        if (!(p.flags & DISPLAYCONFIG_PATH_ACTIVE)) continue;
+        ids.push_back(p.targetInfo.id);
+        UINT32 mi = p.sourceInfo.modeInfoIdx;
+        if (mi < modes.size() && modes[mi].infoType == DISPLAYCONFIG_MODE_INFO_TYPE_SOURCE && !modes[mi].sourceMode.position.x &&
+            !modes[mi].sourceMode.position.y)
+            main = p.targetInfo.id;
+    }
+    std::sort(ids.begin(), ids.end());
+    std::wstring s = std::to_wstring(main) + L":";
+    for (UINT32 id : ids) s += std::to_wstring(id) + L",";
+    return s;
+}
+static std::wstring TelaSignatureNow() {
+    std::vector<DISPLAYCONFIG_PATH_INFO> p;
+    std::vector<DISPLAYCONFIG_MODE_INFO> m;
+    return TelaQuery(p, m, QDC_ONLY_ACTIVE_PATHS) ? TelaSignature(p, m) : L"";
+}
+static std::wstring TelaSignatureOf(const std::wstring& dados) {
+    std::vector<DISPLAYCONFIG_PATH_INFO> p;
+    std::vector<DISPLAYCONFIG_MODE_INFO> m;
+    return TelaUnpack(dados, p, m) ? TelaSignature(p, m) : L"-";
+}
+
+static bool TelaSaveNow() {
+    std::vector<DISPLAYCONFIG_PATH_INFO> paths;
+    std::vector<DISPLAYCONFIG_MODE_INFO> modes;
+    if (!TelaQuery(paths, modes, QDC_ONLY_ACTIVE_PATHS)) return false;
+    TelaPerfil t;
+    TelaDescribe(paths, modes, t.nome, t.info);
+    t.dados = TelaPack(paths, modes);
+    auto v = TelasLoad();
+    std::wstring sig = TelaSignature(paths, modes);
+    bool replaced = false;
+    for (auto& o : v)  // (the same monitors and main one: it's the same profile, saved again)
+        if (TelaSignatureOf(o.dados) == sig) {
+            if (!o.nome.empty()) t.nome = o.nome;  // (the name stays, renamed or not)
+            o = t;
+            replaced = true;
+        }
+    if (!replaced) {
+        if (v.size() >= 10) return false;
+        v.push_back(t);
+    }
+    TelasSave(v);
+    NimbusLog("telas | perfil salvo");
+    return true;
+}
+
+// The "keep these display settings?" box: counts down, and with no answer it goes back.
+static int g_telaLeft = 0;
+static void CALLBACK TelaTick(HWND, UINT, UINT_PTR id, DWORD) {
+    HWND box = nullptr;
+    EnumThreadWindows(GetCurrentThreadId(), [](HWND h, LPARAM lp) WINAPI -> BOOL {
+        wchar_t c[16];
+        if (GetClassNameW(h, c, ARRAYSIZE(c)) && !wcscmp(c, L"#32770")) {
+            *(HWND*)lp = h;
+            return FALSE;
+        }
+        return TRUE;
+    }, (LPARAM)&box);
+    if (!box) return;
+    if (--g_telaLeft <= 0) {
+        KillTimer(nullptr, id);
+        PostMessageW(box, WM_COMMAND, IDCANCEL, 0);
+        return;
+    }
+    wchar_t t[200];
+    swprintf_s(t, L2(L"Manter esta configuração de tela?\n\nVolta para a anterior sozinha em %d s.", L"Keep these display settings?\n\nGoes back to the previous ones in %d s."),
+               g_telaLeft);
+    SetDlgItemTextW(box, 0xFFFF, t);
+}
+static std::atomic<bool> g_telaBusy{false};
+static DWORD WINAPI TelaApplyThread(LPVOID arg) {
+    std::unique_ptr<std::wstring> dados((std::wstring*)arg);
+    auto fail = [](const wchar_t* why) {
+        MessageBoxW(nullptr, why, L"Nimbus Menu", MB_OK | MB_ICONWARNING | MB_TOPMOST | MB_SETFOREGROUND);
+    };
+    std::vector<DISPLAYCONFIG_PATH_INFO> paths, cur, all;
+    std::vector<DISPLAYCONFIG_MODE_INFO> modes, curModes, allModes;
+    if (!TelaUnpack(*dados, paths, modes) || !TelaQuery(cur, curModes, QDC_ONLY_ACTIVE_PATHS) || !TelaQuery(all, allModes, QDC_ALL_PATHS)) {
+        fail(L2(L"Não deu para ler esse arranjo.", L"Couldn't read this layout."));
+        g_telaBusy = false;
+        return 0;
+    }
+    // The graphics card's number (LUID) changes from one start to the next: each monitor of the profile is
+    // found again by its own number, and the card's current one goes in.
+    auto key = [](LUID l) { return ((ULONGLONG)(DWORD)l.HighPart << 32) | l.LowPart; };
+    std::unordered_map<ULONGLONG, LUID> luid;
+    for (auto& sp : paths) {
+        const DISPLAYCONFIG_PATH_INFO* hit = nullptr;
+        for (auto& cp : all)
+            if (cp.targetInfo.id == sp.targetInfo.id && cp.sourceInfo.id == sp.sourceInfo.id) {
+                hit = &cp;
+                break;
+            }
+        if (!hit)
+            for (auto& cp : all)
+                if (cp.targetInfo.id == sp.targetInfo.id) {
+                    hit = &cp;
+                    break;
+                }
+        if (!hit || !hit->targetInfo.targetAvailable) {
+            fail(L2(L"Um monitor desse arranjo não está conectado ou ligado agora.", L"A monitor in this layout isn't connected or on right now."));
+            g_telaBusy = false;
+            return 0;
+        }
+        luid[key(sp.targetInfo.adapterId)] = hit->targetInfo.adapterId;
+        luid[key(sp.sourceInfo.adapterId)] = hit->sourceInfo.adapterId;
+    }
+    auto fix = [&](LUID& l) {
+        auto it = luid.find(key(l));
+        if (it != luid.end()) l = it->second;
+    };
+    for (auto& sp : paths) {
+        fix(sp.sourceInfo.adapterId);
+        fix(sp.targetInfo.adapterId);
+        sp.flags |= DISPLAYCONFIG_PATH_ACTIVE;
+    }
+    for (auto& m : modes) fix(m.adapterId);
+    const UINT32 flags = SDC_APPLY | SDC_USE_SUPPLIED_DISPLAY_CONFIG | SDC_SAVE_TO_DATABASE | SDC_ALLOW_CHANGES;
+    LONG r = SetDisplayConfig((UINT32)paths.size(), paths.data(), (UINT32)modes.size(), modes.data(), flags);
+    if (r != ERROR_SUCCESS) {
+        char line[96];
+        snprintf(line, sizeof(line), "telas | o Windows recusou o perfil (erro %ld)", r);
+        NimbusLog(line);
+        fail(L2(L"O Windows não aceitou esse arranjo. Ligue os monitores dele e salve o arranjo de novo.",
+                L"Windows didn't accept this layout. Turn its monitors on and save the layout again."));
+        g_telaBusy = false;
+        return 0;
+    }
+    NimbusLog("telas | perfil aplicado");
+    g_telaLeft = 15;
+    UINT_PTR t = SetTimer(nullptr, 0, 1000, TelaTick);
+    wchar_t ask[200];
+    swprintf_s(ask, L2(L"Manter esta configuração de tela?\n\nVolta para a anterior sozinha em %d s.", L"Keep these display settings?\n\nGoes back to the previous ones in %d s."),
+               15);
+    int a = MessageBoxW(nullptr, ask, L"Nimbus Menu", MB_OKCANCEL | MB_ICONQUESTION | MB_TOPMOST | MB_SETFOREGROUND);
+    KillTimer(nullptr, t);
+    if (a != IDOK) {
+        SetDisplayConfig((UINT32)cur.size(), cur.data(), (UINT32)curModes.size(), curModes.data(), flags);
+        NimbusLog("telas | voltou pra configuracao anterior");
+    }
+    TelasForget();
+    g_telaBusy = false;
+    return 0;
+}
+static void TelaApply(const std::wstring& dados) {
+    if (g_telaBusy.exchange(true)) return;
+    if (HANDLE t = CreateThread(nullptr, 0, TelaApplyThread, new std::wstring(dados), 0, nullptr)) CloseHandle(t);
+    else g_telaBusy = false;
+}
+
+// A small Windows box to type a name in (OK / Cancel). False on Cancel or an empty name.
+struct AskTextCtx {
+    const wchar_t* prompt;
+    std::wstring text;
+};
+static INT_PTR CALLBACK AskTextProc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
+    if (m == WM_INITDIALOG) {
+        auto* c = (AskTextCtx*)lp;
+        SetWindowLongPtrW(h, DWLP_USER, lp);
+        SetDlgItemTextW(h, 100, c->prompt);
+        SetDlgItemTextW(h, 101, c->text.c_str());
+        SendDlgItemMessageW(h, 101, EM_SETLIMITTEXT, 60, 0);
+        SendDlgItemMessageW(h, 101, EM_SETSEL, 0, -1);
+        SetFocus(GetDlgItem(h, 101));
+        return FALSE;  // (the focus was set here)
+    }
+    if (m == WM_COMMAND && (LOWORD(wp) == IDOK || LOWORD(wp) == IDCANCEL)) {
+        if (LOWORD(wp) == IDOK) {
+            auto* c = (AskTextCtx*)GetWindowLongPtrW(h, DWLP_USER);
+            wchar_t b[128] = {};
+            GetDlgItemTextW(h, 101, b, 128);
+            c->text = b;
+        }
+        EndDialog(h, LOWORD(wp));
+        return TRUE;
+    }
+    return FALSE;
+}
+static bool AskText(HWND owner, const wchar_t* prompt, std::wstring& text) {
+    // The dialog is built in memory (no resources in a mod): a line of text, the box, OK and Cancel.
+    std::vector<WORD> t;
+    auto str = [&](const wchar_t* x) {
+        do t.push_back((WORD)*x);
+        while (*x++);
+    };
+    auto dw = [&](DWORD v) {
+        t.push_back(LOWORD(v));
+        t.push_back(HIWORD(v));
+    };
+    dw(DS_MODALFRAME | DS_SETFONT | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU);
+    dw(0);
+    for (WORD v : {4, 0, 0, 236, 66}) t.push_back(v);  // 4 controls; x, y, width, height (dialog units)
+    t.push_back(0);                                   // no menu
+    t.push_back(0);                                   // the standard class
+    str(L"Nimbus Menu");
+    t.push_back(9);
+    str(L"Segoe UI");
+    auto item = [&](DWORD style, WORD x, WORD y, WORD cx, WORD cy, WORD id, WORD cls, const wchar_t* label) {
+        if (t.size() % 2) t.push_back(0);  // (each control starts on a DWORD)
+        dw(style | WS_CHILD | WS_VISIBLE);
+        dw(0);
+        for (WORD v : {x, y, cx, cy, id}) t.push_back(v);
+        t.push_back(0xFFFF);
+        t.push_back(cls);
+        str(label);
+        t.push_back(0);
+    };
+    item(SS_LEFT, 8, 8, 220, 10, 100, 0x0082, L"");
+    item(ES_AUTOHSCROLL | WS_BORDER | WS_TABSTOP, 8, 21, 220, 13, 101, 0x0081, L"");
+    item(BS_DEFPUSHBUTTON | WS_TABSTOP, 124, 44, 50, 14, IDOK, 0x0080, L"OK");
+    item(BS_PUSHBUTTON | WS_TABSTOP, 178, 44, 50, 14, IDCANCEL, 0x0080, L2(L"Cancelar", L"Cancel"));
+    AskTextCtx c{prompt, text};
+    if (DialogBoxIndirectParamW(g_module, (LPCDLGTEMPLATEW)t.data(), owner, AskTextProc, (LPARAM)&c) != IDOK) return false;
+    size_t a = c.text.find_first_not_of(L" \t"), b = c.text.find_last_not_of(L" \t");
+    if (a == std::wstring::npos) return false;
+    text = c.text.substr(a, b - a + 1);
+    return true;
+}
+
+// Settings > Monitors: the profiles, each applied, renamed or deleted, and the setup of now to save.
+static void PageTelas(float& y, float x, float w) {
+    if (!g_swCollect) {
+        y += 16;
+        y += Txt(L2(L"Um arranjo guarda quais monitores ligam, qual é o principal, a posição e a resolução. Troque num clique.",
+                    L"A layout keeps which monitors are on, the main one, their position and resolution. Switch in one click."),
+                 g_sw.fDesc.Get(), x + 4, y, w - 8, kSub);
+        y += 16;
+    }
+    WhereLine(y, x, w, L"telasPlace", L2(L"O botão de arranjos aparece em:", L"The layouts button shows in:"),
+              L2(L"O botão de arranjos está desligado.", L"The layouts button is off."));
+    static std::vector<TelaPerfil> list;
+    static std::wstring now;
+    static DWORD at = 0;
+    if (!at || GetTickCount() - at > 2000) {
+        list = TelasLoad();
+        now = TelaSignatureNow();
+        at = GetTickCount();
+    }
+    auto save = [] {
+        if (!TelaSaveNow())
+            MessageBoxW(g_sw.hwnd, L2(L"Não deu para salvar. Até 10 arranjos.", L"Couldn't save. Up to 10 layouts."), L"Nimbus Menu",
+                        MB_OK | MB_ICONWARNING);
+        at = 0;
+    };
+    // The section's title with the strong "Save current layout" on its line, at the right.
+    std::wstring saveBtn = L2(L"Salvar arranjo atual", L"Save current layout");
+    if (g_swCollect) {
+        g_swCurSection = L2(L"Arranjos salvos", L"Saved layouts");
+        // (the search finds the button as a row of its own)
+        if (!g_swCollectIds) Card({RButtons(saveBtn.c_str(), nullptr, {{L2(L"Salvar", L"Save"), save}})}, y, x, w);
+    } else {
+        y += 16;
+        float bw = Measure(saveBtn, g_sw.fSeg.Get()).width + 28;
+        DrawButton(D2D1::RectF(x + w - bw, y, x + w, y + 34), saveBtn, save, true);
+        std::wstring title = L2(L"Arranjos salvos", L"Saved layouts");
+        Txt(title, g_sw.fSec.Get(), x + 4, y + (34 - Measure(title, g_sw.fSec.Get()).height) / 2, w - bw - 16, kSub);
+        y += 34 + 9;
+    }
+    std::vector<SwRow> rows;
+    for (int i = 0; i < (int)list.size(); i++) {
+        std::wstring dados = list[i].dados, rid = L"tela:" + std::to_wstring(i);
+        SwRow r = RButtons(list[i].nome.c_str(), list[i].info.c_str(),
+                           {{L2(L"Aplicar", L"Apply"), [dados] { TelaApply(dados); }},
+                            {kMoreBtn, [i, rid] {  // (rename, or delete after asking in the row)
+                                 HMENU m = CreatePopupMenu();
+                                 AppendMenuW(m, MF_STRING, 1, L2(L"Renomear…", L"Rename…"));
+                                 AppendMenuW(m, MF_STRING, 2, L2(L"Apagar…", L"Delete…"));
+                                 POINT pt;
+                                 GetCursorPos(&pt);
+                                 SetForegroundWindow(g_sw.hwnd);
+                                 int cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON, pt.x, pt.y, 0, g_sw.hwnd, nullptr);
+                                 DestroyMenu(m);
+                                 if (cmd == 1) {
+                                     auto v = TelasLoad();
+                                     if (i >= (int)v.size()) return;
+                                     std::wstring n = v[i].nome;
+                                     if (AskText(g_sw.hwnd, L2(L"Nome do arranjo:", L"Layout name:"), n) && n != v[i].nome) {
+                                         v[i].nome = n;
+                                         TelasSave(v);
+                                         NimbusLog("telas | perfil renomeado");
+                                     }
+                                     at = 0;
+                                 } else if (cmd == 2) {
+                                     SwAsk(rid);
+                                 }
+                                 SwInvalidate();
+                             }}});
+        r.id = rid;
+        r.ask = L2(L"Apagar este arranjo? Não dá para desfazer.", L"Delete this layout? This can't be undone.");
+        r.askYes = L2(L"Apagar", L"Delete");
+        r.askDanger = true;
+        r.askDo = [i, dados] {  // (only if it is still the layout that was asked about)
+            auto v = TelasLoad();
+            if (i < (int)v.size() && v[i].dados == dados) {
+                v.erase(v.begin() + i);
+                TelasSave(v);
+                NimbusLog("telas | perfil apagado");
+            }
+            at = 0;
+        };
+        r.moreTip = std::wstring(L2(L"Renomear ou apagar “", L"Rename or delete “")) + list[i].nome + L"”";
+        if (TelaSignatureOf(list[i].dados) == now) {  // (nothing to apply: the word takes the button's place)
+            r.buttons.erase(r.buttons.begin());
+            r.word = L2(L"Em uso", L"In use");
+        }
+        rows.push_back(std::move(r));
+    }
+    if (rows.empty())
+        rows.push_back(RInfo(L2(L"Nenhum arranjo salvo", L"No saved layout"),
+                             L2(L"Deixe os monitores do jeito que quer nas Configurações do Windows e salve.",
+                                L"Set the monitors the way you want in Windows Settings and save.")));
+    Card(std::move(rows), y, x, w);
+    Hint(y, x, w, L2(L"Salvar com os mesmos monitores e o mesmo principal atualiza o arranjo que já existe. Até 10 arranjos.",
+                     L"Saving with the same monitors and the same main one updates the existing layout. Up to 10 layouts."),
+         L"info.telasSave");
+    Hint(y, x, w, L2(L"Ao aplicar, o Windows espera 15 segundos pela confirmação e volta sozinho se ninguém confirmar.",
+                     L"On apply, Windows waits 15 seconds for confirmation and goes back by itself otherwise."),
+         L"info.telasApply");
+}
+
+// ---- Export and import: the settings in a .nimbus file, to share or keep (Settings > About and backup). ----
+// Nimbus' values live in Windhawk's storage for the mod (the registry, under this user's prefix): all of them are
+// read from there. "Ajustes" is the look and the settings (no pinned apps, notes, reminders); "tudo" is a
+// full backup. Windows' banner switches saved by Nimbus never go (they're this PC's own, to put back).
+static bool BackupStoreKey(HKEY& root, std::wstring& path) {
+    wchar_t exe[MAX_PATH];
+    GetModuleFileNameW(nullptr, exe, MAX_PATH);
+    PathRemoveFileSpecW(exe);
+    std::wstring ini = std::wstring(exe) + L"\\windhawk.ini";
+    if (GetPrivateProfileIntW(L"Storage", L"Portable", 0, ini.c_str())) return false;
+    wchar_t rk[260] = {};
+    GetPrivateProfileStringW(L"Storage", L"RegistryKey", L"HKLM\\SOFTWARE\\Windhawk", rk, ARRAYSIZE(rk), ini.c_str());
+    std::wstring k = rk;
+    root = HKEY_LOCAL_MACHINE;
+    if (!_wcsnicmp(k.c_str(), L"HKCU\\", 5)) root = HKEY_CURRENT_USER;
+    size_t slash = k.find(L'\\');
+    if (slash == std::wstring::npos) return false;
+    path = k.substr(slash + 1) + L"\\Engine\\ModsWritable\\" + WH_MOD_ID + L"\\LocalStorage";
+    return true;
+}
+struct BackupVal {
+    std::wstring name;  // (without the user's prefix)
+    bool isInt;
+    std::wstring s;
+    DWORD i;
+};
+static bool BackupKeep(const std::wstring& n, bool all) {
+    if (!n.compare(0, 14, L"notif.banners.")) return false;
+    if (all) return true;
+    for (const wchar_t* pre : {L"cfg.", L"seen.", L"mon."})
+        if (!n.compare(0, wcslen(pre), pre)) return true;
+    return n == L"monIds" || n == L"start.statusOrder";
+}
+static bool BackupRead(std::vector<BackupVal>& out, bool all) {
+    HKEY root;
+    std::wstring path;
+    if (!BackupStoreKey(root, path)) return false;
+    HKEY k;
+    if (RegOpenKeyExW(root, path.c_str(), 0, KEY_READ, &k) != ERROR_SUCCESS) return false;
+    const std::wstring& pre = UserPrefix();
+    std::vector<wchar_t> name(16384);
+    std::vector<BYTE> data(256 * 1024);
+    for (DWORD i = 0;; i++) {
+        DWORD nl = (DWORD)name.size(), dl = (DWORD)data.size(), type = 0;
+        LONG r = RegEnumValueW(k, i, name.data(), &nl, nullptr, &type, data.data(), &dl);
+        if (r == ERROR_NO_MORE_ITEMS) break;
+        if (r != ERROR_SUCCESS) continue;
+        std::wstring n(name.data(), nl);
+        if (n.compare(0, pre.size(), pre)) continue;
+        n = n.substr(pre.size());
+        if (!BackupKeep(n, all)) continue;
+        BackupVal v{n, type == REG_DWORD, L"", 0};
+        if (type == REG_DWORD && dl >= 4) v.i = *(DWORD*)data.data();
+        else if (type == REG_SZ || type == REG_EXPAND_SZ) v.s.assign((wchar_t*)data.data(), wcsnlen((wchar_t*)data.data(), dl / sizeof(wchar_t)));
+        else continue;
+        out.push_back(std::move(v));
+    }
+    RegCloseKey(k);
+    return true;
+}
+static std::string BackupUtf8(const std::wstring& w) {
+    int n = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), (int)w.size(), nullptr, 0, nullptr, nullptr);
+    std::string s(n, '\0');
+    WideCharToMultiByte(CP_UTF8, 0, w.c_str(), (int)w.size(), s.data(), n, nullptr, nullptr);
+    return s;
+}
+static bool BackupWriteFile(const std::wstring& file, bool all) {
+    std::vector<BackupVal> vals;
+    if (!BackupRead(vals, all)) return false;
+    std::wstring t = std::wstring(L"Nimbus Menu ") + kVersion + L"\r\ntipo=" + (all ? L"tudo" : L"ajustes") + L"\r\n";
+    for (auto& v : vals) {
+        std::wstring e;
+        for (wchar_t c : v.isInt ? std::to_wstring(v.i) : v.s) {
+            if (c == L'\\') e += L"\\\\";
+            else if (c == L'\n') e += L"\\n";
+            else if (c == L'\r') e += L"\\r";
+            else e += c;
+        }
+        t += (v.isInt ? L"i " : L"s ") + v.name + L"=" + e + L"\r\n";
+    }
+    std::string u = BackupUtf8(t);
+    HANDLE h = CreateFileW(file.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return false;
+    DWORD wr = 0;
+    bool ok = WriteFile(h, u.data(), (DWORD)u.size(), &wr, nullptr) && wr == u.size();
+    CloseHandle(h);
+    return ok;
+}
+static bool BackupParse(const std::wstring& file, std::vector<BackupVal>& vals, bool& all) {
+    HANDLE h = CreateFileW(file.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return false;
+    LARGE_INTEGER sz{};
+    GetFileSizeEx(h, &sz);
+    if (sz.QuadPart <= 0 || sz.QuadPart > 16 * 1024 * 1024) {
+        CloseHandle(h);
+        return false;
+    }
+    std::string u((size_t)sz.QuadPart, '\0');
+    DWORD rd = 0;
+    ReadFile(h, u.data(), (DWORD)u.size(), &rd, nullptr);
+    CloseHandle(h);
+    int n = MultiByteToWideChar(CP_UTF8, 0, u.data(), (int)rd, nullptr, 0);
+    std::wstring t(n, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, u.data(), (int)rd, t.data(), n);
+    if (t.compare(0, 12, L"Nimbus Menu ")) return false;
+    all = t.find(L"\ntipo=tudo") != std::wstring::npos;
+    size_t a = 0;
+    while (a < t.size()) {
+        size_t b = t.find(L'\n', a);
+        std::wstring l = t.substr(a, b == std::wstring::npos ? std::wstring::npos : b - a);
+        a = b == std::wstring::npos ? t.size() : b + 1;
+        if (!l.empty() && l.back() == L'\r') l.pop_back();
+        if (l.size() < 3 || (l[0] != L's' && l[0] != L'i') || l[1] != L' ') continue;
+        size_t eq = l.find(L'=');
+        if (eq == std::wstring::npos) continue;
+        BackupVal v{l.substr(2, eq - 2), l[0] == L'i', L"", 0};
+        if (v.name.empty() || !BackupKeep(v.name, all)) continue;
+        std::wstring raw = l.substr(eq + 1), val;
+        for (size_t k = 0; k < raw.size(); k++) {
+            if (raw[k] == L'\\' && k + 1 < raw.size()) {
+                wchar_t c = raw[++k];
+                val += c == L'n' ? L'\n' : c == L'r' ? L'\r' : c;
+            } else {
+                val += raw[k];
+            }
+        }
+        if (v.isInt) v.i = (DWORD)_wtoi64(val.c_str());
+        else v.s = val;
+        vals.push_back(std::move(v));
+    }
+    return true;
+}
+static std::wstring g_importFile;  // put in after the bar closed (nothing it saves on the way out overwrites it)
+static bool g_importUndo = false;  // (it is the copy kept before the last import, going back in)
+// The copy of everything made right before a backup is opened: what "Undo the last import" puts back.
+static std::wstring BackupSafePath() {
+    wchar_t dir[MAX_PATH];
+    ExpandEnvironmentStringsW(L"%LOCALAPPDATA%\\Nimbus Menu", dir, MAX_PATH);
+    CreateDirectoryW(dir, nullptr);
+    return std::wstring(dir) + L"\\antes-de-importar.nimbus";
+}
+// The file the last export wrote: its row says where it is and opens the folder, until the page changes.
+static std::wstring g_exportDone;
+static bool g_exportDoneAll = false;
+static void BackupImportNow() {
+    std::vector<BackupVal> vals;
+    bool all = false;
+    if (g_importFile.empty() || !BackupParse(g_importFile, vals, all)) return;
+    std::vector<BackupVal> old;  // (what the file replaces goes first: what isn't in it falls back to the default)
+    if (BackupRead(old, all))
+        for (auto& v : old) Wh_DeleteValue((UserPrefix() + v.name).c_str());
+    for (auto& v : vals) {
+        std::wstring n = UserPrefix() + v.name;
+        if (v.isInt) Wh_SetIntValue(n.c_str(), (int)v.i);
+        else Wh_SetStringValue(n.c_str(), v.s.c_str());
+    }
+    // When it was: the row "Undo the last import" shows while this is saved. Undone, it goes (the copy put back
+    // may carry an older one).
+    std::wstring last = UserPrefix() + L"backup.lastImport";
+    if (g_importUndo) {
+        Wh_DeleteValue(last.c_str());
+    } else {
+        SYSTEMTIME t;
+        GetLocalTime(&t);
+        wchar_t when[40];
+        swprintf_s(when, L"%04u-%02u-%02u %02u:%02u", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute);
+        Wh_SetStringValue(last.c_str(), when);
+    }
+    char line[96];
+    snprintf(line, sizeof(line), "backup | %s: %zu valores (%s)", g_importUndo ? "importação desfeita" : "importado", vals.size(), all ? "tudo" : "ajustes");
+    NimbusLog(line);
+}
+static std::wstring BackupDialog(bool save, const wchar_t* defName) {
+    wchar_t file[MAX_PATH] = {};
+    if (defName) wcscpy_s(file, defName);
+    wchar_t docs[MAX_PATH] = {};
+    SHGetFolderPathW(nullptr, CSIDL_PERSONAL, nullptr, 0, docs);
+    OPENFILENAMEW o = {sizeof(o)};
+    o.hwndOwner = g_sw.hwnd;
+    o.lpstrFilter = L"Nimbus Menu (*.nimbus)\0*.nimbus\0";
+    o.lpstrFile = file;
+    o.nMaxFile = MAX_PATH;
+    o.lpstrInitialDir = docs;
+    o.lpstrDefExt = L"nimbus";
+    o.Flags = OFN_NOCHANGEDIR | (save ? OFN_OVERWRITEPROMPT : OFN_FILEMUSTEXIST);
+    if (!(save ? GetSaveFileNameW(&o) : GetOpenFileNameW(&o))) return L"";
+    return file;
+}
+static void BackupExport(bool all) {
+    SYSTEMTIME t;
+    GetLocalTime(&t);
+    wchar_t def[80];
+    swprintf_s(def, L"%s-%04u-%02u-%02u.nimbus", all ? L"nimbus-backup" : L"nimbus-ajustes", t.wYear, t.wMonth, t.wDay);
+    std::wstring f = BackupDialog(true, def);
+    if (f.empty()) return;
+    if (BackupWriteFile(f, all)) {  // (said on the row itself, with the folder one click away: no box to close)
+        g_exportDone = f;
+        g_exportDoneAll = all;
+        SwInvalidate();
+        return;
+    }
+    MessageBoxW(g_sw.hwnd, L2(L"Não deu para exportar (o Windhawk portátil guarda os ajustes de outro jeito).", L"Couldn't export (portable Windhawk keeps settings another way)."),
+                L"Nimbus Menu", MB_OK | MB_ICONWARNING);
+}
+static void BackupImport() {
+    std::wstring f = BackupDialog(false, nullptr);
+    if (f.empty()) return;
+    std::vector<BackupVal> vals;
+    bool all = false;
+    if (!BackupParse(f, vals, all) || vals.empty()) {
+        MessageBoxW(g_sw.hwnd, L2(L"Esse arquivo não é um ajuste do Nimbus.", L"This file isn't Nimbus settings."), L"Nimbus Menu", MB_OK | MB_ICONWARNING);
+        return;
+    }
+    // A copy of everything of now first, to go back.
+    std::wstring safe = BackupSafePath();
+    BackupWriteFile(safe, true);
+    std::wstring ask = std::wstring(all ? L2(L"Esse é um backup completo: troca os ajustes, os fixados, as notas e os lembretes pelos do arquivo.",
+                                                L"This is a full backup: it replaces the settings, pinned apps, notes and reminders with the file's.")
+                                        : L2(L"Troca os ajustes pelos do arquivo (os fixados, notas e lembretes ficam).",
+                                             L"Replaces the settings with the file's (pinned apps, notes and reminders stay).")) +
+                       L2(L"\n\nO Nimbus reinicia para carregar. Uma cópia de agora fica em:\n", L"\n\nNimbus restarts to load them. A copy of now is kept in:\n") + safe +
+                       L2(L"\n\nRestaurar este backup?", L"\n\nRestore this backup?");
+    if (MessageBoxW(g_sw.hwnd, ask.c_str(), L"Nimbus Menu", MB_OKCANCEL | MB_ICONQUESTION) != IDOK) return;
+    g_importFile = f;
+    g_importUndo = false;
+    NimbusLog("backup | importando: o Nimbus reinicia");
+    g_selfRestart = true;
+    PostMessageW(g_msgWnd, WM_APP_QUIT, 0, 0);
+}
+// "Undo the last import": the copy made before it goes back in, the same way a backup does.
+static void BackupImportUndo() {
+    std::wstring safe = BackupSafePath();
+    if (GetFileAttributesW(safe.c_str()) == INVALID_FILE_ATTRIBUTES) return;
+    g_importFile = safe;
+    g_importUndo = true;
+    NimbusLog("backup | desfazendo a importação: o Nimbus reinicia");
+    g_selfRestart = true;
+    PostMessageW(g_msgWnd, WM_APP_QUIT, 0, 0);
+}
+
+// What a monitor's dock does differently from the others: the settings it has its own value for, each with the
+// page it lives on and the row to light up there.
+struct MonDiff {
+    std::wstring field, label, flash;
+    int page;
+};
+static std::vector<MonDiff> MonDiffs(int mi) {
+    static const struct {
+        const wchar_t *f, *pt, *en;
+        int page;
+    } look[] = {
+        {L"edge", L"Borda da tela", L"Screen edge", PgDock},
+        {L"align", L"Posição na borda", L"Place on the edge", PgDock},
+        {L"apps", L"Apps nesta dock", L"Apps on this dock", PgDock},
+        {L"windows", L"Janelas abertas", L"Open windows", PgDock},
+        {L"format", L"Formato", L"Format", PgDock},
+        {L"iconSize", L"Tamanho dos ícones", L"Icon size", PgDock},
+        {L"iconGap", L"Espaço entre os ícones", L"Space between icons", PgDock},
+        {L"bottomGap", L"Distância da borda", L"Distance from the edge", PgDock},
+        {L"animation", L"Animação", L"Animation", PgDock},
+        {L"magnification", L"Tamanho do zoom", L"Zoom size", PgDock},
+        {L"autoHide", L"Esconder sozinha", L"Auto-hide", PgDock},
+        {L"hideDelay", L"Tempo até esconder", L"Delay before hiding", PgDock},
+        {L"tintColor", L"Cor do vidro", L"Glass color", PgGeral},
+        {L"tintOpacity", L"Força da cor do vidro", L"Glass color strength", PgGeral},
+        {L"showStart", L"Botão Iniciar", L"Start button", PgIniciar},
+    };
+    static const wchar_t* const places[] = {L"trayPlace", L"notifPlace", L"notesPlace", L"shelfPlace", L"playerPlace", L"devPlace", L"privPlace",
+                                            L"dndPlace", L"nightPlace", L"btPlace", L"shortPlace", L"lightPlace", L"powerPlace", L"telasPlace",
+                                            L"statusClock", L"statusBattery", L"statusVolume", L"statusNetwork", L"statusKeyboard"};
+    const SwMon& m = g_sw.mons[mi];
+    std::vector<MonDiff> v;
+    for (auto& e : look)
+        if (MonOwn(m.who.id, m.group, e.f))
+            v.push_back({e.f, L2(e.pt, e.en), std::wstring(e.f) == L"showStart" ? std::wstring(L"showStart") : L"mon:" + m.who.id + L":" + e.f, e.page});
+    for (auto& it : kDockStat) {
+        std::wstring f = std::wstring(L"stat.") + it.key;
+        if (!MonOwn(m.who.id, m.group, f)) continue;
+        std::wstring row = L"stat.central";  // (the items table's row of this item: its place key)
+        for (auto* p : places)
+            if (std::wstring(DockStatOfPlace(p)) == it.key) row = p;
+        v.push_back({f, L2(it.pt, it.en), row, PgItens});
+    }
+    return v;
+}
+// Where a monitor sits, in words: the primary one, or its side of it.
+static std::wstring MonWhere(int mi) {
+    const SwMon& m = g_sw.mons[mi];
+    if (m.primary) return L2(L"principal", L"primary");
+    for (auto& p : g_sw.mons) {
+        if (!p.primary) continue;
+        long dx = (m.rc.left + m.rc.right) / 2 - (p.rc.left + p.rc.right) / 2, dy = (m.rc.top + m.rc.bottom) / 2 - (p.rc.top + p.rc.bottom) / 2;
+        if (std::abs(dx) >= std::abs(dy)) return dx < 0 ? L2(L"à esquerda do principal", L"left of the primary") : L2(L"à direita do principal", L"right of the primary");
+        return dy < 0 ? L2(L"acima do principal", L"above the primary") : L2(L"abaixo do principal", L"below the primary");
+    }
+    return L"";
+}
+
+// Settings > Monitors. Overview: the map, then a card per monitor, to read and to jump from (no setting lives
+// here). A card says the monitor's name and size, whether it has a dock (changed on the Dock page) and how much it
+// does differently from All: a count, the list by page under "Show" (each name goes to that monitor's band on
+// its page and lights it), and "Match All…", asked in place and undone for 6 s.
+std::vector<std::wstring> g_monShown;  // the monitors whose list of differences is open
+int g_monMatched = 0;                  // how many settings the last "Match" took back (its "Undo" line says so)
+static void MonCard(int i, float& y, float x, float w) {
+    auto* rt = g_sw.rt.Get();
+    const SwMon& m = g_sw.mons[i];
+    std::wstring id = m.who.id, cardId = L"mon:" + id + L":#card", allId = L"mon:" + id + L":#all", undoId = L"monall:" + id;
+    const wchar_t* group = m.group;
+    bool on = SwMonHasDock(i);
+    std::vector<MonDiff> diffs = on ? MonDiffs(i) : std::vector<MonDiff>();
+    int n = (int)diffs.size();
+    bool asking = n && g_sw.confirmId == allId, undo = SwUndoIs(undoId), foot = on && g_sw.mons.size() > 1;  // (alone: no others to be like)
+    bool open = n && !asking && std::find(g_monShown.begin(), g_monShown.end(), id) != g_monShown.end();
+    IDWriteTextFormat* f = g_sw.fSeg.Get();
+    static const int pages[] = {PgDock, PgGeral, PgIniciar, PgItens};
+    float lh = Measure(L"X", f).height, sp = Measure(L" · ", f).width, col = 0;
+    for (int pg : pages) col = std::max(col, Measure(SwPageName(pg) + L":", f).width);
+    // The open list: a page's name, then its settings as links, wrapping under each other. Returns its height.
+    auto list = [&](float top, bool draw) {
+        float tx = x + 18, lx = tx + col + 12, rx = x + w - 18, py = top;
+        for (int pg : pages) {
+            bool any = false;
+            float px = lx;
+            for (auto& d : diffs) {
+                if (d.page != pg) continue;
+                float lw = Measure(d.label, f).width + 1;
+                if (!any) {
+                    if (draw) Txt1(SwPageName(pg) + L":", f, tx, py, col + 2, kSub);
+                } else if (px + sp + lw > rx) {
+                    px = lx;
+                    py += lh + 6;
+                } else {
+                    if (draw) Txt1(L" · ", f, px, py, sp + 2, kMuted);
+                    px += sp;
+                }
+                any = true;
+                if (draw) {
+                    D2D1_RECT_F lr = D2D1::RectF(px, py - 2, px + lw, py + lh + 2);
+                    bool hot = Hot(lr);
+                    Txt1(d.label, f, px, py, lw + 2, hot ? 0xFFFFFF : kInk);
+                    rt->FillRectangle(D2D1::RectF(px, py + lh - 1, px + lw, py + lh), Br(kInk, hot ? 0.9f : 0.45f));
+                    std::wstring flash = d.flash;
+                    AddHit(lr, [pg, flash] { SwJump(pg, flash); });
+                }
+                px += lw;
+            }
+            if (any) py += lh + 10;
+        }
+        return py - top;
+    };
+    const float headH = 68, footH = 48;
+    float total = headH + (foot ? footH : 0) + (open ? list(0, false) + 4 : 0);
+    D2D1_RECT_F card = D2D1::RectF(x, y, x + w, y + total);
+    rt->FillRoundedRectangle(D2D1::RoundedRect(card, 12, 12), Br(0xFFFFFF, 0.035f));
+    rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(x + 0.5f, y + 0.5f, x + w - 0.5f, y + total - 0.5f), 12, 12), Br(0xFFFFFF, 0.06f), 1);
+    if (!g_sw.flashId.empty() && g_sw.flashId == cardId) {  // (a click on the map: gone to and lit, as a row is)
+        g_swFlashSeen = true;
+        if (g_sw.flashScroll) {
+            g_sw.flashScroll = false;
+            g_swFlashJumped = true;
+            g_swFlashJump = std::max(0.0f, y + g_sw.scroll - (kBarH + kJumpGap));
+        } else {
+            DWORD now = GetTickCount();
+            if (!g_sw.flashAt) g_sw.flashAt = now ? now : 1;
+            float t = (now - g_sw.flashAt) / 900.0f;
+            if (t >= 1) {
+                g_sw.flashId.clear();
+            } else {
+                rt->FillRoundedRectangle(D2D1::RoundedRect(card, 12, 12), Br(0xFFFFFF, 0.10f * (1 - t)));
+                SwAnimKeep();
+            }
+        }
+    }
+    // Its number, big; its name; its size and where it sits.
+    float cyH = y + headH / 2;
+    D2D1_RECT_F badge = D2D1::RectF(x + 18, cyH - 14, x + 46, cyH + 14);
+    {
+        SwDim dim(on ? 1 : 0.5f, false);
+        rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x + 32, cyH), 14, 14), Br(kInk));
+        TxtC(std::to_wstring(i + 1), g_sw.fBrand.Get(), badge, kBg);
+    }
+    MonPeekArea(D2D1::RectF(badge.left - 4, badge.top - 4, badge.right + 4, badge.bottom + 4), i);
+    std::wstring go = L2(L"Mudar em Dock", L"Change in Dock"), has = on ? L2(L"Com dock", L"Has a dock") : L2(L"Sem dock", L"No dock");
+    float bw = Measure(go, f).width + 28, hw = Measure(has, f).width;
+    DrawButton(D2D1::RectF(x + w - 18 - bw, cyH - 14, x + w - 18, cyH + 14), go, [] { SwJump(PgDock, L"dockOn"); });
+    Txt(has, f, x + w - 18 - bw - 12 - hw, cyH - lh / 2, hw + 2, kSub);
+    float nx = x + 60, nw = std::max(60.0f, x + w - 18 - bw - 12 - hw - 16 - nx);
+    wchar_t sub[200];
+    swprintf_s(sub, L"%d × %d  ·  %s", m.w, m.h, MonWhere(i).c_str());
+    float nh = Measure(L"X", g_sw.fTitle.Get()).height, sh = Measure(L"X", g_sw.fDesc.Get()).height, ny = cyH - (nh + 2 + sh) / 2;
+    Txt1(MonNameOf(i), g_sw.fTitle.Get(), nx, ny, nw, kInk);
+    Txt1(sub, g_sw.fDesc.Get(), nx, ny + nh + 2, nw, kSub);
+    if (foot) {
+        float fy = y + headH, cy = fy + footH / 2, tx = x + 18, right = x + w - 18;
+        rt->FillRectangle(D2D1::RectF(x + 1, fy, x + w - 1, fy + 1), Br(0xFFFFFF, 0.05f));
+        auto button = [&](const std::wstring& t, std::function<void()> fn, bool strong) {
+            float tw = Measure(t, f).width + 28;
+            DrawButton(D2D1::RectF(right - tw, cy - 14, right, cy + 14), t, std::move(fn), strong);
+            right -= tw + 8;
+        };
+        wchar_t t[160];
+        if (undo) {  // (just matched: how many, and the way back)
+            swprintf_s(t, g_monMatched == 1 ? L2(L"%d ajuste igualado ·", L"%d setting matched ·") : L2(L"%d ajustes igualados ·", L"%d settings matched ·"),
+                       g_monMatched);
+            std::wstring back = L2(L"Desfazer", L"Undo");
+            float dw = Measure(t, f).width, uw = Measure(back, f).width;
+            Txt(t, f, tx, cy - lh / 2, dw + 2, kSub);
+            D2D1_RECT_F ur = D2D1::RectF(tx + dw + 2, cy - 14, tx + dw + 2 + uw + 12, cy + 14);
+            bool hot = Hot(ur);
+            if (hot) rt->FillRoundedRectangle(D2D1::RoundedRect(ur, 7, 7), Br(0xFFFFFF, 0.08f));
+            Txt(back, f, ur.left + 6, cy - lh / 2, uw + 2, kInk);
+            rt->FillRectangle(D2D1::RectF(ur.left + 6, cy + lh / 2 - 1, ur.left + 6 + uw, cy + lh / 2), Br(kInk, hot ? 0.9f : 0.45f));
+            AddHit(ur, [] { SwUndoDo(); });
+        } else if (asking) {  // (verb and object, never a bare "Reset")
+            rt->PushAxisAlignedClip(D2D1::RectF(x, fy + 1, x + w, fy + footH), D2D1_ANTIALIAS_MODE_ALIASED);
+            rt->FillRoundedRectangle(D2D1::RoundedRect(card, 12, 12), Br(0xFFFFFF, 0.07f));
+            rt->PopAxisAlignedClip();
+            button(L2(L"Cancelar", L"Cancel"), [] { g_sw.confirmId.clear(); }, false);
+            swprintf_s(t, n == 1 ? L2(L"Igualar %d ajuste", L"Match %d setting") : L2(L"Igualar %d ajustes", L"Match %d settings"), n);
+            button(t, [id, group, diffs, undoId] {
+                g_sw.confirmId.clear();
+                std::vector<std::pair<std::wstring, std::wstring>> was;
+                for (auto& d : diffs) {
+                    was.push_back({d.field, MonCfg(id, group, d.field.c_str())});
+                    MonOwnSet(id, group, d.field, MonBackOf(d.field));
+                }
+                g_monMatched = (int)was.size();
+                SwUndoOffer(undoId, [id, group, was] {
+                    for (auto& v : was) MonOwnSet(id, group, v.first, v.second);
+                    PostMessageW(g_msgWnd, WM_APP_SETTINGS, 0, 0);
+                });
+                PostMessageW(g_msgWnd, WM_APP_SETTINGS, 0, 0);  // (a status item's worker may have to start or stop)
+            }, true);
+            swprintf_s(t, n == 1 ? L2(L"%d ajuste deste monitor volta ao valor de Todos.", L"This monitor's %d setting goes back to All's value.")
+                                 : L2(L"%d ajustes deste monitor voltam ao valor de Todos.", L"This monitor's %d settings go back to All's value."), n);
+            Txt1(t, f, tx, cy - lh / 2, std::max(60.0f, right - tx), kInk);
+        } else if (!n) {
+            Txt(L2(L"Igual a Todos em tudo.", L"Same as All in everything."), f, tx, cy - lh / 2, w - 36, kSub);
+        } else {
+            button(L2(L"Igualar a Todos…", L"Match All…"), [allId] { SwAsk(allId); }, false);
+            swprintf_s(t, n == 1 ? L2(L"Diferente em %d ajuste", L"Different in %d setting") : L2(L"Diferente em %d ajustes", L"Different in %d settings"), n);
+            float dw = Measure(t, f).width;
+            Txt(t, f, tx, cy - lh / 2, dw + 2, kInk);
+            // "Show": opens and closes the list.
+            std::wstring see = L2(L"Ver", L"Show");
+            float sw = Measure(see, f).width;
+            D2D1_RECT_F sr = D2D1::RectF(tx + dw + 12, cy - 14, tx + dw + 12 + 12 + sw + 6 + 12 + 10, cy + 14);
+            bool hot = Hot(sr), down = Pressed(sr);
+            if (hot || down) rt->FillRoundedRectangle(D2D1::RoundedRect(sr, 8, 8), Br(0xFFFFFF, down ? 0.12f : 0.08f));
+            rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(sr.left + 0.5f, sr.top + 0.5f, sr.right - 0.5f, sr.bottom - 0.5f), 8, 8), Br(0xFFFFFF, 0.12f), 1);
+            Txt(see, f, sr.left + 12, cy - lh / 2, sw + 2, kInk);
+            Icon(open ? L"M6 15l6-6 6 6" : L"M6 9l6 6 6-6", sr.right - 10 - 12, cy - 6, 12, kIdle, 1, 2);
+            AddHit(sr, [id] {
+                auto it = std::find(g_monShown.begin(), g_monShown.end(), id);
+                if (it == g_monShown.end()) g_monShown.push_back(id);
+                else g_monShown.erase(it);
+            });
+        }
+        if (open) list(fy + footH, true);
+    }
+    y += total;
+}
+
+static void PageMonitores(float& y, float x, float w) {
+    Heading(y, x, w, L2(L"Monitores", L"Monitors"),
+            L2(L"Como seus monitores estão arrumados e o que cada um tem de diferente.",
+               L"How your monitors are set up and what each one does differently."));
+    y += g_swCollect ? 0 : 14;
+    Tabs(y, x, w, {L2(L"Visão geral", L"Overview"), L2(L"Arranjos", L"Layouts")}, g_sw.monTab, [](int t) { g_sw.monTab = t; });
+    if (g_sw.monTab == 1) {
+        PageTelas(y, x, w);
+        return;
+    }
+    if (g_swCollect) return;  // (nothing is set here: what a monitor's dock does is found on each setting's own page)
+    if (g_sw.mons.empty()) LoadSwMonitors();
+    y += 18;
+    MonMap(y, x, w);
+    for (int i = 0; i < (int)g_sw.mons.size(); i++) {
+        y += 12;
+        MonCard(i, y, x, w);
+    }
+}
+
+// ---- The mod's log: %LOCALAPPDATA%\Nimbus Menu\registro.txt, one "yyyy-MM-dd HH:mm:ss | ..." line per event.
+// Lines older than two days go on each write and each read; Settings → About shows the latest.
+static std::wstring NimbusLogPath(bool makeDir = false) {
+    wchar_t dir[MAX_PATH];
+    if (!ExpandEnvironmentStringsW(L"%LOCALAPPDATA%\\Nimbus Menu", dir, MAX_PATH)) return L"";
+    if (makeDir) CreateDirectoryW(dir, nullptr);
+    return std::wstring(dir) + L"\\registro.txt";
+}
+static ULONGLONG NimbusNow100ns() {
+    FILETIME ft;
+    GetSystemTimeAsFileTime(&ft);
+    return ((ULONGLONG)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
+}
+static bool NimbusLogLineTime(const std::string& l, ULONGLONG& out) {  // (local time in the line → UTC)
+    SYSTEMTIME st = {};
+    unsigned Y, M, D, h, m, s;
+    if (sscanf(l.c_str(), "%4u-%2u-%2u %2u:%2u:%2u", &Y, &M, &D, &h, &m, &s) != 6) return false;
+    st.wYear = (WORD)Y, st.wMonth = (WORD)M, st.wDay = (WORD)D, st.wHour = (WORD)h, st.wMinute = (WORD)m, st.wSecond = (WORD)s;
+    SYSTEMTIME utc;
+    FILETIME ft;
+    if (!TzSpecificLocalTimeToSystemTime(nullptr, &st, &utc) || !SystemTimeToFileTime(&utc, &ft)) return false;
+    out = ((ULONGLONG)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
+    return true;
+}
+// Reads the log, drops what's older than two days (and lines without a date), rewrites it if that changed.
+static std::vector<std::string> NimbusLogLoad(const char* append = nullptr) {
+    std::vector<std::string> keep;
+    std::wstring p = NimbusLogPath(append != nullptr);
+    if (p.empty()) return keep;
+    HANDLE mx = CreateMutexW(nullptr, FALSE, L"Local\\NimbusMenu_Log");
+    if (mx) WaitForSingleObject(mx, 2000);
+    std::string all;
+    HANDLE h = CreateFileW(p.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (h != INVALID_HANDLE_VALUE) {
+        char buf[4096];
+        DWORD n = 0;
+        while (ReadFile(h, buf, sizeof(buf), &n, nullptr) && n) all.append(buf, n);
+        CloseHandle(h);
+    } else if (GetLastError() != ERROR_FILE_NOT_FOUND && GetLastError() != ERROR_PATH_NOT_FOUND) {
+        // There but unreadable now (an editor or an antivirus holding it): never rewritten from nothing,
+        // the new line is only appended.
+        if (append) {
+            HANDLE a = CreateFileW(p.c_str(), FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_ALWAYS, 0, nullptr);
+            if (a != INVALID_HANDLE_VALUE) {
+                std::string l = std::string(append) + "\r\n";
+                DWORD w = 0;
+                WriteFile(a, l.data(), (DWORD)l.size(), &w, nullptr);
+                CloseHandle(a);
+            }
+        }
+        if (mx) {
+            ReleaseMutex(mx);
+            CloseHandle(mx);
+        }
+        return keep;
+    }
+    const ULONGLONG cut = NimbusNow100ns() - 2ULL * 24 * 3600 * 10000000ULL;
+    size_t total = 0;
+    for (size_t i = 0; i < all.size();) {
+        size_t e = all.find('\n', i);
+        std::string l = all.substr(i, e == std::string::npos ? std::string::npos : e - i);
+        i = e == std::string::npos ? all.size() : e + 1;
+        if (!l.empty() && l.back() == '\r') l.pop_back();
+        if (l.empty()) continue;
+        total++;
+        ULONGLONG t;
+        if (NimbusLogLineTime(l, t) && t >= cut) keep.push_back(l);
+    }
+    if (append) keep.push_back(append);
+    if (append || keep.size() != total) {
+        std::string out;
+        for (auto& l : keep) out += l + "\r\n";
+        if (keep.empty()) {
+            DeleteFileW(p.c_str());
+        } else {
+            h = CreateFileW(p.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, 0, nullptr);
+            if (h != INVALID_HANDLE_VALUE) {
+                DWORD w = 0;
+                WriteFile(h, out.data(), (DWORD)out.size(), &w, nullptr);
+                CloseHandle(h);
+            }
+        }
+    }
+    if (mx) {
+        ReleaseMutex(mx);
+        CloseHandle(mx);
+    }
+    return keep;
+}
+static void NimbusLog(const char* what) {
+    SYSTEMTIME t;
+    GetLocalTime(&t);
+    char line[400];
+    snprintf(line, sizeof(line), "%04u-%02u-%02u %02u:%02u:%02u | %s", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond, what);
+    NimbusLogLoad(line);
+}
+
+// ---- The bar watching itself (all of it to the log) ----
+// A thread pings the bar's window every 2 s: a freeze over 5 s is noted, and how long it lasted when it
+// ends. Every minute: Windows' drawing objects (GDI, USER: at 10 000 a process can't make windows and the
+// dock vanishes), the memory, the handles; noted when they pass a step. A crash notes its code and place.
+static HANDLE g_barWatchStop = nullptr, g_barWatchThread = nullptr;
+static LPTOP_LEVEL_EXCEPTION_FILTER g_prevCrashFilter = nullptr;
+static LONG WINAPI BarCrashFilter(EXCEPTION_POINTERS* ep) {
+    static LONG once = 0;
+    if (ep && ep->ExceptionRecord && !InterlockedExchange(&once, 1)) {
+        void* at = ep->ExceptionRecord->ExceptionAddress;
+        HMODULE mod = nullptr;
+        wchar_t name[MAX_PATH] = L"?";
+        if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)at, &mod) && mod)
+            GetModuleFileNameW(mod, name, MAX_PATH);
+        char line[400];
+        snprintf(line, sizeof(line), "barra | codigo 0x%08lX | erro dentro da barra em %ls+0x%llX (vai cair)",
+                 (unsigned long)ep->ExceptionRecord->ExceptionCode, PathFindFileNameW(name),
+                 (unsigned long long)((ULONG_PTR)at - (ULONG_PTR)mod));
+        NimbusLog(line);
+    }
+    return g_prevCrashFilter ? g_prevCrashFilter(ep) : EXCEPTION_CONTINUE_SEARCH;
+}
+static DWORD WINAPI BarWatchThread(LPVOID) {
+    DWORD frozenAt = 0, lastMinute = GetTickCount();
+    int gdiStep = 0, userStep = 0, memStep = 0, handleStep = 0;
+    for (;;) {
+        if (WaitForSingleObject(g_barWatchStop, 2000) == WAIT_OBJECT_0) return 0;
+        HWND w = g_msgWnd;
+        if (w) {
+            DWORD_PTR res = 0;
+            DWORD t0 = GetTickCount();
+            bool ok = SendMessageTimeoutW(w, WM_NULL, 0, 0, SMTO_BLOCK, 5000, &res) != 0;
+            if (WaitForSingleObject(g_barWatchStop, 0) == WAIT_OBJECT_0) return 0;  // (closing: not a freeze)
+            if (!ok && !frozenAt) {
+                frozenAt = t0;
+                NimbusLog("vigia | a barra parou de responder (mais de 5 s)");
+            } else if (ok && frozenAt) {
+                char line[96];
+                snprintf(line, sizeof(line), "vigia | a barra voltou a responder depois de %lu s", (unsigned long)((GetTickCount() - frozenAt) / 1000));
+                NimbusLog(line);
+                frozenAt = 0;
+            }
+        }
+        if (GetTickCount() - lastMinute < 60000) continue;
+        lastMinute = GetTickCount();
+        DWORD gdi = GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS), user = GetGuiResources(GetCurrentProcess(), GR_USEROBJECTS);
+        DWORD handles = 0;
+        GetProcessHandleCount(GetCurrentProcess(), &handles);
+        PROCESS_MEMORY_COUNTERS_EX pm = {sizeof(pm)};
+        SIZE_T mb = K32GetProcessMemoryInfo(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS*)&pm, sizeof(pm)) ? pm.PrivateUsage >> 20 : 0;
+        auto step = [](DWORD v, DWORD first, DWORD every) { return v < first ? 0 : 1 + (int)((v - first) / every); };
+        int g = step(gdi, 3000, 2000), u = step(user, 3000, 2000), m = step((DWORD)mb, 600, 400), h = step(handles, 5000, 5000);
+        if (g > gdiStep || u > userStep || m > memStep || h > handleStep) {
+            char line[200];
+            snprintf(line, sizeof(line), "vigia | recursos altos: GDI %lu, USER %lu (limite 10000), memoria %lu MB, handles %lu",
+                     (unsigned long)gdi, (unsigned long)user, (unsigned long)mb, (unsigned long)handles);
+            NimbusLog(line);
+        }
+        gdiStep = std::max(gdiStep, g), userStep = std::max(userStep, u), memStep = std::max(memStep, m), handleStep = std::max(handleStep, h);
+    }
+}
+static void BarWatchStart() {
+    g_prevCrashFilter = SetUnhandledExceptionFilter(BarCrashFilter);
+    g_barWatchStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (g_barWatchStop) g_barWatchThread = CreateThread(nullptr, 0, BarWatchThread, nullptr, 0, nullptr);
+}
+static void BarWatchEnd() {
+    if (g_barWatchStop) SetEvent(g_barWatchStop);
+    if (g_barWatchThread) {
+        // (it may be pinging this very thread: answer while waiting)
+        DWORD until = GetTickCount() + 6000;
+        while (MsgWaitForMultipleObjects(1, &g_barWatchThread, FALSE, std::max<LONG>(0, (LONG)(until - GetTickCount())), QS_SENDMESSAGE) == WAIT_OBJECT_0 + 1) {
+            MSG m;
+            PeekMessageW(&m, nullptr, 0, 0, PM_NOREMOVE | PM_QS_SENDMESSAGE);
+        }
+        CloseHandle(g_barWatchThread);
+        g_barWatchThread = nullptr;
+    }
+    if (g_barWatchStop) {
+        CloseHandle(g_barWatchStop);
+        g_barWatchStop = nullptr;
+    }
+    SetUnhandledExceptionFilter(g_prevCrashFilter);
+}
+
+// The version whose notes were last opened: a newer one puts a dot on About and backup and on its What's new tab.
+static bool NotesUnseen() {
+    wchar_t b[32] = {};
+    return !Wh_GetStringValue((UserPrefix() + L"notes.seen").c_str(), b, ARRAYSIZE(b)) || wcscmp(b, kVersion) != 0;
+}
+static void NotesSeen() { Wh_SetStringValue((UserPrefix() + L"notes.seen").c_str(), kVersion); }
+
+// Someone who had Nimbus before this version's questions came (not a first run, and no round of the guided setup
+// ended on this version): only they are offered "only what's new".
+static bool WizUpdated() {
+    static DWORD at = 0;  // (asked on every frame of two pages: read again once a second)
+    static bool updated = false;
+    if (at && GetTickCount() - at < 1000) return updated;
+    at = GetTickCount();
+    wchar_t b[32] = {};
+    updated = !WizardFirstRun() && (!Wh_GetStringValue((UserPrefix() + L"wizard.ver").c_str(), b, ARRAYSIZE(b)) || wcscmp(b, kVersion) != 0);
+    return updated;
+}
+
+static void PageNovidades(float& y, float x, float w);
+static void SobreLog(float& y, float x, float w);
+// About and backup: the tabs right under the title, as on every page that has them. What's new comes first (and
+// has the app's card); the numbers in g_sw.sobreTab are the old ones.
+static void PageSobre(float& y, float x, float w) {
+    Heading(y, x, w, L2(L"Sobre e backup", L"About and backup"), L2(L"Versão, backup e o que mudou.", L"Version, backup and what changed."));
+    y += g_swCollect ? 0 : 14;
+    static const int order[] = {1, 0, 2};
+    int cur = 0;
+    for (int k = 0; k < 3; k++)
+        if (order[k] == g_sw.sobreTab) cur = k;
+    Tabs(y, x, w, {L2(L"Novidades", L"What's new"), L"Backup", L2(L"Diagnóstico", L"Diagnostics")}, cur,
+         [](int k) {
+             g_sw.sobreTab = order[k];
+             Wh_SetIntValue((UserPrefix() + L"sw.sobreTab").c_str(), g_sw.sobreTab);
+             if (g_sw.sobreTab == 1) NotesSeen();
+         },
+         NotesUnseen() ? 0 : -1);
+    if (g_sw.sobreTab == 1) {
+        PageNovidades(y, x, w);
+        return;
+    }
+    if (g_sw.sobreTab == 2) {
+        SobreLog(y, x, w);
+        return;
+    }
+    // An export: once done, its row says where the file is, with the folder one click away.
+    static std::wstring said;
+    said = std::wstring(L2(L"Pronto, salvo em ", L"Done, saved in ")) + g_exportDone + L".";
+    auto exportRow = [](bool all, const wchar_t* label, const wchar_t* desc, const wchar_t* btn) {
+        bool done = !g_swCollect && !g_exportDone.empty() && g_exportDoneAll == all;
+        std::vector<std::pair<std::wstring, std::function<void()>>> b;
+        if (done) b.push_back({L2(L"Abrir pasta", L"Open folder"), [] {
+                                   ShellExecuteW(nullptr, L"open", L"explorer.exe", (L"/select,\"" + g_exportDone + L"\"").c_str(), nullptr, SW_SHOWNORMAL);
+                               }});
+        b.push_back({btn, [all] { BackupExport(all); }});
+        return RButtons(label, done ? said.c_str() : desc, std::move(b));
+    };
+    // ("Restore" is opening a backup; the factory values are "defaults". The search still finds it by "import".)
+    SwRow restore = RButtons(L2(L"Restaurar um backup", L"Restore a backup"),
+                             L2(L"Abre um arquivo .nimbus. Antes, guarda uma cópia dos ajustes de agora.",
+                                L"Opens a .nimbus file. A copy of the current settings is kept first."),
+                             {{L2(L"Restaurar backup…", L"Restore backup…"), [] { BackupImport(); }}});
+    restore.alias = L"importar import";
+    std::vector<SwRow> keep = {exportRow(false, L2(L"Exportar os ajustes", L"Export the settings"),
+                                         L2(L"O visual, os ajustes e os de cada monitor. Sem fixados, notas nem lembretes.",
+                                            L"The look, the settings and each monitor's. No pinned apps, notes or reminders."),
+                                         L2(L"Exportar ajustes…", L"Export settings…")),
+                               exportRow(true, L2(L"Backup completo", L"Full backup"),
+                                         L2(L"Tudo: ajustes, fixados, notas, lembretes, arranjos de telas e a bandeja.",
+                                            L"Everything: settings, pinned apps, notes, reminders, screen layouts and the tray."),
+                                         L2(L"Fazer backup…", L"Back up…")),
+                               restore};
+    // The way back from the last backup opened: only while its date and the copy made then are both there.
+    wchar_t when[40] = {};
+    if (Wh_GetStringValue((UserPrefix() + L"backup.lastImport").c_str(), when, ARRAYSIZE(when)) && wcslen(when) >= 10 &&
+        GetFileAttributesW(BackupSafePath().c_str()) != INVALID_FILE_ATTRIBUTES) {
+        std::wstring d(when, 10);  // yyyy-mm-dd
+        static std::wstring desc;
+        desc = std::wstring(L2(L"Volta aos ajustes de antes do backup aberto em ", L"Goes back to the settings from before the backup opened on ")) +
+               L2((d.substr(8, 2) + L"/" + d.substr(5, 2) + L"/" + d.substr(0, 4)).c_str(), d.c_str()) + L".";
+        SwRow undo = RButtons(L2(L"Desfazer a última importação", L"Undo the last import"), desc.c_str(),
+                              {{L2(L"Desfazer…", L"Undo…"), [] { SwAsk(L"#undoImport"); }}});
+        undo.id = L"#undoImport";
+        undo.alias = L"importar import restaurar restore";
+        undo.ask = L2(L"Os ajustes de agora dão lugar aos de antes desse backup. O Nimbus reinicia para carregar.",
+                      L"The current settings give way to the ones from before that backup. Nimbus restarts to load them.");
+        undo.askYes = L2(L"Desfazer a importação", L"Undo the import");
+        undo.askDo = [] { BackupImportUndo(); };
+        keep.push_back(std::move(undo));
+    }
+    Section(y, x, w, L2(L"Guardar e levar", L"Keep and carry"));
+    Card(std::move(keep), y, x, w);
+    Section(y, x, w, L2(L"Recomeçar", L"Start over"));
+    SwRow reset = RButtons(L2(L"Voltar ao padrão", L"Reset to defaults"),
+                           L2(L"Os ajustes voltam aos de fábrica. Os apps fixados ficam.", L"The settings go back to the factory ones. Pinned apps stay."),
+                           {{L2(L"Voltar ao padrão…", L"Reset to defaults…"), [] { SwAsk(L"#reset"); }}});
+    reset.id = L"#reset";
+    reset.dangerBtn = 0;  // (it erases: its words say so before the click)
+    reset.ask = L2(L"Todos os ajustes voltam aos de fábrica. Os apps fixados ficam.", L"Every setting goes back to the factory one. Pinned apps stay.");
+    reset.askYes = L2(L"Voltar tudo ao padrão", L"Reset everything");
+    reset.askDanger = true;
+    reset.askDo = [] { ResetCfg(); };
+    Card({reset}, y, x, w);
+}
+
+// About and backup > Diagnostics: the mod's log, read again every few seconds, newest first.
+static void SobreLog(float& y, float x, float w) {
+    static std::vector<std::string> log;
+    static DWORD logAt = 0;
+    if (!g_swCollect && (!logAt || GetTickCount() - logAt > 3000)) {
+        log = NimbusLogLoad();
+        logAt = GetTickCount();
+    }
+    static std::wstring logDesc;
+    int falls = 0;
+    for (auto& l : log)
+        if (l.find("| barra |") != std::string::npos) falls++;
+    logDesc = log.empty() ? std::wstring(L2(L"Nada registrado. O que passa de 2 dias se apaga sozinho.", L"Nothing logged. Anything older than 2 days is deleted by itself."))
+                          : (falls ? std::to_wstring(falls) + L2(L" queda(s) da barra nos últimos 2 dias.", L" bar crash(es) in the last 2 days.")
+                                   : std::wstring(L2(L"Nenhuma queda da barra nos últimos 2 dias.", L"No bar crash in the last 2 days."))) +
+                                L2(L" Apaga sozinho depois de 2 dias.", L" Deleted by itself after 2 days.");
+    Section(y, x, w, L2(L"Registro", L"Log"));
+    Card({RButtons(L2(L"Registro do Nimbus", L"Nimbus log"), logDesc.c_str(),
+                   {{L2(L"Abrir no Bloco de notas", L"Open in Notepad"), [] {
+                         std::wstring p = NimbusLogPath(true);
+                         if (GetFileAttributesW(p.c_str()) == INVALID_FILE_ATTRIBUTES) NimbusLog("nimbus | registro aberto pelos Ajustes");
+                         ShellExecuteW(nullptr, L"open", L"notepad.exe", (L"\"" + p + L"\"").c_str(), nullptr, SW_SHOWNORMAL);
+                     }},
+                    {L2(L"Limpar", L"Clear"), [] {
+                         DeleteFileW(NimbusLogPath().c_str());
+                         logAt = 0;
+                     }}})},
+         y, x, w);
+    if (g_swCollect || log.empty()) return;
+    y += 10;
+    int shown = 0;
+    for (auto it = log.rbegin(); it != log.rend() && shown < 8; ++it, ++shown) {
+        int n = MultiByteToWideChar(CP_UTF8, 0, it->c_str(), (int)it->size(), nullptr, 0);
+        std::wstring wl(n, L'\0');
+        MultiByteToWideChar(CP_UTF8, 0, it->c_str(), (int)it->size(), wl.data(), n);
+        y += Txt(wl, g_sw.fDesc.Get(), x + 6, y, w - 12, kSub) + 4;
+    }
+}
+
+// ---- What's new: the app's card, then each version's notes (a tab of About and backup) ----
+struct SwNoteGroup {
+    const wchar_t *pt, *en;  // the page the items are about ("": a version told in one list)
+    std::vector<std::pair<const wchar_t*, const wchar_t*>> items;  // pt, en
+};
+struct SwNote {
+    const wchar_t* ver;
+    const wchar_t* date;
+    std::vector<SwNoteGroup> groups;
+};
+static void WizStart(int mode);
+static std::vector<int> WizListFor(int mode);
+static void SwSetPage(int p);
+static void PageNovidades(float& y, float x, float w) {
+    if (g_swCollect) return;
+    y += 18;
+    {  // the app
+        float h = 100;
+        D2D1_RECT_F card = D2D1::RectF(x, y, x + w, y + h);
+        g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(card, 12, 12), Br(0xFFFFFF, 0.035f));
+        g_sw.rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(x + 0.5f, y + 0.5f, x + w - 0.5f, y + h - 0.5f), 12, 12), Br(0xFFFFFF, 0.06f), 1);
+        D2D1_RECT_F tile = D2D1::RectF(x + 22, y + 22, x + 78, y + 78);
+        DrawNimbusLogo(g_sw.rt.Get(), tile);
+        std::wstring bw = L2(L"Ajuda e sugestões", L"Help and ideas");
+        float btnW = Measure(bw, g_sw.fSeg.Get()).width + 28;
+        float tx = tile.right + 18, tw = w - (tx - x) - btnW - 40;
+        float th = Txt(std::wstring(L"Nimbus Menu ") + kVersion, g_sw.fTitle.Get(), tx, y + 30, tw, kInk);
+        Txt(L2(L"Dock e Iniciar para o Windows 11, no Windhawk. Feito por igoredm.", L"A dock and Start for Windows 11, on Windhawk. Made by igoredm."),
+            g_sw.fDesc.Get(), tx, y + 30 + th + 3, tw, kSub);
+        DrawButton(D2D1::RectF(x + w - 22 - btnW, y + h / 2 - 17, x + w - 22, y + h / 2 + 17), bw,
+                   [] { ShellExecuteW(nullptr, L"open", kHelpUrl, nullptr, nullptr, SW_SHOWNORMAL); });
+        y += h;
+    }
+    // Who came from an older version: the new questions of the guided setup, one click away (this tab's one full button).
+    int nNew = (int)WizListFor(-2).size();
+    if (WizUpdated() && nNew > 0) {
+        y += 12;
+        std::wstring btn = std::wstring(L2(L"Responder as ", L"Answer the ")) + std::to_wstring(nNew) + L2(L" perguntas novas", L" new questions");
+        SwRow r = RButtons(L2(L"Perguntas novas na configuração guiada", L"New questions in the guided setup"),
+                           L2(L"As que chegaram com a 2.0 e a 2.1. Cada resposta vale na hora.", L"The ones that came with 2.0 and 2.1. Each answer applies at once."),
+                           {{btn, [] {
+                                 WizStart(-2);
+                                 SwSetPage(PgComecar);
+                             }}});
+        r.strongBtn = 0;
+        Card({r}, y, x, w);
+    }
+    static const std::vector<SwNote> notes = {
+        {L"2.1.0", L"2026-11",
+         {{L"Dock", L"Dock",
+           {{L"Número de notificações não lidas no ícone de cada app na dock.", L"Unread notification count on each app's dock icon."},
+            {L"Arquivos recentes de cada app no botão direito (dock e Iniciar).", L"Each app's recent files on right-click (dock and Start)."},
+            {L"Executar como administrador no botão direito da dock e do Iniciar.", L"Run as administrator from the right-click menu of the dock and of Start."},
+            {L"Se a barra cair, a do Windows volta na hora e o Nimbus reabre sozinho.", L"If the bar crashes, Windows' taskbar comes back right away and Nimbus reopens by itself."},
+            {L"Se uma dock some, o Nimbus refaz a dock e, se ela não voltar, reinicia sozinho.", L"If a dock goes missing, Nimbus makes it again and, if it doesn't come back, restarts by itself."}}},
+          {L"Iniciar e busca", L"Start and search",
+           {{L"A busca do Iniciar faz coisas: contas, unidades, janelas abertas, bloquear, suspender, timer, nota, esvaziar a lixeira.",
+             L"Start's search does things: sums, units, open windows, lock, sleep, timer, note, empty the Recycle Bin."},
+            {L"A busca do Iniciar abre pastas e comandos do Executar: %appdata%, C:\\, regedit, ms-settings: e outros.",
+             L"Start's search opens folders and Run commands: %appdata%, C:\\, regedit, ms-settings: and more."},
+            {L"Reiniciar no modo de segurança (com ou sem internet) no menu de energia.", L"Restart in safe mode (with or without internet) in the power menu."}}},
+          {L"Itens", L"Items",
+           {{L"Microfone e câmera em uso: um ponto no ícone deles; clique para ver qual app.", L"Microphone and camera in use: a dot on their icon; click it to see which app."}}},
+          {L"Bandeja e notificações", L"Tray and notifications",
+           {{L"Um app da bandeja fixado fica na dock mesmo com a Bandeja na Central ou no Iniciar.", L"A pinned tray app stays in the dock even with the tray in the Center or Start."},
+            {L"Notificações de balão da bandeja com o ícone e o nome do app.", L"Tray balloon notifications with the app's icon and name."}}},
+          {L"Som e player", L"Sound and player",
+           {{L"Painel de som Grade: cada app em cada saída, com volume e som.", L"Grid sound panel: every app on every output, with volume and sound."},
+            {L"Painel de som Completo: clique na bolinha de um app numa saída para mudar o volume dele só ali.", L"Complete sound panel: click an app's dot on an output to set its volume there only."},
+            {L"Uma barrinha mostra qual saída e qual app estão tocando.", L"A small bar shows which output and app are playing."},
+            {L"Correção: tirar o mudo no mixer do Windows vale.", L"Fix: unmuting in Windows' mixer sticks."}}},
+          {L"Prateleira", L"Shelf",
+           {{L"A prateleira baixa links: solte ou cole um link. Arquivo direto o Nimbus baixa; vídeo, áudio e imagens de sites pelo yt-dlp e pelo gallery-dl (opcionais, instalados por você). Escolha a qualidade do vídeo, cancele no ×, e uma notificação chega quando termina.",
+             L"The shelf downloads links: drop or paste one. Nimbus fetches a direct file; videos, audio and pictures on sites go through yt-dlp and gallery-dl (optional, installed by you). Pick the video quality, cancel with ×, and a notification comes when it's done."}}},
+          {L"Monitores", L"Monitors",
+           {{L"Arranjos de telas: salve como o Windows arruma os monitores (qual é o principal, quais ligam) e troque num clique, na dock, na Central ou no Iniciar.",
+             L"Screen layouts: save how Windows sets up the monitors (the main one, which are on) and switch in one click, in the dock, the Center or Start."}}},
+          {L"Ajustes", L"Settings",
+           {{L"Ajustes com busca (é só digitar) e esta aba de novidades.", L"Settings with search (just type) and this What's new tab."},
+            {L"Exportar os ajustes para compartilhar, backup completo e restaurar, em Sobre e backup › Backup.",
+             L"Export the settings to share, a full backup and restore, in About and backup › Backup."},
+            {L"A pasta de cada conta no armazenamento do mod só abre para ela.", L"Each account's folder in the mod's storage opens only for that account."},
+            {L"Correção: o teclado chega ao fim de Todos os apps.", L"Fix: the keyboard reaches the end of All apps."}}}}},
+        {L"2.0.0", L"2026-11",
+         {{L"", L"",
+           {{L"Bandeja, Central, Bluetooth, notificações próprias, player, baterias de aparelhos, notas e lembretes, prateleira.",
+             L"Tray, Center, Bluetooth, its own notifications, player, device batteries, notes and reminders, shelf."},
+            {L"Cada item da área de status na dock, na Central e no Iniciar, ou desligado; aba Status no Iniciar.",
+             L"Every status item in the dock, the Center and Start, or off; a Status tab in Start."},
+            {L"Busca mais esperta (sem acento, iniciais, uma letra errada) e teclado em todas as abas do Iniciar.",
+             L"Smarter search (no accents, initials, one typo) and keyboard in every Start tab."},
+            {L"Painel de som Simples ou Completo, com cada app na saída que você quiser.", L"Simple or Complete sound panel, each app on the output you want."},
+            {L"Janela de ajustes própria com prévia ao vivo e configuração guiada.", L"Its own settings window with a live preview and a guided setup."}}}}},
+        {L"1.1.0", L"2026-11",
+         {{L"", L"",
+           {{L"Aba Baixados no Iniciar.", L"Downloads tab in Start."},
+            {L"Caixa de busca com seleção e atalhos (Ctrl+A, C, X, V).", L"Search box with selection and shortcuts (Ctrl+A, C, X, V)."},
+            {L"Botão direito em arquivos e Finalizar tarefa na dock.", L"Right-click on files and End task on the dock."},
+            {L"A tecla Windows sempre leva para o Iniciar do Nimbus; vidro sólido com a transparência desligada.",
+             L"The Windows key always goes to Nimbus' Start; solid glass with transparency off."}}}}},
+        {L"1.0.0", L"2026-11",
+         {{L"", L"",
+           {{L"A primeira: dock leve por monitor, com zoom, prévias das janelas e Iniciar próprio com busca.",
+             L"The first one: a light dock per monitor, with zoom, window previews and its own Start with search."}}}}},
+    };
+    static unsigned open = 0;  // the older versions opened (by their place in the list); they start closed
+    for (size_t ni = 0; ni < notes.size(); ni++) {
+        const SwNote& n = notes[ni];
+        bool current = !wcscmp(n.ver, kVersion), shown = current || (open >> ni & 1);
+        y += current ? 26.0f : 12.0f;
+        std::wstring title = std::wstring(L"Nimbus ") + n.ver;
+        D2D1_SIZE_F ts = Measure(title, g_sw.fTitle.Get());
+        if (current) {
+            Txt(title, g_sw.fTitle.Get(), x + 4, y, w, kInk);
+            std::wstring tag = L2(L"esta versão", L"this version");
+            float tw = Measure(tag, g_sw.fSmall.Get()).width + 16, tx = x + 4 + ts.width + 10;
+            D2D1_RECT_F r = D2D1::RectF(tx, y + 1, tx + tw, y + 23);
+            g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(r, 11, 11), Br(kAccent, 0.2f));
+            TxtC(tag, g_sw.fSmall.Get(), r, kInk);
+            y += ts.height + 10;
+        } else {
+            // An older version: one line that opens and closes its list.
+            D2D1_RECT_F hr = D2D1::RectF(x, y, x + w, y + 44);
+            bool hot = Hot(hr);
+            g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(hr, 12, 12), Br(0xFFFFFF, hot ? 0.055f : 0.035f));
+            g_sw.rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(hr.left + 0.5f, hr.top + 0.5f, hr.right - 0.5f, hr.bottom - 0.5f), 12, 12),
+                                          Br(0xFFFFFF, 0.06f), 1);
+            D2D1_SIZE_F ls = Measure(title, g_sw.fLbl.Get());
+            Txt(title, g_sw.fLbl.Get(), x + 18, y + (44 - ls.height) / 2, w - 60, kInk);
+            Icon(shown ? L"M6 14.5l6-6 6 6" : L"M6 9.5l6 6 6-6", x + w - 18 - 16, y + 14, 16, hot ? kInk : kIdle, 1, 2);
+            AddHit(hr, [ni] { open ^= 1u << ni; });
+            y += 44;
+            if (!shown) continue;
+            y += 8;
+        }
+        // the items, in one card: a name over each page's
+        const float tw = w - 54;
+        float ih = 16;
+        for (auto& g : n.groups) {
+            if (*g.pt) ih += Measure(L2(g.pt, g.en), g_sw.fSec.Get(), tw).height + 8;
+            for (auto& it : g.items) ih += Measure(L2(it.first, it.second), g_sw.fDesc.Get(), tw).height + 10;
+            ih += 6;
+        }
+        D2D1_RECT_F card = D2D1::RectF(x, y, x + w, y + ih);
+        g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(card, 12, 12), Br(0xFFFFFF, 0.035f));
+        g_sw.rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(x + 0.5f, y + 0.5f, x + w - 0.5f, card.bottom - 0.5f), 12, 12), Br(0xFFFFFF, 0.06f), 1);
+        float iy = y + 16;
+        for (auto& g : n.groups) {
+            if (*g.pt) iy += Txt(L2(g.pt, g.en), g_sw.fSec.Get(), x + 18, iy, tw, kSub) + 8;
+            for (auto& it : g.items) {
+                float lh = Measure(L"X", g_sw.fDesc.Get()).height;
+                g_sw.rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x + 24, iy + lh / 2), 2.5f, 2.5f), Br(kSub));
+                iy += Txt(L2(it.first, it.second), g_sw.fDesc.Get(), x + 36, iy, tw, kInk) + 10;
+            }
+            iy += 6;
+        }
+        y = card.bottom;
+    }
+}
+
+static void SwPageDraw(int page, float& y, float x, float cw);
+static std::wstring SwPageName(int page);
+
+// A page (and its tab, in Monitors and in About and backup) whose rows the guided setup shows.
+struct SwSrc {
+    int page, tab;
+};
+
 // ---- Guided setup: a few questions, each answer applied at once ----
+// A question someone already changed in Settings starts on "my own": their rows, as they are, right there.
 struct WizOpt {
     const wchar_t *pt, *en, *dpt, *den;
     bool rec;
 };
+enum WizId { WzVisual, WzDock, WzHide, WzAnim, WzPinned, WzWinKey, WzSearch, WzStatus, WzTray, WzPlayer, WzNotes, WzDevices, WzPrivacy,
+             WzNotif, WzBadges, WzSound, WzShelf, WzAlign, WzOtherMons, WzCount };
 struct WizQ {
+    int chap, ver;  // chapter (kWizChap), the version it came with (1, 20, 21)
     const wchar_t *kpt, *ken, *qpt, *qen, *hpt, *hen;
     std::vector<WizOpt> opts;
+    std::vector<std::wstring> keys;  // the settings it sets, shown as "my own" (the monitors': see WizMonRows)
+    std::vector<SwSrc> srcs;         // the pages those rows are on
 };
-static const std::vector<WizQ>& WizQuestions() {
+static const wchar_t* const kWizChap[][2] = {{L"Visual e dock", L"Look and dock"}, {L"Iniciar", L"Start"},
+                                             {L"Área de status", L"Status area"}, {L"Notificações", L"Notifications"},
+                                             {L"Som e arquivos", L"Sound and files"}, {L"Monitores", L"Monitors"}};
+static const std::vector<WizQ>& WizQuestions() {  // (in WizId order)
     static const std::vector<WizQ> q = {
-        {L"Visual", L"Look", L"Qual visual você prefere?", L"Which look do you prefer?", L"Vale pra dock, o Iniciar e os painéis.",
+        {0, 1, L"Visual", L"Look", L"Qual visual você prefere?", L"Which look do you prefer?", L"Vale para a dock, o Iniciar e os painéis.",
          L"It applies to the dock, Start and the panels.",
          {{L"Névoa", L"Névoa", L"Vidro fumê, escuro e suave.", L"Smoked glass, dark and soft.", true},
           {L"Cristal", L"Cristal", L"Vidro claro.", L"Light glass.", false},
-          {L"Grafite", L"Grafite", L"Sólido, o mais leve pro PC.", L"Solid, the lightest for the PC.", false},
-          {L"Aurora", L"Aurora", L"Vidro com borda colorida.", L"Glass with a colored edge.", false}}},
-        {L"Dock", L"Dock", L"Como a dock fica na tela?", L"How does the dock sit on screen?", L"Na aba Dock tem prévia e tamanho dos ícones.",
-         L"The Dock tab has a preview and the icon size.",
+          {L"Grafite", L"Grafite", L"Sólido, o mais leve para o PC.", L"Solid, the lightest for the PC.", false},
+          {L"Aurora", L"Aurora", L"Vidro com borda colorida.", L"Glass with a colored edge.", false}},
+         {L"style", L"tintColor", L"tintOpacity"}, {{PgGeral, 0}}},
+        {0, 1, L"Dock", L"Dock", L"Como a dock fica na tela?", L"How does the dock sit on screen?", L"Na página Dock tem prévia e tamanho dos ícones.",
+         L"The Dock page has a preview and the icon size.",
          {{L"Flutuante", L"Floating", L"Uma pílula solta no centro, como no macOS.", L"A loose pill in the middle, like macOS.", true},
-          {L"Barra inteira", L"Full width", L"Cola embaixo de ponta a ponta, como a barra do Windows.", L"Across the bottom, like the Windows taskbar.", false}}},
-        {L"Esconder", L"Auto-hide", L"Ela some quando você não usa?", L"Does it hide when you're not using it?",
-         L"Escondida, aparece quando o mouse encosta embaixo.", L"Hidden, it shows when the mouse touches the bottom.",
-         {{L"Sim, esconder sozinha", L"Yes, hide by itself", L"Mais espaço pras janelas.", L"More room for windows.", true},
-          {L"Não, sempre à mostra", L"No, always visible", L"Sempre visível.", L"Always there.", false}}},
-        {L"Animação", L"Animation", L"O que acontece ao passar o mouse nos ícones?", L"What happens when the mouse goes over the icons?", L"",
+          {L"Barra inteira", L"Full width", L"Cola embaixo de ponta a ponta, como a barra do Windows.", L"Across the bottom, like the Windows taskbar.", false}},
+         {L"format", L"iconSize", L"iconGap", L"bottomGap"}, {{PgDock, 0}}},
+        {0, 1, L"Esconder", L"Auto-hide", L"Ela some quando você não usa?", L"Does it hide when you're not using it?",
+         L"Escondida, ela volta quando o mouse encosta na borda.", L"Hidden, it comes back when the mouse touches the edge.",
+         {{L"Sim, esconder sozinha", L"Yes, hide by itself", L"Mais espaço para as janelas.", L"More room for windows.", true},
+          {L"Não, sempre à mostra", L"No, always visible", L"Sempre visível.", L"Always there.", false}},
+         {L"autoHide", L"hideDelay"}, {{PgDock, 0}}},
+        {0, 1, L"Animação", L"Animation", L"O que acontece ao passar o mouse nos ícones?", L"What happens when the mouse goes over the icons?", L"",
          L"",
          {{L"Zoom", L"Zoom", L"A onda do macOS.", L"The macOS wave.", true},
           {L"Elevar", L"Lift", L"Só o ícone sobe.", L"Only the icon rises.", false},
           {L"Foco", L"Focus", L"Os outros ícones apagam.", L"The other icons dim.", false},
-          {L"Nada", L"Nothing", L"Quietinho.", L"Quiet.", false}}},
-        {L"Tecla Windows", L"Windows key", L"A tecla Windows abre qual Iniciar?", L"Which Start does the Windows key open?",
+          {L"Nada", L"Nothing", L"Quietinho.", L"Quiet.", false}},
+         {L"animation", L"magnification"}, {{PgDock, 0}}},
+        {0, 21, L"Apps fixados", L"Pinned apps", L"Como ficam os apps fixados?", L"How do the pinned apps show?",
+         L"Os abertos sempre aparecem. Também dá para trocar no botão direito da dock.", L"The open ones always show. The dock's right-click menu switches it too.",
+         {{L"Todos à mostra", L"All of them", L"Cada fixado com o seu ícone, como sempre.", L"Each pinned app with its icon, as always.", true},
+          {L"Carrossel com 5", L"Carousel of 5", L"Os outros passam entre duas setas ou com a roda do mouse.", L"The others take turns between two arrows or with the wheel.", false},
+          {L"Carrossel com 8", L"Carousel of 8", L"O mesmo, com mais ícones de cada vez.", L"The same, with more icons at a time.", false}},
+         {L"pinCarousel", L"pinCarouselN"}, {{PgDock, 0}}},
+        {1, 1, L"Tecla Windows", L"Windows key", L"A tecla Windows abre qual Iniciar?", L"Which Start does the Windows key open?",
          L"Ctrl+Esc sempre abre o do Windows.", L"Ctrl+Esc always opens Windows' own.",
          {{L"O do Nimbus", L"Nimbus'", L"Fixados, todos os apps, baixados e a busca esperta.", L"Pinned, all apps, downloads and the smart search.", true},
-          {L"O do Windows", L"Windows'", L"O Nimbus fica só na dock.", L"Nimbus stays in the dock only.", false}}},
-        {L"Área de status", L"Status area", L"Onde ficam relógio, volume, rede e o resto?", L"Where do the clock, volume, network and the rest go?",
-         L"Depois, cada item pode ir pra um ou vários lugares nos Ajustes.", L"Later, each item can go to one or several places in Settings.",
+          {L"O do Windows", L"Windows'", L"O Nimbus fica só na dock.", L"Nimbus stays in the dock only.", false}},
+         {L"winKeyMode", L"startMenu", L"showStart", L"startHotkey"}, {{PgIniciar, 0}}},
+        {1, 1, L"Busca de arquivos", L"File search", L"Como a busca do Iniciar acha arquivos?", L"How does Start's search find files?",
+         L"Ela já faz contas (12*3), unidades (10 km em mi) e comandos: timer 10m, nota comprar pão, bloquear.",
+         L"It already does sums (12*3), units (10 km to mi) and commands: timer 10m, note buy bread, lock.",
+         {{L"Everything", L"Everything", L"Acha qualquer arquivo na hora. Grátis, instalado à parte.", L"Finds any file instantly. Free, installed separately.", true},
+          {L"Busca do Windows", L"Windows Search", L"Abre a busca do próprio Windows.", L"Opens Windows' own search.", false},
+          {L"Só apps e ajustes", L"Apps and settings only", L"Sem arquivos nos resultados.", L"No files in the results.", false}},
+         {L"fileSearch", L"searchLayout"}, {{PgIniciar, 0}}},
+        {2, 20, L"Área de status", L"Status area", L"Onde ficam relógio, volume, rede e o resto?", L"Where do the clock, volume, network and the rest go?",
+         L"Depois, cada item pode ir para um ou vários lugares nos Ajustes.", L"Later, each item can go to one or several places in Settings.",
          {{L"Na dock", L"In the dock", L"Tudo à vista, como na barra do Windows.", L"Everything in sight, like the Windows taskbar.", false},
-          {L"Numa central", L"In a control center", L"A dock fica limpa: o relógio e um botão que abre o resto.",
+          {L"Tudo na Central", L"All in the Center", L"A dock fica limpa: o relógio e um botão que abre o resto.",
            L"A clean dock: the clock and one button that opens the rest.", false},
-          {L"Misto", L"Mixed", L"Relógio, volume, rede, bateria, bandeja e avisos na dock; o resto na central.",
-           L"Clock, volume, network, battery, tray and notifications in the dock; the rest in the center.", true}}},
-        {L"Bandeja", L"Tray", L"E os ícones em segundo plano (bandeja)?", L"And the background icons (tray)?", L"Discord, Steam, antivírus…",
+          {L"Misto", L"Mixed", L"Relógio, volume, rede, bateria, bandeja e notificações na dock; o resto na Central.",
+           L"Clock, volume, network, battery, tray and notifications in the dock; the rest in the control center.", true}},
+         {L"statusClock", L"statusVolume", L"statusNetwork", L"statusBattery", L"statusKeyboard", L"dndPlace", L"btPlace", L"nightPlace", L"shortPlace",
+          L"lightPlace", L"powerPlace", L"statusPos", L"statusPanels"},
+         {{PgItens, 0}}},
+        {2, 20, L"Bandeja", L"Tray", L"E os ícones em segundo plano (bandeja)?", L"And the background icons (tray)?", L"Discord, Steam, antivírus…",
          L"Discord, Steam, antivirus…",
          {{L"Num botão", L"In a button", L"Um ícone que abre e fecha os outros.", L"One icon that opens and closes the others.", true},
           {L"Lado a lado", L"Side by side", L"Todos à mostra, rolando com a roda.", L"All shown, scrolling with the wheel.", false},
           {L"Grade", L"Grid", L"Um painel com os ícones em grade.", L"A panel with the icons in a grid.", false},
-          {L"Escondida", L"Hidden", L"Não aparece.", L"Doesn't show.", false}}},
-        {L"Notificações", L"Notifications", L"Quer os avisos com o visual do Nimbus?", L"Do you want notifications in Nimbus' look?",
-         L"Os do Windows continuam guardados na central dele.", L"Windows' own stay in its center.",
-         {{L"Sim, com som", L"Yes, with sound", L"Cartões do Nimbus, o som Pingo nos avisos e Bolha nos lembretes.", L"Nimbus cards, the Drop sound for notifications and Bubble for reminders.", true},
-          {L"Sim, sem som", L"Yes, silent", L"Só o cartão, nem os lembretes tocam.", L"Just the card; reminders are silent too.", false},
-          {L"Não", L"No", L"Fica tudo com o Windows.", L"Everything stays with Windows.", false}}},
-        {L"Player", L"Player", L"O que está tocando aparece na dock?", L"Does what's playing show in the dock?", L"Spotify, YouTube, qualquer player.",
+          {L"Escondida", L"Hidden", L"Não aparece.", L"Doesn't show.", false}},
+         {L"trayPlace", L"trayStyle", L"trayVisible"}, {{PgItens, 0}, {PgBandeja, 0}}},
+        {2, 20, L"Player", L"Player", L"O que está tocando aparece na dock?", L"Does what's playing show in the dock?", L"Spotify, YouTube, qualquer player.",
          L"Spotify, YouTube, any player.",
          {{L"Capa e título", L"Cover and title", L"A música atual na dock.", L"The current song in the dock.", true},
           {L"Barras", L"Bars", L"Barrinhas que dançam com o som.", L"Little bars dancing with the sound.", false},
           {L"Só o ícone", L"Just the icon", L"Discreto.", L"Discreet.", false},
-          {L"Não", L"No", L"Sem player.", L"No player.", false}}},
+          {L"Não", L"No", L"Sem player.", L"No player.", false}},
+         {L"playerPlace", L"playerDock", L"playerHide"}, {{PgItens, 0}, {PgSom, 0}}},
+        {2, 20, L"Notas e lembretes", L"Notes and reminders", L"Onde ficam as notas e os lembretes?", L"Where do notes and reminders go?",
+         L"Um lembrete chega como notificação, atrasado também se o PC estava desligado.", L"A reminder comes as a notification, late too if the PC was off.",
+         {{L"Na dock", L"In the dock", L"Um botão na dock abre as notas.", L"A dock button opens the notes.", true},
+          {L"Na Central", L"In the Center", L"Dentro da Central.", L"Inside the Center.", false},
+          {L"No Iniciar", L"In Start", L"Na aba Status do Iniciar.", L"In Start's Status tab.", false},
+          {L"Não quero", L"Not needed", L"Sem notas nem lembretes.", L"No notes or reminders.", false}},
+         {L"notesPlace"}, {{PgItens, 0}}},
+        {2, 20, L"Aparelhos sem fio", L"Wireless devices", L"Mostrar a bateria de fones, mouses e controles sem fio?",
+         L"Show the battery of wireless headsets, mice and controllers?",
+         L"Receptor USB (Logitech, Razer)? O BatteryHub se liga na página Itens.", L"A USB receiver (Logitech, Razer)? BatteryHub is turned on in the Items page.",
+         {{L"Na dock, com notificação", L"In the dock, with a notification", L"E uma notificação quando a bateria chega a 20% e a 10%.", L"And a notification when the battery gets to 20% and 10%.", true},
+          {L"Na Central", L"In the Center", L"Dentro da Central, com a notificação.", L"Inside the Center, with the notification.", false},
+          {L"Não", L"No", L"Sem baterias e sem notificações.", L"No batteries and no notifications.", false}},
+         {L"devPlace", L"devAlerts", L"devHub"}, {{PgItens, 0}}},
+        {2, 21, L"Microfone e câmera", L"Microphone and camera", L"Mostrar quando um app usa o microfone ou a câmera?",
+         L"Show when an app uses the microphone or the camera?",
+         L"Um ponto laranja (microfone) ou verde (câmera); clique para ver qual app.", L"An orange (microphone) or green (camera) dot; click it to see which app.",
+         {{L"Sim, na dock", L"Yes, in the dock", L"Só aparece enquanto algum app usa.", L"Only shows while an app uses them.", true},
+          {L"Na Central", L"In the Center", L"Dentro da Central.", L"Inside the Center.", false},
+          {L"Não", L"No", L"Sem o indicador.", L"No indicator.", false}},
+         {L"privPlace"}, {{PgItens, 0}}},
+        {3, 20, L"Notificações", L"Notifications", L"Quer as notificações com o visual do Nimbus?", L"Do you want notifications in Nimbus' look?",
+         L"As do Windows continuam guardadas na central dele.", L"Windows' own stay in its center.",
+         {{L"Sim, com som", L"Yes, with sound", L"Cartões do Nimbus, o som Pingo nas notificações e Bolha nos lembretes.", L"Nimbus cards, the Drop sound for notifications and Bubble for reminders.", true},
+          {L"Sim, sem som", L"Yes, silent", L"Só o cartão, nem os lembretes tocam.", L"Just the card; reminders are silent too.", false},
+          {L"Não", L"No", L"Fica tudo com o Windows.", L"Everything stays with Windows.", false}},
+         {L"notifShow", L"notifSound", L"remSound", L"notifV", L"notifH", L"notifSecs", L"notifWinN", L"notifPlace"}, {{PgItens, 0}, {PgNotif, 0}}},
+        {3, 21, L"Número de notificações", L"Notification count", L"Mostrar no ícone de cada app quantas notificações chegaram?",
+         L"Show on each app's icon how many notifications came?", L"O número some quando o app vem para a frente.", L"The number goes when the app comes to the front.",
+         {{L"Sim", L"Yes", L"Um número pequeno no canto do ícone.", L"A small number on the icon's corner.", true},
+          {L"Não", L"No", L"Os ícones ficam limpos.", L"Clean icons.", false}},
+         {L"dockBadges"}, {{PgDock, 0}}},
+        {4, 20, L"Painel de som", L"Sound panel", L"Qual painel de som?", L"Which sound panel?",
+         L"Completo e Grade mudam a saída de som dos apps no Windows. Voltar para Simples desfaz.",
+         L"Complete and Grid change the apps' sound output in Windows. Going back to Simple undoes it.",
+         {{L"Simples", L"Simple", L"O volume e o de cada app.", L"The volume and each app's.", true},
+          {L"Completo", L"Complete", L"Apps à esquerda, saídas à direita; arraste um app para tocar numa saída.", L"Apps on the left, outputs on the right; drag an app to play on an output.", false},
+          {L"Grade", L"Grid", L"Cada app em cada saída, com volume em cada cruzamento.", L"Every app on every output, with a volume at each crossing.", false}},
+         {L"soundPanel"}, {{PgSom, 0}}},
+        {4, 20, L"Prateleira", L"Shelf", L"Quer a prateleira para guardar arquivos e baixar links?", L"Do you want the shelf to keep files and download links?",
+         L"Solte arquivos na dock para guardar por um tempo, depois arraste para onde quiser.", L"Drop files on the dock to keep them for a moment, then drag them anywhere.",
+         {{L"Sim, arquivos e links diretos", L"Yes, files and direct links", L"O Nimbus baixa o arquivo do link.", L"Nimbus downloads the link's file.", true},
+          {L"Sim, também de sites", L"Yes, sites too", L"Vídeos e imagens pelo yt-dlp e gallery-dl, instalados por você.", L"Videos and pictures through yt-dlp and gallery-dl, installed by you.", false},
+          {L"Não", L"No", L"Sem prateleira.", L"No shelf.", false}},
+         {L"shelfPlace", L"shelfSites", L"shelfStyle", L"shelfLimit", L"shelfDrag", L"shelfCookies", L"shelfQuality"}, {{PgItens, 0}, {PgPrateleira, 0}}},
+        {0, 21, L"Posição da dock", L"Dock position", L"Onde a dock fica na tela?", L"Where does the dock sit on the screen?",
+         L"Vale para todos os monitores; cada um muda depois em Dock.", L"For every monitor; each one changes later in Dock.",
+         {{L"Embaixo, no meio", L"Bottom, in the middle", L"Como sempre foi.", L"As it always was.", true},
+          {L"Embaixo, à esquerda", L"Bottom, on the left", L"Os apps começam no canto, como no Windows 10.", L"The apps start at the corner, like Windows 10.", false},
+          {L"Em cima", L"At the top", L"Na borda de cima da tela.", L"On the top edge of the screen.", false},
+          {L"Na lateral esquerda", L"On the left side", L"Em pé, na borda esquerda.", L"Standing, on the left edge.", false}},
+         {L"edge", L"align"}, {{PgDock, 0}, {PgMonitores, 0}}},
+        {5, 21, L"Outros monitores", L"Other monitors", L"E nos outros monitores?", L"And on the other monitors?",
+         L"O principal fica como está.", L"The primary one stays as it is.",
+         {{L"Igual ao principal", L"Like the primary", L"Uma dock em cada um, com todas as janelas.", L"A dock on each, with every window.", true},
+          {L"Só as janelas de cada um", L"Each one's own windows", L"Cada dock mostra só as janelas do seu monitor.", L"Each dock shows only its monitor's windows.", false},
+          {L"Dock só no principal", L"Dock on the primary only", L"Os outros ficam sem dock.", L"The others have no dock.", false}},
+         {L"windows"}, {{PgDock, 0}}},
     };
     return q;
 }
 
 static void WizApply(int q, int o) {
     auto set = [](const wchar_t* k, const wchar_t* v) {
-        g_cfg[k] = v;
+        CfgPut(k, v);
         WriteVal(UserPrefix() + L"cfg." + k, v);
     };
+    auto place = [](int o, bool start) {  // (0 dock, 1 center, 2 Start when it's an answer, else off)
+        return o == 0 ? L"dock" : o == 1 ? L"central" : o == 2 && start ? L"iniciar" : L"off";
+    };
     switch (q) {
-        case 0: set(L"style", o == 0 ? L"nevoa" : o == 1 ? L"cristal" : o == 2 ? L"grafite" : L"aurora"); break;
-        case 1: set(L"format", o == 0 ? L"dock" : L"fixa"); break;
-        case 2: set(L"autoHide", o == 0 ? L"1" : L"0"); break;
-        case 3: set(L"animation", o == 0 ? L"zoom" : o == 1 ? L"elevar" : o == 2 ? L"foco" : L"nenhuma"); break;
-        case 4:
+        case WzVisual: set(L"style", o == 0 ? L"nevoa" : o == 1 ? L"cristal" : o == 2 ? L"grafite" : L"aurora"); break;
+        case WzDock: set(L"format", o == 0 ? L"dock" : L"fixa"); break;
+        case WzHide: set(L"autoHide", o == 0 ? L"1" : L"0"); break;
+        case WzAnim: set(L"animation", o == 0 ? L"zoom" : o == 1 ? L"elevar" : o == 2 ? L"foco" : L"nenhuma"); break;
+        case WzPinned:
+            set(L"pinCarousel", o == 0 ? L"0" : L"1");
+            if (o) set(L"pinCarouselN", o == 1 ? L"5" : L"8");
+            break;
+        case WzWinKey:
             set(L"winKeyMode", o == 0 ? L"nevoa" : L"windows");
             set(L"startMenu", o == 0 ? L"nevoa" : L"windows");
             break;
-        case 5: {
+        case WzSearch: set(L"fileSearch", o == 0 ? L"everything" : o == 1 ? L"windows" : L"off"); break;
+        case WzStatus: {
+            // (notes and the shelf have their own questions)
             const wchar_t* core[] = {L"statusClock", L"statusVolume", L"statusNetwork", L"statusBattery", L"statusKeyboard"};
-            const wchar_t* rest[] = {L"notesPlace", L"shelfPlace", L"dndPlace", L"btPlace", L"nightPlace", L"shortPlace", L"lightPlace", L"powerPlace"};
+            const wchar_t* rest[] = {L"dndPlace", L"btPlace", L"nightPlace", L"shortPlace", L"lightPlace", L"powerPlace"};
             if (o == 0) {
                 for (auto k : core) set(k, L"dock");
                 for (auto k : rest) set(k, L"dock");
@@ -17015,21 +25827,69 @@ static void WizApply(int q, int o) {
                 set(L"trayPlace", L"dock");
                 set(L"notifPlace", L"dock");
             }
+            // (on every dock: none keeps a choice of its own for the items arranged here)
+            for (auto k : core) StatClear(DockStatOfPlace(k));
+            for (auto k : rest) StatClear(DockStatOfPlace(k));
+            StatClear(L"bandeja");
+            StatClear(L"avisos");
             break;
         }
-        case 6:
+        case WzTray:
             set(L"trayStyle", o == 0 ? L"botao" : o == 1 ? L"lado" : o == 2 ? L"grade" : L"off");
             break;
-        case 7:
-            set(L"notifShow", o == 2 ? L"0" : L"1");
-            set(L"notifSound", o == 0 ? L"pingo" : L"0");
-            set(L"remSound", o == 0 ? L"bolha" : L"0");
-            break;
-        case 8:
+        case WzPlayer:
             if (o == 3) set(L"playerPlace", L"off");
             else {
                 if (CfgStr(L"playerPlace", L"dock") == L"off") set(L"playerPlace", L"dock");
                 set(L"playerDock", o == 0 ? L"ambos" : o == 1 ? L"espectro" : L"icone");
+            }
+            break;
+        case WzNotes: set(L"notesPlace", place(o, true)); break;
+        case WzDevices:
+            set(L"devPlace", place(o, false));
+            set(L"devAlerts", o == 2 ? L"0" : L"1");
+            break;
+        case WzPrivacy: set(L"privPlace", place(o, false)); break;
+        case WzNotif:
+            set(L"notifShow", o == 2 ? L"0" : L"1");
+            set(L"notifSound", o == 0 ? L"pingo" : L"0");
+            set(L"remSound", o == 0 ? L"bolha" : L"0");
+            break;
+        case WzBadges: set(L"dockBadges", o == 0 ? L"1" : L"0"); break;
+        case WzSound:
+            if (o == 0 && SoundFull()) SndResetAll();  // (as the setting's own row does)
+            set(L"soundPanel", o == 0 ? L"simples" : o == 1 ? L"completo" : L"extremo");
+            break;
+        case WzShelf:
+            if (o == 2) {
+                set(L"shelfPlace", L"off");
+            } else {
+                if (!PlaceOf(CfgStr(L"shelfPlace", L"dock"), true)) set(L"shelfPlace", L"dock");
+                set(L"shelfSites", o == 1 ? L"1" : L"0");
+            }
+            break;
+        case WzAlign:
+        case WzOtherMons:
+            if (g_sw.mons.empty()) LoadSwMonitors();
+            if (q == WzAlign) {  // (everyone's edge and place on it; no monitor keeps its own)
+                set(L"edge", o == 2 ? L"cima" : o == 3 ? L"esquerda" : L"baixo");
+                set(L"align", o == 1 ? L"esquerda" : L"centro");
+            } else if (o == 1) {
+                set(L"windows", L"deste");
+            }
+            for (auto& m : g_sw.mons) {
+                const std::wstring& id = m.who.id;
+                if (id.empty()) continue;
+                if (q == WzAlign) {
+                    for (const wchar_t* f : {L"edge", L"align"})
+                        if (!MonCfg(id, m.group, f).empty()) MonSet(id, f, L"");
+                } else if (o == 1) {  // (All's value now, set above: no monitor keeps its own)
+                    if (MonOwn(id, m.group, L"windows")) MonSet(id, L"windows", L"");
+                } else if (!m.primary) {
+                    MonSet(id, L"enabled", o == 2 ? L"0" : L"1");
+                    // (every window: All's value when that is it, else this monitor's own)
+                    if (o == 0) MonSet(id, L"windows", CfgStr(L"windows", L"todas") == L"todas" ? L"" : L"todas");
+                }
             }
             break;
     }
@@ -17038,86 +25898,634 @@ static void WizApply(int q, int o) {
 
 // The option that matches the current settings (-1: none of them).
 static int WizCurrent(int q) {
+    auto where = [](const wchar_t* k) { return PlaceName(PlaceOf(CfgStr(k, L"dock"), true)); };
     switch (q) {
-        case 0: {
+        case WzVisual: {
             std::wstring v = CfgStr(L"style", L"nevoa");
             return v == L"nevoa" ? 0 : v == L"cristal" ? 1 : v == L"grafite" ? 2 : v == L"aurora" ? 3 : -1;
         }
-        case 1: return CfgStr(L"format", L"dock") == L"fixa" ? 1 : 0;
-        case 2: return CfgInt(L"autoHide") ? 0 : 1;
-        case 3: {
+        case WzDock: return CfgStr(L"format", L"dock") == L"fixa" ? 1 : 0;
+        case WzHide: return CfgInt(L"autoHide") ? 0 : 1;
+        case WzAnim: {
             std::wstring v = CfgStr(L"animation", L"zoom");
             return v == L"zoom" ? 0 : v == L"elevar" ? 1 : v == L"foco" ? 2 : 3;
         }
-        case 4: return CfgStr(L"winKeyMode", L"nevoa") == L"windows" ? 1 : 0;
-        case 6: {
+        case WzPinned: return !CfgInt(L"pinCarousel") ? 0 : CfgInt(L"pinCarouselN") == 5 ? 1 : CfgInt(L"pinCarouselN") == 8 ? 2 : -1;
+        case WzWinKey: return CfgStr(L"winKeyMode", L"nevoa") == L"windows" ? 1 : 0;
+        case WzSearch: {
+            std::wstring v = CfgStr(L"fileSearch", L"everything");
+            return v == L"everything" ? 0 : v == L"windows" ? 1 : 2;
+        }
+        case WzTray: {
             std::wstring v = CfgStr(L"trayStyle", L"botao");
             return v == L"botao" ? 0 : v == L"lado" ? 1 : v == L"grade" ? 2 : v == L"off" ? 3 : -1;
         }
-        case 7: return !CfgInt(L"notifShow") ? 2 : SoundValue(CfgStr(L"notifSound")) ? 0 : 1;
-        case 8: {
+        case WzPlayer: {
             if (CfgStr(L"playerPlace", L"dock") == L"off") return 3;
             std::wstring v = CfgStr(L"playerDock", L"ambos");
             return v == L"espectro" ? 1 : v == L"icone" ? 2 : v == L"ambos" ? 0 : -1;
+        }
+        case WzNotes: {
+            std::wstring v = where(L"notesPlace");
+            return v == L"dock" ? 0 : v == L"central" ? 1 : v == L"iniciar" ? 2 : v == L"off" ? 3 : -1;
+        }
+        case WzDevices:
+        case WzPrivacy: {
+            std::wstring v = where(q == WzDevices ? L"devPlace" : L"privPlace");
+            return v == L"dock" ? 0 : v == L"central" ? 1 : v == L"off" ? 2 : -1;
+        }
+        case WzNotif: return !CfgInt(L"notifShow") ? 2 : SoundValue(CfgStr(L"notifSound")) ? 0 : 1;
+        case WzBadges: return CfgInt(L"dockBadges") ? 0 : 1;
+        case WzSound: {
+            std::wstring v = CfgStr(L"soundPanel", L"simples");
+            return v == L"completo" ? 1 : v == L"extremo" ? 2 : 0;
+        }
+        case WzShelf: return !PlaceOf(CfgStr(L"shelfPlace", L"dock"), true) ? 2 : CfgInt(L"shelfSites") ? 1 : 0;
+        case WzAlign: {
+            if (g_sw.mons.empty()) LoadSwMonitors();
+            for (auto& m : g_sw.mons)  // (a monitor with its own place: none of the answers)
+                if (MonOwn(m.who.id, m.group, L"edge") || MonOwn(m.who.id, m.group, L"align")) return -1;
+            std::wstring e = CfgStr(L"edge", L"baixo"), a = CfgStr(L"align", L"centro");
+            if (e == L"cima") return a == L"centro" ? 2 : -1;
+            if (e == L"esquerda") return a == L"centro" ? 3 : -1;
+            if (e == L"baixo") return a == L"esquerda" ? 1 : a == L"centro" ? 0 : -1;
+            return -1;
+        }
+        case WzOtherMons: {
+            if (g_sw.mons.empty()) LoadSwMonitors();
+            bool off = false, own = false;
+            for (auto& m : g_sw.mons) {
+                if (!m.primary && MonCfg(m.who.id, m.group, L"enabled") == L"0") off = true;
+                if (MonValOf(m, L"windows") == L"deste") own = true;
+            }
+            return off ? 2 : own ? 1 : 0;
         }
     }
     return -1;
 }
 
-static void WizStart() {
-    g_sw.wizStep = 0;
-    g_sw.wizAns.assign(WizQuestions().size(), -1);
-    Wh_SetStringValue((UserPrefix() + L"wizard.done").c_str(), L"1");  // (it opens by itself only once)
+// A setting moved away from its default (places compared as dock / center / Start, sounds by the sound).
+// (not "saved for this user": Back to defaults, the 1.x import and the questions save values equal to the default)
+static bool CfgChanged(const std::wstring& k) {
+    std::wstring def = CfgDefault(k), cur = CfgStr(k.c_str(), def.c_str());
+    bool status = k.rfind(L"status", 0) == 0 && k != L"statusPos" && k != L"statusPanels";
+    if (status || (k.size() > 5 && k.compare(k.size() - 5, 5, L"Place") == 0)) return PlaceOf(cur, !status) != PlaceOf(def, !status);
+    if (k == L"notifSound" || k == L"remSound") return SoundValue(cur) != SoundValue(def);
+    return cur != def;
 }
 
-static void PageComecar(float& y, float x, float w) {
-    const auto& qs = WizQuestions();
-    if (g_sw.wizAns.size() != qs.size()) g_sw.wizAns.assign(qs.size(), -1);
-    int n = (int)qs.size(), i = g_sw.wizStep;
-    auto later = [&] {
-        // (said plainly: nothing here is final)
-        y += 18;
-        Txt(L2(L"Nada aqui é definitivo: tudo pode ser mudado depois nas outras abas dos Ajustes, do jeito que você preferir.",
-               L"Nothing here is final: everything can be changed later in the other Settings tabs, the way you prefer."),
-            g_sw.fDesc.Get(), x, y, w, kMuted);
-        y += 20;
-    };
-    if (i >= n) {
-        Heading(y, x, w, L2(L"O Nimbus ficou do seu jeito", L"Nimbus is set up your way"),
-                L2(L"Pode mudar qualquer coisa depois, conforme preferir, nas outras abas, ou responder tudo de novo.",
-                   L"You can change anything later, as you like, in the other tabs, or answer again."));
-        y += 18;
-        std::vector<SwRow> rows;
-        for (int k = 0; k < n; k++) {
-            SwRow r;
-            r.label = L2(qs[k].kpt, qs[k].ken);
-            int a = g_sw.wizAns[k];
-            r.desc = a >= 0 ? std::wstring(L2(qs[k].opts[a].pt, qs[k].opts[a].en)) : std::wstring(L2(L"como estava", L"unchanged"));
-            rows.push_back(r);
+// The question's settings, already changed by the user (the monitors': complete mode, or the others' own docks).
+static bool WizMine(int id) {
+    for (auto& k : WizQuestions()[id].keys)
+        if (CfgChanged(k)) return true;
+    if (id == WzAlign || id == WzOtherMons) {
+        if (g_sw.mons.empty()) LoadSwMonitors();
+        for (auto& m : g_sw.mons) {
+            if (id == WzAlign && (MonOwn(m.who.id, m.group, L"edge") || MonOwn(m.who.id, m.group, L"align"))) return true;
+            if (id == WzOtherMons && !m.primary &&
+                (MonCfg(m.who.id, m.group, L"enabled") == L"0" || MonValOf(m, L"windows") == L"deste" || MonValOf(m, L"apps") != L"todos"))
+                return true;
         }
-        Card(rows, y, x, w);
-        y += 22;
-        DrawButton(D2D1::RectF(x, y, x + 150, y + 36), L2(L"Recomeçar", L"Start over"), [] {
-            WizStart();
-            SwInvalidate();
-        });
-        DrawButton(D2D1::RectF(x + w - 170, y, x + w, y + 36), L2(L"Ir pros Ajustes", L"Go to Settings"), [] { SwSetPage(PgGeral); }, true);
-        y += 36;
+    }
+    return false;
+}
+
+// The rows of the settings pages, found by the setting they show: the pages run without drawing, only the
+// ones needed. Again after a click, for other pages, or after a second (a hover redraw reuses them).
+static bool g_swRowsDirty = true;
+static void SwCollectRows(const std::vector<SwSrc>& srcs) {
+    static std::vector<std::pair<int, int>> last;
+    static DWORD at = 0;
+    std::vector<std::pair<int, int>> want;
+    for (auto& s : srcs) want.push_back({s.page, s.tab});
+    if (!g_swRowsDirty && want == last && GetTickCount() - at < 1000) return;
+    last = want;
+    at = GetTickCount();
+    g_swRowsDirty = false;
+    g_swById.clear();
+    size_t hits = g_sw.hits.size();
+    D2D1_RECT_F preview = g_sw.preview;
+    int savedMonTab = g_sw.monTab, savedSobreTab = g_sw.sobreTab, savedPage = g_swCurPage;
+    g_swCollect = g_swCollectIds = true;
+    g_sw.rt->PushAxisAlignedClip(D2D1::RectF(0, 0, 0, 0), D2D1_ANTIALIAS_MODE_ALIASED);
+    for (auto& s : srcs) {
+        if (s.page == PgMonitores) g_sw.monTab = s.tab;
+        if (s.page == PgSobre) g_sw.sobreTab = s.tab;
+        g_swCurPage = s.page;
+        float yy = 0;
+        SwPageDraw(s.page, yy, 0, 600);
+    }
+    g_sw.rt->PopAxisAlignedClip();
+    g_swCollect = g_swCollectIds = false;
+    g_sw.monTab = savedMonTab;
+    g_sw.sobreTab = savedSobreTab;
+    g_swCurPage = savedPage;
+    g_swCurMon = -1;
+    g_sw.hits.resize(hits);  // (nothing there can be clicked)
+    g_sw.preview = preview;
+}
+static std::vector<SwRow> SwRowsOf(const std::vector<std::wstring>& ids) {
+    std::vector<SwRow> rows;
+    for (auto& id : ids) {
+        auto it = g_swById.find(id);
+        if (it == g_swById.end()) continue;
+        bool twice = false;  // (a row with two settings, like the position picker, is found by both)
+        for (auto& r : rows) twice |= r.id == it->second.id;
+        if (!twice) {
+            rows.push_back(it->second);
+            rows.back().child = false;  // (in the question's order, not the page's: no row to hang under)
+        }
+    }
+    return rows;
+}
+
+// What "all at once" is about to change, as it is now: every place it sets and every dock's own choice it takes
+// away. Returns the way back.
+static std::function<void()> StatusPresetKeep() {
+    static const wchar_t* const keys[] = {L"statusClock", L"statusVolume", L"statusNetwork", L"statusBattery", L"statusKeyboard", L"dndPlace", L"btPlace",
+                                          L"nightPlace", L"shortPlace", L"lightPlace", L"powerPlace", L"trayPlace", L"notifPlace"};
+    struct Was {
+        std::wstring id, field, v;
+    };
+    std::vector<std::pair<std::wstring, std::wstring>> cfg;
+    std::vector<Was> own;
+    for (auto* k : keys) {
+        cfg.push_back({k, CfgStr(k)});
+        std::wstring f = std::wstring(L"stat.") + DockStatOfPlace(k);
+        for (int i : SwMonsOn()) {
+            std::wstring v = MonCfg(g_sw.mons[i].who.id, g_sw.mons[i].group, f.c_str());
+            if (!v.empty()) own.push_back({g_sw.mons[i].who.id, f, v});
+        }
+    }
+    return [cfg, own] {
+        for (auto& c : cfg) CfgSet(c.first, c.second);
+        for (auto& m : own) MonSet(m.id, m.field.c_str(), m.v);
+        PostMessageW(g_msgWnd, WM_APP_SETTINGS, 0, 0);  // (an item's worker may have to start or stop)
+    };
+}
+// The status area all at once (its question's answers). The first click asks: the button then says what it will
+// do, for 8 s. Done, the row offers "Undo" for 6 s.
+static SwRow StatusPresetRow() {
+    static const wchar_t* names[][2] = {{L"Tudo na dock", L"All in the dock"}, {L"Tudo na Central", L"All in the Center"}, {L"Misto", L"Mixed"}};
+    static const wchar_t* yes[][2] = {{L"Pôr tudo na dock", L"Put all in the dock"}, {L"Pôr tudo na Central", L"Put all in the Center"},
+                                      {L"Usar o misto", L"Use the mix"}};
+    if (SwUndoIs(L"status.preset")) {
+        SwRow u = RButtons(L2(L"Arrumar tudo de uma vez", L"Arrange everything at once"), L2(L"Arrumado.", L"Arranged."),
+                           {{L2(L"Desfazer", L"Undo"), [] { SwUndoDo(); }}});
+        u.id = L"status.preset";
+        return u;
+    }
+    int c = g_sw.confirmPreset;
+    std::vector<std::pair<std::wstring, std::function<void()>>> b;
+    for (int o = 0; o < 3; o++)
+        b.push_back({c == o ? std::wstring(L2(yes[o][0], yes[o][1])) : std::wstring(L2(names[o][0], names[o][1])), [o] {
+                         if (g_sw.confirmPreset == o) {
+                             g_sw.confirmPreset = -1;
+                             auto back = StatusPresetKeep();
+                             WizApply(WzStatus, o);
+                             SwUndoOffer(L"status.preset", std::move(back));
+                         } else {
+                             g_sw.confirmPreset = o;
+                             if (g_sw.hwnd) SetTimer(g_sw.hwnd, TIMER_SW_CONFIRM, 8000, nullptr);
+                         }
+                     }});
+    SwRow r = RButtons(L2(L"Arrumar tudo de uma vez", L"Arrange everything at once"),
+                       c >= 0 ? L2(L"Todos os itens abaixo mudam. Clique de novo para confirmar.", L"Every item below changes. Click again to confirm.")
+                       : SwMonsOn().size() > 1 ? L2(L"Muda todos os itens abaixo, em todas as docks. As marcas só de um monitor saem.",
+                                                    L"Changes every item below, on every dock. Ticks on one monitor only are removed.")
+                              : L2(L"Muda todos os itens abaixo. Depois dá para acertar um por um.",
+                                   L"Changes every item below. Fine-tune them one by one after."),
+                       std::move(b));
+    r.id = L"status.preset";
+    r.asking = c >= 0;
+    r.strongBtn = c >= 0 ? c : 1;  // (the page's one full button: the suggested answer, or the one being confirmed)
+    return r;
+}
+
+// The monitor questions' own rows: each monitor's, named when there are several. The dock's position: everyone's
+// rows first, then only the monitors with a place of their own.
+static std::vector<SwRow> WizMonRows(int id) {
+    std::vector<SwRow> rows;
+    if (id == WzAlign) rows = SwRowsOf({L"edge", L"align"});
+    else rows = SwRowsOf({L"windows", L"apps"});  // (All's rows first; then each monitor's switch and what it has of its own)
+    int n = 0;
+    for (auto& m : g_sw.mons) {
+        n++;
+        if (m.who.id.empty() || (id == WzOtherMons && m.primary)) continue;
+        std::wstring name = m.who.name.empty() ? std::wstring(L2(L"Monitor ", L"Monitor ")) + std::to_wstring(n) : m.who.name;
+        std::vector<std::wstring> fields = id == WzAlign ? std::vector<std::wstring>{L"edge", L"align", L"apps"}
+                                                         : std::vector<std::wstring>{L"enabled", L"windows", L"apps"};
+        for (auto& f : fields) {
+            auto it = g_swById.find(L"mon:" + m.who.id + L":" + f);
+            if (it == g_swById.end() || (f != L"enabled" && !MonOwn(m.who.id, m.group, f))) continue;
+            SwRow r = it->second;
+            if (g_sw.mons.size() > 1) r.label = name + L"  ·  " + r.label;
+            rows.push_back(std::move(r));
+        }
+    }
+    return rows;
+}
+
+// The page a question's settings live on (its "This page's questions" button asks only those).
+static int WizPageOf(int wizId) {
+    switch (wizId) {
+        case WzVisual: return PgGeral;
+        case WzDock: case WzHide: case WzAnim: case WzPinned: case WzBadges: return PgDock;
+        case WzWinKey: case WzSearch: return PgIniciar;
+        case WzStatus: case WzNotes: case WzDevices: case WzPrivacy: return PgItens;
+        case WzTray: return PgBandeja;
+        case WzNotif: return PgNotif;
+        case WzPlayer: case WzSound: return PgSom;
+        case WzShelf: return PgPrateleira;
+        case WzAlign: return PgDock;
+        case WzOtherMons: return PgMonitores;
+    }
+    return -1;
+}
+
+// A round of questions: all (-1), the ones new in 2.0 and 2.1 (-2), or one page's (100 + its SwPage).
+static std::vector<int> WizListFor(int mode) {
+    if (g_sw.mons.empty()) LoadSwMonitors();
+    std::vector<int> list;
+    const auto& qs = WizQuestions();
+    // (asked in this order: the dock's two questions together, its place right after its format)
+    static const int order[] = {WzVisual, WzDock, WzAlign, WzHide, WzAnim, WzPinned, WzWinKey, WzSearch, WzStatus, WzTray, WzPlayer, WzNotes,
+                                WzDevices, WzPrivacy, WzNotif, WzBadges, WzSound, WzShelf, WzOtherMons};
+    static_assert((int)ARRAYSIZE(order) == (int)WzCount, "every question has its place");
+    for (int k : order) {
+        if (k == WzOtherMons && g_sw.mons.size() < 2) continue;
+        if (k == WzPinned) continue;  // (the pinned carousel is put aside for now)
+        if (mode == -2 && qs[k].ver < 20) continue;
+        if (mode >= 100 && WizPageOf(k) != mode - 100) continue;
+        list.push_back(k);
+    }
+    return list;
+}
+
+// A round left halfway, kept so it can go on another day. Only the home's two rounds (every question, or the new
+// ones): "wizard.at" is the question it stopped at (1-based), "wizard.round" says "new" for the new ones' round.
+// Both go when a round gets to its summary.
+struct WizHalf {
+    bool loaded = false;
+    int mode = -1, at = 0;  // (at 0: none)
+} g_wizHalf;
+static const WizHalf& WizHalfGet() {
+    if (!g_wizHalf.loaded) {
+        wchar_t b[16] = {};
+        g_wizHalf.loaded = true;
+        g_wizHalf.at = Wh_GetIntValue((UserPrefix() + L"wizard.at").c_str(), 0);
+        g_wizHalf.mode = Wh_GetStringValue((UserPrefix() + L"wizard.round").c_str(), b, ARRAYSIZE(b)) && !wcscmp(b, L"new") ? -2 : -1;
+    }
+    return g_wizHalf;
+}
+static void WizHalfSet(int mode, int at) {
+    if (g_wizHalf.loaded && g_wizHalf.mode == mode && g_wizHalf.at == at) return;
+    g_wizHalf = {true, mode, at};
+    std::wstring ka = UserPrefix() + L"wizard.at", kr = UserPrefix() + L"wizard.round";
+    if (at <= 0) {
+        Wh_DeleteValue(ka.c_str());
+        Wh_DeleteValue(kr.c_str());
         return;
     }
-    const WizQ& q = qs[i];
-    wchar_t step[64];
-    swprintf_s(step, L2(L"Pergunta %d de %d", L"Question %d of %d"), i + 1, n);
-    Txt(step, g_sw.fDesc.Get(), x, y, w, kMuted);
-    y += 22;
-    float dw = std::min(30.0f, (w - (n - 1) * 6) / n);
-    for (int k = 0; k < n; k++)
-        g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(x + k * (dw + 6), y, x + k * (dw + 6) + dw, y + 4), 2, 2),
-                                      Br(k <= i ? kInk : 0xFFFFFF, k <= i ? 1 : 0.12f));
-    y += 26;
-    Heading(y, x, w, L2(q.qpt, q.qen), *q.hpt ? L2(q.hpt, q.hen) : nullptr);
+    Wh_SetIntValue(ka.c_str(), at);
+    if (mode == -2) Wh_SetStringValue(kr.c_str(), L"new");
+    else Wh_DeleteValue(kr.c_str());
+}
+// The question a halfway round stopped at, and of how many (false: there is none).
+static bool WizHalfAt(int& at, int& of) {
+    const WizHalf& h = WizHalfGet();
+    if (h.at <= 0) return false;
+    at = h.at;
+    of = (int)WizListFor(h.mode).size();
+    return at <= of;
+}
+
+// The two questions about the monitors: they show the strip of monitors and light the numbers up on arriving.
+static bool WizMonQ(int id) { return id == WzAlign || id == WzOtherMons; }
+
+// On arriving at a question, or at the summary: what is kept for another day, and what shows by itself.
+static void WizArrive() {
+    int n = (int)g_sw.wizList.size(), i = g_sw.wizStep;
+    g_sw.wizPick = -1;
+    g_sw.scroll = g_sw.scrollTo = 0;
+    g_swRowsDirty = true;
+    if (i < 0) return;
+    bool home = g_sw.wizMode < 100;
+    if (i >= n) {  // the summary: the round is done (only now: a round left before it can be picked up again)
+        if (home) {
+            WizHalfSet(g_sw.wizMode, 0);
+            Wh_SetStringValue((UserPrefix() + L"wizard.done").c_str(), L"1");
+            Wh_SetStringValue((UserPrefix() + L"wizard.ver").c_str(), kVersion);
+        }
+        return;
+    }
+    if (home && !g_sw.wizBack) WizHalfSet(g_sw.wizMode, i + 1);
+    if (WizMonQ(g_sw.wizList[i]) && g_sw.mons.size() > 1 && g_sw.hwnd) MonIdentify();  // (which monitor is which, for 2.5 s)
+}
+static void WizGo(int step) {
+    g_sw.wizStep = step;
+    WizArrive();
+    SwInvalidate();
+}
+
+static void WizStart(int mode) {
+    if (!g_swUndo.id.rfind(L"wiz:", 0)) g_swUndo = {};
+    g_sw.wizList = WizListFor(mode);
+    g_sw.wizMode = mode;
+    g_sw.wizStep = 0;
+    g_sw.wizFrom = mode >= 100 ? mode - 100 : -1;
+    g_sw.wizBack = false;
+    g_sw.wizAns.assign(WzCount, -1);
+    g_sw.wizMine.assign(WzCount, 0);
+    for (int id : g_sw.wizList) g_sw.wizMine[id] = WizMine(id);  // (once: answering doesn't change a question's mode)
+    WizArrive();
+}
+// "Continue": the halfway round again, at the question it stopped at. What was answered before is as it is now.
+static void WizResume() {
+    WizHalf h = WizHalfGet();
+    g_sw.wizList = WizListFor(h.mode);
+    int n = (int)g_sw.wizList.size();
+    if (!n) return;
+    g_sw.wizMode = h.mode;
+    g_sw.wizStep = std::clamp(h.at - 1, 0, n - 1);
+    g_sw.wizFrom = -1;
+    g_sw.wizBack = false;
+    if (g_sw.wizAns.size() != WzCount) g_sw.wizAns.assign(WzCount, -1);
+    g_sw.wizMine.assign(WzCount, 0);
+    for (int k = g_sw.wizStep; k < n; k++) g_sw.wizMine[g_sw.wizList[k]] = WizMine(g_sw.wizList[k]);  // (the ones still to come)
+    WizArrive();
+}
+
+// Out of a round: back to the page it was started from, or to the guided setup's home. Halfway, a notice says the
+// answers given stay.
+static void WizLeave() {
+    int from = g_sw.wizFrom, n = (int)g_sw.wizList.size();
+    bool mid = g_sw.wizStep > 0 && g_sw.wizStep < n && !g_sw.wizBack;
+    if (g_sw.wizStep == 0 && g_sw.wizMode < 100) WizHalfSet(g_sw.wizMode, 0);  // (left at the first question: nothing to pick up)
+    if (!g_swUndo.id.rfind(L"wiz:", 0)) g_swUndo = {};
+    g_sw.wizStep = -1;
+    g_sw.wizFrom = -1;
+    g_sw.wizBack = false;
+    g_sw.wizPick = -1;
+    g_sw.scroll = g_sw.scrollTo = 0;
+    if (from >= 0) SwSetPage(from);
+    if (mid) SwToast(L2(L"Suas respostas até aqui já valem.", L"Your answers so far already apply."));
+    SwInvalidate();
+}
+
+// After question i was answered or kept: the next one, or the summary. A round of a single question (a page's)
+// has no summary: straight back to its page, with "Done."
+static void WizNext(int i) {
+    int n = (int)g_sw.wizList.size();
+    bool back = g_sw.wizBack;
+    g_sw.wizBack = false;
+    if (n == 1 && g_sw.wizFrom >= 0) {
+        int from = g_sw.wizFrom;
+        g_sw.wizStep = -1;
+        g_sw.wizFrom = -1;
+        SwSetPage(from);
+        SwToast(L2(L"Pronto.", L"Done."));
+        return;
+    }
+    WizGo(back ? n : i + 1);
+}
+
+// The monitors (their numbers) with a choice of their own that this question's ready answers take away: the
+// status area's items on one dock only, or a dock's own edge or place on it (not the place Nimbus itself gave it).
+static const wchar_t* const kWizStatusKeys[] = {L"statusClock", L"statusVolume", L"statusNetwork", L"statusBattery", L"statusKeyboard", L"dndPlace",
+                                                L"btPlace", L"nightPlace", L"shortPlace", L"lightPlace", L"powerPlace", L"trayPlace", L"notifPlace"};
+static std::vector<int> WizErases(int id) {
+    std::vector<int> v;
+    if (id != WzStatus && id != WzAlign) return v;
+    if (g_sw.mons.empty()) LoadSwMonitors();
+    for (int i = 0; i < (int)g_sw.mons.size(); i++) {
+        const SwMon& m = g_sw.mons[i];
+        if (m.who.id.empty()) continue;
+        bool own = false;
+        if (id == WzAlign) {
+            std::wstring flag;
+            bool autoMade = ReadVal(AlignAutoKey(m.who.id), flag) && flag == L"1";
+            own = !MonCfg(m.who.id, m.group, L"edge").empty() || (!MonCfg(m.who.id, m.group, L"align").empty() && !autoMade);
+        } else if (SwMonHasDock(i)) {
+            for (auto* k : kWizStatusKeys)
+                own |= !MonCfg(m.who.id, m.group, (std::wstring(L"stat.") + DockStatOfPlace(k)).c_str()).empty();
+        }
+        if (own) v.push_back(i + 1);
+    }
+    return v;
+}
+// What such an answer is about to change, as it is now. Returns the way back.
+static std::function<void()> WizKeep(int id) {
+    if (id == WzStatus) return StatusPresetKeep();
+    struct Was {
+        std::wstring id, field, v;
+    };
+    std::vector<Was> own;
+    std::wstring edge = CfgStr(L"edge", L"baixo"), align = CfgStr(L"align", L"centro");
+    for (auto& m : g_sw.mons)
+        for (const wchar_t* f : {L"edge", L"align"}) {
+            std::wstring v = m.who.id.empty() ? L"" : MonCfg(m.who.id, m.group, f);
+            if (!v.empty()) own.push_back({m.who.id, f, v});
+        }
+    return [own, edge, align] {
+        CfgSet(L"edge", edge);
+        CfgSet(L"align", align);
+        for (auto& w : own) MonSet(w.id, w.field.c_str(), w.v);
+    };
+}
+// A ready answer is taken: applied at once, and on to the next question.
+static void WizAnswer(int i, int id, int k) {
+    g_sw.wizAns[id] = k;
+    WizApply(id, k);
+    WizNext(i);
+}
+
+// (said plainly, under each question: nothing here is final)
+static void ComecarLater(float& y, float x, float w) {
+    y += 18;
+    Txt(L2(L"Dá para mudar tudo depois, nos Ajustes.", L"You can change everything later, in Settings."), g_sw.fDesc.Get(), x, y, w, kMuted);
+    y += 20;
+}
+
+// Home: a round left halfway first; then the ways in (every question and, for who came from an older version,
+// only what's new); then one subject's questions, by its page's name.
+static void ComecarHome(float& y, float x, float w) {
+    Heading(y, x, w, L2(L"Configuração guiada", L"Guided setup"),
+            L2(L"Responda umas perguntas rápidas e o Nimbus fica do seu jeito. Cada resposta vale na hora.",
+               L"Answer a few quick questions and Nimbus is set up your way. Each answer applies at once."));
     y += 24;
-    int cur = g_sw.wizAns[i] >= 0 ? g_sw.wizAns[i] : WizCurrent(i);
+    int halfAt = 0, halfOf = 0;
+    bool resume = WizHalfAt(halfAt, halfOf);
+    if (resume) {
+        wchar_t t[96];
+        swprintf_s(t, L2(L"Você parou na pergunta %d de %d", L"You stopped at question %d of %d"), halfAt, halfOf);
+        int mode = WizHalfGet().mode;
+        SwRow r = RButtons(t, mode == -2 ? L2(L"Na rodada só do que é novo. As respostas até ali já valem.", L"In the round of only what's new. The answers up to there already apply.")
+                                         : L2(L"As respostas até ali já valem.", L"The answers up to there already apply."),
+                           {{L2(L"Começar de novo", L"Start over"), [mode] {
+                                 WizStart(mode);
+                                 SwInvalidate();
+                             }},
+                            {L2(L"Continuar", L"Continue"), [] {
+                                 WizResume();
+                                 SwInvalidate();
+                             }}});
+        r.strongBtn = 1;  // (the screen's one full button while there is something to go on with)
+        Card({r}, y, x, w);
+        y += 12;
+    }
+    struct Way {
+        std::wstring title, desc, meta, button;
+        int mode;
+    };
+    std::vector<Way> ways;
+    ways.push_back({L2(L"Todas as perguntas", L"All the questions"),
+                    L2(L"Visual, dock, Iniciar, área de status, notificações, som, prateleira e monitores.",
+                       L"Look, dock, Start, status area, notifications, sound, shelf and monitors."),
+                    L2(L"Uns 3 minutos", L"About 3 minutes"),
+                    std::wstring(L2(L"Começar (", L"Start (")) + std::to_wstring(WizListFor(-1).size()) + L")", -1});
+    if (WizUpdated())  // (someone setting Nimbus up for the first time has nothing "new" to tell apart)
+        ways.push_back({L2(L"Só o que é novo (2.0 e 2.1)", L"Only what's new (2.0 and 2.1)"),
+                        L2(L"Central, bandeja, notas, aparelhos, microfone e câmera, som, prateleira e monitores.",
+                           L"Center, tray, notes, devices, microphone and camera, sound, shelf and monitors."),
+                        L"", std::wstring(L2(L"Responder (", L"Answer (")) + std::to_wstring(WizListFor(-2).size()) + L")", -2});
+    int nw = (int)ways.size();
+    float gap = 12, cw = (w - gap * (nw - 1)) / nw, ch = nw > 1 ? 160.0f : 0.0f;
+    for (auto& wy : ways)
+        ch = std::max(ch, 18 + Measure(wy.title, g_sw.fTitle.Get(), cw - 36).height + 6 + Measure(wy.desc, g_sw.fDesc.Get(), cw - 36).height + 18 + 34 + 16);
+    for (int k = 0; k < nw; k++) {  // (the same card for both; only one full button on the screen)
+        const Way& wy = ways[k];
+        D2D1_RECT_F r = D2D1::RectF(x + k * (cw + gap), y, x + k * (cw + gap) + cw, y + ch);
+        g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(r, 12, 12), Br(0xFFFFFF, 0.035f));
+        g_sw.rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + 0.5f, r.top + 0.5f, r.right - 0.5f, r.bottom - 0.5f), 12, 12),
+                                      Br(0xFFFFFF, 0.06f), 1);
+        float th = Txt(wy.title, g_sw.fTitle.Get(), r.left + 18, r.top + 18, cw - 36, kInk);
+        Txt(wy.desc, g_sw.fDesc.Get(), r.left + 18, r.top + 18 + th + 6, cw - 36, kSub);
+        float bw = Measure(wy.button, g_sw.fSeg.Get()).width + 28;
+        D2D1_RECT_F br = D2D1::RectF(r.right - 18 - bw, r.bottom - 16 - 34, r.right - 18, r.bottom - 16);
+        Txt(wy.meta, g_sw.fSmall.Get(), r.left + 18, (br.top + br.bottom - Measure(L"X", g_sw.fSmall.Get()).height) / 2, br.left - r.left - 30, kMuted);
+        int mode = wy.mode;
+        DrawButton(br, wy.button, [mode] {
+            WizStart(mode);
+            SwInvalidate();
+        }, k == 0 && !resume);
+    }
+    y += ch + 18;
+    // One subject's questions: its page's name is the link (the same round as that page's "This page's questions").
+    static const int pages[] = {PgGeral, PgDock, PgIniciar, PgItens, PgBandeja, PgNotif, PgSom, PgPrateleira, PgMonitores};
+    std::wstring lead = L2(L"Para responder só as de um assunto:", L"To answer only one subject's:");
+    IDWriteTextFormat* f = g_sw.fDesc.Get();
+    float lh = Measure(L"X", f).height, px = x + 4, right = x + w - 4;
+    Txt(lead, f, px, y, w, kMuted);
+    px += Measure(lead, f).width + 8;
+    bool first = true;
+    for (int pg : pages) {
+        if (WizListFor(100 + pg).empty()) continue;
+        std::wstring name = SwPageName(pg);
+        float nwid = Measure(name, f).width;
+        if (px + (first ? 0 : 14) + nwid > right) {  // (no room on this line: the next, with no dot in front)
+            px = x + 4;
+            y += lh + 8;
+        } else if (!first) {
+            Txt(L"\u00B7", f, px + 4, y, 10, kMuted);
+            px += 14;
+        }
+        D2D1_RECT_F lr = D2D1::RectF(px - 3, y - 3, px + nwid + 3, y + lh + 3);
+        bool hot = Hot(lr);
+        Txt(name, f, px, y, nwid + 2, kInk);
+        g_sw.rt->FillRectangle(D2D1::RectF(px, y + lh - 1, px + nwid, y + lh), Br(kInk, hot ? 0.9f : 0.35f));
+        AddHit(lr, [pg] {
+            WizStart(100 + pg);
+            SwInvalidate();
+        });
+        px += nwid;
+        first = false;
+    }
+    y += lh;
+}
+
+// One question; "my own" first when its settings were already changed.
+static void ComecarQuestion(float& y, float x, float w) {
+    const auto& qs = WizQuestions();
+    int n = (int)g_sw.wizList.size(), i = g_sw.wizStep, id = g_sw.wizList[i];
+    const WizQ& q = qs[id];
+    {
+        std::wstring back = L2(L"‹ Sair", L"‹ Exit");
+        DrawButton(D2D1::RectF(x, y, x + Measure(back, g_sw.fSeg.Get()).width + 28, y + 32), back, [] { WizLeave(); });
+        wchar_t step[160];
+        swprintf_s(step, L2(L"%s  ·  Pergunta %d de %d", L"%s  ·  Question %d of %d"), L2(kWizChap[q.chap][0], kWizChap[q.chap][1]), i + 1, n);
+        float sw = Measure(step, g_sw.fDesc.Get()).width;
+        Txt(step, g_sw.fDesc.Get(), x + w - sw - 4, y + 8, sw + 4, kMuted);
+        y += 32 + 16;
+    }
+    // the steps, a little gap between chapters
+    {
+        int breaks = 0;
+        for (int k = 1; k < n; k++) breaks += qs[g_sw.wizList[k]].chap != qs[g_sw.wizList[k - 1]].chap;
+        float dw = std::min(30.0f, (w - (n - 1) * 6 - breaks * 8) / n), bx = x;
+        for (int k = 0; k < n; k++) {
+            if (k && qs[g_sw.wizList[k]].chap != qs[g_sw.wizList[k - 1]].chap) bx += 8;
+            g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(bx, y, bx + dw, y + 4), 2, 2), Br(k <= i ? kInk : 0xFFFFFF, k <= i ? 1 : 0.12f));
+            bx += dw + 6;
+        }
+        y += 4 + 26;
+    }
+    Heading(y, x, w, L2(q.qpt, q.qen), *q.hpt ? L2(q.hpt, q.hen) : nullptr);
+    if (WizMonQ(id)) MonStrip(y, x, w);  // (which monitor is which, in sight while answering about them)
+    y += 24;
+    bool mine = g_sw.wizMine[id] != 0;
+    int ans = g_sw.wizAns[id];
+    if (mine) {
+        // "My own": what they had chosen stays, and can be changed right here
+        // (open: its rows show. A ready answer marked and waiting for "Confirm" only takes the check mark away:
+        // the rows stay, or the answers would jump from under the mouse)
+        bool open = ans < 0, on = open && g_sw.wizPick < 0;
+        D2D1_RECT_F r = D2D1::RectF(x, y, x + w, y + 74);
+        bool hot = Hot(r);
+        g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(r, 14, 14), Br(0xFFFFFF, hot ? 0.08f : on ? 0.07f : 0.04f));
+        g_sw.rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + 0.5f, r.top + 0.5f, r.right - 0.5f, r.bottom - 0.5f), 14, 14),
+                                      Br(on ? kInk : 0xFFFFFF, on ? 0.9f : 0.08f), on ? 1.5f : 1);
+        D2D1_POINT_2F c = D2D1::Point2F(x + 30, (r.top + r.bottom) / 2);
+        if (on) {
+            g_sw.rt->FillEllipse(D2D1::Ellipse(c, 11, 11), Br(kInk));
+            Icon(L"M5 12.5l4.5 4.5L19 7.5", c.x - 7, c.y - 7, 14, kBg, 1, 2.6f);
+        } else {
+            g_sw.rt->DrawEllipse(D2D1::Ellipse(c, 10.5f, 10.5f), Br(0xFFFFFF, 0.3f), 1.2f);
+        }
+        std::wstring pill = L2(L"do seu jeito", L"your way");
+        float pw = Measure(pill, g_sw.fSmall.Get()).width + 18, tx = x + 54, tw = w - 54 - pw - 30;
+        float th = Measure(L2(L"Eu escolho", L"My own"), g_sw.fTitle.Get(), tw).height;
+        std::wstring d = L2(L"Você já mudou isto nos Ajustes. Fica como está; mexa aqui se quiser.",
+                            L"You already changed this in Settings. It stays as it is; change it here if you like.");
+        float dh = Measure(d, g_sw.fDesc.Get(), tw).height, ty = (r.top + r.bottom - th - 3 - dh) / 2;
+        Txt(L2(L"Eu escolho", L"My own"), g_sw.fTitle.Get(), tx, ty, tw, kInk);
+        Txt(d, g_sw.fDesc.Get(), tx, ty + th + 3, tw, kSub);
+        D2D1_RECT_F pr = D2D1::RectF(r.right - 18 - pw, c.y - 11, r.right - 18, c.y + 11);
+        g_sw.rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(pr.left + 0.5f, pr.top + 0.5f, pr.right - 0.5f, pr.bottom - 0.5f), 11, 11),
+                                      Br(0xFFFFFF, 0.16f), 1);
+        TxtC(pill, g_sw.fSmall.Get(), pr, kSub);
+        if (!on) AddHit(r, [id] {
+            g_sw.wizAns[id] = -2;
+            g_sw.wizPick = -1;
+            g_swRowsDirty = true;
+            SwInvalidate();
+        });
+        y += 74;
+        if (open) {
+            y += 8;
+            if (id == WzVisual) {
+                LooksGrid(y, x, w);
+                y += 8;
+            }
+            if (id == WzSound) SoundGrid(y, x, w);  // (the panel isn't a row: its cards)
+            SwCollectRows(q.srcs);
+            auto rows = id == WzAlign || id == WzOtherMons ? WizMonRows(id) : SwRowsOf(q.keys);
+            if (!rows.empty()) Card(std::move(rows), y, x, w);
+        }
+        Section(y, x, w, L2(L"Ou use uma resposta pronta", L"Or use a ready answer"));
+    }
+    int now = ans >= 0 ? ans : mine ? -1 : WizCurrent(id);       // the answer that is in force
+    int cur = g_sw.wizPick >= 0 ? g_sw.wizPick : now;            // the one drawn as chosen
     float gap = 12, cw = (w - gap) / 2, ch = 86;
     for (int k = 0; k < (int)q.opts.size(); k++) {
         const WizOpt& o = q.opts[k];
@@ -17128,7 +26536,7 @@ static void PageComecar(float& y, float x, float w) {
         g_sw.rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + 0.5f, r.top + 0.5f, r.right - 0.5f, r.bottom - 0.5f), 14, 14),
                                       Br(on ? kInk : 0xFFFFFF, on ? 0.9f : 0.08f), on ? 1.5f : 1);
         float tx = r.left + 18;
-        if (i == 0) {  // the looks: a little glass bar of each
+        if (id == WzVisual) {  // the looks: a little glass bar of each
             D2D1_RECT_F ill = D2D1::RectF(r.left + 14, r.top + 16, r.left + 98, r.bottom - 16);
             Wallpaper(ill, 9);
             static const wchar_t* ids[] = {L"nevoa", L"cristal", L"grafite", L"aurora"};
@@ -17137,35 +26545,135 @@ static void PageComecar(float& y, float x, float w) {
             GlassBar(bar, 7, t, t.tint.a);
             tx = ill.right + 14;
         }
-        float th = Txt(L2(o.pt, o.en), g_sw.fTitle.Get(), tx, r.top + 16, r.right - tx - 110, kInk);
+        float th = Txt(L2(o.pt, o.en), g_sw.fTitle.Get(), tx, r.top + 16, r.right - tx - 122, kInk);
         if (o.rec) {
             std::wstring rec = L2(L"recomendado", L"recommended");
             float rw = Measure(rec, g_sw.fSmall.Get()).width + 14;
-            D2D1_RECT_F pr = D2D1::RectF(r.right - 14 - rw, r.top + 16, r.right - 14, r.top + 36);
-            g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(pr, 10, 10), Br(kInk, 0.9f));
+            D2D1_RECT_F pr = D2D1::RectF(r.right - 14 - rw, r.top + 15, r.right - 14, r.top + 37);
+            g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(pr, 11, 11), Br(kInk, 0.9f));
             TxtC(rec, g_sw.fSmall.Get(), pr, kBg);
         }
         Txt(L2(o.dpt, o.den), g_sw.fDesc.Get(), tx, r.top + 16 + th + 4, r.right - tx - 16, kSub);
-        AddHit(r, [i, k] {
-            g_sw.wizAns[i] = k;
-            WizApply(i, k);
-            g_sw.wizStep = i + 1;
-            g_sw.scroll = g_sw.scrollTo = 0;
-            SwInvalidate();
+        AddHit(r, [i, id, k] {
+            // An answer that takes away what was set on one monitor only: the first click only marks it (see below).
+            if (!WizErases(id).empty()) {
+                g_sw.wizPick = k;
+                SwInvalidate();
+                return;
+            }
+            WizAnswer(i, id, k);
         });
     }
     y += ((int)q.opts.size() + 1) / 2 * (ch + gap);
-    later();
+    bool asking = g_sw.wizPick >= 0;
+    if (asking) {
+        // The marked answer waits here: what it replaces, on which monitors, and the button that does it.
+        std::vector<int> er = WizErases(id);
+        std::wstring say = L2(L"Isto troca o que você acertou só no", L"This replaces what you set only on");
+        std::wstring yes = L2(L"Confirmar a troca", L"Confirm the change");
+        float bw = Measure(yes, g_sw.fSeg.Get()).width + 28, lh = 56, cy = y + lh / 2;
+        D2D1_RECT_F lr = D2D1::RectF(x, y, x + w, y + lh);
+        g_sw.rt->FillRoundedRectangle(D2D1::RoundedRect(lr, 12, 12), Br(0xFFFFFF, 0.035f));
+        g_sw.rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(lr.left + 0.5f, lr.top + 0.5f, lr.right - 0.5f, lr.bottom - 0.5f), 12, 12), Br(kWarn, 0.55f), 1);
+        D2D1_SIZE_F ss = Measure(say, g_sw.fSeg.Get());
+        float room = w - 36 - bw - 16 - (float)er.size() * 24;
+        Txt1(say, g_sw.fSeg.Get(), x + 18, cy - ss.height / 2, room, kInk);
+        float px = x + 18 + std::min(ss.width, room) + 8;
+        for (int mn : er) {
+            MonBadge(px, cy, mn, true, true);
+            px += 24;
+        }
+        int k = g_sw.wizPick;
+        DrawButton(D2D1::RectF(x + w - 14 - bw, cy - 17, x + w - 14, cy + 17), yes, [i, id, k] {
+            auto back = WizKeep(id);
+            // ("Undo", for 6 s, on the screen that follows: it puts the choices back and returns to this question)
+            SwUndoOffer(L"wiz:" + std::to_wstring(id), [back, i, id] {
+                back();
+                if (i < (int)g_sw.wizList.size() && g_sw.wizList[i] == id && g_sw.page == PgComecar) {
+                    g_sw.wizAns[id] = -1;
+                    WizGo(i);
+                }
+            });
+            WizAnswer(i, id, k);
+        }, true);
+        y += lh;
+    }
+    ComecarLater(y, x, w);
     y += 10;
     DrawButton(D2D1::RectF(x, y, x + 110, y + 34), L2(L"‹ Voltar", L"‹ Back"), [i] {
-        g_sw.wizStep = std::max(0, i - 1);
-        SwInvalidate();
+        if (g_sw.wizBack) {  // (came from the summary: back to it)
+            WizNext(i);
+            return;
+        }
+        if (!i) {  // (from the first: out of the round)
+            WizLeave();
+            return;
+        }
+        WizGo(i - 1);
     });
-    DrawButton(D2D1::RectF(x + w - 130, y, x + w, y + 34), L2(L"Pular esta", L"Skip this"), [i] {
-        g_sw.wizStep = i + 1;
-        SwInvalidate();
-    });
+    // Nothing to change: with an answer already in force (or "my own" kept) the way on says it is kept.
+    bool keep = mine && ans < 0, held = keep || now >= 0;
+    std::wstring next = held ? L2(L"Manter e seguir ›", L"Keep and continue ›") : L2(L"Pular esta", L"Skip this");
+    float nwid = std::max(130.0f, Measure(next, g_sw.fSeg.Get()).width + 28);
+    DrawButton(D2D1::RectF(x + w - nwid, y, x + w, y + 34), next, [i, id, keep] {
+        if (keep) g_sw.wizAns[id] = -2;
+        WizNext(i);
+    }, held && !asking);
     y += 34;
+}
+
+// The end of a round: what was picked, each with the way back to its question.
+static void ComecarDone(float& y, float x, float w) {
+    const auto& qs = WizQuestions();
+    Heading(y, x, w, L2(L"O Nimbus ficou do seu jeito", L"Nimbus is set up your way"),
+            L2(L"Dá para mudar qualquer coisa depois, nas páginas ao lado, ou responder tudo de novo.",
+               L"You can change anything later, in the pages on the left, or answer again."));
+    y += 18;
+    std::vector<SwRow> rows;
+    for (int k = 0; k < (int)g_sw.wizList.size(); k++) {
+        int id = g_sw.wizList[k];
+        SwRow r = RButtons(L2(qs[id].kpt, qs[id].ken), nullptr, {{L2(L"Mudar", L"Change"), [k] {
+                                                                      g_sw.wizBack = true;  // (answered, it comes back here)
+                                                                      WizGo(k);
+                                                                  }}});
+        int a = g_sw.wizAns[id];
+        r.desc = a >= 0 ? std::wstring(L2(qs[id].opts[a].pt, qs[id].opts[a].en))
+                        : std::wstring(a == -2 ? L2(L"do seu jeito", L"your way") : L2(L"como estava", L"unchanged"));
+        r.small = true;
+        rows.push_back(std::move(r));
+    }
+    Card(rows, y, x, w);
+    y += 22;
+    int from = g_sw.wizFrom, mode = g_sw.wizMode;
+    DrawButton(D2D1::RectF(x, y, x + 170, y + 36), L2(L"Começar de novo", L"Start over"), [mode] {
+        WizStart(mode);
+        SwInvalidate();
+    });
+    // (a page's round closes back to that page)
+    DrawButton(D2D1::RectF(x + w - 130, y, x + w, y + 36), L2(L"Fechar", L"Close"), [from] {
+        g_sw.wizStep = -1;
+        g_sw.wizFrom = -1;
+        SwSetPage(from >= 0 ? from : PgGeral);
+    }, true);
+    y += 36;
+}
+
+static void PageComecar(float& y, float x, float w) {
+    if (g_sw.wizAns.size() != WzCount) g_sw.wizAns.assign(WzCount, -1);
+    if (g_sw.wizMine.size() != WzCount) g_sw.wizMine.assign(WzCount, 0);
+    if (g_sw.wizStep < 0 || g_sw.wizList.empty()) {
+        ComecarHome(y, x, w);
+        return;
+    }
+    if (!g_swUndo.id.rfind(L"wiz:", 0)) {  // an answer just took away some monitor's own choices: the way back, for 6 s
+        SwRow u = RButtons(L2(L"Resposta aplicada. As escolhas só de um monitor saíram.", L"Answer applied. The choices of one monitor only are gone."), nullptr,
+                           {{L2(L"Desfazer", L"Undo"), [] { SwUndoDo(); }}});
+        u.small = true;
+        Card({u}, y, x, w);
+        y += 16;
+    }
+    if (g_sw.wizStep >= (int)g_sw.wizList.size()) ComecarDone(y, x, w);
+    else ComecarQuestion(y, x, w);
 }
 
 // ---- Frame -----------------------------------------------------------------
@@ -17177,22 +26685,120 @@ struct SwNav {
     const wchar_t* en;
     const wchar_t* icon;
 };
-static const SwNav kNav[PgCount] = {
-    {L"Geral", L"General", L"M4 7h9 M17 7h3 M17 7a2 2 0 1 1-4 0a2 2 0 1 1 4 0 M4 17h3 M11 17h9 M11 17a2 2 0 1 1-4 0a2 2 0 1 1 4 0"},
+static const SwNav kNav[PgCount] = {  // (by SwPage)
+    // (the path reader takes no curves: this palette is all arcs)
+    {L"Aparência", L"Appearance",
+     L"M12 3.5a8.5 8.5 0 1 0 0 17a2 2 0 0 0 1.5-3.3a2 2 0 0 1 1.5-3.2h2a4 4 0 0 0 3.5-4a8.5 8.5 0 0 0-8.5-6.5z M8 11.5h.01 M11 7.5h.01 M15.5 8.5h.01"},
     {L"Dock", L"Dock", kGlyphDock},
-    {L"Iniciar", L"Start", L"M4 4h7v7H4z M13 4h7v7h-7z M4 13h7v7H4z M13 13h7v7h-7z"},
-    {L"Área de status", L"Status area", L"M4 9h4l5-4v14l-5-4H4z M16.5 8.5a5 5 0 0 1 0 7 M19 6a8.5 8.5 0 0 1 0 12"},
+    {L"Iniciar e busca", L"Start and search", L"M4 4h7v7H4z M13 4h7v7h-7z M4 13h7v7H4z M13 13h7v7h-7z"},
+    {L"Itens", L"Items", L"M4 7h9 M17 7h3 M17 7a2 2 0 1 1-4 0a2 2 0 1 1 4 0 M4 17h3 M11 17h9 M11 17a2 2 0 1 1-4 0a2 2 0 1 1 4 0"},
     {L"Monitores", L"Monitors", L"M3 4h18v12H3z M8 20h8 M12 16v4"},
-    {L"Sobre", L"About", L"M12 3a9 9 0 1 1 0 18a9 9 0 1 1 0-18 M12 11v6 M12 7.5v.5"},
-    {L"Começar", L"Get started", L"M12 3l2.2 5.6L20 9.3l-4.4 3.9 1.3 5.8L12 16l-4.9 3 1.3-5.8L4 9.3l5.8-.7z"},
+    {L"Sobre e backup", L"About and backup", L"M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18 M12 11v6 M12 7.5h.01"},
+    {L"Configuração guiada", L"Guided setup", L"M5 5h14v10h-8l-4 4v-4H5z M9 9h6 M9 12h3"},
+    {L"Novidades", L"What's new", L""},  // (PgNovidades: an old number with no item, see SwSetPage)
+    {L"Bandeja", L"Tray", L"M4 15h16v4H4z M8 10l4-4 4 4"},
+    {L"Notificações", L"Notifications", L"M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z M10 20.5a2 2 0 0 0 4 0"},
+    {L"Som e player", L"Sound and player", L"M4 9h4l5-4v14l-5-4H4z M16.5 8.5a5 5 0 0 1 0 7 M19 6a8.5 8.5 0 0 1 0 12"},
+    {L"Prateleira", L"Shelf", L"M4 13.5l2-6.5h3 M15 7h3l2 6.5V19H4v-5.5h5l1 2h4l1-2h5 M12 3v7.5 M9.5 8l2.5 2.5L14.5 8"},
 };
+static std::wstring SwPageName(int page) { return page >= 0 && page < PgCount ? L2(kNav[page].pt, kNav[page].en) : L""; }
+// The sidebar: the two pages that go for everything first, with no group; then two groups; then the two items
+// kept at the bottom. Tab walks them in this order.
+static const int kNavTop[] = {PgGeral, PgMonitores};
+static const int kNavDock[] = {PgDock, PgIniciar};
+static const int kNavStatus[] = {PgItens, PgBandeja, PgNotif, PgSom, PgPrateleira};
+static const int kPageOrder[] = {PgGeral, PgMonitores, PgDock, PgIniciar, PgItens, PgBandeja, PgNotif, PgSom, PgPrateleira, PgSobre, PgComecar};
 
 static void SwSetPage(int p) {
+    if (p == PgNovidades) {  // (an old number: What's new is a tab of About and backup)
+        g_sw.sobreTab = 1;
+        p = PgSobre;
+    }
+    if (p < 0 || p >= PgCount) p = PgGeral;
+    if (p == PgSobre && g_sw.sobreTab == 1) NotesSeen();
     g_sw.page = p;
     g_sw.scroll = g_sw.scrollTo = 0;
-    g_sw.confirmReset = false;
+    g_sw.confirmId.clear();
+    g_sw.confirmPreset = -1;
+    g_swUndo = {};  // (an offer to undo is of the page it was made on)
+    g_exportDone.clear();
+    g_swBack.on = false;  // (SwJump puts its own back after this)
+    g_swFilter.text.clear();
+    SwFilterFocus(false);
+    g_trayRowOrder.clear();  // (the tray's list is put in order again the next time it opens)
+    g_swRowsDirty = true;
     if (p == PgMonitores) LoadSwMonitors();
     SwInvalidate();
+}
+
+static void SwJump(int page, const std::wstring& flash, int tab) {
+    SwBack from = {true, g_sw.page, g_sw.monTab, g_sw.sobreTab, g_sw.scrollTo, g_sw.query}, kept = g_swBack;
+    bool inPage = page == g_sw.page && g_sw.query.empty();  // (nowhere else to come back from: the back there was stays)
+    g_sw.query.clear();
+    if (tab >= 0 && page == PgMonitores) g_sw.monTab = tab;
+    if (tab >= 0 && page == PgSobre) g_sw.sobreTab = tab;
+    SwSetPage(page);
+    g_swBack = inPage ? kept : from;
+    g_sw.flashId = flash;
+    g_sw.flashAt = 0;
+    g_sw.flashScroll = !flash.empty();
+}
+static void SwBackGo() {
+    if (!g_swBack.on) return;
+    SwBack b = g_swBack;
+    g_sw.monTab = b.monTab;
+    g_sw.sobreTab = b.sobreTab;
+    SwSetPage(b.page);
+    g_sw.query = b.query;
+    g_sw.flashId.clear();
+    g_sw.flashScroll = false;
+    g_sw.scroll = g_sw.scrollTo = b.scroll;  // (past the end, SwRender brings it in)
+    SwInvalidate();
+}
+// The chip: "‹ Back to <where one was>". 28 high, outlined, no animation.
+static std::wstring SwBackText() {
+    return std::wstring(L2(L"Voltar para ", L"Back to ")) + (g_swBack.query.empty() ? SwPageName(g_swBack.page) : std::wstring(L2(L"Busca", L"Search")));
+}
+static float SwBackChipW() { return 8 + 12 + 4 + Measure(SwBackText(), g_sw.fSeg.Get()).width + 12; }
+static void SwBackChip(float x, float top) {
+    auto* rt = g_sw.rt.Get();
+    std::wstring t = SwBackText();
+    D2D1_RECT_F r = D2D1::RectF(x, top, x + SwBackChipW(), top + 28);
+    SwPress press(r);
+    bool hot = Hot(r), down = Pressed(r);
+    rt->FillRoundedRectangle(D2D1::RoundedRect(r, 8, 8), Br(kBg));
+    if (hot || down) rt->FillRoundedRectangle(D2D1::RoundedRect(r, 8, 8), Br(0xFFFFFF, down ? 0.12f : 0.08f));
+    rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + 0.5f, r.top + 0.5f, r.right - 0.5f, r.bottom - 0.5f), 8, 8), Br(0xFFFFFF, 0.16f), 1);
+    Icon(L"M14.5 6l-6 6 6 6", r.left + 8, top + 8, 12, kInk, 1, 2);
+    D2D1_SIZE_F ts = Measure(t, g_sw.fSeg.Get());
+    Txt(t, g_sw.fSeg.Get(), r.left + 24, top + (28 - ts.height) / 2, ts.width + 2, kInk);
+    AddHit(r, [] { SwBackGo(); });
+}
+
+// A page by its number from before 2.1's new navigation (tab: the old Status area's), as other parts of the
+// mod and other processes still ask for it:
+//   Geral 0 → Appearance · Dock 1 · Iniciar 2 → Start and search · Status area 3: tab 0 Items, 1 Tray, 2 Shelf,
+//   3 Notifications, 4 Player and 5 Sound → Sound and player, 6 Screens → Monitors' Layouts tab ·
+//   Monitores 4 → its Overview tab · Manutenção 5 → About and backup's Backup tab · Começar 6 → Guided setup ·
+//   Novidades 7 → About and backup's What's new tab.
+static void SwOpenLegacy(int page, int tab) {
+    int p = page;
+    if (page == PgStatus) {
+        static const int to[] = {PgItens, PgBandeja, PgPrateleira, PgNotif, PgSom, PgSom, PgMonitores};
+        int t = tab >= 0 && tab <= 6 ? tab : 0;
+        p = to[t];
+        if (t == 6) g_sw.monTab = 1;
+        if (t == 4) {  // (the player is the second half of its page: go down to it)
+            g_sw.flashId = L"playerDock";
+            g_sw.flashAt = 0;
+            g_sw.flashScroll = true;
+        }
+    } else if (page == PgMonitores) {
+        g_sw.monTab = 0;
+    } else if (page == PgSobre) {
+        g_sw.sobreTab = 0;
+    }
+    SwSetPage(p);
 }
 
 static void SwCreateFonts() {
@@ -17201,20 +26807,82 @@ static void SwCreateFonts() {
         g_dw->CreateTextFormat(fam, nullptr, wt, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, size, g_locale, &f);
         if (f && !wrap) f->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
     };
+    // Four sizes in the whole window: 26 (a page's title), 17 (a card's), 14 (labels, the sidebar, tabs, the search)
+    // and 13 (everything else). Nothing smaller.
     mk(L"Segoe UI Variable Display", 26, DWRITE_FONT_WEIGHT_SEMI_BOLD, g_sw.fH1);
-    mk(L"Segoe UI Variable Text", 13.5f, DWRITE_FONT_WEIGHT_NORMAL, g_sw.fSub);
+    mk(L"Segoe UI Variable Text", 14, DWRITE_FONT_WEIGHT_NORMAL, g_sw.fSub);
     mk(L"Segoe UI Variable Text", 14, DWRITE_FONT_WEIGHT_NORMAL, g_sw.fLbl);
-    mk(L"Segoe UI Variable Text", 12.5f, DWRITE_FONT_WEIGHT_NORMAL, g_sw.fDesc);
-    mk(L"Segoe UI Variable Text", 12, DWRITE_FONT_WEIGHT_SEMI_BOLD, g_sw.fSec);
+    mk(L"Segoe UI Variable Text", 13, DWRITE_FONT_WEIGHT_NORMAL, g_sw.fDesc);
+    mk(L"Segoe UI Variable Text", 13, DWRITE_FONT_WEIGHT_SEMI_BOLD, g_sw.fSec);
     mk(L"Segoe UI Variable Text", 13, DWRITE_FONT_WEIGHT_NORMAL, g_sw.fSeg, false);
-    mk(L"Segoe UI Variable Text", 13.5f, DWRITE_FONT_WEIGHT_NORMAL, g_sw.fNav, false);
-    mk(L"Segoe UI Variable Text", 11.5f, DWRITE_FONT_WEIGHT_NORMAL, g_sw.fSmall, false);
+    mk(L"Segoe UI Variable Text", 14, DWRITE_FONT_WEIGHT_NORMAL, g_sw.fNav, false);
+    mk(L"Segoe UI Variable Text", 13, DWRITE_FONT_WEIGHT_NORMAL, g_sw.fSmall, false);
     mk(L"Segoe UI Variable Text", 14, DWRITE_FONT_WEIGHT_SEMI_BOLD, g_sw.fBrand, false);
     mk(L"Segoe UI Variable Display", 17, DWRITE_FONT_WEIGHT_SEMI_BOLD, g_sw.fTitle);
     mk(L"Segoe Fluent Icons", 10, DWRITE_FONT_WEIGHT_NORMAL, g_sw.fGlyph, false);
     D2D1_STROKE_STYLE_PROPERTIES sp = D2D1::StrokeStyleProperties(D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND,
                                                                   D2D1_LINE_JOIN_ROUND);
     g_d2d->CreateStrokeStyle(sp, nullptr, 0, &g_sw.round);
+}
+
+static void SwPageDraw(int page, float& y, float x, float cw) {
+    // "This page's questions": a small button level with the title, on the pages the guided setup asks about.
+    if (!g_swCollect && page != PgComecar && !WizListFor(100 + page).empty()) {
+        std::wstring qb = std::wstring(L2(L"Perguntas desta página", L"This page's questions")) + L" (" +
+                          std::to_wstring(WizListFor(100 + page).size()) + L")";
+        float bw = Measure(qb, g_sw.fSeg.Get()).width + 28;
+        DrawButton(D2D1::RectF(x + cw - bw, y + 4, x + cw, y + 32), qb, [page] {
+            WizStart(100 + page);
+            SwSetPage(PgComecar);
+        });
+    }
+    switch (page) {
+        case PgGeral: PageGeral(y, x, cw); break;
+        case PgDock: PageDock(y, x, cw); break;
+        case PgIniciar: PageIniciar(y, x, cw); break;
+        case PgItens: PageItens(y, x, cw); break;
+        case PgBandeja: PageBandeja(y, x, cw); break;
+        case PgNotif: PageNotif(y, x, cw); break;
+        case PgSom: PageSom(y, x, cw); break;
+        case PgPrateleira: PagePrateleira(y, x, cw); break;
+        case PgMonitores: PageMonitores(y, x, cw); break;
+        case PgSobre: PageSobre(y, x, cw); break;
+        case PgComecar: PageComecar(y, x, cw); break;
+    }
+}
+
+// The fixed bar: where one is once the page's title is gone. The page's name (a click goes back to the top) and
+// the section in sight, which is the last title gone under the bar. k: how far in it is (it fades with the scroll).
+// Its ground is the window's own, already clear: the page is cut at the bar's height.
+static void SwScrollBy(float dy);
+static void SwTopBar(float k, float mainL, float x, float W) {
+    auto* rt = g_sw.rt.Get();
+    g_swAlpha = k;
+    rt->FillRectangle(D2D1::RectF(mainL, kBarH - 1, W, kBarH), Br(0xFFFFFF, 0.08f));
+    float right = W - 3 * kCapBtnW - 12;  // (it ends before the caption buttons)
+    std::wstring name = g_sw.query.empty() ? SwPageName(g_sw.page) : std::wstring(L2(L"Busca", L"Search")), sec;
+    for (auto& m : g_swSecs)
+        if (m.y < kBarH) sec = m.title;
+    bool live = k > 0.5f;
+    if (g_swStripSeen) {  // (the page's strip of monitors is out of sight by now: its map stays, each name in a tip)
+        MiniMap mm = MiniMapAt(0, kBarH / 2, 28);
+        mm = MiniMapAt(right - mm.w, kBarH / 2, 28);
+        MiniMapDraw(mm, live ? MiniMapHot(mm) : -1, true, live);
+        right -= mm.w + 18;
+    }
+    float bx = x + (g_swBack.on ? SwBackChipW() + 14 : 0);  // (the "back" chip, when there is one, goes first: see SwRender)
+    D2D1_SIZE_F ns = Measure(name, g_sw.fBrand.Get());
+    D2D1_RECT_F nr = D2D1::RectF(bx - 8, kBarH / 2 - 14, bx + ns.width + 8, kBarH / 2 + 14);
+    bool hot = live && Hot(nr);
+    if (hot) rt->FillRoundedRectangle(D2D1::RoundedRect(nr, 7, 7), Br(0xFFFFFF, 0.06f));
+    Txt(name, g_sw.fBrand.Get(), bx, (kBarH - ns.height) / 2, ns.width + 2, kInk);
+    if (live) AddHit(nr, [] { SwScrollBy(-1e6f); });
+    bx += ns.width;
+    if (!sec.empty() && right - bx > 60) {
+        std::wstring path = L"  \u203A  " + sec;
+        Txt1(path, g_sw.fSeg.Get(), bx, (kBarH - Measure(path, g_sw.fSeg.Get()).height) / 2, right - bx, kSub);
+    }
+    g_swAlpha = 1;
 }
 
 static void SwRender() {
@@ -17239,11 +26907,52 @@ static void SwRender() {
     float W = sz.width, H = sz.height;
     g_sw.hits.clear();
     g_sw.preview = {};
+    g_swFrame++;
+    if (g_sw.pressed < 0 && g_swPressFx.hit >= 0 && !g_swPressFx.at) g_swPressFx.at = SwNow();  // (let go: it comes back from now)
+    g_swTip.seen = false;
+    g_swFilter.seen = false;
+    g_peekWant = -1;
+    g_peekRects.clear();
 
     auto* rt = g_sw.rt.Get();
     rt->BeginDraw();
     rt->SetTransform(D2D1::Matrix3x2F::Identity());
     rt->Clear(D2D1::ColorF(kBg));
+    if (!g_sw.query.empty()) {
+        // Every page once, drawing nothing: the matching rows are kept.
+        g_swCollect = true;
+        g_swFound.clear();
+        rt->PushAxisAlignedClip(D2D1::RectF(0, 0, 0, 0), D2D1_ANTIALIAS_MODE_ALIASED);
+        if (g_sw.mons.empty()) LoadSwMonitors();
+        // (in the sidebar's order; Monitors' Docks tab names each monitor itself; What's new isn't settings)
+        static const struct {
+            int page, tab;
+            const wchar_t *pt, *en;  // the tab's name, when the path says it
+        } stops[] = {{PgGeral, 0, nullptr, nullptr}, {PgMonitores, 0, nullptr, nullptr}, {PgMonitores, 1, L"Arranjos", L"Layouts"},
+                     {PgDock, 0, nullptr, nullptr}, {PgIniciar, 0, nullptr, nullptr},
+                     {PgItens, 0, nullptr, nullptr}, {PgBandeja, 0, nullptr, nullptr}, {PgNotif, 0, nullptr, nullptr},
+                     {PgSom, 0, nullptr, nullptr}, {PgPrateleira, 0, nullptr, nullptr},
+                     {PgSobre, 0, L"Backup", L"Backup"}, {PgSobre, 2, L"Diagnóstico", L"Diagnostics"}};
+        int savedMonTab = g_sw.monTab, savedSobreTab = g_sw.sobreTab;
+        for (auto& s : stops) {
+            g_swCurPage = s.page;
+            g_swCurTab = s.tab;
+            g_swCurMon = -1;
+            if (s.page == PgMonitores) g_sw.monTab = s.tab;
+            if (s.page == PgSobre) g_sw.sobreTab = s.tab;
+            g_swCurWhere = std::wstring(L2(kNav[s.page].pt, kNav[s.page].en)) + (s.pt ? std::wstring(L" \u203A ") + L2(s.pt, s.en) : L"");
+            g_swCurSection.clear();
+            float yy = 0;
+            SwPageDraw(s.page, yy, 0, 600);
+        }
+        g_sw.monTab = savedMonTab;
+        g_sw.sobreTab = savedSobreTab;
+        g_swCurMon = -1;
+        rt->PopAxisAlignedClip();
+        g_swCollect = false;
+        g_sw.hits.clear();
+        g_sw.preview = {};  // (a page's preview was laid out at the origin there: nothing to hover)
+    }
 
     // Sidebar
     rt->FillRectangle(D2D1::RectF(0, 0, kSideW, H), Br(kSide));
@@ -17253,54 +26962,239 @@ static void SwRender() {
     Txt(L"Nimbus", g_sw.fBrand.Get(), 58, 20, 160, kInk);
     Txt(L2(L"Ajustes", L"Settings"), g_sw.fSmall.Get(), 58, 38, 160, kSub);
     float ny = 74;
-    static const int kNavOrder[PgCount] = {PgComecar, PgGeral, PgDock, PgIniciar, PgStatus, PgMonitores, PgSobre};
-    for (int oi = 0; oi < PgCount; oi++) {
-        int i = kNavOrder[oi];
-        D2D1_RECT_F r = D2D1::RectF(12, ny, kSideW - 12, ny + 38);
-        bool on = g_sw.page == i, hot = Hot(r);
-        if (on || hot) rt->FillRoundedRectangle(D2D1::RoundedRect(r, 8, 8), Br(0xFFFFFF, on ? 0.09f : 0.045f));
-        if (on) rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left, r.top + 11, r.left + 3, r.bottom - 11), 1.5f, 1.5f), Br(kAccent));
-        UINT32 c = on ? 0xFFFFFF : kIdle;
-        Icon(kNav[i].icon, r.left + 12, r.top + 10, 18, c);
-        Txt(L2(kNav[i].pt, kNav[i].en), g_sw.fNav.Get(), r.left + 42, r.top + 9, r.right - r.left - 50, c);
-        int page = i;
-        if (!on) AddHit(r, [page] { SwSetPage(page); });
-        ny += 42;
+    // The search box (typing anywhere goes into it; Esc clears it).
+    {
+        D2D1_RECT_F sb = D2D1::RectF(12, ny, kSideW - 12, ny + 34);
+        bool typing = !g_sw.query.empty(), lit = typing || g_sw.searchFocus, boxHot = Hot(sb);
+        g_sw.searchRc = sb;
+        rt->FillRoundedRectangle(D2D1::RoundedRect(sb, 8, 8), Br(0xFFFFFF, lit ? 0.09f : boxHot ? 0.07f : 0.045f));
+        if (lit) rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(sb.left + .75f, sb.top + .75f, sb.right - .75f, sb.bottom - .75f), 8, 8), Br(kAccent, 0.85f), 1.5f);
+        Icon(L"M10.5 4a6.5 6.5 0 1 1 0 13a6.5 6.5 0 1 1 0-13 M15.5 15.5L20 20", sb.left + 10, sb.top + 9, 16, lit ? kInk : kIdle);
+        AddHit(sb, [] {});  // (a click lands here instead of moving the window)
+        float tx = sb.left + 34, tw = sb.right - tx - (typing ? 30 : 8);
+        if (typing) {
+            float qw = std::min(tw, Measure(g_sw.query, g_sw.fNav.Get()).width);
+            Txt(g_sw.query, g_sw.fNav.Get(), tx, sb.top + 7, tw, kInk);
+            if (g_sw.searchFocus && g_sw.caretOn) rt->FillRectangle(D2D1::RectF(tx + qw + 1, sb.top + 9, tx + qw + 2.5f, sb.bottom - 9), Br(kInk, 0.8f));
+            D2D1_RECT_F xr = D2D1::RectF(sb.right - 28, sb.top + 4, sb.right - 4, sb.bottom - 4);
+            if (Hot(xr)) rt->FillRoundedRectangle(D2D1::RoundedRect(xr, 6, 6), Br(0xFFFFFF, 0.08f));
+            Icon(L"M8 8l8 8 M16 8l-8 8", xr.left + 4, xr.top + 5, 16, kIdle);
+            AddHit(xr, [] {
+                g_sw.query.clear();
+                g_sw.scroll = g_sw.scrollTo = 0;
+                SwInvalidate();
+            });
+        } else {
+            Txt(L2(L"Buscar ajuste", L"Search settings"), g_sw.fNav.Get(), tx, sb.top + 7, tw, lit ? kSub : kMuted);
+            if (g_sw.searchFocus && g_sw.caretOn) rt->FillRectangle(D2D1::RectF(tx - 2, sb.top + 9, tx - 0.5f, sb.bottom - 9), Br(kInk, 0.8f));
+        }
+        ny += 44;
     }
-    Txt(std::wstring(L"Nimbus Menu ") + kVersion, g_sw.fSmall.Get(), 24, H - 34, kSideW - 30, kMuted);
+    bool unseen = NotesUnseen();  // (a version newer than the notes last opened: a dot on About and backup)
+    // (a window too short for the whole list, under about 700: the items get closer, down to 32 a step, so
+    // the two at the bottom stay in reach)
+    float step = std::clamp((H - 236) / 11, 32.0f, 42.0f), ih = step - 4;
+    auto navItem = [&](int i, float top) {
+        D2D1_RECT_F r = D2D1::RectF(12, top, kSideW - 12, top + ih);
+        bool on = g_sw.page == i && g_sw.query.empty(), hot = Hot(r);
+        if (on || hot) rt->FillRoundedRectangle(D2D1::RoundedRect(r, 8, 8), Br(0xFFFFFF, on ? 0.09f : 0.045f));
+        if (on) rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left, r.top + ih / 2 - 8, r.left + 3, r.top + ih / 2 + 8), 1.5f, 1.5f), Br(kAccent));
+        UINT32 c = on ? 0xFFFFFF : kIdle;
+        bool dot = i == PgSobre && unseen;
+        float countW = 0;
+        if (i == PgComecar) {  // (a round left halfway: where it stopped)
+            int at = 0, of = 0;
+            if (WizHalfAt(at, of)) {
+                std::wstring count = std::to_wstring(at) + L"/" + std::to_wstring(of);
+                countW = Measure(count, g_sw.fSmall.Get()).width + 6;
+                Txt(count, g_sw.fSmall.Get(), r.right - 8 - countW + 6, r.top + ih / 2 - Measure(count, g_sw.fSmall.Get()).height / 2, countW, kMuted);
+            }
+        }
+        Icon(kNav[i].icon, r.left + 12, r.top + ih / 2 - 9, 18, c);
+        Txt(L2(kNav[i].pt, kNav[i].en), g_sw.fNav.Get(), r.left + 42, r.top + ih / 2 - 10, r.right - r.left - 50 - (dot ? 18 : 0) - countW, c);
+        if (dot) rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(r.right - 16, (r.top + r.bottom) / 2), 4, 4), Br(kAccent));
+        if (!on) AddHit(r, [i, dot] {
+            g_sw.query.clear();
+            if (dot) g_sw.sobreTab = 1;  // (straight to what's new)
+            SwSetPage(i);
+        });
+    };
+    auto navGroup = [&](const wchar_t* title) {  // (a name over its pages: no hover, no click)
+        Txt(title, g_sw.fSec.Get(), 24, ny + 10, kSideW - 36, kMuted);
+        ny += 32;
+    };
+    for (int i : kNavTop) {
+        navItem(i, ny);
+        ny += step;
+    }
+    navGroup(L2(L"Dock e Iniciar", L"Dock and Start"));
+    for (int i : kNavDock) {
+        navItem(i, ny);
+        ny += step;
+    }
+    navGroup(L2(L"Área de status", L"Status area"));
+    for (int i : kNavStatus) {
+        navItem(i, ny);
+        ny += step;
+    }
+    // About and the guided setup stay at the bottom, under a thin line; in a window too short for that, they
+    // follow the list.
+    float foot = ny <= H - 146 ? H - 136 : ny + 12;
+    rt->FillRectangle(D2D1::RectF(12, foot, kSideW - 12, foot + 1), Br(0xFFFFFF, 0.05f));
+    navItem(PgSobre, foot + 10);
+    navItem(PgComecar, foot + 10 + step);
+    Txt(std::wstring(L"Nimbus Menu ") + kVersion, g_sw.fSmall.Get(), 24, foot + 18 + 2 * step, kSideW - 30, kMuted);
 
-    // Page (scrolls)
+    // Page (scrolls). Nothing of it goes under the caption buttons: it is cut at their height, and at the fixed
+    // bar's once the title has scrolled away. The bar comes in with the scroll itself (40 to 80), with no timer.
     float mainL = kSideW;
     float cw = std::min(720.0f, W - mainL - 80);
     float x = mainL + std::max(40.0f, (W - mainL - cw) / 2 > 40 ? 40.0f : (W - mainL - cw) / 2);
     g_sw.viewH = H;
-    rt->PushAxisAlignedClip(D2D1::RectF(mainL, 0, W, H), D2D1_ANTIALIAS_MODE_ALIASED);
+    float bar = 0, top = 0;
+    size_t hits0 = g_sw.hits.size();
+    auto pageBegin = [&] {  // (also before the second pass of a jump: see below)
+        bar = std::clamp((g_sw.scroll - 40) / 40, 0.0f, 1.0f);
+        top = kCapH + (kBarH - kCapH) * bar;
+        g_swTop = top;
+        g_swSecs.clear();
+        g_swStuck.on = false;
+        g_swStripSeen = false;
+        g_peekWant = -1;
+        g_peekRects.clear();
+        g_sw.hits.resize(hits0);
+        g_sw.preview = {};
+        rt->PushAxisAlignedClip(D2D1::RectF(mainL, top, W, H), D2D1_ANTIALIAS_MODE_ALIASED);
+    };
+    pageBegin();
     float y = 40 - g_sw.scroll;
-    switch (g_sw.page) {
-        case PgGeral: PageGeral(y, x, cw); break;
-        case PgDock: PageDock(y, x, cw); break;
-        case PgIniciar: PageIniciar(y, x, cw); break;
-        case PgStatus: PageStatus(y, x, cw); break;
-        case PgMonitores: PageMonitores(y, x, cw); break;
-        case PgSobre: PageSobre(y, x, cw); break;
-        case PgComecar: PageComecar(y, x, cw); break;
+    if (!g_sw.query.empty()) {
+        g_sw.flashId.clear();
+        int found = 0;
+        for (auto& fnd : g_swFound) found += (int)fnd.rows.size();
+        std::wstring term = L"“" + g_sw.query + L"”", sub;
+        if (found)
+            sub = std::to_wstring(found) + (found == 1 ? L2(L" ajuste com ", L" setting with ") : L2(L" ajustes com ", L" settings with ")) + term +
+                  L2(L". Mude aqui mesmo, ou clique no caminho para ir até a página. Enter abre o primeiro.",
+                     L". Change it right here, or click the path to go to its page. Enter opens the first one.");
+        Heading(y, x, cw, L2(L"Busca", L"Search"), found ? sub.c_str() : nullptr);
+        if (!found) {
+            y += 18;
+            Card({RInfo((std::wstring(L2(L"Nenhum ajuste com ", L"No setting with ")) + term + L".").c_str(),
+                        L2(L"Tente outra palavra, como “cor”, “som” ou “monitor”.",
+                           L"Try another word, like “color”, “sound” or “monitor”."))},
+                 y, x, cw);
+        }
+        for (auto& fnd : g_swFound) {
+            y += 22;
+            float th = Measure(fnd.where, g_sw.fSec.Get(), cw).height;
+            D2D1_RECT_F wr = D2D1::RectF(x, y - 3, x + std::min(cw, Measure(fnd.where, g_sw.fSec.Get()).width + 14), y + th + 3);
+            bool hot = Hot(wr);
+            if (hot) rt->FillRoundedRectangle(D2D1::RoundedRect(wr, 6, 6), Br(0xFFFFFF, 0.06f));
+            std::wstring shown = fnd.where + (hot ? L"  \u2192" : L"");
+            if (auto pl = Lay(shown, g_sw.fSec.Get(), cw)) {  // (the last part of the path in ink, the way there fainter)
+                size_t cutAt = fnd.where.rfind(L" \u203A ");
+                UINT32 from = cutAt == std::wstring::npos ? 0 : (UINT32)cutAt + 3;
+                ComPtr<ID2D1SolidColorBrush> ink;
+                rt->CreateSolidColorBrush(D2D1::ColorF(kInk), &ink);
+                if (ink) pl->SetDrawingEffect(ink.Get(), {from, (UINT32)shown.size() - from});
+                rt->DrawTextLayout(D2D1::Point2F(x + 4, y), pl.Get(), Br(hot ? kInk : kSub), D2D1_DRAW_TEXT_OPTIONS_CLIP);
+            }
+            int pg = fnd.page, tab = fnd.tab, mon = fnd.mon;
+            std::wstring first = fnd.rows[0].id;
+            AddHit(wr, [pg, tab, mon, first] {
+                if (pg == PgMonitores && mon >= 0) g_sw.monSel = mon;
+                SwJump(pg, first, tab);  // (the group's first row: gone to and lit up there)
+            });
+            y += th + 9;
+            Card(fnd.rows, y, x, cw);
+        }
+    } else {
+        g_swFlashSeen = g_swFlashJumped = false;
+        SwPageDraw(g_sw.page, y, x, cw);
+        if (g_swFlashJumped) {
+            // The row to go to was found: straight to it (no scrolling animation), and the page again from there.
+            g_sw.scroll = g_sw.scrollTo = std::min(g_swFlashJump, std::max(0.0f, y + g_sw.scroll + 40 - H));
+            KillTimer(g_sw.hwnd, TIMER_SW_SCROLL);
+            rt->PopAxisAlignedClip();
+            g_swTop = 0;
+            rt->FillRectangle(D2D1::RectF(mainL, 0, W, H), Br(kBg));
+            pageBegin();
+            y = 40 - g_sw.scroll;
+            SwPageDraw(g_sw.page, y, x, cw);
+        }
+        if (!g_swFlashSeen) {  // (a row that isn't on this page now: nothing to wait for)
+            g_sw.flashId.clear();
+            g_sw.flashScroll = false;
+        }
     }
     g_sw.contentH = y + g_sw.scroll + 40;
-    // fade under the caption buttons once scrolled
-    if (g_sw.scroll > 1) {
-        D2D1_GRADIENT_STOP stops[] = {{0, D2D1::ColorF(kBg, 1)}, {1, D2D1::ColorF(kBg, 0)}};
-        ComPtr<ID2D1GradientStopCollection> sc;
-        ComPtr<ID2D1LinearGradientBrush> lin;
-        rt->CreateGradientStopCollection(stops, 2, &sc);
-        if (sc) rt->CreateLinearGradientBrush(D2D1::LinearGradientBrushProperties(D2D1::Point2F(0, 0), D2D1::Point2F(0, 40)), sc.Get(), &lin);
-        if (lin) rt->FillRectangle(D2D1::RectF(mainL, 0, W, 40), lin.Get());
+    rt->PopAxisAlignedClip();
+    if (!g_swFilter.seen) {  // (its field isn't on screen: nothing to type into)
+        g_swFilter.rc = {};
+        SwFilterFocus(false);
     }
+    // What was laid out above the cut takes no click (the hits keep their places: Pressed counts them).
+    for (size_t i = hits0; i < g_sw.hits.size(); i++) {
+        D2D1_RECT_F& r = g_sw.hits[i].r;
+        if (r.bottom <= g_swTop) r = {};
+        else r.top = std::max(r.top, g_swTop);
+    }
+    g_sw.preview.top = std::max(g_sw.preview.top, g_swTop);
+    g_swTop = 0;
+    if (g_swStuck.on) {  // (the table's header again, right under the bar, on the card's own ground)
+        const SwStuck& st = g_swStuck;
+        D2D1_RECT_F hr = D2D1::RectF(st.x, kBarH, st.x + st.w, kBarH + kPlaceHeadH);
+        rt->FillRectangle(hr, Br(kBg));
+        rt->FillRectangle(hr, Br(0xFFFFFF, 0.035f));
+        rt->FillRectangle(D2D1::RectF(hr.left, hr.top, hr.left + 1, hr.bottom), Br(0xFFFFFF, 0.06f));
+        rt->FillRectangle(D2D1::RectF(hr.right - 1, hr.top, hr.right, hr.bottom), Br(0xFFFFFF, 0.06f));
+        DrawPlaceHead(st.x, kBarH, st.w, st.row);
+        rt->FillRectangle(D2D1::RectF(hr.left, hr.bottom - 1, hr.right, hr.bottom), Br(0xFFFFFF, 0.06f));
+    }
+    if (bar > 0) SwTopBar(bar, mainL, x, W);
+    // The way back from a jump: over the page's title and, once the page scrolls, first in the fixed bar. The same
+    // chip at the same place either way (8 from the top, 10 in the bar), so it never moves from under the mouse.
+    if (g_swBack.on) SwBackChip(x, 8 + 2 * bar);
     float maxScroll = std::max(0.0f, g_sw.contentH - H);
-    if (maxScroll > 0) {
-        float th = std::max(40.0f, H * H / g_sw.contentH), ty = (H - th) * (g_sw.scroll / maxScroll);
+    if (maxScroll > 0) {  // (the scroll thumb runs under the caption buttons, not behind them)
+        float room = H - kCapH, th = std::max(40.0f, room * H / g_sw.contentH), ty = kCapH + (room - th) * (g_sw.scroll / maxScroll);
         rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(W - 7, ty + 4, W - 4, ty + th - 4), 1.5f, 1.5f), Br(0xFFFFFF, 0.18f));
     }
-    rt->PopAxisAlignedClip();
+
+    if (!g_swToast.empty()) {  // (over the page's foot, in the middle of the content)
+        float tw = Measure(g_swToast, g_sw.fSeg.Get()).width + 36, cx = mainL + (W - mainL) / 2;
+        D2D1_RECT_F tr = D2D1::RectF(cx - tw / 2, H - 28 - 38, cx + tw / 2, H - 28);
+        rt->FillRoundedRectangle(D2D1::RoundedRect(tr, 10, 10), Br(0x26262B));
+        rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(tr.left + 0.5f, tr.top + 0.5f, tr.right - 0.5f, tr.bottom - 0.5f), 10, 10), Br(0xFFFFFF, 0.12f), 1);
+        TxtC(g_swToast, g_sw.fSeg.Get(), tr, kInk);
+    }
+    MonPeekSync();
+    // The tip of a button back to the general value, over the page.
+    if (!g_swTip.seen) {
+        if (g_swTip.shown) g_swTip.goneAt = SwNow();
+        g_swTip.shown = false;
+        g_swTip.key.clear();
+    } else {
+        double held = SwNow() - g_swTip.since - 500;
+        if (held < 0 && held > -80) SwAnimKeep();  // (TIMER_SW_TIP may come a few ms early: keep painting until it is time)
+        g_swTip.shown = held >= 0;
+        if (held >= 0) {
+            float a = ReduceMotion() ? 1.0f : std::min(1.0f, (float)(held / 120));
+            if (a < 1) SwAnimKeep();
+            D2D1_SIZE_F ts = Measure(g_swTip.text, g_sw.fSmall.Get());
+            float tw = ts.width + 20, th = ts.height + 12;
+            float tl = std::max(mainL + 8, std::min(W - 12 - tw, (g_swTip.at.left + g_swTip.at.right - tw) / 2));
+            float tt = g_swTip.at.top - 6 - th;
+            if (tt < 6) tt = g_swTip.at.bottom + 6;  // (no room above: under the button)
+            D2D1_RECT_F tr = D2D1::RectF(tl, tt, tl + tw, tt + th);
+            g_swAlpha = a;
+            rt->FillRoundedRectangle(D2D1::RoundedRect(tr, 7, 7), Br(0x26262B));
+            rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(tr.left + 0.5f, tr.top + 0.5f, tr.right - 0.5f, tr.bottom - 0.5f), 7, 7), Br(0xFFFFFF, 0.12f), 1);
+            TxtC(g_swTip.text, g_sw.fSmall.Get(), tr, kInk);
+            g_swAlpha = 1;
+        }
+    }
 
     // Caption buttons
     bool zoomed = IsZoomed(g_sw.hwnd);
@@ -17318,7 +27212,7 @@ static void SwRender() {
         bool hot = Hot(r);
         if (hot) rt->FillRectangle(r, caps[i].close ? Br(0xC42B1C) : Br(0xFFFFFF, 0.08f));
         Glyph(caps[i].glyph, r, hot && caps[i].close ? 0xFFFFFF : kInk, hot ? 1 : 0.85f);
-        AddHit(r, caps[i].fn);
+        AddHit(r, caps[i].fn).plain = true;
     }
 
     HRESULT hr = rt->EndDraw();
@@ -17335,6 +27229,15 @@ static void SwRender() {
         g_sw.scroll = std::min(g_sw.scroll, maxS);
         SwInvalidate();
     }
+}
+
+static void SwSearchFocus(bool on) {
+    if (on == g_sw.searchFocus && (!on || g_sw.caretOn)) return;
+    g_sw.searchFocus = on;
+    g_sw.caretOn = true;
+    if (on) SetTimer(g_sw.hwnd, TIMER_SW_CARET, GetCaretBlinkTime(), nullptr);
+    else KillTimer(g_sw.hwnd, TIMER_SW_CARET);
+    SwInvalidate();
 }
 
 static int SwHitAt(D2D1_POINT_2F p) {
@@ -17362,7 +27265,7 @@ static void SwEndDrag() {
     auto it = g_sw.pending.find(g_sw.drag.key);
     if (it != g_sw.pending.end()) {
         int v = it->second;
-        if (v != CfgInt(g_sw.drag.key.c_str()) && g_sw.drag.commit) g_sw.drag.commit(v);
+        if ((v != CfgInt(g_sw.drag.key.c_str()) || !g_sw.drag.key.rfind(L"mon|", 0)) && g_sw.drag.commit) g_sw.drag.commit(v);
         g_sw.pending.erase(it);
     }
     SwInvalidate();
@@ -17447,8 +27350,12 @@ LRESULT CALLBACK SettingsProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 POINT pt;
                 GetCursorPos(&pt);
                 ScreenToClient(hwnd, &pt);
-                int h = SwHitAt(D2D1::Point2F(pt.x / g_sw.scale, pt.y / g_sw.scale));
-                SetCursor(LoadCursorW(nullptr, h >= 0 && pt.y / g_sw.scale >= kCapH ? IDC_HAND : IDC_ARROW));
+                D2D1_POINT_2F p = D2D1::Point2F(pt.x / g_sw.scale, pt.y / g_sw.scale);
+                int h = SwHitAt(p);
+                // (the search box is a text field, up to its "clear" button)
+                bool text = (InRect(g_sw.searchRc, p) && p.x < g_sw.searchRc.right - (g_sw.query.empty() ? 0 : 30)) ||
+                            (InRect(g_swFilter.rc, p) && p.x < g_swFilter.rc.right - (g_swFilter.text.empty() ? 0 : 28));
+                SetCursor(LoadCursorW(nullptr, text ? IDC_IBEAM : h >= 0 && !g_sw.hits[h].plain ? IDC_HAND : IDC_ARROW));
                 return TRUE;
             }
             break;
@@ -17460,11 +27367,12 @@ LRESULT CALLBACK SettingsProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 g_sw.mouseIn = true;
             }
             int before = SwHitAt(g_sw.mouse), now = SwHitAt(p);
+            bool peekMoved = MonPeekAt(g_sw.mouse) != MonPeekAt(p);  // (a monitor's number is no hit: its own repaint)
             bool wasPreview = g_sw.inPreview;
             g_sw.mouse = p;
             g_sw.inPreview = InRect(g_sw.preview, p);
             if (g_sw.dragging) SwDragTo(p.x);
-            else if (before != now || wasPreview || g_sw.inPreview) SwInvalidate();
+            else if (before != now || peekMoved || wasPreview || g_sw.inPreview) SwInvalidate();
             return 0;
         }
         case WM_MOUSELEAVE:
@@ -17476,6 +27384,8 @@ LRESULT CALLBACK SettingsProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_LBUTTONDOWN: {
             D2D1_POINT_2F p = SwPoint(lp);
             g_sw.mouse = p;
+            SwSearchFocus(InRect(g_sw.searchRc, p));  // (at the press: it answers right away)
+            SwFilterFocus(InRect(g_swFilter.rc, p));
             int h = SwHitAt(p);
             SetCapture(hwnd);
             if (h >= 0 && g_sw.hits[h].slider) {
@@ -17484,11 +27394,17 @@ LRESULT CALLBACK SettingsProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 SwDragTo(p.x);
             } else {
                 g_sw.pressed = h;
+                if (h >= 0) SwInvalidate();  // (what is pressed shows it at once)
             }
             return 0;
         }
         case WM_LBUTTONUP: {
             D2D1_POINT_2F p = SwPoint(lp);
+            g_swRowsDirty = true;  // (a click may change what the guided setup's rows say)
+            std::wstring wasAsk = g_sw.confirmId;
+            DWORD wasAskAt = g_sw.confirmAt;
+            int wasPreset = g_sw.confirmPreset;
+            if (g_sw.pressed >= 0) SwInvalidate();
             if (g_sw.dragging) {
                 SwEndDrag();
             } else {
@@ -17497,37 +27413,175 @@ LRESULT CALLBACK SettingsProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 g_sw.pressed = -1;
                 if (h >= 0 && h == pressed && g_sw.hits[h].click) {
                     auto fn = g_sw.hits[h].click;  // (the hits are rebuilt on the next paint)
-                    bool wasConfirm = g_sw.confirmReset;
+                    if (GetCapture() == hwnd) ReleaseCapture();  // (it may open a menu or a dialog: never with the mouse held here)
                     fn();
-                    if (wasConfirm && g_sw.confirmReset) g_sw.confirmReset = false;  // any other click cancels it
                     SwInvalidate();
                 }
+            }
+            // A row asking in place: any click that isn't one of its two buttons (or the one that asked) ends it.
+            if (!wasAsk.empty() && g_sw.confirmId == wasAsk && g_sw.confirmAt == wasAskAt) {
+                g_sw.confirmId.clear();
+                SwInvalidate();
+            }
+            if (wasPreset >= 0 && g_sw.confirmPreset == wasPreset) {  // (the same for the preset's second click)
+                g_sw.confirmPreset = -1;
+                SwInvalidate();
             }
             if (GetCapture() == hwnd) ReleaseCapture();
             return 0;
         }
         case WM_LBUTTONDBLCLK:
             return 0;
+        case WM_RBUTTONUP: {  // (only what has a menu of its own: a row's scope)
+            int h = SwHitAt(SwPoint(lp));
+            if (h >= 0 && g_sw.hits[h].menu) {
+                auto fn = g_sw.hits[h].menu;  // (the hits are rebuilt on the next paint)
+                fn();
+                SwInvalidate();
+            }
+            return 0;
+        }
         case WM_CAPTURECHANGED:
             if (g_sw.dragging) SwEndDrag();
             return 0;
         case WM_MOUSEWHEEL:
             SwScrollBy(-GET_WHEEL_DELTA_WPARAM(wp) / 120.0f * 80);
             return 0;
+        case WM_CHAR:
+            if (g_swFilter.focus) {  // (the tray list's filter was clicked into: the typing is its own)
+                std::wstring& t = g_swFilter.text;
+                if (wp == 27) {
+                    if (t.empty()) SwFilterFocus(false);
+                    t.clear();
+                } else if (wp == 8) {
+                    if (!t.empty()) t.pop_back();
+                } else if (wp == 127) {
+                    while (!t.empty() && t.back() == L' ') t.pop_back();
+                    while (!t.empty() && t.back() != L' ') t.pop_back();
+                } else if (wp >= 32 && t.size() < 40 && !(wp == L' ' && t.empty())) {
+                    t += (wchar_t)wp;
+                }
+                g_sw.caretOn = true;
+                SwInvalidate();
+                return 0;
+            }
+            // Typing goes to the search; Backspace erases, Esc clears.
+            if (wp == 27) {
+                if (!g_sw.query.empty()) g_sw.query.clear();
+                g_sw.confirmId.clear();
+                g_sw.confirmPreset = -1;
+                SwSearchFocus(false);
+            } else if (wp == 8) {
+                if (!g_sw.query.empty()) g_sw.query.pop_back();
+            } else if (wp == 127) {  // Ctrl+Backspace: the last word
+                while (!g_sw.query.empty() && g_sw.query.back() == L' ') g_sw.query.pop_back();
+                while (!g_sw.query.empty() && g_sw.query.back() != L' ') g_sw.query.pop_back();
+            } else if (wp >= 32 && g_sw.query.size() < 60) {
+                if (wp == L' ' && g_sw.query.empty()) return 0;
+                g_sw.query += (wchar_t)wp;
+                SwSearchFocus(true);
+            } else {
+                return 0;
+            }
+            g_sw.caretOn = true;
+            g_sw.scroll = g_sw.scrollTo = 0;
+            SwInvalidate();
+            return 0;
+        case WM_SYSKEYDOWN:
+            if (wp == VK_LEFT && g_swBack.on) {  // Alt+Left: back from a jump
+                SwBackGo();
+                return 0;
+            }
+            break;
+        case WM_XBUTTONUP:
+            if (GET_XBUTTON_WPARAM(wp) == XBUTTON1 && g_swBack.on) {  // the mouse's back button: the same
+                SwBackGo();
+                return TRUE;
+            }
+            break;
         case WM_KEYDOWN:
             switch (wp) {
+                case 'F':  // Ctrl+F: the search field (typing anywhere goes there anyway; this shows where)
+                    if (GetKeyState(VK_CONTROL) < 0) {
+                        SwFilterFocus(false);
+                        SwSearchFocus(true);
+                        return 0;
+                    }
+                    break;
+                case VK_RETURN:  // Enter in a search: the first result's row, on its page
+                    if (!g_sw.query.empty() && !g_swFilter.focus && !g_swFound.empty() && !g_swFound[0].rows.empty()) {
+                        int pg = g_swFound[0].page, tab = g_swFound[0].tab;
+                        std::wstring first = g_swFound[0].rows[0].id;
+                        SwJump(pg, first, tab);
+                        return 0;
+                    }
+                    break;
+                case VK_BROWSER_BACK: SwBackGo(); return 0;
                 case VK_DOWN: SwScrollBy(48); return 0;
                 case VK_UP: SwScrollBy(-48); return 0;
                 case VK_NEXT: SwScrollBy(g_sw.viewH * 0.85f); return 0;
                 case VK_PRIOR: SwScrollBy(-g_sw.viewH * 0.85f); return 0;
                 case VK_HOME: SwScrollBy(-1e6f); return 0;
                 case VK_END: SwScrollBy(1e6f); return 0;
-                case VK_TAB:
-                    SwSetPage((g_sw.page + (GetKeyState(VK_SHIFT) < 0 ? PgCount - 1 : 1)) % PgCount);
+                case VK_TAB: {  // (the pages in the sidebar's order; at once, as any keyboard action)
+                    int n = ARRAYSIZE(kPageOrder), at = 0;
+                    for (int k = 0; k < n; k++)
+                        if (kPageOrder[k] == g_sw.page) at = k;
+                    SwSetPage(kPageOrder[(at + (GetKeyState(VK_SHIFT) < 0 ? n - 1 : 1)) % n]);
                     return 0;
+                }
             }
             break;
+        case WM_KILLFOCUS:
+            SwSearchFocus(false);
+            SwFilterFocus(false);
+            break;
         case WM_TIMER:
+            if (wp == TIMER_SW_CARET) {
+                g_sw.caretOn = !g_sw.caretOn;
+                SwInvalidate();
+                return 0;
+            }
+            if (wp == TIMER_SW_TIP) {  // (the mouse stayed: the frame that follows shows the tip, if it is still there)
+                KillTimer(hwnd, TIMER_SW_TIP);
+                SwInvalidate();
+                return 0;
+            }
+            if (wp == TIMER_SW_PEEK) {  // (the same for a monitor's big number)
+                KillTimer(hwnd, TIMER_SW_PEEK);
+                SwInvalidate();
+                return 0;
+            }
+            if (wp == TIMER_SW_ANIM) {  // (stops by itself once a frame had nothing moving)
+                if (!g_swAnimLive) {
+                    KillTimer(hwnd, TIMER_SW_ANIM);
+                    g_swAnimTimer = false;
+                } else {
+                    g_swAnimLive = false;
+                    SwInvalidate();
+                }
+                return 0;
+            }
+            if (wp == TIMER_SW_UNDO) {  // 6 s: the offer ends (a band's line shrinks away first: see Card)
+                KillTimer(hwnd, TIMER_SW_UNDO);
+                if (!g_swUndo.id.rfind(L"exc:", 0) && !ReduceMotion()) g_swUndo.closing = SwNow();
+                else g_swUndo = {};
+                SwInvalidate();
+                return 0;
+            }
+            if (wp == TIMER_SW_TOAST) {
+                KillTimer(hwnd, TIMER_SW_TOAST);
+                g_swToast.clear();
+                SwInvalidate();
+                return 0;
+            }
+            if (wp == TIMER_SW_CONFIRM) {  // 8 s with no answer: the row stops asking
+                KillTimer(hwnd, TIMER_SW_CONFIRM);
+                g_sw.confirmId.clear();
+                g_sw.confirmPreset = -1;
+                SwInvalidate();
+                return 0;
+            }
             if (wp == TIMER_SW_SCROLL) {
                 float d = g_sw.scrollTo - g_sw.scroll;
                 if (fabsf(d) < 0.5f) {
@@ -17540,15 +27594,27 @@ LRESULT CALLBACK SettingsProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             }
             return 0;
         case WM_DISPLAYCHANGE:
-            if (g_sw.page == PgMonitores) {
+            if (!g_sw.mons.empty() || g_sw.page == PgMonitores || g_sw.page == PgComecar) {  // (other pages name them too)
                 LoadSwMonitors();
+                g_swRowsDirty = true;
                 SwInvalidate();
             }
+            break;
+        case WM_MENUSELECT:
+            if (g_peekMenu) {  // (a menu of monitors: the lit one shows its number; 10 + its place, see MonExceptMenu)
+                UINT id = LOWORD(wp), fl = HIWORD(wp);
+                MonPeekShow(fl != 0xFFFF && !(fl & MF_POPUP) && id >= 10 && id - 10 < g_sw.mons.size() ? (int)id - 10 : -1);
+                return 0;
+            }
+            break;
+        case WM_ACTIVATE:
+            if (LOWORD(wp) == WA_INACTIVE) MonPeekShow(-1);
             break;
         case WM_CLOSE:
             DestroyWindow(hwnd);
             return 0;
         case WM_DESTROY: {
+            MonPeekShow(-1);
             SwEndDrag();
             ComPtr<IPropertyStore> ps;
             if (SUCCEEDED(SHGetPropertyStoreForWindow(hwnd, IID_PPV_ARGS(&ps)))) {
@@ -17563,6 +27629,7 @@ LRESULT CALLBACK SettingsProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             g_sw.rt.Reset();
             g_sw.hits.clear();
             g_sw.hwnd = nullptr;
+            g_swAnimTimer = g_swAnimLive = false;  // (the timers went with the window)
             ScheduleRebuild();
             return 0;
         }
@@ -17570,6 +27637,15 @@ LRESULT CALLBACK SettingsProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     return DefWindowProcW(hwnd, msg, wp, lp);
 }
 
+static void OpenSettings();
+// Settings > Monitors > Layouts (from the layouts' panel).
+static void OpenTelasSettings() {
+    OpenSettings();
+    if (!g_sw.hwnd) return;
+    g_sw.monTab = 1;
+    SwSetPage(PgMonitores);
+    SwInvalidate();
+}
 static void OpenSettings() {
     if (g_sw.hwnd) {
         if (IsIconic(g_sw.hwnd)) ShowWindow(g_sw.hwnd, SW_RESTORE);
@@ -17590,7 +27666,8 @@ static void OpenSettings() {
     int x = wa.left + (wa.right - wa.left - w) / 2, y = wa.top + (wa.bottom - wa.top - h) / 2;
     g_sw.page = PgGeral;
     g_sw.scroll = g_sw.scrollTo = 0;
-    g_sw.confirmReset = false;
+    g_sw.confirmId.clear();
+    g_sw.sobreTab = std::clamp(Wh_GetIntValue((UserPrefix() + L"sw.sobreTab").c_str(), 1), 0, 2);  // (the About tab last used)
     g_sw.hwnd = CreateWindowExW(WS_EX_APPWINDOW, L"NimbusMenu_Settings", SettingsTitle(), WS_OVERLAPPEDWINDOW, x, y, w, h,
                                 nullptr, nullptr, g_module, nullptr);
     if (!g_sw.hwnd) return;
@@ -17647,9 +27724,8 @@ static LRESULT TrayRectOf(const TrayRectWire& q) {
     int ti = TrayFind(WireHwnd(q.hwnd), q.uid, byGuid ? &q.guid : nullptr);
     if (ti < 0 && byGuid) ti = TrayFind(WireHwnd(q.hwnd), q.uid, nullptr);
     if (ti < 0) return 0;
-    std::vector<int> strip = TrayStripList();
     for (auto* d : g_docks) {
-        float top = d->rcMon.bottom - d->ch + d->pill.top, bottom = d->rcMon.bottom - d->ch + d->pill.bottom;
+        std::vector<int> strip = TrayStripList(&d->cfg.monId);
         float l = -1, r = -1;
         for (auto& it : d->stat) {
             if (it.id == StTrayIcon && it.sub == ti) {
@@ -17667,8 +27743,9 @@ static LRESULT TrayRectOf(const TrayRectWire& q) {
         }
         if (l < 0) continue;
         auto s16 = [](float v) { return (SHORT)std::lround(v); };
-        if (q.which == 2) return (LRESULT)(DWORD)MAKELONG(s16(d->rcMon.left + r), s16(bottom));
-        return (LRESULT)(DWORD)MAKELONG(s16(d->rcMon.left + l), s16(top));
+        RECT sr = DockRectToScreen(*d, D2D1::RectF(l, d->pill.top, r, d->pill.bottom));
+        if (q.which == 2) return (LRESULT)(DWORD)MAKELONG(s16((float)sr.right), s16((float)sr.bottom));
+        return (LRESULT)(DWORD)MAKELONG(s16((float)sr.left), s16((float)sr.top));
     }
     return 0;
 }
@@ -17685,6 +27762,7 @@ LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 break;
             case HSHELL_WINDOWACTIVATED:
                 g_flashing.erase(h);
+                BadgeSeen(h);
                 ScheduleRebuild();
                 break;
             case HSHELL_REDRAW:
@@ -17696,7 +27774,13 @@ LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     }
     if (msg == g_taskbarCreatedMsg && g_taskbarCreatedMsg) {
         // Always rebuild: a fixed bar must register its app bar again with the new Explorer.
+        NimbusLog("evento | o Explorer reiniciou (barra do Windows recriada)");
+        if (HANDLE t = CreateThread(nullptr, 0, ExplorerCrashLook, nullptr, 0, nullptr)) CloseHandle(t);
+        g_docksAfterEvent = true;
         SetTimer(hwnd, TIMER_DOCKS, 1500, nullptr);
+        // (signing in, Explorer's taskbar comes after Nimbus and Windows is still setting things up for a few
+        // seconds: the docks are made once more when it has settled)
+        SetTimer(hwnd, TIMER_DOCKS_LATE, 12000, nullptr);
         return 0;
     }
     switch (msg) {
@@ -17712,6 +27796,7 @@ LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     lastSecond = now;
                     if (g_set.hideTaskbar) HideTaskbars();
                     if (DockScalesChanged()) SetTimer(hwnd, TIMER_DOCKS, 300, nullptr);
+                    DockHealth();
                 }
                 if (now - lastRebuild >= 3000 || (!g_launch.empty() && now - lastLaunch >= 500)) {
                     lastRebuild = lastLaunch = now;
@@ -17750,6 +27835,23 @@ LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 KillTimer(hwnd, TIMER_DOCKS);
                 if (g_set.hideTaskbar) HideTaskbars();
                 CreateDocks();
+                if (g_docksAfterEvent) {  // (after Explorer restarting or the monitors changing: how it came out)
+                    g_docksAfterEvent = false;
+                    HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
+                    int shown = 0, hiding = 0;  // (on screen; hidden on purpose: auto-hide)
+                    for (auto* d : g_docks) {
+                        shown += d->content && IsWindowVisible(d->content) ? 1 : 0;
+                        hiding += d->cfg.autoHide ? 1 : 0;
+                    }
+                    char line[200];
+                    snprintf(line, sizeof(line), "docks | refeitas depois do evento: %d dock(s), %d na tela, %d com auto-esconder, barra do Windows %s",
+                             (int)g_docks.size(), shown, hiding, !tray ? "ainda nao existe" : IsWindowVisible(tray) ? "aparecendo" : "escondida");
+                    NimbusLog(line);
+                }
+            } else if (wp == TIMER_DOCKS_LATE) {
+                KillTimer(hwnd, TIMER_DOCKS_LATE);
+                g_docksAfterEvent = true;
+                SendMessageW(hwnd, WM_TIMER, TIMER_DOCKS, 0);
             } else if (wp == TIMER_TRAY_ASK) {
                 KillTimer(hwnd, TIMER_TRAY_ASK);
                 TrayAskMissing();
@@ -17758,6 +27860,7 @@ LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 SaveTray();
             } else if (wp == TIMER_WIZARD) {
                 KillTimer(hwnd, TIMER_WIZARD);
+                Wh_SetStringValue((UserPrefix() + L"wizard.ver").c_str(), kVersion);  // (it opens by itself only once)
                 WizStart();
                 OpenSettings();
                 SwSetPage(PgComecar);
@@ -17773,6 +27876,13 @@ LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
         case WM_DISPLAYCHANGE:
             // (Not on work-area changes: the fixed bar's own app bar causes those.)
+            {
+                char line[96];
+                snprintf(line, sizeof(line), "evento | monitores mudaram (%d monitor(es), %dx%d)", GetSystemMetrics(SM_CMONITORS),
+                         LOWORD(lp), HIWORD(lp));
+                NimbusLog(line);
+            }
+            g_docksAfterEvent = true;
             SetTimer(hwnd, TIMER_DOCKS, 800, nullptr);
             return 0;
         case WM_SETTINGCHANGE:
@@ -17785,6 +27895,12 @@ LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             break;
         case WM_APP_CCREAD:
         case WM_APP_BTREAD:
+            StatusChanged();
+            return 0;
+        case WM_APP_DL:
+            DlMessage((int)wp);
+            return 0;
+        case WM_APP_PRIV:
             StatusChanged();
             return 0;
         case WM_APP_DEVREAD:
@@ -17823,6 +27939,8 @@ LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         }
         case WM_POWERBROADCAST:
             if (wp == PBT_APMPOWERSTATUSCHANGE && ReadBattery()) StatusChanged();
+            if (wp == PBT_APMSUSPEND) NimbusLog("evento | o PC foi dormir");
+            if (wp == PBT_APMRESUMEAUTOMATIC) NimbusLog("evento | o PC acordou");
             return TRUE;
         case WM_COPYDATA: {
             // From the explorer.exe part (see ExTraySubclass).
@@ -17844,7 +27962,11 @@ LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         }
         case WM_APP_OPEN_SETTINGS:
             OpenSettings();
-            if (wp < PgCount) SwSetPage((int)wp);
+            if (wp < PgCount) {
+                // (0 to 7 are the numbers from before the new navigation; lParam: the old Status area's tab)
+                if (wp <= PgNovidades) SwOpenLegacy((int)wp, (int)lp);
+                else SwSetPage((int)wp);
+            }
             return 0;
         case WM_APP_ICON: {
             if (!TakePtr((void*)lp)) return 0;
@@ -17865,6 +27987,21 @@ LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 if (a.key != r->key) continue;
                 a.icon = icon;
                 if (!r->label.empty()) a.label = r->label;
+            }
+            if (!icon) {
+                auto& rt = g_iconRetry[r->key];
+                static const DWORD waits[] = {10000, 60000, 300000};
+                if (rt.second < 3) {
+                    DWORD w = waits[rt.second++];
+                    rt.first = GetTickCount() + w;
+                    if (!rt.first) rt.first = 1;  // (0 means "no more")
+                    for (auto* d : g_docks)  // (a redraw then, so the dock asks again)
+                        if (d->content) SetTimer(d->content, TIMER_DOCK_RETRY, w + 200, nullptr);
+                } else {
+                    rt.first = 0;
+                }
+            } else {
+                g_iconRetry.erase(r->key);
             }
             for (auto* d : g_docks) {
                 d->bmps.erase(r->key);
@@ -17955,6 +28092,7 @@ LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             // The Windows taskbar and the banners first: whatever is slow after this, they're back.
             RestoreTaskbars();
             RestoreBanners();
+            BarWatchEnd();
             StopIconThread();
             FreeSettingsWin();
             DestroyDocks();
@@ -18006,6 +28144,13 @@ DWORD WINAPI UiThread(LPVOID) {
     g_fly.hwnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST, L"NimbusMenu_Flyout",
                                  L"Nimbus", WS_POPUP, 0, 0, 10, 10, nullptr, nullptr, g_module, nullptr);
     RegisterShelfDrop(g_fly.hwnd, nullptr);
+    wc.lpfnWndProc = SndDimProc;
+    wc.lpszClassName = L"NimbusMenu_Dim";
+    wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
+    RegisterClassExW(&wc);
+    wc.hbrBackground = nullptr;
+    g_sndDim = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE, L"NimbusMenu_Dim", L"Nimbus", WS_POPUP, 0, 0,
+                               10, 10, nullptr, nullptr, g_module, nullptr);
     wc.lpfnWndProc = ToastProc;
     wc.lpszClassName = L"NimbusMenu_Toast";
     RegisterClassExW(&wc);
@@ -18038,6 +28183,12 @@ DWORD WINAPI UiThread(LPVOID) {
     g_taskbarCreatedMsg = RegisterWindowMessageW(L"TaskbarCreated");
     g_msgWnd = CreateWindowExW(WS_EX_TOOLWINDOW, L"NimbusMenu_Msg", L"", WS_POPUP, 0, 0, 0, 0, nullptr, nullptr,
                                g_module, nullptr);
+    {
+        char line[64];
+        snprintf(line, sizeof(line), "nimbus | aberto (%ls)", kVersion);
+        NimbusLog(line);
+    }
+    BarWatchStart();
     RegisterShellHookWindow(g_msgWnd);
 
     LoadPins();
@@ -18119,6 +28270,8 @@ DWORD WINAPI UiThread(LPVOID) {
     g_dw.Reset();
     g_wic.Reset();
     OleUninitialize();
+    if (!g_importFile.empty()) BackupImportNow();
+    if (g_selfRestart) ExitProcess(kSelfRestartCode);  // (everything restored above; the guard opens Nimbus again)
     return 0;
 }
 
@@ -18521,9 +28674,171 @@ static void ExTrayStop() {
     }
 }
 
+// The guard (explorer.exe part). The bar's process exits with 0 when it stops normally, having restored
+// everything; any other end is a crash or a kill, and the taskbar would stay hidden. So: give it back at once,
+// then reopen Nimbus. Three deaths in 5 minutes: stop reopening and leave Windows' taskbar.
+HANDLE g_exGuardStop = nullptr, g_exGuardThread = nullptr;
+
+static bool ExGuardReopen(const std::wstring& exe) {
+    bool own = !_wcsicmp(PathFindFileNameW(exe.c_str()), L"windhawk-mod.exe");
+    std::wstring cmd = L"\"" + exe + L"\"" + (own ? std::wstring(L" -windhawk-tool-mod \"") + WH_MOD_ID + L"\"" : L"") + L" -tool-mod \"" + WH_MOD_ID + L"\"";
+    STARTUPINFOW si = {sizeof(si)};
+    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
+    PROCESS_INFORMATION pi = {};
+    if (!CreateProcessW(exe.c_str(), cmd.data(), nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si, &pi)) {
+        Wh_Log(L"guard: couldn't reopen Nimbus: %u", GetLastError());
+        return false;
+    }
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    return true;
+}
+
+// Each end of the bar's process that wasn't Nimbus being turned off goes, with the time and the exit code, to
+// the mod's log (NimbusLog): a kill leaves nothing in Windows' logs.
+static void ExGuardNote(DWORD code, const char* what) {
+    char line[240];
+    snprintf(line, sizeof(line), "barra | codigo 0x%08lX | %s", (unsigned long)code, what);
+    NimbusLog(line);
+}
+
+static DWORD WINAPI ExGuardThread(LPVOID) {
+    DWORD deaths[3] = {};
+    int count = 0;
+    for (;;) {
+        DWORD pid = 0;
+        if (HWND w = FindWindowW(L"NimbusMenu_Msg", nullptr)) GetWindowThreadProcessId(w, &pid);
+        HANDLE proc = pid ? OpenProcess(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid) : nullptr;
+        if (!proc) {
+            if (WaitForSingleObject(g_exGuardStop, 2000) == WAIT_OBJECT_0) return 0;
+            continue;
+        }
+        wchar_t path[MAX_PATH * 2];
+        DWORD len = ARRAYSIZE(path);
+        std::wstring exe = QueryFullProcessImageNameW(proc, 0, path, &len) ? path : L"";
+        HANDLE waits[2] = {g_exGuardStop, proc};
+        // While it runs, every 5 s: does it still answer, and is there a dock while Windows' taskbar is hidden?
+        // A bar that froze or lost its docks stays alive and leaves nothing on screen; after ~25 s of that it's
+        // noted, ended and reopened like a crash.
+        DWORD r;
+        int hung = 0, nodock = 0;
+        const char* why = nullptr;
+        for (;;) {
+            r = WaitForMultipleObjects(2, waits, FALSE, 5000);
+            if (r != WAIT_TIMEOUT) break;
+            if (GetSystemMetrics(SM_SHUTTINGDOWN)) continue;
+            HWND msg = FindWindowW(L"NimbusMenu_Msg", nullptr);
+            DWORD mpid = 0;
+            if (msg) GetWindowThreadProcessId(msg, &mpid);
+            if (mpid != pid) continue;
+            DWORD_PTR res = 0;
+            hung = SendMessageTimeoutW(msg, WM_NULL, 0, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 4000, &res) ? 0 : hung + 1;
+            HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
+            struct Docks {
+                DWORD pid;
+                int n;
+            } dk = {pid, 0};
+            EnumWindows([](HWND h, LPARAM lp) WINAPI -> BOOL {
+                auto* d = (Docks*)lp;
+                wchar_t cls[32];
+                DWORD p = 0;
+                GetWindowThreadProcessId(h, &p);
+                if (p == d->pid && GetClassNameW(h, cls, ARRAYSIZE(cls)) && !wcscmp(cls, L"NimbusMenu_Content")) d->n++;
+                return TRUE;
+            }, (LPARAM)&dk);
+            nodock = (dk.n == 0 && tray && !IsWindowVisible(tray)) ? nodock + 1 : 0;
+            if (hung >= 5) why = "travou (sem responder ~25 s); barra do Windows devolvida, reabrindo";
+            else if (nodock >= 5) why = "ficou sem dock (~25 s) com a barra do Windows escondida; reabrindo";
+            if (why) break;
+        }
+        if (why) {
+            Wh_Log(L"guard: %S", why);
+            ExGuardNote(0, why);
+            RestoreTaskbarAutoHide();
+            ShowTaskbarWindows();
+            RestoreBanners();
+            if (HANDLE kill = OpenProcess(PROCESS_TERMINATE, FALSE, pid)) {
+                TerminateProcess(kill, 0xC0DEDEAD);
+                CloseHandle(kill);
+            }
+            WaitForSingleObject(proc, 5000);
+            CloseHandle(proc);
+            if (WaitForSingleObject(g_exGuardStop, 1500) == WAIT_OBJECT_0) return 0;
+            if (!FindWindowW(L"NimbusMenu_Msg", nullptr) && !exe.empty()) ExGuardReopen(exe);
+            if (WaitForSingleObject(g_exGuardStop, 3000) == WAIT_OBJECT_0) return 0;
+            continue;
+        }
+        DWORD code = 0;
+        GetExitCodeProcess(proc, &code);
+        CloseHandle(proc);
+        if (r != WAIT_OBJECT_0 + 1) return 0;
+        if (GetSystemMetrics(SM_SHUTTINGDOWN)) continue;
+        if (code == 0) {
+            // A normal end restored everything. But if nothing turned Nimbus off (this part would be ending too)
+            // and Windows' taskbar is still hidden, it ended some other way: give the taskbar back, don't reopen.
+            if (WaitForSingleObject(g_exGuardStop, 1500) == WAIT_OBJECT_0) return 0;
+            HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
+            if (FindWindowW(L"NimbusMenu_Msg", nullptr) || !tray || IsWindowVisible(tray)) continue;
+            ExGuardNote(code, "fechou sem devolver a barra do Windows");
+            RestoreTaskbarAutoHide();
+            ShowTaskbarWindows();
+            RestoreBanners();
+            continue;
+        }
+        Wh_Log(L"guard: the bar's process ended with 0x%08X", code);
+        ExGuardNote(code, code == kSelfRestartCode ? "reiniciada pelo proprio Nimbus; reabrindo" : "caiu; barra do Windows devolvida, reabrindo");
+        RestoreTaskbarAutoHide();
+        ShowTaskbarWindows();
+        RestoreBanners();
+        // (the mod may be being turned off: then this wait ends and nothing reopens)
+        if (WaitForSingleObject(g_exGuardStop, 1500) == WAIT_OBJECT_0) return 0;
+        if (FindWindowW(L"NimbusMenu_Msg", nullptr)) continue;  // (Windhawk already reopened it)
+        DWORD now = GetTickCount();
+        if (count == 3 && now - deaths[0] < 5 * 60 * 1000) {
+            Wh_Log(L"guard: three deaths in 5 minutes, leaving Windows' taskbar");
+            WaitForSingleObject(g_exGuardStop, INFINITE);
+            return 0;
+        }
+        if (count == 3) {
+            deaths[0] = deaths[1];
+            deaths[1] = deaths[2];
+            count = 2;
+        }
+        deaths[count++] = now;
+        if (!exe.empty()) ExGuardReopen(exe);
+        if (WaitForSingleObject(g_exGuardStop, 3000) == WAIT_OBJECT_0) return 0;  // (time for its window to appear)
+    }
+}
+
+static void ExGuardStart() {
+    g_exGuardStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (g_exGuardStop) g_exGuardThread = CreateThread(nullptr, 0, ExGuardThread, nullptr, 0, nullptr);
+}
+
+static void ExGuardEnd() {
+    if (g_exGuardStop) SetEvent(g_exGuardStop);
+    if (g_exGuardThread) {
+        // (each of its waits ends on the stop event; the longest step left is a few seconds: the thread must
+        // be gone before this code is unloaded from Explorer)
+        WaitForSingleObject(g_exGuardThread, 15000);
+        CloseHandle(g_exGuardThread);
+        g_exGuardThread = nullptr;
+    }
+    if (g_exGuardStop) {
+        CloseHandle(g_exGuardStop);
+        g_exGuardStop = nullptr;
+    }
+}
+
 static BOOL ExplorerInit() {
     if (IsFolderWindowsProcess()) return FALSE;
+    {  // (two of these with different numbers and no "desligada" between them: Explorer restarted or crashed)
+        char line[96];
+        snprintf(line, sizeof(line), "explorer | parte do Nimbus carregada no Explorer (pid %lu)", GetCurrentProcessId());
+        NimbusLog(line);
+    }
     ExTrayStart();
+    ExGuardStart();
     // Stays loaded even when the hook can't be set, so that ExplorerUninit always runs and can give the
     // taskbar back (see RestoreTaskbarAutoHide).
     HMODULE twinui = LoadLibraryExW(L"twinui.pcshell.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -18564,6 +28879,8 @@ static BOOL ExplorerInit() {
 // taskbar is back, also when that process crashed or was ended before it could restore it.
 static void RestoreBanners();
 static void ExplorerUninit() {
+    NimbusLog("explorer | parte do Nimbus saiu do Explorer (mod desligado, atualizado ou saindo da conta)");
+    ExGuardEnd();
     ExTrayStop();
     // The tool process holds its mutex until it exits: wait for that (it restores everything itself),
     // at most 10 s.
