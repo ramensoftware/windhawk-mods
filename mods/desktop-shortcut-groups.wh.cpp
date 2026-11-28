@@ -8,7 +8,7 @@
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lshell32 -lshlwapi -luuid -lgdi32 -ldwmapi -ladvapi32 -lshcore
+// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lshell32 -lshlwapi -luuid -lgdi32 -ldwmapi -ladvapi32 -lshcore -ld2d1 -ldwrite
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -192,7 +192,9 @@ clear its read-only attribute, or move its shortcuts out and delete it.
 #include <windows.h>
 
 #include <commctrl.h>
+#include <d2d1.h>
 #include <dwmapi.h>
+#include <dwrite.h>
 #include <exdisp.h>
 #include <shellapi.h>
 #include <shellscalingapi.h>
@@ -2305,6 +2307,12 @@ struct PanelState {
     bool backdrop = false;
     HFONT titleFont = nullptr;
     HFONT labelFont = nullptr;
+    // DirectWrite text rendering; the GDI fonts above are the fallback.
+    ID2D1Factory* d2dFactory = nullptr;
+    ID2D1DCRenderTarget* textTarget = nullptr;
+    IDWriteFactory* dwriteFactory = nullptr;
+    IDWriteTextFormat* titleFormat = nullptr;
+    IDWriteTextFormat* labelFormat = nullptr;
     int hover = kHitNone;
     int pressed = kHitNone;
     int focus = kHitNone;
@@ -2365,26 +2373,209 @@ HFONT CreateUiFont(int pixelHeight, int weight) {
     font.lfQuality = ANTIALIASED_QUALITY;
     wcscpy_s(font.lfFaceName, L"Segoe UI Variable Text");
     HFONT result = CreateFontIndirectW(&font);
-    if (!result) {
+
+    // The font mapper silently substitutes a missing face instead of failing,
+    // so check which face was actually selected.
+    bool matched = false;
+    if (result) {
+        HDC dc = CreateCompatibleDC(nullptr);
+        if (dc) {
+            HGDIOBJ old = SelectObject(dc, result);
+            wchar_t face[LF_FACESIZE] = {};
+            if (GetTextFaceW(dc, LF_FACESIZE, face) > 0) {
+                matched = _wcsicmp(face, font.lfFaceName) == 0;
+            }
+            SelectObject(dc, old);
+            DeleteDC(dc);
+        }
+    }
+
+    if (!matched) {
+        if (result) {
+            DeleteObject(result);
+        }
         wcscpy_s(font.lfFaceName, L"Segoe UI");
         result = CreateFontIndirectW(&font);
     }
     return result;
 }
 
-// Draws text into a premultiplied image: GDI renders white text on black,
-// and the rendered coverage is used as the alpha of the requested color.
+template <typename T>
+void SafeRelease(T*& object) {
+    if (object) {
+        object->Release();
+        object = nullptr;
+    }
+}
+
+IDWriteTextFormat* CreateUiTextFormat(IDWriteFactory* factory,
+                                      float pixelSize,
+                                      DWRITE_FONT_WEIGHT weight) {
+    // Prefer the Windows 11 UI font, fall back to Segoe UI where it's missing.
+    const wchar_t* family = L"Segoe UI";
+    IDWriteFontCollection* fonts = nullptr;
+    if (SUCCEEDED(factory->GetSystemFontCollection(&fonts, FALSE)) && fonts) {
+        UINT32 index = 0;
+        BOOL exists = FALSE;
+        if (SUCCEEDED(fonts->FindFamilyName(L"Segoe UI Variable Text", &index,
+                                            &exists)) &&
+            exists) {
+            family = L"Segoe UI Variable Text";
+        }
+        fonts->Release();
+    }
+
+    IDWriteTextFormat* format = nullptr;
+    if (FAILED(factory->CreateTextFormat(
+            family, nullptr, weight, DWRITE_FONT_STYLE_NORMAL,
+            DWRITE_FONT_STRETCH_NORMAL, pixelSize, L"", &format))) {
+        return nullptr;
+    }
+    return format;
+}
+
+// Creates the DirectWrite objects used to draw the panel text. On failure the
+// panel keeps working with GDI text.
+void InitPanelText() {
+    if (FAILED(DWriteCreateFactory(
+            DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
+            reinterpret_cast<IUnknown**>(&g_panel.dwriteFactory)))) {
+        g_panel.dwriteFactory = nullptr;
+        return;
+    }
+    if (FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,
+                                 __uuidof(ID2D1Factory), nullptr,
+                                 reinterpret_cast<void**>(
+                                     &g_panel.d2dFactory)))) {
+        g_panel.d2dFactory = nullptr;
+        return;
+    }
+
+    g_panel.titleFormat =
+        CreateUiTextFormat(g_panel.dwriteFactory,
+                           static_cast<float>(Scaled(18)),
+                           DWRITE_FONT_WEIGHT_SEMI_BOLD);
+    g_panel.labelFormat =
+        CreateUiTextFormat(g_panel.dwriteFactory,
+                           static_cast<float>(Scaled(12)),
+                           DWRITE_FONT_WEIGHT_NORMAL);
+}
+
+void ReleasePanelText() {
+    SafeRelease(g_panel.titleFormat);
+    SafeRelease(g_panel.labelFormat);
+    SafeRelease(g_panel.textTarget);
+    SafeRelease(g_panel.d2dFactory);
+    SafeRelease(g_panel.dwriteFactory);
+}
+
+// Draws white text with forced grayscale antialiasing into a DC that has a
+// zeroed 32-bit DIB selected. The DrawText-style flags are mapped to the
+// DirectWrite layout. Antialiasing doesn't depend on the system font
+// smoothing setting or on remote sessions, unlike GDI.
+bool DrawTextDirectWrite(HDC dc,
+                         int width,
+                         int height,
+                         const std::wstring& text,
+                         IDWriteTextFormat* format,
+                         UINT flags) {
+    if (!format || !g_panel.dwriteFactory || !g_panel.d2dFactory) {
+        return false;
+    }
+
+    if (!g_panel.textTarget) {
+        D2D1_RENDER_TARGET_PROPERTIES properties = {};
+        properties.type = D2D1_RENDER_TARGET_TYPE_SOFTWARE;
+        properties.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        properties.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
+        // 96 DPI: one DirectWrite unit is one pixel, like the GDI fonts.
+        properties.dpiX = 96.0f;
+        properties.dpiY = 96.0f;
+        properties.usage = D2D1_RENDER_TARGET_USAGE_NONE;
+        properties.minLevel = D2D1_FEATURE_LEVEL_DEFAULT;
+        if (FAILED(g_panel.d2dFactory->CreateDCRenderTarget(
+                &properties, &g_panel.textTarget))) {
+            g_panel.textTarget = nullptr;
+            return false;
+        }
+    }
+
+    IDWriteTextLayout* layout = nullptr;
+    if (FAILED(g_panel.dwriteFactory->CreateTextLayout(
+            text.c_str(), static_cast<UINT32>(text.size()), format,
+            static_cast<float>(width), static_cast<float>(height),
+            &layout))) {
+        return false;
+    }
+
+    layout->SetTextAlignment((flags & DT_CENTER)
+                                 ? DWRITE_TEXT_ALIGNMENT_CENTER
+                                 : DWRITE_TEXT_ALIGNMENT_LEADING);
+    layout->SetParagraphAlignment((flags & DT_VCENTER)
+                                      ? DWRITE_PARAGRAPH_ALIGNMENT_CENTER
+                                      : DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
+    // Wrapping breaks inside a word that doesn't fit, like DT_EDITCONTROL.
+    layout->SetWordWrapping((flags & DT_SINGLELINE)
+                                ? DWRITE_WORD_WRAPPING_NO_WRAP
+                                : DWRITE_WORD_WRAPPING_WRAP);
+
+    IDWriteInlineObject* ellipsis = nullptr;
+    if (flags & DT_END_ELLIPSIS) {
+        if (SUCCEEDED(g_panel.dwriteFactory->CreateEllipsisTrimmingSign(
+                layout, &ellipsis))) {
+            // Lines that don't fit in the height are dropped, and the last
+            // visible line ends with an ellipsis.
+            DWRITE_TRIMMING trimming = {DWRITE_TRIMMING_GRANULARITY_CHARACTER,
+                                        0, 0};
+            layout->SetTrimming(&trimming, ellipsis);
+        }
+    }
+
+    bool drawn = false;
+    RECT bounds = {0, 0, width, height};
+    ID2D1SolidColorBrush* brush = nullptr;
+    if (SUCCEEDED(g_panel.textTarget->BindDC(dc, &bounds))) {
+        g_panel.textTarget->BeginDraw();
+        D2D1_COLOR_F transparent = {0.0f, 0.0f, 0.0f, 0.0f};
+        g_panel.textTarget->Clear(&transparent);
+        g_panel.textTarget->SetTextAntialiasMode(
+            D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+        D2D1_COLOR_F white = {1.0f, 1.0f, 1.0f, 1.0f};
+        if (SUCCEEDED(g_panel.textTarget->CreateSolidColorBrush(
+                &white, nullptr, &brush))) {
+            D2D1_POINT_2F origin = {0.0f, 0.0f};
+            g_panel.textTarget->DrawTextLayout(origin, layout, brush,
+                                               D2D1_DRAW_TEXT_OPTIONS_CLIP);
+        }
+        HRESULT hr = g_panel.textTarget->EndDraw(nullptr, nullptr);
+        drawn = SUCCEEDED(hr) && brush;
+        // D2DERR_RECREATE_TARGET: the target is recreated for the next draw.
+        if (hr == static_cast<HRESULT>(0x8899000C)) {
+            SafeRelease(g_panel.textTarget);
+        }
+    }
+
+    SafeRelease(brush);
+    SafeRelease(ellipsis);
+    layout->Release();
+    return drawn;
+}
+
+// Draws text into a premultiplied image. The text is rendered white on black
+// (DirectWrite, or GDI as a fallback), and the rendered coverage is used as
+// the alpha of the requested color.
 void DrawTextToImage(Image& dst,
                      const std::wstring& text,
                      const RECT& rect,
                      HFONT font,
+                     IDWriteTextFormat* textFormat,
                      uint32_t r,
                      uint32_t g,
                      uint32_t b,
                      UINT format) {
     int width = rect.right - rect.left;
     int height = rect.bottom - rect.top;
-    if (width <= 0 || height <= 0 || text.empty() || !font) {
+    if (width <= 0 || height <= 0 || text.empty() || (!font && !textFormat)) {
         return;
     }
 
@@ -2414,9 +2605,14 @@ void DrawTextToImage(Image& dst,
     SetTextColor(dc, RGB(255, 255, 255));
     SetBkMode(dc, TRANSPARENT);
 
-    RECT local = {0, 0, width, height};
-    DrawTextW(dc, text.c_str(), static_cast<int>(text.size()), &local,
-              format | DT_NOPREFIX);
+    bool drawn = DrawTextDirectWrite(dc, width, height, text, textFormat,
+                                     format);
+    if (!drawn && font) {
+        memset(bits, 0, static_cast<size_t>(width) * height * 4);
+        RECT local = {0, 0, width, height};
+        DrawTextW(dc, text.c_str(), static_cast<int>(text.size()), &local,
+                  format | DT_NOPREFIX);
+    }
     GdiFlush();
 
     const uint32_t* pixels = static_cast<const uint32_t*>(bits);
@@ -2554,8 +2750,8 @@ void RenderPanel() {
     RECT button = OpenButtonRect();
     RECT titleRect = {l.padding, l.padding, button.left - Scaled(12),
                       l.padding + l.titleHeight - Scaled(8)};
-    DrawTextToImage(frame, g_panel.title, titleRect, g_panel.titleFont, text,
-                    text, text,
+    DrawTextToImage(frame, g_panel.title, titleRect, g_panel.titleFont,
+                    g_panel.titleFormat, text, text, text,
                     DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 
     // "Open folder" button.
@@ -2566,8 +2762,8 @@ void RenderPanel() {
                     static_cast<float>(button.bottom),
                     static_cast<float>(l.buttonHeight) / 2, highlight,
                     highlight, highlight, buttonHot ? 46 : 24);
-    DrawTextToImage(frame, L"Open folder", button, g_panel.labelFont, text,
-                    text, text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    DrawTextToImage(frame, L"Open folder", button, g_panel.labelFont,
+                    g_panel.labelFormat, text, text, text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
     // Items.
     auto drawItem = [&](int i, const RECT& cell, uint32_t backgroundAlpha) {
@@ -2591,7 +2787,8 @@ void RenderPanel() {
                       iconTop + l.iconSize + l.labelGap,
                       cell.right - Scaled(6), cell.bottom - Scaled(6)};
         DrawTextToImage(frame, g_panel.items[i].name, label,
-                        g_panel.labelFont, text, text, text,
+                        g_panel.labelFont, g_panel.labelFormat, text,
+                        text, text,
                         DT_CENTER | DT_WORDBREAK | DT_EDITCONTROL |
                             DT_END_ELLIPSIS);
     };
@@ -2704,6 +2901,7 @@ void ClosePanel() {
     if (g_panel.labelFont) {
         DeleteObject(g_panel.labelFont);
     }
+    ReleasePanelText();
     g_panel = PanelState();
 }
 
@@ -3583,6 +3781,7 @@ bool ShowGroupPanel(const std::wstring& folder,
     g_panel.title = FileNameOf(folder);
     g_panel.titleFont = CreateUiFont(Scaled(18), FW_SEMIBOLD);
     g_panel.labelFont = CreateUiFont(Scaled(12), FW_NORMAL);
+    InitPanelText();
 
     LoadPanelItems(order);
     ComputePanelLayout();
@@ -3623,7 +3822,19 @@ bool ShowGroupPanel(const std::wstring& folder,
         nullptr);
     if (!g_panel.panel) {
         Wh_Log(L"Failed to create the panel: %u", GetLastError());
-        ClosePanel();
+        if (g_panel.overlay) {
+            ClosePanel();
+        } else {
+            // Nothing to destroy: release the resources ClosePanel would.
+            if (g_panel.titleFont) {
+                DeleteObject(g_panel.titleFont);
+            }
+            if (g_panel.labelFont) {
+                DeleteObject(g_panel.labelFont);
+            }
+            ReleasePanelText();
+            g_panel = PanelState();
+        }
         return false;
     }
 
