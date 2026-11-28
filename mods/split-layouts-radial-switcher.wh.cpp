@@ -32,6 +32,18 @@ your other open windows. Click one to place it there. The X on a window closes
 that window. Press Esc, click the X in the top right corner, click empty space
 or switch to another window to stop choosing; all windows stay as they are.
 
+A zone that already has a window is skipped: placing a window in the left half
+next to a window that fills the right half doesn't open the chooser. Only the
+window that is seen in the middle of the zone counts, not one hidden behind
+others. Turn off "Don't offer windows for a zone that already has a window" to
+be asked for every zone.
+
+With several monitors, the windows of all monitors are offered, and a window
+chosen from another monitor is moved to the zone. With "Offer only the windows
+of the same monitor" enabled, only the windows that are on the monitor of the
+layout are offered; minimized windows count for the monitor they are restored
+to.
+
 With "Turn off Windows edge snapping while dragging" enabled, Windows doesn't
 maximize or snap windows dragged to the screen edges, and doesn't show its gray
 previews. The mod turns this off for the current session only, with
@@ -189,6 +201,18 @@ administrator window is in the foreground.
   $description: Show the layouts bar when a window is dragged to the top or the screen edges.
 - snapAssist: true
   $name: Offer windows for the remaining zones
+- snapAssistSkipTaken: true
+  $name: Don't offer windows for a zone that already has a window
+  $description: >-
+    Placing a window next to a window that already fills the other zone doesn't
+    open the chooser for that zone. When off, the chooser opens for every other
+    zone of the layout.
+- snapAssistSameMonitor: false
+  $name: Offer only the windows of the same monitor
+  $description: >-
+    With several monitors, the remaining zones offer only the windows that are
+    on the monitor of the layout. When off, windows of all monitors are offered,
+    and a window chosen from another monitor is moved to the zone.
 - noEdgeSnap: true
   $name: Turn off Windows edge snapping while dragging
   $description: >-
@@ -378,6 +402,16 @@ Win MakeWin(HWND hwnd) {
         win.floating = IsFloating(hwnd);
     }
     return win;
+}
+
+// The monitor a window belongs to. A minimized window belongs to the monitor it
+// is restored to.
+HMONITOR WindowMonitor(HWND hwnd) {
+    WINDOWPLACEMENT wp{};
+    wp.length = sizeof(wp);
+    if (IsIconic(hwnd) && GetWindowPlacement(hwnd, &wp))
+        return MonitorFromRect(&wp.rcNormalPosition, MONITOR_DEFAULTTONEAREST);
+    return MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
 }
 
 bool Fits(const Win& win, const RECT& r) {
@@ -738,6 +772,8 @@ struct {
     std::atomic<bool> enabled;
     std::atomic<bool> noEdgeSnap;
     std::atomic<bool> assist;
+    std::atomic<bool> assistLocal;
+    std::atomic<bool> assistSkipTaken;
     std::atomic<bool> link;
     std::atomic<bool> glue;
 } settings;
@@ -784,21 +820,74 @@ void Fill(HDC dc, RECT r, COLORREF c) {
     DeleteObject(b);
 }
 
+bool SameRect(const RECT& a, const RECT& b) {
+    return abs(a.left - b.left) <= 1 && abs(a.top - b.top) <= 1 &&
+           abs(a.right - b.right) <= 1 && abs(a.bottom - b.bottom) <= 1;
+}
+
+// Moves the window so that its visible frame is z. wr and fr get the window
+// rectangle and the frame it had before.
+bool MoveFrame(HWND hwnd, RECT z, RECT* wr, RECT* fr) {
+    if (!GetWindowRect(hwnd, wr))
+        return false;
+    if (FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, fr, sizeof(*fr))))
+        *fr = *wr;
+    int l = fr->left - wr->left, t = fr->top - wr->top;
+    int r = wr->right - fr->right, b = wr->bottom - fr->bottom;
+    SetWindowPos(hwnd, nullptr, z.left - l, z.top - t, z.right - z.left + l + r,
+                 z.bottom - z.top + t + b, SWP_NOZORDER | SWP_NOACTIVATE);
+    return true;
+}
+
+// A window that is moved to a monitor with another scaling resizes itself when
+// it arrives, some apps a moment later, and its invisible borders change. Such
+// a window is placed again until it stays in its zone.
+HWND g_fixWnd;
+RECT g_fixRect;
+int g_fixTries;
+UINT_PTR g_fixTimer;
+
+void StopFix() {
+    if (g_fixTimer)
+        KillTimer(nullptr, g_fixTimer);
+    g_fixTimer = 0;
+}
+
+void CALLBACK FixProc(HWND, UINT, UINT_PTR, DWORD) {
+    RECT wr, fr;
+    if (++g_fixTries > 8 || !IsWindow(g_fixWnd) || IsIconic(g_fixWnd) || IsZoomed(g_fixWnd) ||
+        IsHungAppWindow(g_fixWnd)) {
+        StopFix();
+        return;
+    }
+    if (SUCCEEDED(DwmGetWindowAttribute(g_fixWnd, DWMWA_EXTENDED_FRAME_BOUNDS, &fr,
+                                        sizeof(fr))) &&
+        !SameRect(fr, g_fixRect))
+        MoveFrame(g_fixWnd, g_fixRect, &wr, &fr);
+}
+
 bool Place(HWND hwnd, RECT z) {
     if (!IsWindow(hwnd) || IsHungAppWindow(hwnd))
         return false;
+    HMONITOR from = WindowMonitor(hwnd);
     if (IsZoomed(hwnd) || IsIconic(hwnd))
         ShowWindow(hwnd, SW_RESTORE);
-    RECT wr, fr;
-    if (!GetWindowRect(hwnd, &wr))
+    RECT before, fr, wr, now;
+    if (!MoveFrame(hwnd, z, &before, &fr))
         return false;
-    if (FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &fr, sizeof(fr))))
-        fr = wr;
-    int l = fr.left - wr.left, t = fr.top - wr.top;
-    int r = wr.right - fr.right, b = wr.bottom - fr.bottom;
-    RECT before = wr;
-    SetWindowPos(hwnd, nullptr, z.left - l, z.top - t, z.right - z.left + l + r,
-                 z.bottom - z.top + t + b, SWP_NOZORDER | SWP_NOACTIVATE);
+    StopFix();
+    if (from != MonitorFromRect(&z, MONITOR_DEFAULTTONEAREST)) {
+        // Right away with the borders the window has on the new monitor, and
+        // again later in case the app resizes itself after that.
+        if (SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &now,
+                                            sizeof(now))) &&
+            !SameRect(now, z))
+            MoveFrame(hwnd, z, &wr, &now);
+        g_fixWnd = hwnd;
+        g_fixRect = z;
+        g_fixTries = 0;
+        g_fixTimer = SetTimer(nullptr, 0, 100, FixProc);
+    }
     GetWindowRect(hwnd, &wr);
     return !EqualRect(&wr, &before) || EqualRect(&fr, &z);
 }
@@ -818,6 +907,9 @@ BOOL CALLBACK EnumProc(HWND hwnd, LPARAM) {
         if (hwnd == g_used[i])
             return TRUE;
     if (IsHungAppWindow(hwnd) || !IsCandidate(hwnd, nullptr))
+        return TRUE;
+    if (settings.assistLocal &&
+        WindowMonitor(hwnd) != MonitorFromRect(&g_work, MONITOR_DEFAULTTONEAREST))
         return TRUE;
     g_wins[g_count++] = hwnd;
     return g_count < MAXWIN;
@@ -887,9 +979,31 @@ void ShowChooser(RECT b) {
     InvalidateRect(g_chooser, nullptr, TRUE);
 }
 
+// Whether the zone already has a window: the window that is seen in the middle
+// of the zone fills it. That window isn't offered for the other zones either.
+bool ZoneTaken(RECT zone) {
+    HWND hwnd = RootAt({(zone.left + zone.right) / 2, (zone.top + zone.bottom) / 2});
+    if (!hwnd || !IsCandidate(hwnd, nullptr))
+        return false;
+    for (int i = 0; i < g_nused; i++)
+        if (g_used[i] == hwnd)
+            return false;
+    Win win = MakeWin(hwnd);
+    if (!win.ok || !Fits(win, zone))
+        return false;
+    if (g_nused < MAXWIN)
+        g_used[g_nused++] = hwnd;
+    return true;
+}
+
 void NextChooser() {
     const Layout& L = g_layouts[g_layout];
-    for (g_zone = 0; g_zone < L.n && (g_done >> g_zone & 1); g_zone++) {
+    for (g_zone = 0; g_zone < L.n; g_zone++) {
+        if (g_done >> g_zone & 1)
+            continue;
+        if (!settings.assistSkipTaken || !ZoneTaken(ZoneIn(g_work, L.z[g_zone])))
+            break;
+        g_done |= 1 << g_zone;
     }
     if (g_zone < L.n)
         ShowChooser(ZoneIn(g_work, L.z[g_zone]));
@@ -1430,6 +1544,8 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
         SendMessageTimeout(hwnd, WM_NCHITTEST, 0, MAKELPARAM(pt.x, pt.y),
                            SMTO_ABORTIFHUNG, 50, &hit);
         StopLink();
+        if (hwnd == g_fixWnd)
+            StopFix();
         bool sizing = hit >= HTLEFT && hit <= HTBOTTOMRIGHT;
         if (sizing && settings.link) {
             StopTracking();
@@ -1538,6 +1654,7 @@ DWORD WINAPI ThreadProc(LPVOID) {
     RunMessageLoop(g_frames, TrackFrame);
 
     g_link.active = false;
+    StopFix();
     g_frames.Destroy();
     if (g_timer)
         KillTimer(nullptr, g_timer);
@@ -1620,6 +1737,8 @@ void SetDocking(bool off) {
 void LoadSettings() {
     settings.enabled = Wh_GetIntSetting(L"splitLayouts");
     settings.assist = Wh_GetIntSetting(L"snapAssist");
+    settings.assistLocal = Wh_GetIntSetting(L"snapAssistSameMonitor");
+    settings.assistSkipTaken = Wh_GetIntSetting(L"snapAssistSkipTaken");
     settings.noEdgeSnap = Wh_GetIntSetting(L"noEdgeSnap");
     settings.link = Wh_GetIntSetting(L"linkedResize");
     settings.glue = Wh_GetIntSetting(L"glueWindows");
@@ -1718,16 +1837,8 @@ void SendKey(WORD vk, bool up) {
 }
 
 // With "only the windows of the current monitor": the monitor whose windows
-// are listed. A minimized window belongs to the monitor it is restored to.
+// are listed.
 HMONITOR g_listMon;
-
-HMONITOR WindowMonitor(HWND hwnd) {
-    WINDOWPLACEMENT wp{};
-    wp.length = sizeof(wp);
-    if (IsIconic(hwnd) && GetWindowPlacement(hwnd, &wp))
-        return MonitorFromRect(&wp.rcNormalPosition, MONITOR_DEFAULTTONEAREST);
-    return MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-}
 
 BOOL CALLBACK EnumProc(HWND hwnd, LPARAM) {
     bool floating = false;
