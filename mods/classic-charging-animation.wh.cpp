@@ -3,12 +3,12 @@
 // @name            Classic Charging Animation
 // @description     Shows the battery level when you plug in, in the style of the Windows 11 volume and brightness indicators.
 // @description:it-IT Mostra il livello della batteria al collegamento del caricatore, nello stile degli indicatori di volume e luminosità di Windows 11.
-// @version         1.4.2
+// @version         1.4.3
 // @author          mamt104
 // @github          https://github.com/mamt104
 // @license         MIT
 // @include         windhawk.exe
-// @compilerOptions -lgdiplus -lgdi32 -luser32 -ladvapi32 -ldwmapi -lshell32
+// @compilerOptions -lgdiplus -lgdi32 -luser32 -ladvapi32 -ldwmapi -lshell32 -lwtsapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -16,6 +16,8 @@
 # Classic Charging Animation
 
 Plug in the charger to see the battery percentage in a small bar at the bottom center of the primary display. The bar takes its shape, position and motion from the Windows 11 volume and brightness indicators. It disappears after about two seconds.
+
+If you plug in while the screen is off or Windows is locked, the bar waits until you return to the desktop. Unplugging before then cancels it.
 
 ![Preview of the charging bar at different battery levels](https://raw.githubusercontent.com/mamt104/windhawk-mods/69c605cce728f97219930ce121b3c3bef5401710/previews/classic-charging-animation-preview.gif)
 
@@ -28,6 +30,8 @@ Choose **Automatic**, **Pulse** or **Segments** in the settings. With **Preview 
 ### Italiano
 
 Quando colleghi il caricatore, una barra in basso al centro dello schermo principale mostra la percentuale della batteria. Riprende l’aspetto degli indicatori di volume e luminosità di Windows 11 e scompare dopo circa due secondi.
+
+Se colleghi il caricatore a schermo spento o con Windows bloccato, la barra compare quando torni al desktop. Se prima scolleghi il cavo, la barra si annulla.
 
 Sotto il 30% la barra parte in ambra, sotto il 15% in rosso. Sotto il 5% compare un punto esclamativo. Dal 95% un riflesso attraversa la barra e al 100% appare un segno di spunta. Puoi scegliere **Automatico**, **Impulso** o **Segmenti** e vedere un’anteprima salvando le impostazioni.
 */
@@ -57,10 +61,12 @@ Sotto il 30% la barra parte in ambra, sotto il 15% in rosso. Sotto il 5% compare
 #include <dwmapi.h>
 #include <gdiplus.h>
 #include <shellapi.h>
+#include <wtsapi32.h>
 #include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <cstring>
 #include <cwchar>
 
 namespace {
@@ -72,6 +78,12 @@ constexpr GUID kPowerSource = {
     0xe9d5,
     0x4b00,
     {0xa6, 0xbd, 0xff, 0x34, 0xff, 0x51, 0x65, 0x48}};
+// GUID_SESSION_DISPLAY_STATUS, scoped to the session showing the bar.
+constexpr GUID kSessionDisplay = {
+    0x2b84c20e,
+    0xad23,
+    0x4ddf,
+    {0x93, 0xdb, 0x05, 0xff, 0xbd, 0x7e, 0xfc, 0xa5}};
 HANDLE gStop, gPreview, gThread;
 
 enum class Style { Automatic, Pulse, Segments };
@@ -427,6 +439,7 @@ struct Overlay {
     POINT position{};
     Clock::time_point started{};
     bool motion{}, preview{};
+    bool pendingPlug{}, displayOn{true}, awaitingWake{}, locked{};
     BYTE battery{255}, previousSource{255};
     HPOWERNOTIFY notification{};
     Style style{};
@@ -502,6 +515,19 @@ struct Overlay {
     }
 
     DWORD Frame() {
+        if (pendingPlug && displayOn && !awaitingWake && !locked) {
+            // Unlock can arrive while Windows is still on its sign-in desktop.
+            BOOL inputDesktop = TRUE;
+            if (GetUserObjectInformationW(GetThreadDesktop(GetCurrentThreadId()),
+                                          UOI_IO, &inputDesktop,
+                                          sizeof(inputDesktop), nullptr) &&
+                !inputDesktop)
+                return 250;
+            pendingPlug = false;
+            SYSTEM_POWER_STATUS status{};
+            if (GetSystemPowerStatus(&status) && HasBattery(status))
+                Start(status.BatteryLifePercent);
+        }
         if (!pixels)
             return INFINITE;
         const float elapsed =
@@ -568,15 +594,28 @@ struct Overlay {
     void PowerChanged(BYTE source) {
         if (source > 1)
             return;
-        const bool pluggedIn = previousSource == 0 && source == 1;
-        if (previousSource == 1 && source == 0 && pixels && !preview)
-            Hide();
+        if (source == 0) {
+            pendingPlug = false;
+            if (pixels && !preview)
+                Hide();
+        } else if (previousSource == 0) {
+            pendingPlug = true;
+        }
         previousSource = source;
-        if (!pluggedIn)
-            return;
+    }
+
+    void RefreshPower() {
         SYSTEM_POWER_STATUS status{};
-        if (GetSystemPowerStatus(&status) && HasBattery(status))
-            Start(status.BatteryLifePercent);
+        if (GetSystemPowerStatus(&status))
+            PowerChanged(status.ACLineStatus);
+    }
+
+    void Defer() {
+        if (pixels) {
+            if (!preview && previousSource == 1)
+                pendingPlug = true;
+            Hide();
+        }
     }
 };
 
@@ -596,20 +635,49 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     if (msg == WM_POWERBROADCAST) {
         if (wp == PBT_POWERSETTINGCHANGE && lp) {
             auto* setting = reinterpret_cast<const POWERBROADCAST_SETTING*>(lp);
-            if (IsEqualGUID(setting->PowerSetting, kPowerSource) &&
-                setting->DataLength == sizeof(DWORD)) {
-                if (setting->Data[0] <= 2)
-                    overlay->PowerChanged(setting->Data[0] == 0 ? 1 : 0);
+            if (setting->DataLength == sizeof(DWORD)) {
+                DWORD value;
+                std::memcpy(&value, setting->Data, sizeof(value));
+                if (IsEqualGUID(setting->PowerSetting, kPowerSource) &&
+                    value <= 2) {
+                    overlay->PowerChanged(value == 0 ? 1 : 0);
+                } else if (IsEqualGUID(setting->PowerSetting, kSessionDisplay) &&
+                           value <= 2) {
+                    overlay->displayOn = value != 0;
+                    if (overlay->displayOn) {
+                        if (value == 1)
+                            overlay->awaitingWake = false;
+                        overlay->RefreshPower();
+                    } else {
+                        overlay->Defer();
+                    }
+                }
             }
         } else if (wp == PBT_APMPOWERSTATUSCHANGE && !overlay->notification) {
-            SYSTEM_POWER_STATUS status{};
-            if (GetSystemPowerStatus(&status))
-                overlay->PowerChanged(status.ACLineStatus);
+            overlay->RefreshPower();
+        } else if (wp == PBT_APMSUSPEND) {
+            overlay->awaitingWake = true;
+            overlay->Defer();
+        } else if (wp == PBT_APMRESUMEAUTOMATIC || wp == PBT_APMRESUMESUSPEND) {
+            if (wp == PBT_APMRESUMESUSPEND)
+                overlay->awaitingWake = false;
+            overlay->RefreshPower();
         }
         return TRUE;
     }
+    if (msg == WM_WTSSESSION_CHANGE) {
+        if (wp == WTS_SESSION_LOCK) {
+            overlay->locked = true;
+            overlay->Defer();
+        } else if (wp == WTS_SESSION_UNLOCK) {
+            overlay->locked = false;
+            overlay->awaitingWake = false;
+            overlay->RefreshPower();
+        }
+        return 0;
+    }
     if (msg == WM_DISPLAYCHANGE)
-        overlay->Hide();
+        overlay->Defer();
     if ((msg == WM_SETTINGCHANGE || msg == WM_THEMECHANGED ||
          msg == WM_SYSCOLORCHANGE) &&
         overlay->pixels)
@@ -645,6 +713,15 @@ DWORD WINAPI RunOverlay(void*) {
         if (hwnd) {
             overlay.notification = RegisterPowerSettingNotification(
                 hwnd, &kPowerSource, DEVICE_NOTIFY_WINDOW_HANDLE);
+            overlay.displayOn = false;  // Wait for the initial display state.
+            const auto display = RegisterPowerSettingNotification(
+                hwnd, &kSessionDisplay, DEVICE_NOTIFY_WINDOW_HANDLE);
+            if (!display)
+                overlay.displayOn = true;
+            const auto suspend = RegisterSuspendResumeNotification(
+                hwnd, DEVICE_NOTIFY_WINDOW_HANDLE);
+            const bool session =
+                WTSRegisterSessionNotification(hwnd, NOTIFY_FOR_THIS_SESSION);
             const HANDLE events[] = {gStop, gPreview};
             FrameSync frameSync;
             while (WaitForSingleObject(gStop, 0) == WAIT_TIMEOUT) {
@@ -669,6 +746,12 @@ DWORD WINAPI RunOverlay(void*) {
             }
             if (overlay.notification)
                 UnregisterPowerSettingNotification(overlay.notification);
+            if (display)
+                UnregisterPowerSettingNotification(display);
+            if (suspend)
+                UnregisterSuspendResumeNotification(suspend);
+            if (session)
+                WTSUnRegisterSessionNotification(hwnd);
             overlay.Hide();
             DestroyWindow(hwnd);
         }
