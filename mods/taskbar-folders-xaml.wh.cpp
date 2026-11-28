@@ -3073,6 +3073,7 @@ struct FolderPanel : FolderPalette {
     POINT dragPoint{};
     HBRUSH searchBrush{};
     RECT rest{}, morphFrom{}, searchRect{};
+    int heldRevealShift = 0;
     SIZE childLayout{};
     bool motion = false, frame = false, layered = false, closing = false;
     Ease reveal, arrival, morph;
@@ -4865,10 +4866,12 @@ static void layoutPanelChildren(int w, int h) {
     }
 }
 static constexpr unsigned kPanelRevealMs = 165;
+static constexpr int kPanelSlideDip = 7;
 
 static int panelRevealShift(double now) {
     const int sign = panel->rest.bottom <= panel->anchor.top ? 1 : -1;
-    return int(std::lround(sign * px(7) * (1 - panel->reveal.value(now))));
+    const int shift = int(std::lround(px(kPanelSlideDip) * (1 - panel->reveal.value(now))));
+    return sign * std::max(0, shift - panel->heldRevealShift);
 }
 static void panelPosition(double now, bool layout = false) {
     RECT r = panel->rest;
@@ -4897,6 +4900,17 @@ static void panelPosition(double now, bool layout = false) {
             LWA_ALPHA);
 }
 static void sizePanel(RECT dest, bool modeChanged) {
+    RECT from{};
+    const bool switching = modeChanged && !panel->closing && !panel->browsing &&
+        IsWindowVisible(panel->window) && GetWindowRect(panel->window, &from);
+    const bool above = dest.bottom <= panel->anchor.top;
+    if (switching) {
+        // Add or Back can interrupt the entrance between two monitor refreshes.
+        // Retain the taskbar-facing edge of the frame actually on screen.
+        const LONG shift = above ? from.bottom - dest.bottom : dest.top - from.top;
+        panel->heldRevealShift = std::clamp<LONG>(shift, 0, px(kPanelSlideDip));
+    }
+    OffsetRect(&dest, 0, above ? panel->heldRevealShift : -panel->heldRevealShift);
     const bool sameTarget = EqualRect(&dest, &panel->rest);
     if (sameTarget && panel->morph.duration && !modeChanged) {
         // Typing and arriving suggestions update the content, never the motion clock.
@@ -4905,11 +4919,8 @@ static void sizePanel(RECT dest, bool modeChanged) {
     }
     const auto now = motionTime();
     panel->rest = dest;
-    RECT from{};
     panel->morph.set(1);
-    if (modeChanged && panel->motion && !panel->closing && !panel->browsing &&
-        IsWindowVisible(panel->window) && GetWindowRect(panel->window, &from)) {
-        OffsetRect(&from, 0, -panelRevealShift(now));
+    if (switching && panel->motion) {
         const auto distance = std::max({
             std::abs(dest.left - from.left), std::abs(dest.top - from.top),
             std::abs(dest.right - from.right), std::abs(dest.bottom - from.bottom)});
@@ -6834,7 +6845,18 @@ static void refreshPanel() {
     int cellW = std::min(px(88), std::max(1, monitorW - 2 * pad));
     int available = std::clamp((monitorW - 2 * pad) / cellW, 1, 4),
         count = (int)panel->apps.size();
+    const bool chooser = panel->choosing;
     int cols = searchField ? available : std::clamp(count, 1, available);
+    int width = std::min(monitorW, std::max(px(190), 2 * pad + cols * cellW));
+    if (chooser && !IsRectEmpty(&panel->rest)) {
+        // Keep both bottom corners in place. Fit the results to the folder the
+        // user opened, including when suggestions arrive or the query changes.
+        width = std::clamp<int>(panel->rest.right - panel->rest.left, 1, monitorW);
+        const int inner = std::max(1, width - 2 * pad);
+        cols = std::clamp(inner / std::min(cellW, px(80)), 1, available);
+        cellW = std::min(cellW, inner / cols);
+    }
+    const int folderRows = (int(f->apps.size()) + cols - 1) / cols;
     int rows = (count + cols - 1) / cols,
         gridTop = panelGridTop();
     int room =
@@ -6844,20 +6866,17 @@ static void refreshPanel() {
         px(7);
     int capRows =
         std::clamp((room - gridTop - px(12)) / panel->cellHeight, 1, 4);
-    const bool chooser = panel->choosing;
     if (chooser || rows > capRows)
         capRows = std::clamp((room - gridTop - px(39)) / panel->cellHeight, 1,
-                             chooser ? 3 : 4);
+                             chooser ? std::clamp(folderRows, 3, 4) : 4);
     int shown =
         panel->filtering
-            ? std::min(capRows,
-                       std::max(1, ((int)f->apps.size() + cols - 1) / cols))
+            ? std::min(capRows, std::max(1, folderRows))
         : chooser ? capRows : std::min(rows, capRows);
     panel->cellWidth = cellW;
     panel->columns = cols;
     panel->capacity = std::max(1, cols * capRows);
     panel->page = std::clamp(panel->page, 0, pageCount() - 1);
-    int width = std::min(monitorW, std::max(px(190), 2 * pad + cols * cellW));
     // Reserve the chooser's grid and pager once so incoming suggestions and
     // typed queries never move the search box or the button under the pointer.
     const int footer = panelFooter();
@@ -8113,6 +8132,7 @@ static void openPanel(wstring id,
     panel->systemDark = dark;
     panel->closing = false;
     panel->motion = allowMotion();
+    panel->heldRevealShift = 0;
     panel->reveal.set(panel->motion ? 0 : 1);
     if (panel->parkedWindow) {
         panel->window = std::exchange(panel->parkedWindow, nullptr);
