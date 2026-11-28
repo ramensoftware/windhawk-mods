@@ -158,7 +158,11 @@ Windows does not expose raw CPU die temperature to user-mode apps without a kern
 - **LibreHardwareMonitor** or **OpenHardwareMonitor** (WMI, run as Administrator)
 - **HWiNFO64** (Sensors-only mode with Shared Memory Support enabled)
 
-When **CPU Temp** shows `N/A` in the Resource Monitor flyout, click the red **`?`** button inside the CPU Temp tile to open the setup window with direct download links and **1-Click Setup** (with a confirmation summary before applying changes).
+When **CPU Temp** shows `N/A` in the Resource Monitor flyout, click the red **`?`** button inside the CPU Temp tile to open the **Enable CPU Temperature** window with direct download links, **1-Click Setup** (with a confirmation summary before running), and **Remove Auto-Start Tasks**.
+
+- **Security and elevation:** 1-Click Setup only accepts sensor executables installed under `%ProgramFiles%` or `%ProgramFiles(x86)%` (never user-writable folders or arbitrary running processes) and passes its script directly via PowerShell `-EncodedCommand` without writing any temporary script file to `%TEMP%`.
+- **Changes made by 1-Click Setup:** Requests Administrator elevation via UAC, updates the selected app's configuration file (`CoreTemp.ini`, `Profiles\MSIAfterburner.cfg`, `LibreHardwareMonitor.config`, or `HWiNFO64.INI`) to start minimized/shared-memory, and registers a Windows logon scheduled task (`TopBar_CoreTemp_AutoStart`, `TopBar_MSIAfterburner_AutoStart`, `TopBar_LibreHardwareMonitor_AutoStart`, or `TopBar_HWiNFO64_AutoStart`) with `RunLevel Highest` (Administrator).
+- **Reverting tasks:** Click **Remove Auto-Start Tasks** in the Enable CPU Temperature window at any time to unregister all `TopBar_*_AutoStart` scheduled tasks.
 
 ## Network requests (Weather & SpeedTest)
 
@@ -301,6 +305,28 @@ Clicking on the TopBar itself, or on another TopBar flyout, still
 closes the open flyout. Only clicks on other apps or the
 desktop are ignored.
 
+## Resource variables and styling precedence
+
+Use **Resource variables** in Windhawk mod settings to override Windows 11
+Fluent Design XAML resources globally across the TopBar, all flyouts, and
+detached windows (Settings, About this PC, and Enable CPU Temperature):
+
+- `ControlCornerRadius` (default `4` per Windows 11 design guidelines)
+- `OverlayCornerRadius` (default `8` for flyouts, popups, and bar surfaces)
+- `TextFillColorPrimaryBrush`, `TextFillColorSecondaryBrush`, `LayerFillColorDefaultBrush`, `CardStrokeColorDefaultBrush`
+- `SystemFillColorSuccessBrush`, `SystemFillColorCautionBrush`, `SystemFillColorCriticalBrush`
+- `ContentControlThemeFontFamily`, `SymbolThemeFontFamily`
+- `ControlNormalAnimationDuration`, `ControlFastAnimationDuration`, `ControlFasterAnimationDuration`
+
+All `ControlTemplate` definitions and `ContentPresenter` hosts expose the
+`CommonStates` visual state group (`Normal`, `PointerOver`, `Pressed`, `Disabled`)
+so `@PointerOver`, `@Pressed`, `@Disabled`, and `@Normal` rules work everywhere.
+
+Visual appearance settings in the TopBar Settings app never override Windhawk
+`theme`, `controlStyles`, or `resourceVariables`. Only the four user preference
+categories in the Settings app remain authoritative: **UI alignment**,
+**Buttons visibility**, **Shortcuts**, and **Behaviour**.
+
 */
 // ==/WindhawkModReadme==
 
@@ -335,6 +361,17 @@ desktop are ignored.
 - styleConstants: [""]
   $name: Style constants
   $description: name=value pairs referenced in styles as $name.
+- resourceVariables:
+  - - variableKey: ""
+      $name: Variable key
+    - value: ""
+      $name: Value
+  $name: Resource variables
+  $description: >-
+    Override XAML theme and Windows 11 design resources across the TopBar,
+    flyouts, and detached windows (for example ControlCornerRadius,
+    OverlayCornerRadius, TextFillColorPrimaryBrush, LayerFillColorDefaultBrush,
+    SystemFillColorCriticalBrush, SymbolThemeFontFamily). Supports $styleConstants.
 - disableFlyoutAutoClose: false
   $name: Never auto-close flyouts
   $description: >-
@@ -3057,6 +3094,9 @@ void OpenCpuTempSetupWindow();
 void DestroyCpuTempSetupWindowNow();
 bool PreTranslateCpuTempSetupMessage(MSG* msg);
 int g_cliMonitorIndex = 0;
+static inline bool IsSecondaryMonitorInstance() { return g_cliMonitorIndex > 1; }
+void WhTool_ModUninit();
+static std::atomic<bool> g_btDeviceEventPending{false};
 bool IsAboutPcWindow(HWND hwnd);
 void CloseNativeStartMenuIfOpen();
 void CloseNativeSearchIfOpen();
@@ -3334,8 +3374,20 @@ int g_clockSlideDirection = 0;
 [[clang::no_destroy]] wuxc::Flyout g_settingsFlyout{nullptr};
 [[clang::no_destroy]] wuxc::StackPanel g_settingsPanel{nullptr};
 
+struct ResourceVariableRule {
+    std::wstring variableKey;
+    std::wstring value;
+};
+
 std::vector<std::pair<std::wstring, std::wstring>> g_styleConstants;
 std::vector<ControlStyleRule> g_controlStyleRules;
+std::vector<ResourceVariableRule> g_resourceVariables;
+
+bool HasUserResourceVariable(const std::wstring& key);
+std::optional<std::wstring> GetUserResourceVariableValue(const std::wstring& key);
+std::optional<double> TryGetUserResourceCornerRadius(const std::wstring& key);
+wuxm::Brush TryGetUserResourceBrush(UIElement const& contextElem, const std::wstring& key);
+void ApplyResourceVariablesToRoot(FrameworkElement const& root);
 
 const std::vector<ControlStyleRule>& BuiltInStyles() {
     static const std::vector<ControlStyleRule> winui3Styles = {
@@ -6329,6 +6381,293 @@ struct TopBarPressAnimConfig {
 static std::mutex g_pressAnimConfigMutex;
 [[clang::no_destroy]] static std::map<std::wstring, TopBarPressAnimConfig> g_pressAnimConfigs;
 
+static bool TryParseNumericList(const std::wstring& s, std::vector<double>& out) {
+    out.clear();
+    std::wstring cur;
+    for (wchar_t ch : s) {
+        if (ch == L',' || ch == L' ' || ch == L'\t') {
+            if (!cur.empty()) {
+                try {
+                    size_t idx = 0;
+                    double v = std::stod(cur, &idx);
+                    if (idx != cur.size() || !std::isfinite(v)) return false;
+                    out.push_back(v);
+                } catch (...) { return false; }
+                cur.clear();
+            }
+        } else {
+            cur.push_back(ch);
+        }
+    }
+    if (!cur.empty()) {
+        try {
+            size_t idx = 0;
+            double v = std::stod(cur, &idx);
+            if (idx != cur.size() || !std::isfinite(v)) return false;
+            out.push_back(v);
+        } catch (...) { return false; }
+    }
+    return !out.empty();
+}
+
+static bool TryParseCornerRadiusValue(const std::wstring& s, CornerRadius* out) {
+    std::vector<double> nums;
+    if (!TryParseNumericList(s, nums)) return false;
+    if (nums.size() == 1) {
+        *out = CornerRadius{nums[0], nums[0], nums[0], nums[0]};
+        return true;
+    }
+    if (nums.size() == 4) {
+        *out = CornerRadius{nums[0], nums[1], nums[2], nums[3]};
+        return true;
+    }
+    return false;
+}
+
+static bool TryParseThicknessValue(const std::wstring& s, Thickness* out) {
+    std::vector<double> nums;
+    if (!TryParseNumericList(s, nums)) return false;
+    if (nums.size() == 1) {
+        *out = Thickness{nums[0], nums[0], nums[0], nums[0]};
+        return true;
+    }
+    if (nums.size() == 2) {
+        *out = Thickness{nums[0], nums[1], nums[0], nums[1]};
+        return true;
+    }
+    if (nums.size() == 4) {
+        *out = Thickness{nums[0], nums[1], nums[2], nums[3]};
+        return true;
+    }
+    return false;
+}
+
+static bool TryParseDurationValue(const std::wstring& raw, Duration* out) {
+    std::wstring s = TrimWs(raw);
+    if (s.empty()) return false;
+    try {
+        double ms = -1.0;
+        if (s.size() > 2 && _wcsicmp(s.c_str() + s.size() - 2, L"ms") == 0) {
+            ms = std::stod(s.substr(0, s.size() - 2));
+        } else if (s.size() > 1 && (s.back() == L's' || s.back() == L'S') && s.find(L':') == std::wstring::npos) {
+            ms = std::stod(s.substr(0, s.size() - 1)) * 1000.0;
+        } else if (s.find(L':') != std::wstring::npos) {
+            size_t c1 = s.find(L':');
+            size_t c2 = s.find(L':', c1 + 1);
+            if (c2 != std::wstring::npos) {
+                double h = std::stod(s.substr(0, c1));
+                double m = std::stod(s.substr(c1 + 1, c2 - c1 - 1));
+                double sec = std::stod(s.substr(c2 + 1));
+                ms = ((h * 3600.0) + (m * 60.0) + sec) * 1000.0;
+            }
+        }
+        if (ms >= 0.0 && std::isfinite(ms)) {
+            int64_t ticks = static_cast<int64_t>(std::llround(ms * 10000.0));
+            *out = DurationHelper::FromTimeSpan(wf::TimeSpan{ticks});
+            return true;
+        }
+    } catch (...) {}
+    return false;
+}
+
+static wf::IInspectable ParseResourceVariableValue(
+    UIElement const& contextElem,
+    const std::wstring& key,
+    const std::wstring& rawValue) {
+    std::wstring val = TrimWs(ApplyStyleConstants(rawValue));
+    if (val.empty()) return nullptr;
+
+    if (val.starts_with(L"<WindhawkBlur")) {
+        if (auto blur = ParseWindhawkBlurValue(val)) {
+            if (contextElem) {
+                return CreateWindhawkBlurBrush(contextElem, *blur, /*inheritGlobal=*/false);
+            }
+        }
+        return nullptr;
+    }
+
+    // Raw XAML object element (e.g. <SolidColorBrush .../>, <LinearGradientBrush .../>, <AcrylicBrush .../>)
+    if (val.front() == L'<') {
+        std::wstring xaml = val;
+        if (xaml.find(L"x:Key=") == std::wstring::npos) {
+            size_t insertPos = xaml.find_first_of(L" \t\r\n/>");
+            if (insertPos != std::wstring::npos) {
+                xaml.insert(insertPos, L" x:Key=\"__wh_res\"");
+            }
+        }
+        std::wstring dictXaml =
+            L"<ResourceDictionary "
+            L"xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" "
+            L"xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\">" +
+            xaml + L"</ResourceDictionary>";
+        try {
+            auto dict = Markup::XamlReader::Load(dictXaml).as<ResourceDictionary>();
+            if (dict.Size() > 0) {
+                return dict.First().Current().Value();
+            }
+        } catch (...) {}
+    }
+
+    auto keyEndsWith = [&](PCWSTR suffix) -> bool {
+        size_t slen = wcslen(suffix);
+        return key.size() >= slen && _wcsicmp(key.c_str() + key.size() - slen, suffix) == 0;
+    };
+    auto keyContains = [&](PCWSTR sub) -> bool {
+        std::wstring lk = key, ls = sub;
+        for (auto& c : lk) c = towlower(c);
+        for (auto& c : ls) c = towlower(c);
+        return lk.find(ls) != std::wstring::npos;
+    };
+
+    if (keyContains(L"CornerRadius")) {
+        CornerRadius cr{};
+        if (TryParseCornerRadiusValue(val, &cr)) return winrt::box_value(cr);
+    }
+    if (keyContains(L"Thickness") || keyContains(L"Padding") || keyContains(L"Margin")) {
+        Thickness th{};
+        if (TryParseThicknessValue(val, &th)) return winrt::box_value(th);
+    }
+    if (keyContains(L"FontFamily")) {
+        try { return winrt::box_value(wuxm::FontFamily(winrt::hstring(val))); } catch (...) {}
+    }
+    if (keyContains(L"Duration")) {
+        Duration dur{};
+        if (TryParseDurationValue(val, &dur)) return winrt::box_value(dur);
+    }
+
+    // Color or SolidColorBrush
+    wui::Color parsedColor{};
+    if (TryParseHexColor(val, &parsedColor) || TryParseNamedColor(val, &parsedColor)) {
+        if (keyEndsWith(L"Color") && !keyEndsWith(L"Brush")) {
+            return winrt::box_value(parsedColor);
+        }
+        return wuxm::SolidColorBrush(parsedColor);
+    }
+
+    if (_wcsicmp(val.c_str(), L"true") == 0) return winrt::box_value(true);
+    if (_wcsicmp(val.c_str(), L"false") == 0) return winrt::box_value(false);
+
+    {
+        std::vector<double> nums;
+        if (TryParseNumericList(val, nums) && nums.size() == 1) {
+            return winrt::box_value(nums[0]);
+        }
+    }
+
+    // Fallback: XAML Setter brush parsing, then plain string
+    try {
+        std::wstring setterXaml =
+            L"<ResourceDictionary "
+            L"xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" "
+            L"xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\">"
+            L"<Style TargetType=\"Border\">"
+            L"<Setter Property=\"Background\">" + val + L"</Setter>"
+            L"</Style></ResourceDictionary>";
+        auto dict = Markup::XamlReader::Load(setterXaml).as<ResourceDictionary>();
+        auto style = dict.First().Current().Value().as<Style>();
+        if (auto v = style.Setters().GetAt(0).as<Setter>().Value()) {
+            return v;
+        }
+    } catch (...) {}
+
+    return winrt::box_value(winrt::hstring(val));
+}
+
+bool HasUserResourceVariable(const std::wstring& key) {
+    for (const auto& rv : g_resourceVariables) {
+        if (_wcsicmp(rv.variableKey.c_str(), key.c_str()) == 0) return true;
+    }
+    return false;
+}
+
+std::optional<std::wstring> GetUserResourceVariableValue(const std::wstring& key) {
+    std::optional<std::wstring> result;
+    for (const auto& rv : g_resourceVariables) {
+        if (_wcsicmp(rv.variableKey.c_str(), key.c_str()) == 0) {
+            result = TrimWs(ApplyStyleConstants(rv.value));
+        }
+    }
+    return result;
+}
+
+std::optional<double> TryGetUserResourceCornerRadius(const std::wstring& key) {
+    auto val = GetUserResourceVariableValue(key);
+    if (!val || val->empty()) return std::nullopt;
+    CornerRadius cr{};
+    if (TryParseCornerRadiusValue(*val, &cr)) {
+        return cr.TopLeft;
+    }
+    return std::nullopt;
+}
+
+wuxm::Brush TryGetUserResourceBrush(UIElement const& contextElem, const std::wstring& key) {
+    auto val = GetUserResourceVariableValue(key);
+    if (!val || val->empty()) return nullptr;
+    auto obj = ParseResourceVariableValue(contextElem, key, *val);
+    if (!obj) return nullptr;
+    if (auto b = obj.try_as<wuxm::Brush>()) return b;
+    if (auto c = obj.try_as<wui::Color>()) return wuxm::SolidColorBrush(*c);
+    return nullptr;
+}
+
+void ApplyResourceVariablesToRoot(FrameworkElement const& root) {
+    if (!root) return;
+    try {
+        auto res = root.Resources();
+        auto putIfMissing = [&](PCWSTR key, wf::IInspectable const& val) {
+            if (!val) return;
+            auto boxedKey = winrt::box_value(winrt::hstring(key));
+            if (!res.HasKey(boxedKey)) {
+                res.Insert(boxedKey, val);
+            }
+        };
+        auto putOverride = [&](const std::wstring& key, wf::IInspectable const& val) {
+            if (!val || key.empty()) return;
+            auto boxedKey = winrt::box_value(winrt::hstring(key));
+            if (res.HasKey(boxedKey)) {
+                res.Remove(boxedKey);
+            }
+            res.Insert(boxedKey, val);
+        };
+
+        // Seed standard Windows 11 App Design Guide (Fluent Design) theme tokens
+        putIfMissing(L"ControlCornerRadius", winrt::box_value(CornerRadius{4, 4, 4, 4}));
+        putIfMissing(L"OverlayCornerRadius", winrt::box_value(CornerRadius{8, 8, 8, 8}));
+        putIfMissing(L"ControlNormalAnimationDuration",
+                     winrt::box_value(DurationHelper::FromTimeSpan(wf::TimeSpan{2500000})));
+        putIfMissing(L"ControlFastAnimationDuration",
+                     winrt::box_value(DurationHelper::FromTimeSpan(wf::TimeSpan{1670000})));
+        putIfMissing(L"ControlFasterAnimationDuration",
+                     winrt::box_value(DurationHelper::FromTimeSpan(wf::TimeSpan{830000})));
+        putIfMissing(L"SymbolThemeFontFamily",
+                     winrt::box_value(wuxm::FontFamily(L"Segoe Fluent Icons, Segoe MDL2 Assets")));
+        putIfMissing(L"ContentControlThemeFontFamily",
+                     winrt::box_value(wuxm::FontFamily(L"Segoe UI Variable Text, Segoe UI")));
+        putIfMissing(L"TextFillColorPrimaryBrush", MakeBrush(0xFF, 0xFF, 0xFF, 0xFF));
+        putIfMissing(L"TextFillColorSecondaryBrush", MakeBrush(0xC5, 0xFF, 0xFF, 0xFF));
+        putIfMissing(L"TextFillColorTertiaryBrush", MakeBrush(0x8B, 0xFF, 0xFF, 0xFF));
+        putIfMissing(L"LayerFillColorDefaultBrush", MakeBrush(0x0E, 0xFF, 0xFF, 0xFF));
+        putIfMissing(L"CardBackgroundFillColorDefaultBrush", MakeBrush(0x0D, 0xFF, 0xFF, 0xFF));
+        putIfMissing(L"CardStrokeColorDefaultBrush", MakeBrush(0x18, 0xFF, 0xFF, 0xFF));
+        putIfMissing(L"ControlFillColorDefaultBrush", MakeBrush(0x0F, 0xFF, 0xFF, 0xFF));
+        putIfMissing(L"ControlFillColorSecondaryBrush", MakeBrush(0x1A, 0xFF, 0xFF, 0xFF));
+        putIfMissing(L"ControlFillColorTertiaryBrush", MakeBrush(0x08, 0xFF, 0xFF, 0xFF));
+        putIfMissing(L"ControlStrokeColorDefaultBrush", MakeBrush(0x18, 0xFF, 0xFF, 0xFF));
+        putIfMissing(L"SystemFillColorSuccessBrush", MakeBrush(0xFF, 0x6C, 0xCB, 0x5F));
+        putIfMissing(L"SystemFillColorCautionBrush", MakeBrush(0xFF, 0xFC, 0xE1, 0x00));
+        putIfMissing(L"SystemFillColorCriticalBrush", MakeBrush(0xFF, 0xFF, 0x99, 0xA4));
+
+        // Apply user-defined resourceVariables (highest priority over seeded defaults)
+        auto ui = root.try_as<UIElement>();
+        for (const auto& rv : g_resourceVariables) {
+            if (rv.variableKey.empty() || rv.variableKey.starts_with(L"//")) continue;
+            if (auto parsed = ParseResourceVariableValue(ui, rv.variableKey, rv.value)) {
+                putOverride(rv.variableKey, parsed);
+            }
+        }
+    } catch (...) {}
+}
+
 void ApplySingleStyleToElement(FrameworkElement element, const std::wstring& rule) {
     std::wstring ruleWithConstants = ApplyStyleConstants(rule);
     std::wstring trimmedRule = TrimWs(ruleWithConstants);
@@ -6459,32 +6798,8 @@ void ApplySingleStyleToElement(FrameworkElement element, const std::wstring& rul
         if (!fe) {
             return;
         }
-        wf::IInspectable resourceValue{nullptr};
-        if (valuePart.starts_with(L"<WindhawkBlur")) {
-            if (auto blur = ParseWindhawkBlurValue(valuePart)) {
-                if (auto ui = element.try_as<UIElement>()) {
-                    resourceValue = CreateWindhawkBlurBrush(ui, *blur);
-                }
-            }
-        } else {
-            std::wstring setterXaml =
-                L"<ResourceDictionary "
-                L"xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" "
-                L"xmlns:x=\"http://schemas.microsoft.com/winfx/2006/xaml\">"
-                L"<Style TargetType=\"Border\">"
-                L"<Setter Property=\"Background\">" + valuePart + L"</Setter>"
-                L"</Style></ResourceDictionary>";
-            try {
-                auto dict = Markup::XamlReader::Load(setterXaml).as<ResourceDictionary>();
-                auto style = dict.First().Current().Value().as<Style>();
-                resourceValue = style.Setters().GetAt(0).as<Setter>().Value();
-            } catch (winrt::hresult_error const& ex) {
-                Wh_Log(L"Resource value parse failed (%s): %08X",
-                       trimmedRule.c_str(),
-                       static_cast<unsigned int>(ex.code().value));
-                return;
-            }
-        }
+        wf::IInspectable resourceValue = ParseResourceVariableValue(
+            element.try_as<UIElement>(), key, valuePart);
         if (resourceValue) {
             auto res = fe.Resources();
             auto boxedKey = winrt::box_value(winrt::hstring(key));
@@ -7220,13 +7535,20 @@ void ApplyControlStylesToPopupRoot(FrameworkElement const& root) {
                 try {
                     ApplyWinUI3BackgroundSizingIfUnset(node);
                     if (auto btn = node.try_as<wuxc::Button>()) {
+                        bool hasCustomTpl = false;
                         try {
-                            if (!IsTextBoxTemplateButton(btn) && btn.Template() != tmpl) {
+                            auto localTpl = btn.ReadLocalValue(wuxc::Control::TemplateProperty());
+                            hasCustomTpl = (localTpl != DependencyProperty::UnsetValue() &&
+                                            localTpl != nullptr &&
+                                            btn.Template() != tmpl);
+                        } catch (...) {}
+                        try {
+                            if (!IsTextBoxTemplateButton(btn) && !hasCustomTpl && btn.Template() != tmpl) {
                                 btn.Template(tmpl);
                                 btn.ApplyTemplate();
                             }
                         } catch (...) {}
-                        try { if (!IsTextBoxTemplateButton(btn)) EnsureButtonHoverHook(btn); } catch (...) {}
+                        try { if (!IsTextBoxTemplateButton(btn) && !hasCustomTpl) EnsureButtonHoverHook(btn); } catch (...) {}
                     }
                     int n = wuxm::VisualTreeHelper::GetChildrenCount(node);
                     for (int i = 0; i < n; i++) {
@@ -7252,14 +7574,15 @@ void ApplyControlStylesToPopupRoot(FrameworkElement const& root) {
                                : g_settings.iconColor;
     }
 
+    ApplyResourceVariablesToRoot(root);
     ApplyIconColorToElement(root, defaultIconColor);
     ApplyRuleListToPopupRoot(BuiltInStyles(), root);
+    ApplyUserFlyoutCornerOverrides(root);
     {
         int prevTier = g_styleApplyTier;
         struct TierGuard { int prev; ~TierGuard() { g_styleApplyTier = prev; } } tierGuard{prevTier};
         g_styleApplyTier = 1;
         ApplyRuleListToPopupRoot(g_themeStyleRules, root);
-        ApplyUserFlyoutCornerOverrides(root);
         g_styleApplyTier = 2;
         ApplyRuleListToPopupRoot(g_controlStyleRules, root);
     }
@@ -7496,13 +7819,20 @@ void ApplyAllControlStyles() {
                     try {
                         ApplyWinUI3BackgroundSizingIfUnset(node);
                         if (auto btn = node.try_as<wuxc::Button>()) {
+                            bool hasCustomTpl = false;
                             try {
-                                if (!IsTextBoxTemplateButton(btn) && btn.Template() != tmpl) {
+                                auto localTpl = btn.ReadLocalValue(wuxc::Control::TemplateProperty());
+                                hasCustomTpl = (localTpl != DependencyProperty::UnsetValue() &&
+                                                localTpl != nullptr &&
+                                                btn.Template() != tmpl);
+                            } catch (...) {}
+                            try {
+                                if (!IsTextBoxTemplateButton(btn) && !hasCustomTpl && btn.Template() != tmpl) {
                                     btn.Template(tmpl);
                                     btn.ApplyTemplate();
                                 }
                             } catch (...) {}
-                            try { if (!IsTextBoxTemplateButton(btn)) EnsureButtonHoverHook(btn); } catch (...) {}
+                            try { if (!IsTextBoxTemplateButton(btn) && !hasCustomTpl) EnsureButtonHoverHook(btn); } catch (...) {}
                         }
                         int n = wuxm::VisualTreeHelper::GetChildrenCount(node);
                         for (int i = 0; i < n; i++) {
@@ -7543,7 +7873,13 @@ void ApplyAllControlStyles() {
         }
     } catch (...) {}
 
+    if (g_rootElement) ApplyResourceVariablesToRoot(g_rootElement);
+    for (auto& wr : g_detachedStyleRoots) {
+        if (auto root = wr.get(); isLoadedRoot(root)) ApplyResourceVariablesToRoot(root);
+    }
     ApplyRuleList(BuiltInStyles());
+    ApplyUserTopBarCornerOverrides();
+    ApplyUserFlyoutCornerOverrides(nullptr);
     try { AdaptNetworkButtonDensity(); } catch (...) {}
     try { AdaptTopBarHeightDensity(); } catch (...) {}
     {
@@ -7551,8 +7887,6 @@ void ApplyAllControlStyles() {
         struct TierGuard { int prev; ~TierGuard() { g_styleApplyTier = prev; } } tierGuard{prevTier};
         g_styleApplyTier = 1;
         ApplyRuleList(g_themeStyleRules);
-        ApplyUserTopBarCornerOverrides();
-        ApplyUserFlyoutCornerOverrides(nullptr);
         g_styleApplyTier = 2;
         ApplyRuleList(g_controlStyleRules);
     }
@@ -9387,11 +9721,16 @@ wuxc::TextBlock MakeText(PCWSTR name, std::wstring_view text, double size, bool 
     block.Text(winrt::hstring(text));
     block.FontSize(size);
 
-    if (!g_settings.fontFamily.empty()) {
+    if (auto resFont = GetUserResourceVariableValue(L"ContentControlThemeFontFamily");
+        resFont && !resFont->empty()) {
+        try {
+            block.FontFamily(wuxm::FontFamily(winrt::hstring(*resFont)));
+        } catch (...) {}
+    } else if (!g_settings.fontFamily.empty()) {
         try {
             block.FontFamily(wuxm::FontFamily(winrt::hstring(g_settings.fontFamily)));
         } catch (...) {}
-    } else if (IsWinUI3StyleMode()) {
+    } else {
         try {
             block.FontFamily(wuxm::FontFamily(
                 size >= 18.0 ? L"Segoe UI Variable Display, Segoe UI"
@@ -9405,7 +9744,9 @@ wuxc::TextBlock MakeText(PCWSTR name, std::wstring_view text, double size, bool 
                              ? winrt::Windows::UI::Text::FontWeights::SemiBold()
                              : ResolveBoldWeight());
     }
-    if (!g_settings.fontColor.empty()) {
+    if (auto resBrush = TryGetUserResourceBrush(block.as<UIElement>(), L"TextFillColorPrimaryBrush")) {
+        try { block.Foreground(resBrush); } catch (...) {}
+    } else if (!g_settings.fontColor.empty()) {
         wui::Color fontColor{};
         if (TryParseHexColor(g_settings.fontColor, &fontColor) ||
             TryParseNamedColor(g_settings.fontColor, &fontColor)) {
@@ -17448,13 +17789,22 @@ wuxc::ControlTemplate BuildFlyoutShellTemplate(bool isMenu) {
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                  TargetType="FlyoutPresenter">
   <Grid Background="Transparent">
+    <VisualStateManager.VisualStateGroups>
+      <VisualStateGroup x:Name="CommonStates">
+        <VisualState x:Name="Normal"/>
+        <VisualState x:Name="PointerOver"/>
+        <VisualState x:Name="Pressed"/>
+        <VisualState x:Name="Disabled"/>
+      </VisualStateGroup>
+    </VisualStateManager.VisualStateGroups>
     <Border x:Name="PART_BackgroundBorder"
             BackgroundSizing="InnerBorderEdge"
             Background="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Background}"
             BorderBrush="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=BorderBrush}"
             BorderThickness="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=BorderThickness}"
             CornerRadius="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=CornerRadius}">
-      <ContentPresenter BackgroundSizing="InnerBorderEdge"
+      <ContentPresenter x:Name="ContentPresenter"
+                        BackgroundSizing="InnerBorderEdge"
                         Content="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Content}"
                         ContentTemplate="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=ContentTemplate}"
                         ContentTransitions="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=ContentTransitions}"
@@ -17469,6 +17819,14 @@ wuxc::ControlTemplate BuildFlyoutShellTemplate(bool isMenu) {
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                  TargetType="MenuFlyoutPresenter">
   <Grid Background="Transparent">
+    <VisualStateManager.VisualStateGroups>
+      <VisualStateGroup x:Name="CommonStates">
+        <VisualState x:Name="Normal"/>
+        <VisualState x:Name="PointerOver"/>
+        <VisualState x:Name="Pressed"/>
+        <VisualState x:Name="Disabled"/>
+      </VisualStateGroup>
+    </VisualStateManager.VisualStateGroups>
     <Border x:Name="PART_BackgroundBorder"
             BackgroundSizing="InnerBorderEdge"
             Background="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Background}"
@@ -18015,6 +18373,14 @@ Style GetWinUI3ToolTipStyle() {
           CornerRadius="{TemplateBinding CornerRadius}"
           Padding="{TemplateBinding Padding}"
           BackgroundSizing="InnerBorderEdge">
+    <VisualStateManager.VisualStateGroups>
+      <VisualStateGroup x:Name="CommonStates">
+        <VisualState x:Name="Normal"/>
+        <VisualState x:Name="PointerOver"/>
+        <VisualState x:Name="Pressed"/>
+        <VisualState x:Name="Disabled"/>
+      </VisualStateGroup>
+    </VisualStateManager.VisualStateGroups>
     <ContentPresenter x:Name="ContentPresenter"
                       Content="{TemplateBinding Content}"
                       ContentTemplate="{TemplateBinding ContentTemplate}"
@@ -18251,6 +18617,14 @@ void ApplyWinUI3ScrollViewerStyle(wuxc::ScrollViewer const& sv) {
           Background="{TemplateBinding Background}"
           BorderBrush="{TemplateBinding BorderBrush}"
           BorderThickness="{TemplateBinding BorderThickness}">
+    <VisualStateManager.VisualStateGroups>
+      <VisualStateGroup x:Name="CommonStates">
+        <VisualState x:Name="Normal"/>
+        <VisualState x:Name="PointerOver"/>
+        <VisualState x:Name="Pressed"/>
+        <VisualState x:Name="Disabled"/>
+      </VisualStateGroup>
+    </VisualStateManager.VisualStateGroups>
     <Grid>
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="*"/>
@@ -29699,79 +30073,143 @@ void UpdateResourceFlyoutContent() {
 }
 
 
+static bool IsPathUnderAdminProgramFiles(const std::wstring& candidate) {
+    if (candidate.empty()) return false;
+    wchar_t fullBuf[MAX_PATH]{};
+    DWORD n = GetFullPathNameW(candidate.c_str(), MAX_PATH, fullBuf, nullptr);
+    if (n == 0 || n >= MAX_PATH) return false;
+    std::wstring full(fullBuf, n);
+
+    auto startsWithDir = [&](PCWSTR envName) -> bool {
+        wchar_t baseBuf[MAX_PATH]{};
+        DWORD bn = GetEnvironmentVariableW(envName, baseBuf, MAX_PATH);
+        if (bn == 0 || bn >= MAX_PATH) return false;
+        wchar_t baseFull[MAX_PATH]{};
+        DWORD bfn = GetFullPathNameW(baseBuf, MAX_PATH, baseFull, nullptr);
+        if (bfn == 0 || bfn >= MAX_PATH) return false;
+        std::wstring prefix(baseFull, bfn);
+        if (!prefix.empty() && prefix.back() != L'\\') prefix.push_back(L'\\');
+        return full.size() > prefix.size() &&
+               _wcsnicmp(full.c_str(), prefix.c_str(), prefix.size()) == 0;
+    };
+
+    if (!startsWithDir(L"ProgramFiles") && !startsWithDir(L"ProgramFiles(x86)")) {
+        return false;
+    }
+    DWORD attrs = GetFileAttributesW(full.c_str());
+    if (attrs == INVALID_FILE_ATTRIBUTES || (attrs & FILE_ATTRIBUTE_DIRECTORY) ||
+        (attrs & FILE_ATTRIBUTE_REPARSE_POINT)) {
+        return false;
+    }
+    return true;
+}
+
 static std::wstring FindInstalledCpuSensorExe(const std::wstring& provider) {
-    std::wstring exeName;
+    // Only accept executables installed inside admin-protected Program Files directories.
+    // Never resolve paths from arbitrary running processes or user-writable folders so an
+    // elevated logon scheduled task can never point at a user-replaceable binary.
     std::vector<std::wstring> candidates;
-    wchar_t progFiles[MAX_PATH]{}, progFiles86[MAX_PATH]{}, localApp[MAX_PATH]{}, userProf[MAX_PATH]{};
+    wchar_t progFiles[MAX_PATH]{}, progFiles86[MAX_PATH]{};
     GetEnvironmentVariableW(L"ProgramFiles", progFiles, MAX_PATH);
     GetEnvironmentVariableW(L"ProgramFiles(x86)", progFiles86, MAX_PATH);
-    GetEnvironmentVariableW(L"LOCALAPPDATA", localApp, MAX_PATH);
-    GetEnvironmentVariableW(L"USERPROFILE", userProf, MAX_PATH);
 
     if (provider == L"coretemp") {
-        exeName = L"Core Temp.exe";
         if (progFiles[0]) candidates.push_back(std::wstring(progFiles) + L"\\Core Temp\\Core Temp.exe");
         if (progFiles86[0]) candidates.push_back(std::wstring(progFiles86) + L"\\Core Temp\\Core Temp.exe");
-        if (localApp[0]) candidates.push_back(std::wstring(localApp) + L"\\Core Temp\\Core Temp.exe");
     } else if (provider == L"lhm") {
-        exeName = L"LibreHardwareMonitor.exe";
         if (progFiles[0]) candidates.push_back(std::wstring(progFiles) + L"\\LibreHardwareMonitor\\LibreHardwareMonitor.exe");
         if (progFiles86[0]) candidates.push_back(std::wstring(progFiles86) + L"\\LibreHardwareMonitor\\LibreHardwareMonitor.exe");
-        if (localApp[0]) candidates.push_back(std::wstring(localApp) + L"\\LibreHardwareMonitor\\LibreHardwareMonitor.exe");
-        if (userProf[0]) candidates.push_back(std::wstring(userProf) + L"\\Downloads\\LibreHardwareMonitor\\LibreHardwareMonitor.exe");
     } else if (provider == L"afterburner") {
-        exeName = L"MSIAfterburner.exe";
         if (progFiles86[0]) candidates.push_back(std::wstring(progFiles86) + L"\\MSI Afterburner\\MSIAfterburner.exe");
         if (progFiles[0]) candidates.push_back(std::wstring(progFiles) + L"\\MSI Afterburner\\MSIAfterburner.exe");
-        if (localApp[0]) candidates.push_back(std::wstring(localApp) + L"\\MSI Afterburner\\MSIAfterburner.exe");
     } else if (provider == L"hwinfo") {
-        exeName = L"HWiNFO64.exe";
         if (progFiles[0]) candidates.push_back(std::wstring(progFiles) + L"\\HWiNFO64\\HWiNFO64.exe");
         if (progFiles86[0]) candidates.push_back(std::wstring(progFiles86) + L"\\HWiNFO64\\HWiNFO64.exe");
-        if (localApp[0]) candidates.push_back(std::wstring(localApp) + L"\\HWiNFO64\\HWiNFO64.exe");
     }
 
-    // 1. Check running processes first (finds portable installs anywhere on disk!)
-    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (snap != INVALID_HANDLE_VALUE) {
-        PROCESSENTRY32W pe{};
-        pe.dwSize = sizeof(pe);
-        if (Process32FirstW(snap, &pe)) {
-            do {
-                if (_wcsicmp(pe.szExeFile, exeName.c_str()) == 0) {
-                    HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pe.th32ProcessID);
-                    if (hProc) {
-                        wchar_t buf[MAX_PATH]{};
-                        DWORD sz = MAX_PATH;
-                        if (QueryFullProcessImageNameW(hProc, 0, buf, &sz) && sz > 0) {
-                            CloseHandle(hProc);
-                            CloseHandle(snap);
-                            return std::wstring(buf, sz);
-                        }
-                        CloseHandle(hProc);
-                    }
-                }
-            } while (Process32NextW(snap, &pe));
-        }
-        CloseHandle(snap);
-    }
-
-    // 2. Check standard install directories
     for (const auto& c : candidates) {
-        if (GetFileAttributesW(c.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        if (IsPathUnderAdminProgramFiles(c)) {
             return c;
         }
     }
     return L"";
 }
 
+static std::wstring Base64EncodeUtf16Le(const std::wstring& text) {
+    static const wchar_t kB64[] =
+        L"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const uint8_t* bytes = reinterpret_cast<const uint8_t*>(text.data());
+    size_t len = text.size() * sizeof(wchar_t);
+    std::wstring out;
+    out.reserve(((len + 2) / 3) * 4);
+    for (size_t i = 0; i < len; i += 3) {
+        uint32_t v = static_cast<uint32_t>(bytes[i]) << 16;
+        if (i + 1 < len) v |= static_cast<uint32_t>(bytes[i + 1]) << 8;
+        if (i + 2 < len) v |= static_cast<uint32_t>(bytes[i + 2]);
+        out.push_back(kB64[(v >> 18) & 0x3F]);
+        out.push_back(kB64[(v >> 12) & 0x3F]);
+        out.push_back((i + 1 < len) ? kB64[(v >> 6) & 0x3F] : L'=');
+        out.push_back((i + 2 < len) ? kB64[v & 0x3F] : L'=');
+    }
+    return out;
+}
+
+static bool RunElevatedPowerShellEncoded(const std::wstring& psScript, DWORD* outExitCode) {
+    if (outExitCode) *outExitCode = 1;
+    std::wstring encoded = Base64EncodeUtf16Le(psScript);
+    std::wstring params = L"-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand " + encoded;
+
+    SHELLEXECUTEINFOW sei{};
+    sei.cbSize = sizeof(sei);
+    sei.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
+    sei.lpVerb = L"runas";
+    sei.lpFile = L"powershell.exe";
+    sei.lpParameters = params.c_str();
+    sei.nShow = SW_HIDE;
+
+    if (!ShellExecuteExW(&sei) || !sei.hProcess) {
+        return false;
+    }
+    DWORD waitRes = WaitForSingleObject(sei.hProcess, 30000);
+    DWORD exitCode = 1;
+    if (waitRes == WAIT_OBJECT_0) {
+        GetExitCodeProcess(sei.hProcess, &exitCode);
+    }
+    CloseHandle(sei.hProcess);
+    if (outExitCode) *outExitCode = exitCode;
+    return (waitRes == WAIT_OBJECT_0 && exitCode == 0);
+}
+
+static bool RunCpuSensorRemoveAutoStartTasks(std::wstring& outMessage) {
+    std::wstring ps;
+    ps += L"$ErrorActionPreference = 'Stop'\r\n";
+    ps += L"try {\r\n";
+    ps += L"  foreach ($t in @('TopBar_CoreTemp_AutoStart','TopBar_MSIAfterburner_AutoStart','TopBar_LibreHardwareMonitor_AutoStart','TopBar_HWiNFO64_AutoStart')) {\r\n";
+    ps += L"    if (Get-ScheduledTask -TaskName $t -ErrorAction SilentlyContinue) {\r\n";
+    ps += L"      Unregister-ScheduledTask -TaskName $t -Confirm:$false\r\n";
+    ps += L"    }\r\n";
+    ps += L"  }\r\n";
+    ps += L"  exit 0\r\n";
+    ps += L"} catch { exit 1 }\r\n";
+
+    DWORD code = 1;
+    if (!RunElevatedPowerShellEncoded(ps, &code)) {
+        outMessage = (code == 1)
+            ? L"Removal canceled or elevation was denied."
+            : L"Failed to remove scheduled tasks (exit code " + std::to_wstring(code) + L").";
+        return false;
+    }
+    outMessage = L"All TopBar CPU sensor auto-start tasks have been removed.";
+    return true;
+}
+
 static bool RunCpuSensorOneClickSetup(const std::wstring& provider, std::wstring& outMessage) {
     std::wstring exePath = FindInstalledCpuSensorExe(provider);
     if (exePath.empty()) {
-        if (provider == L"coretemp") outMessage = L"Core Temp not found. Install it first, then click 1-Click Setup.";
-        else if (provider == L"afterburner") outMessage = L"MSI Afterburner not found. Install it first, then click 1-Click Setup.";
-        else if (provider == L"lhm") outMessage = L"LibreHardwareMonitor not found. Extract/run it once, then click 1-Click Setup.";
-        else outMessage = L"HWiNFO64 not found. Install it first, then click 1-Click Setup.";
+        if (provider == L"coretemp") outMessage = L"Core Temp not found under Program Files. Install it to Program Files first, then click 1-Click Setup.";
+        else if (provider == L"afterburner") outMessage = L"MSI Afterburner not found under Program Files. Install it to Program Files first, then click 1-Click Setup.";
+        else if (provider == L"lhm") outMessage = L"LibreHardwareMonitor not found under Program Files. Place it in Program Files\\LibreHardwareMonitor first for elevated auto-start.";
+        else outMessage = L"HWiNFO64 not found under Program Files. Install it to Program Files first, then click 1-Click Setup.";
         return false;
     }
 
@@ -29790,7 +30228,8 @@ static bool RunCpuSensorOneClickSetup(const std::wstring& provider, std::wstring
     if (slash != std::wstring::npos) dir = dir.substr(0, slash);
 
     std::wstring ps;
-    ps += L"$ErrorActionPreference = 'SilentlyContinue'\r\n";
+    ps += L"$ErrorActionPreference = 'Stop'\r\n";
+    ps += L"try {\r\n";
     ps += L"$exe = '" + psEsc(exePath) + L"'\r\n";
     ps += L"$dir = '" + psEsc(dir) + L"'\r\n";
     ps += L"function Register-TopBarAutoStart($taskName, $exePath, $workDir, $argsStr) {\r\n";
@@ -29824,8 +30263,9 @@ static bool RunCpuSensorOneClickSetup(const std::wstring& provider, std::wstring
     ps += L"  return $out.ToArray()\r\n";
     ps += L"}\r\n";
 
+    std::wstring successMsg;
     if (provider == L"coretemp") {
-        ps += L"Get-Process 'Core Temp' | Stop-Process -Force\r\n";
+        ps += L"try { Get-Process 'Core Temp' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue } catch {}\r\n";
         ps += L"Start-Sleep -Milliseconds 500\r\n";
         ps += L"$iniPaths = @((Join-Path $dir 'CoreTemp.ini'))\r\n";
         ps += L"$appIni = Join-Path $env:APPDATA 'Core Temp\\CoreTemp.ini'\r\n";
@@ -29860,9 +30300,9 @@ static bool RunCpuSensorOneClickSetup(const std::wstring& provider, std::wstring
         ps += L"}\r\n";
         ps += L"Register-TopBarAutoStart 'TopBar_CoreTemp_AutoStart' $exe $dir ''\r\n";
         ps += L"Start-Process -FilePath $exe -WorkingDirectory $dir -WindowStyle Minimized\r\n";
-        outMessage = L"Core Temp configured: boot auto-start enabled, starts minimized with hidden taskbar button, and all per-core tray icons disabled.";
+        successMsg = L"Core Temp configured: task TopBar_CoreTemp_AutoStart created, starts minimized with hidden taskbar button, and per-core tray icons disabled.";
     } else if (provider == L"afterburner") {
-        ps += L"Get-Process 'MSIAfterburner' | Stop-Process -Force\r\n";
+        ps += L"try { Get-Process 'MSIAfterburner' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue } catch {}\r\n";
         ps += L"Start-Sleep -Milliseconds 500\r\n";
         ps += L"$profDir = Join-Path $dir 'Profiles'\r\n";
         ps += L"if (-not (Test-Path $profDir)) { New-Item -ItemType Directory -Path $profDir -Force | Out-Null }\r\n";
@@ -29873,9 +30313,9 @@ static bool RunCpuSensorOneClickSetup(const std::wstring& provider, std::wstring
         ps += L"Set-Content -Path $cfg -Value $lines -Encoding ASCII\r\n";
         ps += L"Register-TopBarAutoStart 'TopBar_MSIAfterburner_AutoStart' $exe $dir '/m'\r\n";
         ps += L"Start-Process -FilePath $exe -ArgumentList '/m' -WorkingDirectory $dir -WindowStyle Minimized\r\n";
-        outMessage = L"MSI Afterburner configured: auto-start at boot minimized. Make sure CPU temperature is enabled in Afterburner Settings > Monitoring.";
+        successMsg = L"MSI Afterburner configured: task TopBar_MSIAfterburner_AutoStart created. Make sure CPU temperature is enabled in Afterburner Settings > Monitoring.";
     } else if (provider == L"lhm") {
-        ps += L"Get-Process 'LibreHardwareMonitor' | Stop-Process -Force\r\n";
+        ps += L"try { Get-Process 'LibreHardwareMonitor' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue } catch {}\r\n";
         ps += L"Start-Sleep -Milliseconds 500\r\n";
         ps += L"$cfg = Join-Path $dir 'LibreHardwareMonitor.config'\r\n";
         ps += L"if (-not (Test-Path $cfg)) {\r\n";
@@ -29895,9 +30335,9 @@ static bool RunCpuSensorOneClickSetup(const std::wstring& provider, std::wstring
         ps += L"$xml.Save($cfg)\r\n";
         ps += L"Register-TopBarAutoStart 'TopBar_LibreHardwareMonitor_AutoStart' $exe $dir ''\r\n";
         ps += L"Start-Process -FilePath $exe -WorkingDirectory $dir -WindowStyle Minimized\r\n";
-        outMessage = L"LibreHardwareMonitor configured: auto-start at boot (admin) and start minimized to tray.";
+        successMsg = L"LibreHardwareMonitor configured: task TopBar_LibreHardwareMonitor_AutoStart created and minimized to tray.";
     } else {
-        ps += L"Get-Process 'HWiNFO64' | Stop-Process -Force\r\n";
+        ps += L"try { Get-Process 'HWiNFO64' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue } catch {}\r\n";
         ps += L"Start-Sleep -Milliseconds 500\r\n";
         ps += L"$ini = Join-Path $dir 'HWiNFO64.INI'\r\n";
         ps += L"$lines = if (Test-Path $ini) { Get-Content $ini } else { @('[Settings]') }\r\n";
@@ -29910,32 +30350,17 @@ static bool RunCpuSensorOneClickSetup(const std::wstring& provider, std::wstring
         ps += L"Set-Content -Path $ini -Value $lines -Encoding ASCII\r\n";
         ps += L"Register-TopBarAutoStart 'TopBar_HWiNFO64_AutoStart' $exe $dir ''\r\n";
         ps += L"Start-Process -FilePath $exe -WorkingDirectory $dir -WindowStyle Minimized\r\n";
-        outMessage = L"HWiNFO64 configured: Sensors-only, Shared Memory enabled, minimized, and auto-start at boot.";
+        successMsg = L"HWiNFO64 configured: task TopBar_HWiNFO64_AutoStart created with Sensors-only and Shared Memory enabled.";
     }
+    ps += L"exit 0\r\n";
+    ps += L"} catch { exit 1 }\r\n";
 
-    wchar_t tempDir[MAX_PATH]{};
-    GetTempPathW(MAX_PATH, tempDir);
-    std::wstring psPath = std::wstring(tempDir) + L"topbar_cpu_sensor_setup.ps1";
-    HANDLE hf = CreateFileW(psPath.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (hf == INVALID_HANDLE_VALUE) {
-        outMessage = L"Could not write setup script to %TEMP%.";
+    DWORD exitCode = 1;
+    if (!RunElevatedPowerShellEncoded(ps, &exitCode)) {
+        outMessage = L"Setup failed, was canceled, or elevation was denied.";
         return false;
     }
-    int utf8Len = WideCharToMultiByte(CP_UTF8, 0, ps.c_str(), -1, nullptr, 0, nullptr, nullptr);
-    if (utf8Len > 1) {
-        std::string utf8(utf8Len - 1, '\0');
-        WideCharToMultiByte(CP_UTF8, 0, ps.c_str(), -1, utf8.data(), utf8Len - 1, nullptr, nullptr);
-        DWORD written = 0;
-        WriteFile(hf, utf8.data(), static_cast<DWORD>(utf8.size()), &written, nullptr);
-    }
-    CloseHandle(hf);
-
-    std::wstring params = L"-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"" + psPath + L"\"";
-    HINSTANCE res = ShellExecuteW(nullptr, L"runas", L"powershell.exe", params.c_str(), nullptr, SW_HIDE);
-    if (reinterpret_cast<INT_PTR>(res) <= 32) {
-        outMessage = L"Setup canceled or elevation was denied.";
-        return false;
-    }
+    outMessage = successMsg;
     return true;
 }
 
@@ -30421,26 +30846,47 @@ void PopulateResourceFlyout() {
         helpBtn.BorderThickness(Thickness{0, 0, 0, 0});
         try {
             helpBtn.Template(Markup::XamlReader::Load(LR"XAML(
-<ControlTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" TargetType="Button">
-  <Grid Background="Transparent">
-    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-  </Grid>
+<ControlTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 TargetType="Button">
+  <ContentPresenter x:Name="ContentPresenter"
+                    Background="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Background}"
+                    BorderBrush="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=BorderBrush}"
+                    BorderThickness="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=BorderThickness}"
+                    CornerRadius="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=CornerRadius}"
+                    Content="{TemplateBinding Content}"
+                    ContentTemplate="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=ContentTemplate}"
+                    Padding="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Padding}"
+                    HorizontalContentAlignment="Center"
+                    VerticalContentAlignment="Center">
+    <VisualStateManager.VisualStateGroups>
+      <VisualStateGroup x:Name="CommonStates">
+        <VisualState x:Name="Normal"/>
+        <VisualState x:Name="PointerOver"/>
+        <VisualState x:Name="Pressed"/>
+        <VisualState x:Name="Disabled"/>
+      </VisualStateGroup>
+    </VisualStateManager.VisualStateGroups>
+  </ContentPresenter>
 </ControlTemplate>)XAML").as<wuxc::ControlTemplate>());
         } catch (...) {}
 
+        auto critBrush = TryGetUserResourceBrush(helpBtn.as<UIElement>(), L"SystemFillColorCriticalBrush");
         wuxc::Border qRing;
+        qRing.Name(L"CpuTempHelpRing");
         qRing.Width(16);
         qRing.Height(16);
         qRing.CornerRadius(MakeCorner(8));
         qRing.Background(MakeBrush(0x14, 0xFF, 0x4D, 0x4D));
-        qRing.BorderBrush(MakeBrush(0xD8, 0xFF, 0x5C, 0x5C));
+        qRing.BorderBrush(critBrush ? critBrush : MakeBrush(0xD8, 0xFF, 0x5C, 0x5C));
         qRing.BorderThickness(Thickness{1, 1, 1, 1});
 
         wuxc::TextBlock qMark;
+        qMark.Name(L"CpuTempHelpGlyph");
         qMark.Text(L"?");
         qMark.FontSize(10.5);
         qMark.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
-        qMark.Foreground(MakeBrush(0xFF, 0xFF, 0x6E, 0x6E));
+        qMark.Foreground(critBrush ? critBrush : MakeBrush(0xFF, 0xFF, 0x6E, 0x6E));
         qMark.HorizontalAlignment(HorizontalAlignment::Center);
         qMark.VerticalAlignment(VerticalAlignment::Center);
         qMark.TextAlignment(TextAlignment::Center);
@@ -35496,8 +35942,18 @@ wuxc::ControlTemplate GetWinUI3MenuSeparatorTemplate() {
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                  TargetType="MenuFlyoutSeparator">
   <Grid Height="7" Background="Transparent">
-    <Rectangle Height="1"
-               Fill="#19FFFFFF"
+    <VisualStateManager.VisualStateGroups>
+      <VisualStateGroup x:Name="CommonStates">
+        <VisualState x:Name="Normal"/>
+        <VisualState x:Name="PointerOver"/>
+        <VisualState x:Name="Pressed"/>
+        <VisualState x:Name="Disabled"/>
+      </VisualStateGroup>
+    </VisualStateManager.VisualStateGroups>
+    <Rectangle x:Name="SeparatorLine"
+               Height="1"
+               Fill="{TemplateBinding Foreground}"
+               Opacity="0.16"
                Margin="6,3,6,3"
                VerticalAlignment="Center"
                HorizontalAlignment="Stretch"/>
@@ -44515,12 +44971,26 @@ int GetAutoTopBarScale();
 
 static void SetElementCornerAndClip(FrameworkElement const& fe, double r, bool clip = false) {
     if (!fe) return;
-    if (UserControlStylesSetProperty(fe, L"CornerRadius")) return;
+    if (ThemeOrUserStylesSetProperty(fe, L"CornerRadius")) return;
+    // Respect ControlCornerRadius / OverlayCornerRadius resourceVariables over Settings app sliders
+    std::wstring feName(fe.Name());
+    bool isOverlaySurface = fe.try_as<wuxc::FlyoutPresenter>() ||
+                            fe.try_as<wuxc::MenuFlyoutPresenter>() ||
+                            feName == L"TopBarRoot" || feName == L"GlobalBlurLayer" ||
+                            feName == L"PART_BackgroundBorder" ||
+                            feName.find(L"BlurHost") != std::wstring::npos;
+    if (isOverlaySurface) {
+        if (auto resR = TryGetUserResourceCornerRadius(L"OverlayCornerRadius")) {
+            r = *resR;
+        }
+    } else if (auto resR = TryGetUserResourceCornerRadius(L"ControlCornerRadius")) {
+        r = *resR;
+    }
     // Also respect TopBarRoot CornerRadius style on GlobalBlurLayer
-    if (fe.Name() == L"GlobalBlurLayer") {
+    if (feName == L"GlobalBlurLayer") {
         if (auto tbIt = g_namedElements.find(L"TopBarRoot");
             tbIt != g_namedElements.end() && tbIt->second &&
-            UserControlStylesSetProperty(tbIt->second, L"CornerRadius")) {
+            ThemeOrUserStylesSetProperty(tbIt->second, L"CornerRadius")) {
             return;
         }
     }
@@ -44818,7 +45288,9 @@ static void ApplyFontSettingsLive(bool updateColor, bool updateFamily, bool upda
         try {
             if (auto tb = node.try_as<wuxc::TextBlock>()) {
                 if (!isIconGlyphText(tb)) {
-                    if (updateFamily) {
+                    auto tbFe = tb.as<FrameworkElement>();
+                    if (updateFamily && !ThemeOrUserStylesSetProperty(tbFe, L"FontFamily") &&
+                        !HasUserResourceVariable(L"ContentControlThemeFontFamily")) {
                         try {
                             if (!g_settings.fontFamily.empty()) {
                                 tb.FontFamily(wuxm::FontFamily(winrt::hstring(g_settings.fontFamily)));
@@ -44830,14 +45302,15 @@ static void ApplyFontSettingsLive(bool updateColor, bool updateFamily, bool upda
                             }
                         } catch (...) {}
                     }
-                    if (updateWeight) {
+                    if (updateWeight && !ThemeOrUserStylesSetProperty(tbFe, L"FontWeight")) {
                         try {
                             tb.FontWeight(g_settings.fontBold
                                 ? ResolveBoldWeight()
                                 : winrt::Windows::UI::Text::FontWeights::Normal());
                         } catch (...) {}
                     }
-                    if (colorBrush) {
+                    if (colorBrush && !ThemeOrUserStylesSetProperty(tbFe, L"Foreground") &&
+                        !HasUserResourceVariable(L"TextFillColorPrimaryBrush")) {
                         try { tb.Foreground(colorBrush); } catch (...) {}
                     }
                 }
@@ -45000,18 +45473,21 @@ static bool TryApplySettingLive(PCWSTR key) {
         g_settings.topBarCornerRadiusCustom = true;
         g_settings.topBarCornerRadius = std::clamp(ReadIntSetting(L"topBarCornerRadius", g_settings.topBarCornerRadius), 0, 30);
         ApplyUserTopBarCornerOverrides();
+        ApplyAllControlStyles();
         return true;
     }
     if (keyEq(L"topBarButtonsCornerRadius")) {
         g_settings.topBarButtonsCornerRadiusCustom = true;
         g_settings.topBarButtonsCornerRadius = std::clamp(ReadIntSetting(L"topBarButtonsCornerRadius", g_settings.topBarButtonsCornerRadius), 0, 30);
         ApplyUserTopBarCornerOverrides();
+        ApplyAllControlStyles();
         return true;
     }
     if (keyEq(L"flyoutsCornerRadius")) {
         g_settings.flyoutsCornerRadiusCustom = true;
         g_settings.flyoutsCornerRadius = std::clamp(ReadIntSetting(L"flyoutsCornerRadius", g_settings.flyoutsCornerRadius), 0, 30);
         ApplyUserFlyoutCornerOverrides(nullptr);
+        ApplyAllControlStyles();
         return true;
     }
 
@@ -45275,10 +45751,11 @@ void ScheduleReload() {
             }
             Wh_Log(L"Reload: post-shellhost");
             {
-                if (g_cliMonitorIndex > 1 && !g_settings.showOnAllMonitors) {
-                    if (g_topBarHwnd && IsWindow(g_topBarHwnd)) {
-                        PostMessageW(g_topBarHwnd, WM_CLOSE, 0, 0);
-                    }
+                if (IsSecondaryMonitorInstance() && !g_settings.showOnAllMonitors) {
+                    std::thread([] {
+                        try { WhTool_ModUninit(); } catch (...) {}
+                        ExitProcess(0);
+                    }).detach();
                     return;
                 }
                 static bool g_prevShowOnAllMonitors = false;
@@ -45492,7 +45969,8 @@ void ApplyTopBarBackgroundNow() {
     }
     auto it = g_namedElements.find(L"TopBarRoot");
     if (it == g_namedElements.end()) return;
-    if (ThemeOrUserStylesSetProperty(it->second, L"Background")) return;
+    if (ThemeOrUserStylesSetProperty(it->second, L"Background") ||
+        HasUserResourceVariable(L"TopBarBackgroundBrush")) return;
     auto element = it->second.try_as<UIElement>();
     if (!element) return;
     auto brush = winrt::make<XamlBlurBrush>(
@@ -47600,8 +48078,17 @@ void BuildStartSearchPage(wuxc::StackPanel& p) {
     auto cellTemplate=Markup::XamlReader::Load(LR"XAML(
 <ControlTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" TargetType="Button">
  <Grid Background="Transparent">
-  <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="7"/>
-  <Border x:Name="AlignmentHover" Background="#14FFFFFF" CornerRadius="7" Margin="1" Opacity="0" IsHitTestVisible="False"/>
+  <VisualStateManager.VisualStateGroups>
+   <VisualStateGroup x:Name="CommonStates">
+    <VisualState x:Name="Normal"/>
+    <VisualState x:Name="PointerOver"/>
+    <VisualState x:Name="Pressed"/>
+    <VisualState x:Name="Disabled"/>
+   </VisualStateGroup>
+  </VisualStateManager.VisualStateGroups>
+  <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{TemplateBinding CornerRadius}"/>
+  <Border x:Name="AlignmentHover" Background="#14FFFFFF" CornerRadius="{TemplateBinding CornerRadius}" Margin="1" Opacity="0" IsHitTestVisible="False"/>
+  <ContentPresenter x:Name="ContentPresenter" Content="{TemplateBinding Content}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
  </Grid>
 </ControlTemplate>)XAML").as<wuxc::ControlTemplate>();
     auto setHover=[](wuxc::Button const& button,bool hovered){
@@ -49099,16 +49586,16 @@ static wuxc::Grid BuildSettingsNavigation(std::function<void()> onPageChosen = n
    <VisualState x:Name="Pressed"><Storyboard><DoubleAnimation Storyboard.TargetName="RowHover" Storyboard.TargetProperty="Opacity" To="1" Duration="0"/></Storyboard></VisualState>
    <VisualState x:Name="Disabled"/>
   </VisualStateGroup></VisualStateManager.VisualStateGroups>
-  <Border x:Name="RowBackground" Background="{TemplateBinding Background}" CornerRadius="8"/>
-  <Border x:Name="RowHover" Background="#12FFFFFF" CornerRadius="8" Opacity="0" IsHitTestVisible="False"/>
-  <ContentPresenter Content="{TemplateBinding Content}" Padding="{TemplateBinding Padding}" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center"/>
+  <Border x:Name="RowBackground" Background="{TemplateBinding Background}" CornerRadius="{TemplateBinding CornerRadius}"/>
+  <Border x:Name="RowHover" Background="#12FFFFFF" CornerRadius="{TemplateBinding CornerRadius}" Opacity="0" IsHitTestVisible="False"/>
+  <ContentPresenter x:Name="ContentPresenter" Content="{TemplateBinding Content}" Padding="{TemplateBinding Padding}" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center"/>
  </Grid>
 </ControlTemplate>)XAML").as<wuxc::ControlTemplate>();
     for(int i=0;i<kPageCount;++i){
         wuxc::Button button;button.Name(L"SettingsNavRow"+std::to_wstring(i));
         button.Width(192);button.Height(40);button.Margin(Thickness{14,3,14,3});
         button.Padding(Thickness{12,0,12,0});button.HorizontalAlignment(HorizontalAlignment::Stretch);
-        button.HorizontalContentAlignment(HorizontalAlignment::Stretch);button.Template(rowTemplate);
+        button.HorizontalContentAlignment(HorizontalAlignment::Stretch);button.CornerRadius(MakeCorner(8));button.Template(rowTemplate);
         button.Background(MakeSolid(0,255,255,255));
         wuxc::Grid content;content.ColumnSpacing(12);
         wuxc::ColumnDefinition iconColumn;iconColumn.Width({0,GridUnitType::Auto});
@@ -50124,7 +50611,15 @@ void CreateWindowOnCurrentThread() {
         GetClientRect(s_hwnd, &rc);
         SetWindowPos(s_islandHwnd, nullptr, 0, 0, rc.right, rc.bottom,
                      SWP_SHOWWINDOW | SWP_NOZORDER | SWP_NOACTIVATE);
-        s_xamlSource.Content(BuildWindowContent());
+        auto settingsRoot = BuildWindowContent();
+        if (auto fe = settingsRoot.try_as<FrameworkElement>()) {
+            fe.Name(L"SettingsWindowRoot");
+            s_xamlSource.Content(fe);
+            RegisterDetachedStyleRoot(fe);
+            ApplyControlStylesToPopupRoot(fe);
+        } else {
+            s_xamlSource.Content(settingsRoot);
+        }
         s_native2 = s_xamlSource.try_as<IDesktopWindowXamlSourceNative2>();
     } catch (winrt::hresult_error const& ex) {
         Wh_Log(L"TopBar Settings: XAML init failed: %08X - %s",
@@ -51186,10 +51681,27 @@ static wuxc::Grid BuildAboutPcContent() {
         closeBtn.BorderThickness(Thickness{ 0, 0, 0, 0 });
         try {
             closeBtn.Template(Markup::XamlReader::Load(LR"XAML(
-<ControlTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" TargetType="Button">
-  <Grid Background="Transparent">
-    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-  </Grid>
+<ControlTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 TargetType="Button">
+  <ContentPresenter x:Name="ContentPresenter"
+                    Background="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Background}"
+                    BorderBrush="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=BorderBrush}"
+                    BorderThickness="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=BorderThickness}"
+                    CornerRadius="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=CornerRadius}"
+                    Content="{TemplateBinding Content}"
+                    Padding="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Padding}"
+                    HorizontalContentAlignment="Center"
+                    VerticalContentAlignment="Center">
+    <VisualStateManager.VisualStateGroups>
+      <VisualStateGroup x:Name="CommonStates">
+        <VisualState x:Name="Normal"/>
+        <VisualState x:Name="PointerOver"/>
+        <VisualState x:Name="Pressed"/>
+        <VisualState x:Name="Disabled"/>
+      </VisualStateGroup>
+    </VisualStateManager.VisualStateGroups>
+  </ContentPresenter>
 </ControlTemplate>)XAML").as<wuxc::ControlTemplate>());
         } catch (...) {}
 
@@ -51414,7 +51926,11 @@ static void CreateAboutPcWindowOnCurrentThread() {
         GetClientRect(s_hwnd, &rc);
         SetWindowPos(s_islandHwnd, nullptr, 0, 0, rc.right, rc.bottom,
                      SWP_SHOWWINDOW | SWP_NOZORDER | SWP_NOACTIVATE);
-        s_xamlSource.Content(BuildAboutPcContent());
+        auto aboutRoot = BuildAboutPcContent();
+        aboutRoot.Name(L"AboutPcRoot");
+        s_xamlSource.Content(aboutRoot);
+        RegisterDetachedStyleRoot(aboutRoot);
+        ApplyControlStylesToPopupRoot(aboutRoot);
         s_native2 = s_xamlSource.try_as<IDesktopWindowXamlSourceNative2>();
     } catch (...) {
         try { if (s_xamlSource) s_xamlSource.Close(); } catch (...) {}
@@ -51707,41 +52223,65 @@ static wuxc::Grid BuildCpuTempSetupContent() {
         L"Lightweight, recommended",
         L"https://www.alcpu.com/CoreTemp/",
         L"coretemp",
-        L"This will ask for admin permission to:\n"
-        L"- Add a Windows startup task so Core Temp launches at boot (no UAC prompt)\n"
-        L"- Set Core Temp to start minimized and close to the system tray\n"
-        L"- Turn off per-core temperature tray icons and restart Core Temp");
+        L"This requests Administrator elevation to:\n"
+        L"- Register scheduled task TopBar_CoreTemp_AutoStart (RunLevel Highest / Admin, AtLogOn)\n"
+        L"- Update CoreTemp.ini (start minimized, close to tray, hide taskbar button, disable per-core tray icons)\n"
+        L"- Restart Core Temp from Program Files");
 
     addProviderRow(
         L"MSI Afterburner",
         L"Popular GPU & CPU monitor",
         L"https://www.msi.com/Landing/afterburner",
         L"afterburner",
-        L"This will ask for admin permission to:\n"
-        L"- Add a Windows startup task to launch MSI Afterburner minimized at boot\n"
-        L"- Enable Start with Windows and Start minimized in Profiles\\MSIAfterburner.cfg\n"
-        L"- Restart MSI Afterburner in tray mode");
+        L"This requests Administrator elevation to:\n"
+        L"- Register scheduled task TopBar_MSIAfterburner_AutoStart (RunLevel Highest / Admin, AtLogOn)\n"
+        L"- Update Profiles\\MSIAfterburner.cfg (StartWithWindows, StartMinimized)\n"
+        L"- Restart MSI Afterburner from Program Files");
 
     addProviderRow(
         L"LibreHardwareMonitor",
         L"Open-source, WMI sensors",
         L"https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases",
         L"lhm",
-        L"This will ask for admin permission to:\n"
-        L"- Add a Windows startup task to launch LibreHardwareMonitor at boot (admin)\n"
-        L"- Enable Start minimized and Minimize to tray in LibreHardwareMonitor.config\n"
-        L"- Restart LibreHardwareMonitor in tray mode");
+        L"This requests Administrator elevation to:\n"
+        L"- Register scheduled task TopBar_LibreHardwareMonitor_AutoStart (RunLevel Highest / Admin, AtLogOn)\n"
+        L"- Update LibreHardwareMonitor.config (start minimized, minimize to tray)\n"
+        L"- Restart LibreHardwareMonitor from Program Files");
 
     addProviderRow(
         L"HWiNFO64",
         L"Full hardware sensors",
         L"https://www.hwinfo.com/download/",
         L"hwinfo",
-        L"This will ask for admin permission to:\n"
-        L"- Add a Windows startup task to launch HWiNFO64 at boot (admin)\n"
-        L"- Enable Sensors-only mode, Shared Memory, and minimized tray start in HWiNFO64.INI\n"
-        L"- Restart HWiNFO64 in tray mode");
+        L"This requests Administrator elevation to:\n"
+        L"- Register scheduled task TopBar_HWiNFO64_AutoStart (RunLevel Highest / Admin, AtLogOn)\n"
+        L"- Update HWiNFO64.INI (Sensors-only, Shared Memory, minimized start)\n"
+        L"- Restart HWiNFO64 from Program Files");
 
+    wuxc::Button removeTasksBtn;
+    removeTasksBtn.Name(L"CpuTempRemoveTasksButton");
+    removeTasksBtn.HorizontalAlignment(HorizontalAlignment::Left);
+    removeTasksBtn.CornerRadius(CornerRadius{ 6, 6, 6, 6 });
+    removeTasksBtn.Padding(Thickness{ 10, 5, 10, 5 });
+    removeTasksBtn.BorderThickness(Thickness{ 1, 1, 1, 1 });
+    removeTasksBtn.BorderBrush(Br(0x28, 0xFF, 0x6B, 0x6B));
+    removeTasksBtn.Background(Br(0x16, 0xFF, 0x4D, 0x4D));
+    removeTasksBtn.Content(topbar_settings_window::MakeLabel(L"Remove Auto-Start Tasks", 11.5, false, 0.92));
+    removeTasksBtn.Click([statusText](auto&&, auto&&) {
+        statusText.Text(L"Removing TopBar sensor auto-start tasks...");
+        statusText.Visibility(Visibility::Visible);
+        RunInBackground([statusText]() {
+            std::wstring msg;
+            RunCpuSensorRemoveAutoStartTasks(msg);
+            RunOnUiThread([statusText, msg]() {
+                if (s_hwnd && IsWindow(s_hwnd)) {
+                    statusText.Text(winrt::hstring(msg));
+                    statusText.Visibility(Visibility::Visible);
+                }
+            });
+        });
+    });
+    main.Children().Append(removeTasksBtn);
     main.Children().Append(statusText);
 
     rootLayers.Children().Append(main);
@@ -51848,7 +52388,11 @@ static void CreateCpuTempSetupWindowOnCurrentThread() {
         GetClientRect(s_hwnd, &rc);
         SetWindowPos(s_islandHwnd, nullptr, 0, 0, rc.right, rc.bottom,
                      SWP_SHOWWINDOW | SWP_NOZORDER | SWP_NOACTIVATE);
-        s_xamlSource.Content(BuildCpuTempSetupContent());
+        auto cpuSetupRoot = BuildCpuTempSetupContent();
+        cpuSetupRoot.Name(L"CpuTempSetupRoot");
+        s_xamlSource.Content(cpuSetupRoot);
+        RegisterDetachedStyleRoot(cpuSetupRoot);
+        ApplyControlStylesToPopupRoot(cpuSetupRoot);
         s_native2 = s_xamlSource.try_as<IDesktopWindowXamlSourceNative2>();
     } catch (...) {
         try { if (s_xamlSource) s_xamlSource.Close(); } catch (...) {}
@@ -57095,6 +57639,7 @@ static std::mutex g_savedQuietHoursMutex;
 static std::wstring g_savedQuietHoursProfile;
 
 void SyncNativeToastSuppression() {
+    if (IsSecondaryMonitorInstance()) return;
     bool shouldSuppress = (g_settings.enableNotificationPopup && g_settings.hideWindowsNotifications) ||
                           (g_settings.enableNotificationPopup && g_settings.topBarNotificationDnd);
     RunInBackground([shouldSuppress] {
@@ -57219,6 +57764,7 @@ void DismissLiveNotificationPopup(bool immediate) {
 }
 
 void PollNotificationsForLivePopup() {
+    if (IsSecondaryMonitorInstance()) return;
     if (!g_settings.enableNotificationPopup && !g_settings.showNotificationsButton) return;
     if (live_notif_popup::g_pollInFlight.exchange(true)) return;
     windows_notifications::RefreshAsync([] {
@@ -62260,6 +62806,7 @@ void KillNativeShellHostIfOursOpen(HWND hwnd) {
 }
 
 void HideAllNativeShellHostWindows() {
+    if (IsSecondaryMonitorInstance()) return;
     bool replaceStart  = g_settings.defaultStartMenu;
     bool replaceSearch = g_settings.defaultSearch;
     if (!replaceStart && !replaceSearch) return;
@@ -66157,6 +66704,21 @@ LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
                          std::abs(curRect.bottom - g_lastBarMonitorRect.bottom) > 2);
                     bool scaleChanged = g_lastOsScale > 0.0 &&
                         std::abs(curScale - g_lastOsScale) > 0.005;
+                    if (IsSecondaryMonitorInstance()) {
+                        int monCount = 0;
+                        EnumDisplayMonitors(nullptr, nullptr,
+                            [](HMONITOR, HDC, LPRECT, LPARAM lp) -> BOOL {
+                                ++(*reinterpret_cast<int*>(lp));
+                                return TRUE;
+                            }, reinterpret_cast<LPARAM>(&monCount));
+                        if (g_cliMonitorIndex > monCount) {
+                            std::thread([] {
+                                try { WhTool_ModUninit(); } catch (...) {}
+                                ExitProcess(0);
+                            }).detach();
+                            return;
+                        }
+                    }
                     if (!rectChanged && !scaleChanged) {
                         // Spurious boot-time / driver WM_DISPLAYCHANGE with identical
                         // monitor rect and DPI: repin cleanly without destroying TopBar.
@@ -66172,6 +66734,14 @@ LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
             });
             return 0;
         }
+
+        case WM_DEVICECHANGE:
+            if (wParam == 0x0007 /*DBT_DEVNODES_CHANGED*/ ||
+                wParam == 0x8000 /*DBT_DEVICEARRIVAL*/ ||
+                wParam == 0x8004 /*DBT_DEVICEREMOVECOMPLETE*/) {
+                g_btDeviceEventPending.store(true);
+            }
+            return 0;
 
         case WM_SETTINGCHANGE:
             UpdateClockText();
@@ -66593,8 +67163,9 @@ static DWORD WINAPI StatusPollWorkerProc(LPVOID) {
                 });
             }
         }
-        bool btPeriodicRefresh = btOn && (now - lastBgBtPreloadTick >= 3000);
-        if (wantBt && (g_btLastEnumTick.load() == 0 || btChanged || btPeriodicRefresh)) {
+        bool btDeviceEvent = btOn && g_btDeviceEventPending.exchange(false);
+        bool btPeriodicRefresh = btOn && (now - lastBgBtPreloadTick >= 60000);
+        if (wantBt && (g_btLastEnumTick.load() == 0 || btChanged || btDeviceEvent || btPeriodicRefresh)) {
             if (!g_bluetoothScanning.load() && !g_bluetoothSyncing.load() &&
                 g_bluetoothConnectingAddress.load() == 0 &&
                 g_pairingDeviceAddress.load() == 0 &&
@@ -68554,6 +69125,20 @@ void LoadSettings() {
         }
     }
 
+    g_resourceVariables.clear();
+    for (int i = 0;; i++) {
+        std::wstring key = GetStringSettingCopy(L"resourceVariables[%d].variableKey", i);
+        if (key.empty()) {
+            break;
+        }
+        std::wstring val = GetStringSettingCopy(L"resourceVariables[%d].value", i);
+        key = TrimWs(key);
+        val = TrimWs(val);
+        if (!key.empty() && !key.starts_with(L"//") && !val.empty()) {
+            g_resourceVariables.push_back(ResourceVariableRule{std::move(key), std::move(val)});
+        }
+    }
+
     g_controlStyleRules.clear();
     for (int i = 0;; i++) {
         std::wstring target = GetStringSettingCopy(L"controlStyles[%d].target", i);
@@ -68652,9 +69237,11 @@ void LoadSettings() {
         return false;
     };
 
-    int defTopBarCorner = resolveThemeCorner({ L"TopBarRoot", L"Grid#TopBarRoot", L"Grid#BarRoot > Grid#TopBarRoot" }, 8);
-    int defBtnCorner = resolveThemeCorner({ L"Grid#TopBarRoot > StackPanel > Button", L"StartButton", L"TaskButton" }, 6);
-    int defFlyoutCorner = resolveThemeCorner({ L"FlyoutBlurHost", L"FlyoutPresenter", L"FlyoutPresenter > Grid > Border#PART_BackgroundBorder" }, 8);
+    int defOverlayCorner = static_cast<int>(std::lround(TryGetUserResourceCornerRadius(L"OverlayCornerRadius").value_or(8.0)));
+    int defControlCorner = static_cast<int>(std::lround(TryGetUserResourceCornerRadius(L"ControlCornerRadius").value_or(4.0)));
+    int defTopBarCorner = resolveThemeCorner({ L"TopBarRoot", L"Grid#TopBarRoot", L"Grid#BarRoot > Grid#TopBarRoot" }, defOverlayCorner);
+    int defBtnCorner = resolveThemeCorner({ L"Grid#TopBarRoot > StackPanel > Button", L"StartButton", L"TaskButton" }, defControlCorner);
+    int defFlyoutCorner = resolveThemeCorner({ L"FlyoutBlurHost", L"FlyoutPresenter", L"FlyoutPresenter > Grid > Border#PART_BackgroundBorder" }, defOverlayCorner);
 
     int explicitVal = 0;
     if (readExplicitCorner(L"topBarCornerRadius", &explicitVal)) {
@@ -69538,12 +70125,16 @@ BOOL WhTool_ModInit() {
     g_prevDefaultStartMenu = g_settings.defaultStartMenu;
     g_prevDefaultSearch = g_settings.defaultSearch;
 
-    RestorePersistedShellHosts();
+    if (!IsSecondaryMonitorInstance()) {
+        RestorePersistedShellHosts();
+    }
     LoadPinnedThumbState();
 
     g_taskbarCreatedMsg = RegisterWindowMessage(L"TaskbarCreated");
 
-    StartHookThread();
+    if (!IsSecondaryMonitorInstance()) {
+        StartHookThread();
+    }
 
     g_stopEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
 
@@ -69576,8 +70167,10 @@ void WhTool_ModUninit() {
     InterlockedExchange(&g_shuttingDown, 1);
     g_allowHide = true;
 
-    try { RestoreNativeShellHostWindows(true, true); } catch (...) {}
-    try { optimizer::RestoreThrottledProcesses(); } catch (...) {}
+    if (!IsSecondaryMonitorInstance()) {
+        try { RestoreNativeShellHostWindows(true, true); } catch (...) {}
+        try { optimizer::RestoreThrottledProcesses(); } catch (...) {}
+    }
     try { live_notif_popup::Cleanup(); } catch (...) {}
     try { HidePinnedTaskTooltip(true); } catch (...) {}
     if (g_topBarHwnd && g_appBarRegistered) {
@@ -69763,9 +70356,109 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
+static HANDLE g_toolWatchdogStopEvent = nullptr;
+
+static void FormatToolModMutexName(int monitorIdx, wchar_t* outBuf, size_t outCount) {
+    if (monitorIdx > 1) {
+        swprintf_s(outBuf, outCount, L"windhawk-tool-mod_%s_mon_%d", WH_MOD_ID, monitorIdx);
+    } else {
+        swprintf_s(outBuf, outCount, L"windhawk-tool-mod_%s", WH_MOD_ID);
+    }
+}
+
+static bool IsToolModInstanceRunning(int monitorIdx) {
+    wchar_t mutexName[128]{};
+    FormatToolModMutexName(monitorIdx, mutexName, ARRAYSIZE(mutexName));
+    HANDLE existing = OpenMutexW(SYNCHRONIZE, FALSE, mutexName);
+    if (existing) {
+        CloseHandle(existing);
+        return true;
+    }
+    return false;
+}
+
+static bool SpawnToolModIfNotRunning(int monitorIdx) {
+    if (IsToolModInstanceRunning(monitorIdx)) {
+        return false;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return false;
+    }
+
+    WCHAR commandLine[MAX_PATH + 128];
+    if (monitorIdx > 1) {
+        swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\" -topbar-monitor %d",
+                   currentProcessPath, WH_MOD_ID, monitorIdx);
+    } else {
+        swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"",
+                   currentProcessPath, WH_MOD_ID);
+    }
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return false;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return false;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi{};
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return false;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    return true;
+}
+
+static int GetConnectedMonitorCount() {
+    int monCount = 0;
+    EnumDisplayMonitors(nullptr, nullptr,
+        [](HMONITOR, HDC, LPRECT, LPARAM lp) -> BOOL {
+            ++(*reinterpret_cast<int*>(lp));
+            return TRUE;
+        }, reinterpret_cast<LPARAM>(&monCount));
+    return monCount;
+}
+
 void Wh_ModAfterInit() {
     if (!g_isToolModProcessLauncher) {
         return;
+    }
+
+    if (!g_toolWatchdogStopEvent) {
+        g_toolWatchdogStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     }
 
     RunInBackground([] {
@@ -69789,115 +70482,87 @@ void Wh_ModAfterInit() {
         Wh_Log(L"TopBar tray: gave up looking for own Shell_TrayWnd");
     });
 
-    auto spawnToolMod = [](int monitorIdx) {
-        WCHAR currentProcessPath[MAX_PATH];
-        switch (GetModuleFileName(nullptr, currentProcessPath,
-                                  ARRAYSIZE(currentProcessPath))) {
-            case 0:
-            case ARRAYSIZE(currentProcessPath):
-                Wh_Log(L"GetModuleFileName failed");
-                return;
-        }
-
-        WCHAR commandLine[MAX_PATH + 128];
-        if (monitorIdx > 1) {
-            swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\" -topbar-monitor %d",
-                       currentProcessPath, WH_MOD_ID, monitorIdx);
-        } else {
-            swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"",
-                       currentProcessPath, WH_MOD_ID);
-        }
-
-        HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
-        if (!kernelModule) {
-            kernelModule = GetModuleHandle(L"kernel32.dll");
-            if (!kernelModule) {
-                Wh_Log(L"No kernelbase.dll/kernel32.dll");
-                return;
-            }
-        }
-
-        using CreateProcessInternalW_t = BOOL(WINAPI*)(
-            HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
-            LPSECURITY_ATTRIBUTES lpProcessAttributes,
-            LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
-            DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
-            LPSTARTUPINFOW lpStartupInfo,
-            LPPROCESS_INFORMATION lpProcessInformation,
-            PHANDLE hRestrictedUserToken);
-        CreateProcessInternalW_t pCreateProcessInternalW =
-            (CreateProcessInternalW_t)GetProcAddress(kernelModule,
-                                                     "CreateProcessInternalW");
-        if (!pCreateProcessInternalW) {
-            Wh_Log(L"No CreateProcessInternalW");
-            return;
-        }
-
-        STARTUPINFO si{
-            .cb = sizeof(STARTUPINFO),
-            .dwFlags = STARTF_FORCEOFFFEEDBACK,
-        };
-        PROCESS_INFORMATION pi{};
-        if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
-                                     nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
-                                     nullptr, nullptr, &si, &pi, nullptr)) {
-            Wh_Log(L"CreateProcess failed");
-            return;
-        }
-
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
-    };
-
-    spawnToolMod(0);
+    SpawnToolModIfNotRunning(0);
     if (Wh_GetIntSetting(L"showOnAllMonitors") != 0) {
-        int monCount = 0;
-        EnumDisplayMonitors(nullptr, nullptr,
-            [](HMONITOR, HDC, LPRECT, LPARAM lp) -> BOOL {
-                ++(*reinterpret_cast<int*>(lp));
-                return TRUE;
-            }, reinterpret_cast<LPARAM>(&monCount));
+        int monCount = GetConnectedMonitorCount();
         for (int m = 2; m <= monCount; ++m) {
-            spawnToolMod(m);
+            SpawnToolModIfNotRunning(m);
         }
     }
+
+    // Crash-recovery & hot-plug monitor watchdog in the Explorer launcher.
+    // Automatically restarts the tool process if it exits unexpectedly, with
+    // exponential backoff and a 5-restarts-per-minute circuit breaker.
+    RunInBackground([] {
+        struct RestartState {
+            int recentRestarts = 0;
+            ULONGLONG lastRestartTick = 0;
+        };
+        std::map<int, RestartState> states;
+        static constexpr DWORD kBackoffMs[] = { 1500, 3000, 6000, 10000, 15000 };
+
+        auto waitInterruptible = [](DWORD ms) -> bool {
+            if (g_shellTrayPushShutdown.load()) return false;
+            if (g_toolWatchdogStopEvent) {
+                return WaitForSingleObject(g_toolWatchdogStopEvent, ms) == WAIT_TIMEOUT &&
+                       !g_shellTrayPushShutdown.load();
+            }
+            Sleep(ms);
+            return !g_shellTrayPushShutdown.load();
+        };
+
+        // Initial grace period for startup before monitoring
+        if (!waitInterruptible(5000)) return;
+
+        while (waitInterruptible(3000)) {
+            std::vector<int> expected;
+            expected.push_back(0);
+            if (Wh_GetIntSetting(L"showOnAllMonitors") != 0) {
+                int monCount = GetConnectedMonitorCount();
+                for (int m = 2; m <= monCount; ++m) {
+                    expected.push_back(m);
+                }
+            }
+
+            ULONGLONG now = GetTickCount64();
+            for (int m : expected) {
+                if (g_shellTrayPushShutdown.load()) return;
+                auto& st = states[m];
+                if (IsToolModInstanceRunning(m)) {
+                    if (st.recentRestarts > 0 && now - st.lastRestartTick >= 60000) {
+                        st.recentRestarts = 0;
+                    }
+                    continue;
+                }
+
+                // Circuit breaker: pause for 60s after 5 rapid restarts in a row
+                if (st.recentRestarts >= 5 && now - st.lastRestartTick < 60000) {
+                    continue;
+                }
+                if (st.recentRestarts >= 5 && now - st.lastRestartTick >= 60000) {
+                    st.recentRestarts = 0;
+                }
+
+                DWORD delay = kBackoffMs[std::min(st.recentRestarts, 4)];
+                if (!waitInterruptible(delay)) return;
+                if (IsToolModInstanceRunning(m)) continue;
+
+                st.recentRestarts++;
+                st.lastRestartTick = GetTickCount64();
+                Wh_Log(L"TopBar watchdog: restarting tool process for monitor %d (attempt %d)",
+                       m, st.recentRestarts);
+                SpawnToolModIfNotRunning(m);
+            }
+        }
+    });
 }
 
 void Wh_ModSettingsChanged() {
     if (g_isToolModProcessLauncher) {
         if (Wh_GetIntSetting(L"showOnAllMonitors") != 0) {
-            int monCount = 0;
-            EnumDisplayMonitors(nullptr, nullptr,
-                [](HMONITOR, HDC, LPRECT, LPARAM lp) -> BOOL {
-                    ++(*reinterpret_cast<int*>(lp));
-                    return TRUE;
-                }, reinterpret_cast<LPARAM>(&monCount));
-            WCHAR currentProcessPath[MAX_PATH];
-            DWORD pathLen = GetModuleFileName(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath));
-            if (pathLen > 0 && pathLen < ARRAYSIZE(currentProcessPath)) {
-                HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
-                if (!kernelModule) kernelModule = GetModuleHandle(L"kernel32.dll");
-                using CreateProcessInternalW_t = BOOL(WINAPI*)(
-                    HANDLE, LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES,
-                    WINBOOL, DWORD, LPVOID, LPCWSTR, LPSTARTUPINFOW, LPPROCESS_INFORMATION, PHANDLE);
-                auto pCreateProcessInternalW = kernelModule
-                    ? (CreateProcessInternalW_t)GetProcAddress(kernelModule, "CreateProcessInternalW")
-                    : nullptr;
-                if (pCreateProcessInternalW) {
-                    for (int m = 2; m <= monCount; ++m) {
-                        WCHAR cmd[MAX_PATH + 128];
-                        swprintf_s(cmd, L"\"%s\" -tool-mod \"%s\" -topbar-monitor %d",
-                                   currentProcessPath, WH_MOD_ID, m);
-                        STARTUPINFO si{ .cb = sizeof(STARTUPINFO), .dwFlags = STARTF_FORCEOFFFEEDBACK };
-                        PROCESS_INFORMATION pi{};
-                        if (pCreateProcessInternalW(nullptr, currentProcessPath, cmd,
-                                                    nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
-                                                    nullptr, nullptr, &si, &pi, nullptr)) {
-                            CloseHandle(pi.hProcess);
-                            CloseHandle(pi.hThread);
-                        }
-                    }
-                }
+            int monCount = GetConnectedMonitorCount();
+            for (int m = 2; m <= monCount; ++m) {
+                SpawnToolModIfNotRunning(m);
             }
         }
         return;
@@ -69909,6 +70574,7 @@ void Wh_ModSettingsChanged() {
 void Wh_ModBeforeUninit() {
     if (!g_isToolModProcessLauncher) return;
     g_shellTrayPushShutdown = true;
+    if (g_toolWatchdogStopEvent) SetEvent(g_toolWatchdogStopEvent);
     std::vector<HANDLE> workers;
     {
         std::lock_guard<std::mutex> lock(g_workerThreadsMutex);
@@ -69952,6 +70618,11 @@ void Wh_ModUninit() {
             WaitForSingleObject(g_shellTrayPushThread, INFINITE);
             CloseHandle(g_shellTrayPushThread);
             g_shellTrayPushThread = nullptr;
+        }
+        if (g_toolWatchdogStopEvent) {
+            SetEvent(g_toolWatchdogStopEvent);
+            CloseHandle(g_toolWatchdogStopEvent);
+            g_toolWatchdogStopEvent = nullptr;
         }
         if (g_shellTrayPushWake) {
             CloseHandle(g_shellTrayPushWake);
