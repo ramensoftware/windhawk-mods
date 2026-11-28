@@ -68,14 +68,15 @@ those from the menu by their name.
 Added items are written to `HKEY_CURRENT_USER\Software\Classes\.ext\ShellNew`
 and removed again when you remove them from the settings or disable the mod.
 For an extension that has no file type, the mod also registers one,
-`NewMenu.ext`, with the name you entered; it is removed together with the
-item, or as soon as a program registers its own file type for the extension.
-An existing `ShellNew` key of your own is never overwritten.
+`WindhawkNewMenu.ext`, with the name you entered. It is removed together with
+the item, or the next time Explorer starts (or the settings change) after a
+program registered its own file type for the extension. An existing `ShellNew`
+key of your own is never overwritten.
 
 These keys are volatile: if Explorer crashes and the mod can't remove them,
 Windows removes them when you sign out. Only the default value of
-`HKEY_CURRENT_USER\Software\Classes\.ext` (`NewMenu.ext`), and the `.ext` key
-if the mod created it, can remain in that case. The mod also clears Explorer's
+`HKEY_CURRENT_USER\Software\Classes\.ext` (`WindhawkNewMenu.ext`), and the
+`.ext` key if the mod created it, can remain in that case. The mod also clears Explorer's
 cache of the New menu when it starts, when the settings change and when it
 stops.
 
@@ -702,20 +703,20 @@ static HRESULT WINAPI SHLoadIndirectString_Hook(PCWSTR source, PWSTR output,
 // The mod keeps no record of what it wrote: what is its own is marked in the
 // registry of the current user.
 // - <ext>\ShellNew is the mod's if it has the value kOwnerValue.
-// - The file type NewMenu<ext> is the mod's.
-// - The default value of <ext> is the mod's while it is NewMenu<ext>.
+// - The file type WindhawkNewMenu<ext> is the mod's.
+// - The default value of <ext> is the mod's while it is WindhawkNewMenu<ext>.
 // The ShellNew key and the file type are volatile, so they are gone after
 // signing out even if the mod could not remove them.
 
 constexpr PCWSTR kOwnerValue = L"WindhawkNewMenu";
-constexpr std::wstring_view kOwnProgIdPrefix = L"NewMenu.";
+constexpr std::wstring_view kOwnProgIdPrefix = L"WindhawkNewMenu.";
 
 static std::wstring ClassesPath(const std::wstring& name) {
     return L"Software\\Classes\\" + name;
 }
 
 static std::wstring OwnProgId(const std::wstring& ext) {
-    return L"NewMenu" + ext;
+    return kOwnerValue + ext;
 }
 
 static bool ValueExists(HKEY root, const std::wstring& path, PCWSTR value) {
@@ -847,7 +848,7 @@ static bool RemoveOwnKeys(const std::wstring& ext) {
 
 // Windows only lists an extension in the New menu if it has a file type
 // (ProgID). For an extension without one, the mod registers its own,
-// NewMenu<ext>, and lets it go as soon as another file type is registered.
+// WindhawkNewMenu<ext>, and lets it go once another file type is registered.
 // Returns whether file associations changed.
 static bool EnsureFileType(const AddedItem& item, bool* ownsType) {
     std::wstring extPath = ClassesPath(item.ext);
