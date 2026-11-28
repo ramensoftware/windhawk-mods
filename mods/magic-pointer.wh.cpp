@@ -32,7 +32,7 @@
 // @description:vi  Lắc con trỏ chuột để gọi Magic Pointer kiểu Googlebook, sau đó trỏ vào hoặc chọn bất kỳ thứ gì trên màn hình rồi hỏi Gemini, ChatGPT hoặc Claude về nó
 // @description:zh-CN 摇动鼠标指针，唤出 Googlebook 风格的 Magic Pointer，然后指向或选择屏幕上的任意内容，并向 Gemini、ChatGPT 或 Claude 提问
 // @description:zh-TW 搖動滑鼠游標，叫出 Googlebook 風格的 Magic Pointer，然後指向或選取螢幕上的任何內容，並向 Gemini、ChatGPT 或 Claude 提問
-// @version         1.0.4
+// @version         1.0.5
 // @author          Rono
 // @github          https://github.com/rono-zeroseven
 // @include         windhawk.exe
@@ -2048,6 +2048,12 @@ the problem. Include screenshots when useful and remove private content.
   $description:vi: "Chỉ dùng khi Trình duyệt được đặt là Khác: đường dẫn đầy đủ tới chương trình của trình duyệt, chẳng hạn C:\\Apps\\MyBrowser\\browser.exe"
   $description:zh-CN: "仅当“浏览器”设置为“其他”时使用：浏览器程序的完整路径，例如 C:\\Apps\\MyBrowser\\browser.exe"
   $description:zh-TW: "僅當「瀏覽器」設定為「其他」時使用：瀏覽器程式的完整路徑，例如 C:\\Apps\\MyBrowser\\browser.exe"
+- screenshotFolder: ""
+  $name: Screenshot folder
+  $description: >-
+    Folder used by Save image. Leave empty to use your Windows Screenshots
+    folder. To change it, enter a full folder path; environment variables such
+    as %USERPROFILE% are supported. Missing folders are created automatically.
 - apiKey: ""
   $name: API key
   $description: >-
@@ -3184,6 +3190,7 @@ struct Settings {
     bool ocr = true;
     std::wstring browser;
     std::wstring browserPath;
+    std::wstring screenshotFolder;
     std::wstring apiKey;
     std::wstring model;
     bool suggestions = false;
@@ -3243,6 +3250,7 @@ Settings LoadSettings() {
     s.ocr = Wh_GetIntSetting(L"ocr") != 0;
     s.browser = GetStringSetting(L"browser");
     s.browserPath = GetStringSetting(L"browserPath");
+    s.screenshotFolder = GetStringSetting(L"screenshotFolder");
     s.apiKey = GetApiKeySetting(L"apiKey");
     s.model = GetStringSetting(L"model");
     s.suggestions = Wh_GetIntSetting(L"suggestions") != 0;
@@ -3328,6 +3336,13 @@ bool UseDarkTheme() {
     X(SearchWithLens, L"Search with Google Lens") \
     X(TranslateTo, L"Translate to {0}") \
     X(CopyImage, L"Copy image") \
+    X(SaveImage, L"Save image") \
+    X(ImageSaved, L"Image saved to {0}") \
+    X(ImageSaveFailed, L"Couldn't save the image. Check the screenshots folder in settings.") \
+    X(Retry, L"Retry") \
+    X(StopThinking, L"Stop thinking") \
+    X(Send, L"Send") \
+    X(InputHelp, L"Enter to send; Shift+Enter for a new line") \
     X(CopyText, L"Copy text") \
     X(AddSelection, L"Add another selection") \
     X(WhatIsThis, L"What is this?") \
@@ -4404,8 +4419,8 @@ class FontCache {
         iconGlyphs_.clear();
     }
 
-    HFONT Get(int px, int weight, bool mono = false) {
-        return Find(px, weight, mono ? 1 : 0);
+    HFONT Get(int px, int weight, bool mono = false, bool italic = false) {
+        return Find(px, weight, mono ? 1 : 0, italic);
     }
 
     HFONT Icons(int px) {
@@ -4448,22 +4463,24 @@ class FontCache {
         int weight;
         int kind;  // 0 = text, 1 = monospace, 2 = icons.
         HFONT font;
+        bool italic;
     };
 
-    HFONT Find(int px, int weight, int kind) {
+    HFONT Find(int px, int weight, int kind, bool italic = false) {
         px = std::max(px, 6);
         for (const Entry& entry : entries_) {
-            if (entry.px == px && entry.weight == weight && entry.kind == kind) {
+            if (entry.px == px && entry.weight == weight && entry.kind == kind &&
+                entry.italic == italic) {
                 return entry.font;
             }
         }
         const std::wstring& face = kind == 2 ? iconFace_ : kind == 1 ? monoFace_ : face_;
-        HFONT font = CreateFontW(-px, 0, 0, 0, weight, FALSE, FALSE, FALSE,
+        HFONT font = CreateFontW(-px, 0, 0, 0, weight, italic, FALSE, FALSE,
                                  DEFAULT_CHARSET, OUT_TT_PRECIS,
                                  CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY,
                                  DEFAULT_PITCH | FF_DONTCARE, face.c_str());
         if (font) {
-            entries_.push_back({px, weight, kind, font});
+            entries_.push_back({px, weight, kind, font, italic});
         }
         return font ? font : static_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
     }
@@ -4666,9 +4683,743 @@ class TextPainter {
 };
 
 ////////////////////////////////////////////////////////////////////////////////
+// Native formula layout. All glyphs and rules stay local and share a baseline.
+
+struct MathGlyph {
+    std::wstring text;
+    HFONT font = nullptr;
+    int x = 0, y = 0, width = 0, height = 0;
+};
+struct MathRule { float x1, y1, x2, y2, width; };
+struct MathLayout {
+    int width = 0, height = 0, baseline = 0;
+    std::wstring plain;
+    std::vector<MathGlyph> glyphs;
+    std::vector<MathRule> rules;
+    bool limits = false;
+};
+
+class MathFontCache {
+  public:
+    struct Font { HFONT handle; int ascent; int height; };
+    Font Get(int px, int style = 0) {
+        px = std::clamp(px, 7, 512);
+        for (const Entry& entry : entries_)
+            if (entry.px == px && entry.style == style) return entry.font;
+        // Cambria Math exposes oversized GDI line metrics for extensible glyphs.
+        // Cambria provides the same basic shapes with conventional line metrics.
+        HFONT font = CreateFontW(-px, 0, 0, 0, style & 2 ? FW_SEMIBOLD : FW_NORMAL,
+            style & 1, FALSE, FALSE, DEFAULT_CHARSET, OUT_TT_PRECIS,
+            CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, DEFAULT_PITCH, L"Cambria");
+        if (!font) return {static_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT)),px,px + 3};
+        TEXTMETRICW metrics{};
+        HDC dc = CreateCompatibleDC(nullptr);
+        if (dc) {
+            HGDIOBJ old = SelectObject(dc,font); GetTextMetricsW(dc,&metrics);
+            SelectObject(dc,old); DeleteDC(dc);
+        }
+        Font result{font,metrics.tmAscent ? static_cast<int>(metrics.tmAscent) : px,
+            metrics.tmHeight ? static_cast<int>(metrics.tmHeight) : px + 3};
+        entries_.push_back({px,style,result});
+        return result;
+    }
+    void Clear() {
+        for (const Entry& entry : entries_) DeleteObject(entry.font.handle);
+        entries_.clear();
+    }
+  private:
+    struct Entry { int px; int style; Font font; };
+    std::vector<Entry> entries_;
+};
+
+MathFontCache g_mathFonts;
+void ClearMathFonts() { g_mathFonts.Clear(); }
+
+namespace formula {
+
+void Place(MathLayout& target,const MathLayout& box,int x,int y) {
+    for (MathGlyph glyph : box.glyphs) {
+        glyph.x += x; glyph.y += y; target.glyphs.push_back(std::move(glyph));
+    }
+    for (MathRule rule : box.rules) {
+        rule.x1 += x; rule.x2 += x; rule.y1 += y; rule.y2 += y;
+        target.rules.push_back(rule);
+    }
+}
+MathLayout Text(TextPainter& painter,const std::wstring& text,int px,int style = 0) {
+    if (text.empty()) return {};
+    const auto font = g_mathFonts.Get(px,style);
+    MathLayout result;
+    result.width = painter.Width(font.handle,text.c_str(),static_cast<int>(text.size()));
+    result.height = font.height; result.baseline = font.ascent; result.plain = text;
+    result.glyphs.push_back({text,font.handle,0,0,result.width,result.height});
+    return result;
+}
+MathLayout Row(const std::vector<MathLayout>& boxes) {
+    MathLayout result;
+    for (const auto& box : boxes) result.baseline = std::max(result.baseline,box.baseline);
+    for (const auto& box : boxes) {
+        const int top = result.baseline - box.baseline;
+        Place(result,box,result.width,top);
+        result.width += box.width; result.height = std::max(result.height,top + box.height);
+        result.plain += box.plain;
+    }
+    return result;
+}
+MathLayout Space(int width,const std::wstring& plain = L" ") {
+    MathLayout result; result.width = width; result.plain = plain; return result;
+}
+MathLayout Scripts(const MathLayout& base,const MathLayout& sup,
+                   const MathLayout& sub,int px,bool centered = false) {
+    if (!sup.height && !sub.height) return base;
+    MathLayout result;
+    const int gap = std::max(1,px / 12);
+    if (centered) {
+        result.width = std::max({base.width,sup.width,sub.width});
+        const int top = sup.height ? sup.height + gap : 0;
+        Place(result,sup,(result.width - sup.width) / 2,0);
+        Place(result,base,(result.width - base.width) / 2,top);
+        Place(result,sub,(result.width - sub.width) / 2,top + base.height + gap);
+        result.baseline = top + base.baseline;
+        result.height = top + base.height + (sub.height ? sub.height + gap : 0);
+    } else {
+        const int supTop = sup.height ? base.baseline - std::max(px * 3 / 5,sup.height * 2 / 3) - sup.baseline : 0;
+        const int subTop = sub.height ? base.baseline + std::max(px / 3,2) - sub.baseline : 0;
+        const int top = std::min({0,supTop,subTop});
+        const int x = base.width + std::max(0,px / 20);
+        Place(result,base,0,-top); Place(result,sup,x,supTop - top); Place(result,sub,x,subTop - top);
+        result.baseline = base.baseline - top;
+        result.height = std::max({base.height,supTop + sup.height,subTop + sub.height}) - top;
+        result.width = x + std::max(sup.width,sub.width);
+    }
+    result.plain = base.plain;
+    if (sub.height) result.plain += L"_(" + sub.plain + L")";
+    if (sup.height) result.plain += L"^(" + sup.plain + L")";
+    return result;
+}
+MathLayout Fraction(const MathLayout& numerator,const MathLayout& denominator,int px,bool bar = true) {
+    MathLayout result;
+    const int pad = std::max(2,px / 8),gap = std::max(2,px / 7);
+    result.width = std::max(numerator.width,denominator.width) + 2 * pad;
+    const int rule = numerator.height + gap;
+    Place(result,numerator,(result.width - numerator.width) / 2,0);
+    Place(result,denominator,(result.width - denominator.width) / 2,rule + gap + 1);
+    if (bar) result.rules.push_back({0.0f,static_cast<float>(rule),static_cast<float>(result.width),
+        static_cast<float>(rule),std::max(1.0f,px / 18.0f)});
+    result.height = rule + gap + 1 + denominator.height;
+    result.baseline = rule + std::max(2,px / 4);
+    result.height = std::max(result.height,result.baseline + 1);
+    result.plain = L"(" + numerator.plain + L")/(" + denominator.plain + L")";
+    return result;
+}
+std::wstring Symbol(const std::wstring& name) {
+    static const std::pair<PCWSTR,PCWSTR> symbols[] = {
+        {L"alpha",L"α"},{L"beta",L"β"},{L"gamma",L"γ"},{L"delta",L"δ"},
+        {L"epsilon",L"ϵ"},{L"varepsilon",L"ε"},{L"zeta",L"ζ"},{L"eta",L"η"},
+        {L"theta",L"θ"},{L"vartheta",L"ϑ"},{L"iota",L"ι"},{L"kappa",L"κ"},
+        {L"lambda",L"λ"},{L"mu",L"μ"},{L"nu",L"ν"},{L"xi",L"ξ"},
+        {L"pi",L"π"},{L"varpi",L"ϖ"},{L"rho",L"ρ"},{L"varrho",L"ϱ"},
+        {L"sigma",L"σ"},{L"varsigma",L"ς"},{L"tau",L"τ"},{L"upsilon",L"υ"},
+        {L"phi",L"ϕ"},{L"varphi",L"φ"},{L"chi",L"χ"},{L"psi",L"ψ"},{L"omega",L"ω"},
+        {L"Gamma",L"Γ"},{L"Delta",L"Δ"},{L"Theta",L"Θ"},{L"Lambda",L"Λ"},
+        {L"Xi",L"Ξ"},{L"Pi",L"Π"},{L"Sigma",L"Σ"},{L"Upsilon",L"Υ"},
+        {L"Phi",L"Φ"},{L"Psi",L"Ψ"},{L"Omega",L"Ω"},
+        {L"pm",L"±"},{L"mp",L"∓"},{L"times",L"×"},{L"cdot",L"·"},{L"div",L"÷"},
+        {L"le",L"≤"},{L"leq",L"≤"},{L"ge",L"≥"},{L"geq",L"≥"},
+        {L"ne",L"≠"},{L"neq",L"≠"},{L"approx",L"≈"},{L"sim",L"∼"},
+        {L"simeq",L"≃"},{L"equiv",L"≡"},{L"propto",L"∝"},
+        {L"infty",L"∞"},{L"partial",L"∂"},{L"nabla",L"∇"},
+        {L"in",L"∈"},{L"notin",L"∉"},{L"ni",L"∋"},{L"subset",L"⊂"},
+        {L"subseteq",L"⊆"},{L"supset",L"⊃"},{L"supseteq",L"⊇"},
+        {L"cup",L"∪"},{L"cap",L"∩"},{L"setminus",L"∖"},
+        {L"emptyset",L"∅"},{L"varnothing",L"∅"},{L"forall",L"∀"},{L"exists",L"∃"},
+        {L"neg",L"¬"},{L"land",L"∧"},{L"lor",L"∨"},{L"wedge",L"∧"},{L"vee",L"∨"},
+        {L"to",L"→"},{L"rightarrow",L"→"},{L"longrightarrow",L"⟶"},
+        {L"leftarrow",L"←"},{L"longleftarrow",L"⟵"},{L"leftrightarrow",L"↔"},
+        {L"Rightarrow",L"⇒"},{L"Longrightarrow",L"⟹"},{L"Leftarrow",L"⇐"},
+        {L"Leftrightarrow",L"⇔"},{L"iff",L"⟺"},{L"mapsto",L"↦"},
+        {L"uparrow",L"↑"},{L"downarrow",L"↓"},{L"updownarrow",L"↕"},
+        {L"rightleftharpoons",L"⇌"},{L"leftrightharpoons",L"⇋"},
+        {L"sum",L"∑"},{L"prod",L"∏"},{L"coprod",L"∐"},
+        {L"int",L"∫"},{L"iint",L"∬"},{L"iiint",L"∭"},{L"oint",L"∮"},
+        {L"bigcup",L"⋃"},{L"bigcap",L"⋂"},
+        {L"ldots",L"…"},{L"dots",L"…"},{L"cdots",L"⋯"},{L"vdots",L"⋮"},{L"ddots",L"⋱"},
+        {L"ell",L"ℓ"},{L"hbar",L"ℏ"},{L"Re",L"ℜ"},{L"Im",L"ℑ"},
+        {L"angle",L"∠"},{L"degree",L"°"},{L"circ",L"∘"},{L"perp",L"⊥"},
+        {L"parallel",L"∥"},{L"mid",L"∣"},{L"vert",L"|"},{L"Vert",L"‖"},
+        {L"langle",L"⟨"},{L"rangle",L"⟩"},{L"lbrace",L"{"},{L"rbrace",L"}"},
+        {L"lbrack",L"["},{L"rbrack",L"]"},{L"lfloor",L"⌊"},{L"rfloor",L"⌋"},
+        {L"lceil",L"⌈"},{L"rceil",L"⌉"},{L"backslash",L"∖"},
+        {L"checkmark",L"✓"},{L"therefore",L"∴"},{L"because",L"∵"}
+    };
+    for (const auto& entry : symbols) if (name == entry.first) return entry.second;
+    return {};
+}
+
+class Parser {
+  public:
+    Parser(const std::wstring& source,TextPainter& painter,bool display,int depth = 0)
+        : source_(source),painter_(painter),display_(display),depth_(depth) {}
+    MathLayout Parse(int px,int style = 1) {
+        if (depth_ > 48) return Text(painter_,source_,px,0);
+        MathLayout result = Sequence(px,style);
+        if (pos_ < source_.size())
+            result = Row({result,Text(painter_,source_.substr(pos_),px,0)});
+        return result;
+    }
+  private:
+    void Skip() { while (pos_ < source_.size() && iswspace(source_[pos_])) pos_++; }
+    bool Starts(const std::wstring& value) const { return source_.compare(pos_,value.size(),value) == 0; }
+    std::wstring Command() {
+        if (pos_ >= source_.size() || source_[pos_] != L'\\') return {};
+        pos_++; const size_t start = pos_;
+        while (pos_ < source_.size() && iswalpha(source_[pos_])) pos_++;
+        if (pos_ == start && pos_ < source_.size()) pos_++;
+        return source_.substr(start,pos_ - start);
+    }
+    std::wstring RawGroup(wchar_t open = L'{',wchar_t close = L'}') {
+        Skip();
+        if (pos_ >= source_.size()) return {};
+        if (source_[pos_] != open) {
+            if (source_[pos_] == L'\\') return L"\\" + Command();
+            return source_.substr(pos_++,1);
+        }
+        const size_t start = ++pos_;
+        int nesting = 1;
+        while (pos_ < source_.size()) {
+            if (source_[pos_] == L'\\' && pos_ + 1 < source_.size() &&
+                (source_[pos_ + 1] == open || source_[pos_ + 1] == close)) { pos_ += 2; continue; }
+            if (source_[pos_] == open) nesting++;
+            if (source_[pos_] == close && --nesting == 0) {
+                const auto value = source_.substr(start,pos_ - start); pos_++; return value;
+            }
+            pos_++;
+        }
+        return source_.substr(start);
+    }
+    MathLayout Child(const std::wstring& value,int px,int style) {
+        return Parser(value,painter_,display_,depth_ + atomDepth_ + 1).Parse(px,style);
+    }
+    MathLayout Argument(int px,int style) {
+        Skip();
+        if (pos_ >= source_.size() || source_[pos_] == L'}') return {};
+        return source_[pos_] == L'{' ? Child(RawGroup(),px,style) : Atom(px,style);
+    }
+    std::wstring Delimiter() {
+        Skip();
+        if (pos_ >= source_.size()) return {};
+        if (source_[pos_] == L'.') { pos_++; return {}; }
+        if (source_[pos_] == L'\\') {
+            const auto name = Command(),symbol = Symbol(name);
+            return symbol.empty() ? name : symbol;
+        }
+        return source_.substr(pos_++,1);
+    }
+    MathLayout Delimit(const MathLayout& body,const std::wstring& left,
+                       const std::wstring& right,int px) {
+        const int height = std::max(px,body.height);
+        auto l = Text(painter_,left,height * 4 / 5,0),r = Text(painter_,right,height * 4 / 5,0);
+        if (l.height) l.baseline = l.height / 2 + px / 4;
+        if (r.height) r.baseline = r.height / 2 + px / 4;
+        auto result = Row({l,body,r});
+        result.plain = left + body.plain + right;
+        return result;
+    }
+    MathLayout Sequence(int px,int style,bool untilRight = false) {
+        std::vector<MathLayout> boxes;
+        size_t tokens = 0;
+        while (pos_ < source_.size() && tokens++ < 8192) {
+            Skip();
+            if (pos_ >= source_.size() || source_[pos_] == L'}' ||
+                (untilRight && Starts(L"\\right"))) break;
+            const size_t before = pos_;
+            MathLayout base = Atom(px,style),sup,sub;
+            bool centered = base.limits;
+            for (;;) {
+                Skip();
+                if (Starts(L"\\limits")) { pos_ += 7; centered = true; continue; }
+                if (Starts(L"\\nolimits")) { pos_ += 9; centered = false; continue; }
+                if (pos_ < source_.size() && (source_[pos_] == L'^' || source_[pos_] == L'_')) {
+                    const wchar_t marker = source_[pos_++];
+                    auto value = Argument(std::max(7,px * 7 / 10),style);
+                    if (marker == L'^') sup = std::move(value); else sub = std::move(value);
+                    continue;
+                }
+                if (pos_ < source_.size() && source_[pos_] == L'\'') {
+                    std::wstring primes;
+                    while (pos_ < source_.size() && source_[pos_] == L'\'') { primes += L'′'; pos_++; }
+                    sup = Text(painter_,primes,std::max(7,px * 7 / 10),0); continue;
+                }
+                break;
+            }
+            boxes.push_back(Scripts(base,sup,sub,px,centered));
+            if (pos_ == before) pos_++;
+        }
+        return Row(boxes);
+    }
+    MathLayout Matrix(const std::wstring& env,const std::wstring& content,int px,int style) {
+        std::vector<std::vector<std::wstring>> strings(1,std::vector<std::wstring>(1));
+        int braces = 0,nested = 0;
+        for (size_t i = 0; i < content.size(); i++) {
+            if (content.compare(i,7,L"\\begin{") == 0) nested++;
+            if (content.compare(i,5,L"\\end{") == 0) nested = std::max(0,nested - 1);
+            if (content[i] == L'{' && (i == 0 || content[i - 1] != L'\\')) braces++;
+            if (content[i] == L'}' && (i == 0 || content[i - 1] != L'\\')) braces--;
+            if (!braces && !nested && content[i] == L'&' && (i == 0 || content[i - 1] != L'\\')) {
+                strings.back().push_back({});
+            } else if (!braces && !nested && content.compare(i,2,L"\\\\") == 0) {
+                if (strings.size() < 64) strings.push_back(std::vector<std::wstring>(1));
+                i++;
+                if (i + 1 < content.size() && content[i + 1] == L'[') {
+                    const size_t end = content.find(L']',i + 2);
+                    if (end != std::wstring::npos) i = end;
+                }
+            } else strings.back().back() += content[i];
+        }
+        if (strings.size() > 1 && strings.back().size() == 1 && Trim(strings.back()[0]).empty()) strings.pop_back();
+        size_t columns = 0;
+        for (const auto& row : strings) columns = std::max(columns,std::min<size_t>(row.size(),32));
+        std::vector<int> widths(columns,0);
+        std::vector<std::vector<MathLayout>> cells;
+        for (const auto& row : strings) {
+            cells.push_back({});
+            for (size_t c = 0; c < columns; c++) {
+                auto box = Child(c < row.size() ? row[c] : L"",px,style);
+                widths[c] = std::max(widths[c],box.width);
+                cells.back().push_back(std::move(box));
+            }
+        }
+        MathLayout result;
+        const int gap = std::max(4,px * 3 / 4);
+        const bool aligned = env.find(L"align") != std::wstring::npos || env == L"split";
+        for (const auto& row : cells) {
+            int ascent = 0,descent = 0;
+            for (const auto& box : row) {
+                ascent = std::max(ascent,box.baseline);
+                descent = std::max(descent,box.height - box.baseline);
+            }
+            int x = 0;
+            for (size_t c = 0; c < row.size(); c++) {
+                const int offset = aligned ? (c % 2 == 0 ? widths[c] - row[c].width : 0)
+                                           : (widths[c] - row[c].width) / 2;
+                Place(result,row[c],x + offset,result.height + ascent - row[c].baseline);
+                x += widths[c];
+                if (c + 1 < row.size()) x += aligned && c % 2 == 0 ? px / 4 : gap;
+                if (c) result.plain += L'\t';
+                result.plain += row[c].plain;
+            }
+            result.width = std::max(result.width,x);
+            result.height += ascent + descent + std::max(2,px / 3);
+            result.plain += L'\n';
+        }
+        result.height = std::max(0,result.height - std::max(2,px / 3));
+        result.baseline = result.height / 2 + px / 4;
+        if (!result.plain.empty()) result.plain.pop_back();
+        if (env == L"pmatrix") return Delimit(result,L"(",L")",px);
+        if (env == L"bmatrix") return Delimit(result,L"[",L"]",px);
+        if (env == L"Bmatrix") return Delimit(result,L"{",L"}",px);
+        if (env == L"vmatrix") return Delimit(result,L"|",L"|",px);
+        if (env == L"Vmatrix") return Delimit(result,L"‖",L"‖",px);
+        if (env == L"cases") return Delimit(result,L"{",L"",px);
+        return result;
+    }
+    MathLayout Chemistry(const std::wstring& source,int px,bool units = false) {
+        if (units) {
+            const size_t fraction = source.find(L"//");
+            if (fraction != std::wstring::npos) return Fraction(
+                Child(source.substr(0,fraction),px * 9 / 10,0),
+                Child(source.substr(fraction + 2),px * 9 / 10,0),px);
+            return Child(source,px,0);
+        }
+        std::vector<MathLayout> boxes;
+        bool element = false;
+        const int small = std::max(7,px * 7 / 10);
+        MathLayout leadingSup,leadingSub;
+        for (size_t i = 0; i < source.size();) {
+            auto append = [&](const std::wstring& value) { boxes.push_back(Text(painter_,value,px,0)); };
+            if (iswspace(source[i])) {
+                boxes.push_back(Space(std::max(2,px / 3)));
+                element = false; i++; continue;
+            }
+            std::wstring arrow;
+            size_t arrowLength = 0;
+            static const std::pair<PCWSTR,PCWSTR> arrows[] = {
+                {L"<-->",L"⟷"},{L"<=>>",L"⇌"},{L"<<=>",L"⇋"},
+                {L"<=>",L"⇌"},{L"<->",L"↔"},{L"->",L"⟶"},{L"<-",L"⟵"},{L"=>",L"⇒"}};
+            for (const auto& value : arrows) {
+                const size_t length = wcslen(value.first);
+                if (source.compare(i,length,value.first) == 0) {
+                    arrow = value.second; arrowLength = length; break;
+                }
+            }
+            if (!arrow.empty()) {
+                i += arrowLength;
+                MathLayout above,below;
+                for (int label = 0; label < 2 && i < source.size() && source[i] == L'['; label++) {
+                    const size_t end = source.find(L']',i + 1);
+                    if (end == std::wstring::npos) break;
+                    auto value = Child(source.substr(i + 1,end - i - 1),small,0);
+                    if (label == 0) above = std::move(value); else below = std::move(value);
+                    i = end + 1;
+                }
+                boxes.push_back(Space(std::max(2,px / 4)));
+                boxes.push_back(Scripts(Text(painter_,arrow,px + px / 3,0),above,below,px,true));
+                boxes.push_back(Space(std::max(2,px / 4))); element = false; continue;
+            }
+            if (source[i] == L'^' || source[i] == L'_') {
+                const bool sup = source[i++] == L'^';
+                size_t end = i; std::wstring value;
+                if (i < source.size() && source[i] == L'{') {
+                    int level = 1; end = i + 1;
+                    while (end < source.size() && level) {
+                        if (source[end] == L'{') level++;
+                        if (source[end] == L'}') level--;
+                        if (level) end++;
+                    }
+                    value = source.substr(i + 1,end - i - 1); i = std::min(end + 1,source.size());
+                } else {
+                    while (end < source.size() && (iswdigit(source[end]) || source[end] == L'+' || source[end] == L'-')) end++;
+                    if (end == i && end < source.size()) end++;
+                    value = source.substr(i,end - i); i = end;
+                }
+                auto script = Child(value,small,0);
+                if (!element && (boxes.empty() || leadingSup.height || leadingSub.height)) {
+                    if (sup) leadingSup = std::move(script); else leadingSub = std::move(script);
+                } else {
+                    MathLayout base;
+                    if (!boxes.empty()) { base = std::move(boxes.back()); boxes.pop_back(); }
+                    boxes.push_back(Scripts(base,sup ? script : MathLayout{},sup ? MathLayout{} : script,px));
+                }
+                continue;
+            }
+            if (iswdigit(source[i])) {
+                const size_t start = i++;
+                while (i < source.size() && iswdigit(source[i])) i++;
+                const auto number = source.substr(start,i - start);
+                if (element && !boxes.empty()) {
+                    auto base = std::move(boxes.back()); boxes.pop_back();
+                    boxes.push_back(Scripts(base,{},Text(painter_,number,small,0),px));
+                } else append(number);
+                continue;
+            }
+            if ((source[i] == L'+' || source[i] == L'-') && element && !boxes.empty()) {
+                auto base = std::move(boxes.back()); boxes.pop_back();
+                boxes.push_back(Scripts(base,Text(painter_,source[i] == L'-' ? L"−" : L"+",small,0),{},px));
+                i++; continue;
+            }
+            if (source[i] == L'\\') {
+                size_t end = i + 1;
+                while (end < source.size() && iswalpha(source[end])) end++;
+                if (end == i + 1 && end < source.size()) end++;
+                if (end < source.size() && source[end] == L'{') {
+                    int level = 1; end++;
+                    while (end < source.size() && level) {
+                        if (source[end] == L'{') level++;
+                        if (source[end] == L'}') level--;
+                        end++;
+                    }
+                }
+                boxes.push_back(Child(source.substr(i,end - i),px,0)); i = end; element = true; continue;
+            }
+            if (source[i] == L'*' || source[i] == L'.') { append(L"·"); element = false; i++; continue; }
+            if (source[i] == L'+' || source[i] == L'=') {
+                boxes.push_back(Space(std::max(2,px / 4))); append(source.substr(i++,1));
+                boxes.push_back(Space(std::max(2,px / 4))); element = false; continue;
+            }
+            if (source[i] == L'{' || source[i] == L'}') { i++; continue; }
+            const wchar_t c = source[i++];
+            auto atom = Text(painter_,std::wstring(1,c),px,0);
+            if (leadingSup.height || leadingSub.height) {
+                MathLayout prefix = Scripts({},leadingSup,leadingSub,px);
+                atom = Row({prefix,atom}); leadingSup = {}; leadingSub = {};
+            }
+            boxes.push_back(std::move(atom));
+            element = iswalpha(c) || c == L')' || c == L']';
+        }
+        if (leadingSup.height || leadingSub.height) boxes.push_back(Scripts({},leadingSup,leadingSub,px));
+        return Row(boxes);
+    }
+    MathLayout Environment(const std::wstring& name,int px,int style) {
+        const std::wstring opening = L"\\begin{" + name + L"}";
+        const std::wstring closing = L"\\end{" + name + L"}";
+        const size_t start = pos_;
+        size_t end = source_.size();
+        int level = 1;
+        for (size_t i = pos_; i < source_.size();) {
+            if (source_.compare(i,opening.size(),opening) == 0) {
+                level++; i += opening.size();
+            } else if (source_.compare(i,closing.size(),closing) == 0) {
+                if (--level == 0) { end = i; pos_ = i + closing.size(); break; }
+                i += closing.size();
+            } else i++;
+        }
+        if (end == source_.size()) pos_ = end;
+        std::wstring content = source_.substr(start,end - start);
+        if (name == L"array") {
+            size_t begin = content.find_first_not_of(L" \t\r\n");
+            if (begin != std::wstring::npos && content[begin] == L'{') {
+                const size_t close = content.find(L'}',begin + 1);
+                if (close != std::wstring::npos) content.erase(0,close + 1);
+            }
+        }
+        if (name == L"equation" || name == L"equation*" || name == L"displaymath")
+            return Child(content,px,style);
+        return Matrix(name,content,px,style);
+    }
+
+    MathLayout Radical(const MathLayout& body,const MathLayout& index,int px) {
+        MathLayout result;
+        const int pad = std::max(2,px / 8);
+        const int lead = std::max(px * 3 / 5,index.width + px / 3);
+        const int top = std::max(pad,index.height / 2);
+        const int bodyX = lead + pad;
+        Place(result,body,bodyX,top + pad);
+        Place(result,index,0,0);
+        result.width = bodyX + body.width + pad;
+        result.height = top + pad + body.height;
+        result.baseline = top + pad + body.baseline;
+        const float width = std::max(1.0f,px / 17.0f);
+        const float lower = static_cast<float>(std::max(top + px / 2,result.height - pad));
+        const float shoulder = static_cast<float>(top + std::max(2,px / 3));
+        const float hook = static_cast<float>(lead - px / 3);
+        result.rules.push_back({hook - px / 5.0f,shoulder + px / 5.0f,hook,shoulder,width});
+        result.rules.push_back({hook,shoulder,static_cast<float>(lead - px / 7),lower,width});
+        result.rules.push_back({static_cast<float>(lead - px / 7),lower,static_cast<float>(lead),static_cast<float>(top),width});
+        result.rules.push_back({static_cast<float>(lead),static_cast<float>(top),static_cast<float>(result.width),static_cast<float>(top),width});
+        result.plain = index.plain.empty() ? L"sqrt(" + body.plain + L")"
+                                          : L"root[" + index.plain + L"](" + body.plain + L")";
+        return result;
+    }
+
+    MathLayout Accent(const MathLayout& body,const std::wstring& name,int px) {
+        MathLayout result;
+        const bool below = name == L"underline" || name == L"underbrace";
+        const int extra = std::max(3,px / 5);
+        Place(result,body,0,below ? 0 : extra);
+        result.width = body.width;
+        result.height = body.height + extra;
+        result.baseline = body.baseline + (below ? 0 : extra);
+        result.plain = body.plain;
+        const float y = below ? body.height + extra * 0.5f : extra * 0.5f;
+        const float thickness = std::max(1.0f,px / 18.0f);
+        const float right = static_cast<float>(std::max(1,body.width));
+        if (name == L"hat" || name == L"widehat") {
+            result.rules.push_back({0,y + 1,right * 0.5f,0,thickness});
+            result.rules.push_back({right * 0.5f,0,right,y + 1,thickness});
+        } else if (name == L"vec" || name == L"overrightarrow") {
+            result.rules.push_back({0,y,right,y,thickness});
+            result.rules.push_back({right - extra,y - extra * 0.5f,right,y,thickness});
+            result.rules.push_back({right - extra,y + extra * 0.5f,right,y,thickness});
+        } else if (name == L"dot" || name == L"ddot") {
+            const float center = right * 0.5f;
+            const float offset = name == L"ddot" ? extra * 0.6f : 0;
+            result.rules.push_back({center - offset,y,center - offset + 0.1f,y,std::max(1.5f,thickness)});
+            if (offset) result.rules.push_back({center + offset,y,center + offset + 0.1f,y,std::max(1.5f,thickness)});
+        } else if (name == L"tilde" || name == L"widetilde") {
+            for (int i = 0; i < 8; i++) {
+                const float a = i / 8.0f, b = (i + 1) / 8.0f;
+                result.rules.push_back({right * a,extra * (0.5f - 0.3f * sinf(2 * kPi * a)),
+                    right * b,extra * (0.5f - 0.3f * sinf(2 * kPi * b)),thickness});
+            }
+        } else {
+            result.rules.push_back({0,y,right,y,thickness});
+        }
+        return result;
+    }
+
+    MathLayout Atom(int px,int style) {
+        Skip();
+        if (pos_ >= source_.size()) return {};
+        if (depth_ + atomDepth_ >= 48) {
+            const std::wstring literal = source_.substr(pos_);
+            pos_ = source_.size();
+            return Text(painter_,literal,px,0);
+        }
+        struct AtomScope {
+            int& depth;
+            ~AtomScope() { depth--; }
+        };
+        atomDepth_++;
+        AtomScope scope{atomDepth_};
+        if (source_[pos_] == L'{') return Child(RawGroup(),px,style);
+        if (source_[pos_] != L'\\') {
+            const wchar_t c = source_[pos_++];
+            if (c == L'$') return {}; // Nested math delimiters, e.g. mhchem arrow labels.
+            if (c == L'~') return Space(std::max(2,px / 3));
+            if (c == L'&') return Space(std::max(2,px / 2));
+            if (c == L'-') return Text(painter_,L"−",px,0);
+            if (wcschr(L"=+<>±×÷",c)) return Row({Space(std::max(1,px / 7),L""),
+                Text(painter_,std::wstring(1,c),px,0),Space(std::max(1,px / 7),L"")});
+            std::wstring value(1,c);
+            if (IS_HIGH_SURROGATE(c) && pos_ < source_.size() && IS_LOW_SURROGATE(source_[pos_]))
+                value += source_[pos_++];
+            return Text(painter_,value,px,iswalpha(c) ? style : style & ~1);
+        }
+        const std::wstring name = Command();
+        const int small = std::max(7,px * 4 / 5);
+        if (name == L"frac" || name == L"dfrac" || name == L"tfrac") {
+            const int size = name == L"dfrac" ? px : small;
+            const auto numerator = Argument(size,style);
+            const auto denominator = Argument(size,style);
+            return Fraction(numerator,denominator,px);
+        }
+        if (name == L"binom" || name == L"dbinom" || name == L"tbinom") {
+            const auto top = Argument(small,style),bottom = Argument(small,style);
+            return Delimit(Fraction(top,bottom,px,false),L"(",L")",px);
+        }
+        if (name == L"sqrt") {
+            Skip();
+            MathLayout index;
+            if (pos_ < source_.size() && source_[pos_] == L'[')
+                index = Child(RawGroup(L'[',L']'),std::max(7,px * 3 / 5),style);
+            return Radical(Argument(px,style),index,px);
+        }
+        if (name == L"left") {
+            const auto left = Delimiter();
+            const auto body = Sequence(px,style,true);
+            std::wstring right;
+            if (Starts(L"\\right")) { pos_ += 6; right = Delimiter(); }
+            return Delimit(body,left,right,px);
+        }
+        if (name == L"right" || name == L"middle") return Text(painter_,Delimiter(),px,0);
+        if (name == L"big" || name == L"Big" || name == L"bigg" || name == L"Bigg" ||
+            name == L"bigl" || name == L"bigr" || name == L"Bigl" || name == L"Bigr")
+            return Text(painter_,Delimiter(),px * 4 / 3,0);
+        if (name == L"begin") return Environment(RawGroup(),px,style);
+        if (name == L"end") { RawGroup(); return {}; }
+        if (name == L"ce" || name == L"pu") return Chemistry(RawGroup(),px,name == L"pu");
+        if (name == L"text" || name == L"textrm" || name == L"mbox" || name == L"textnormal") {
+            std::wstring text = RawGroup();
+            for (size_t i = 0; i + 1 < text.size(); i++)
+                if (text[i] == L'\\' && wcschr(L"{}$%#&_",text[i + 1])) text.erase(i,1);
+            return Text(painter_,text,px,0);
+        }
+        if (name == L"mathrm" || name == L"mathsf" || name == L"mathtt" || name == L"operatorname")
+            return Child(RawGroup(),px,style & ~1);
+        if (name == L"mathbf" || name == L"boldsymbol" || name == L"bm")
+            return Child(RawGroup(),px,style | 2);
+        if (name == L"mathit") return Child(RawGroup(),px,style | 1);
+        if (name == L"mathbb" || name == L"mathcal" || name == L"mathscr") {
+            std::wstring value = RawGroup();
+            if (name == L"mathbb" && value.size() == 1) {
+                const std::wstring letters = L"CHNPQRZ";
+                const std::wstring symbols = L"ℂℍℕℙℚℝℤ";
+                const size_t found = letters.find(value[0]);
+                if (found != std::wstring::npos) return Text(painter_,symbols.substr(found,1),px,0);
+            }
+            return Child(value,px,name == L"mathbb" ? 0 : style | 1);
+        }
+        if (name == L"overline" || name == L"bar" || name == L"underline" ||
+            name == L"hat" || name == L"widehat" || name == L"vec" || name == L"overrightarrow" ||
+            name == L"dot" || name == L"ddot" || name == L"tilde" || name == L"widetilde" ||
+            name == L"overbrace" || name == L"underbrace")
+            return Accent(Argument(px,style),name,px);
+        if (name == L"overset" || name == L"stackrel" || name == L"underset") {
+            auto annotation = Argument(small,style),body = Argument(px,style);
+            return Scripts(body,name == L"underset" ? MathLayout{} : annotation,
+                name == L"underset" ? annotation : MathLayout{},px,true);
+        }
+        if (name == L"substack") return Matrix(L"gathered",RawGroup(),small,style);
+        if (name == L"phantom" || name == L"hphantom" || name == L"vphantom") {
+            auto result = Argument(px,style);
+            result.glyphs.clear(); result.rules.clear(); result.plain.clear();
+            if (name == L"hphantom") result.height = result.baseline = 0;
+            if (name == L"vphantom") result.width = 0;
+            return result;
+        }
+        if (name == L"," || name == L":" || name == L";" || name == L" " ||
+            name == L"quad" || name == L"qquad" || name == L"enspace" || name == L"!") {
+            const int width = name == L"qquad" ? px * 2 : name == L"quad" ? px
+                : name == L"enspace" ? px / 2 : name == L"!" ? 0
+                : name == L"," ? std::max(1,px / 6) : std::max(2,px / 3);
+            return Space(width,name == L"!" ? L"" : L" ");
+        }
+        if (name == L"displaystyle" || name == L"textstyle" || name == L"scriptstyle" ||
+            name == L"scriptscriptstyle" || name == L"nonumber" || name == L"notag") return {};
+        if (name == L"label") { RawGroup(); return {}; }
+        if (name == L"tag") return Delimit(Child(RawGroup(),px,0),L"(",L")",px);
+        if (name == L"color" || name == L"textcolor") {
+            RawGroup();
+            return name == L"textcolor" ? Argument(px,style) : MathLayout{};
+        }
+        static const PCWSTR functions[] = {L"sin",L"cos",L"tan",L"cot",L"sec",L"csc",
+            L"arcsin",L"arccos",L"arctan",L"sinh",L"cosh",L"tanh",L"log",L"ln",L"exp",
+            L"det",L"dim",L"gcd",L"ker",L"Pr",L"max",L"min",L"sup",L"inf",L"lim",L"limsup",L"liminf"};
+        for (PCWSTR function : functions) if (name == function) {
+            auto result = Text(painter_,name,px,0);
+            result.limits = display_ && (name == L"lim" || name == L"limsup" || name == L"liminf" ||
+                                         name == L"max" || name == L"min" || name == L"sup" || name == L"inf");
+            return result;
+        }
+        const std::wstring symbol = Symbol(name);
+        if (!symbol.empty()) {
+            const bool large = name == L"sum" || name == L"prod" || name == L"coprod" ||
+                name == L"bigcup" || name == L"bigcap" || name == L"int" || name == L"iint" ||
+                name == L"iiint" || name == L"oint";
+            auto result = Text(painter_,symbol,large && display_ ? px * 3 / 2 : px,0);
+            result.limits = large && display_ && name.find(L"int") == std::wstring::npos;
+            if (name == L"pm" || name == L"mp" || name == L"times" || name == L"cdot" ||
+                name == L"le" || name == L"leq" || name == L"ge" || name == L"geq" ||
+                name == L"ne" || name == L"neq" || name == L"approx" || name == L"to" ||
+                name == L"rightarrow")
+                return Row({Space(std::max(1,px / 7),L""),result,Space(std::max(1,px / 7),L"")});
+            return result;
+        }
+        if (name == L"\\") return Space(std::max(2,px / 2));
+        if (name.size() == 1 && iswpunct(name[0])) return Text(painter_,name,px,0);
+        // Unsupported macros stay visible rather than silently discarding their meaning.
+        return Text(painter_,L"\\" + name,px,0);
+    }
+
+    const std::wstring& source_;
+    TextPainter& painter_;
+    bool display_;
+    int depth_;
+    int atomDepth_ = 0;
+    size_t pos_ = 0;
+};
+
+} // namespace formula
+
+MathLayout LayoutMath(const std::wstring& source,int px,TextPainter& painter,bool display = false) {
+    // Formula text comes from streamed model responses; malformed groups must stay bounded.
+    const std::wstring bounded = source.substr(0,32768);
+    auto result = formula::Parser(bounded,painter,display).Parse(std::clamp(px,7,256));
+    if (result.height == 0) {
+        const auto font = g_mathFonts.Get(px);
+        result.height = font.height; result.baseline = font.ascent;
+    }
+    return result;
+}
+
+void DrawMath(Surface& surface,TextPainter& painter,const MathLayout& layout,
+              int x,int y,Color color,const RECT& clip) {
+    const RECT bounds{0,0,surface.Width(),surface.Height()};
+    RECT visible;
+    if (!IntersectRect(&visible,&bounds,&clip)) return;
+    for (const MathGlyph& glyph : layout.glyphs) {
+        const RECT rect{x + glyph.x,y + glyph.y,x + glyph.x + glyph.width + 1,y + glyph.y + glyph.height};
+        RECT glyphClip;
+        if (IntersectRect(&glyphClip,&rect,&visible))
+            painter.Draw(surface,glyph.font,glyph.text,rect,glyphClip,DT_SINGLELINE | DT_LEFT,color);
+    }
+    for (const MathRule& rule : layout.rules) {
+        const Vec2 a{rule.x1 + x,rule.y1 + y},b{rule.x2 + x,rule.y2 + y};
+        const float left = std::max(static_cast<float>(visible.left),std::min(a.x,b.x) - rule.width);
+        const float top = std::max(static_cast<float>(visible.top),std::min(a.y,b.y) - rule.width);
+        const float right = std::min(static_cast<float>(visible.right),std::max(a.x,b.x) + rule.width);
+        const float bottom = std::min(static_cast<float>(visible.bottom),std::max(a.y,b.y) + rule.width);
+        if (right <= left || bottom <= top) continue;
+        FillShape(surface,left,top,right,bottom,
+            [&](float px,float py) { return SdSegment({px,py},a,b) - rule.width * 0.5f; },
+            [&](float,float) { return color; });
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // Icons, drawn on a 16x16 design grid centered at (cx, cy)
 
-enum class Icon { Close, Copy, Search, External, Send, Plus, Translate };
+enum class Icon { Close, Copy, Save, Search, External, Send, Plus, Translate };
 
 void DrawIcon(Surface& s, Icon icon, float cx, float cy, float scale, Color c) {
     const float u = scale;  // One design unit.
@@ -4688,6 +5439,14 @@ void DrawIcon(Surface& s, Icon icon, float cx, float cy, float scale, Color c) {
             StrokeLine(s, P(2, 4), P(4, 2), w * 0.9f, c);
             break;
         }
+        case Icon::Save:
+            StrokeLine(s, P(8, 2), P(8, 10), w, c);
+            StrokeLine(s, P(4.5f, 6.5f), P(8, 10), w, c);
+            StrokeLine(s, P(8, 10), P(11.5f, 6.5f), w, c);
+            StrokeLine(s, P(2.5f, 10.5f), P(2.5f, 14), w, c);
+            StrokeLine(s, P(2.5f, 14), P(13.5f, 14), w, c);
+            StrokeLine(s, P(13.5f, 14), P(13.5f, 10.5f), w, c);
+            break;
         case Icon::Search: {
             Vec2 center = P(7, 7);
             StrokeCircle(s, center.x, center.y, 4.6f * u, w, c);
@@ -4724,6 +5483,7 @@ void DrawIcon(Surface& s, Icon icon, float cx, float cy, float scale, Color c) {
 enum class Glyph : wchar_t {
     Close = 0xE711,
     Copy = 0xE8C8,
+    Save = 0xE896,
     Search = 0xE721,
     OpenInNew = 0xE8A7,
     Send = 0xE725,
@@ -4754,6 +5514,9 @@ void DrawGlyph(Surface& s,
     switch (glyph) {
         case Glyph::Close:
             icon = Icon::Close;
+            break;
+        case Glyph::Save:
+            icon = Icon::Save;
             break;
         case Glyph::Search:
         case Glyph::Camera:
@@ -8508,6 +9271,117 @@ bool EncodePng(const Image& image, std::vector<uint8_t>& out) {
     return EncodeImage(image, out, false);
 }
 
+std::wstring ScreenshotFolder(const std::wstring& configuredFolder) {
+    std::wstring folder = configuredFolder;
+    if (folder.empty()) {
+        // Use the known folder so redirected Pictures/OneDrive locations work.
+        constexpr GUID screenshotsId = {
+            0xb7bede81, 0xdf94, 0x4682, {0xa7, 0xd8, 0x57, 0xa5, 0x26, 0x20, 0xb8, 0x6f}};
+        PWSTR path = nullptr;
+        const HRESULT result = SHGetKnownFolderPath(screenshotsId, KF_FLAG_CREATE,
+                                                    nullptr, &path);
+        if (SUCCEEDED(result) && path) {
+            folder = path;
+        }
+        CoTaskMemFree(path);
+        if (folder.empty()) {
+            // Screenshots wasn't a known folder on Windows 7.
+            const OsVersion& version = GetOsVersion();
+            if (version.major > 6 || (version.major == 6 && version.minor > 1)) {
+                return {};
+            }
+            WCHAR pictures[MAX_PATH];
+            if (FAILED(SHGetFolderPathW(nullptr, CSIDL_MYPICTURES | CSIDL_FLAG_CREATE,
+                                       nullptr, SHGFP_TYPE_CURRENT, pictures))) {
+                return {};
+            }
+            folder = std::wstring(pictures) + L"\\Screenshots";
+        }
+    } else {
+        if (folder.size() >= 2 && folder.front() == L'"' && folder.back() == L'"') {
+            folder = folder.substr(1, folder.size() - 2);
+        }
+        const DWORD required = ExpandEnvironmentStringsW(folder.c_str(), nullptr, 0);
+        if (!required || required > 32768) {
+            return {};
+        }
+        std::vector<WCHAR> expanded(required);
+        const DWORD length = ExpandEnvironmentStringsW(folder.c_str(), expanded.data(), required);
+        if (!length || length > required) {
+            return {};
+        }
+        folder.assign(expanded.data());
+    }
+    std::replace(folder.begin(), folder.end(), L'/', L'\\');
+    const bool drivePath = folder.size() >= 3 && iswalpha(folder[0]) &&
+                           folder[1] == L':' && folder[2] == L'\\';
+    const bool uncPath = folder.size() > 2 && folder[0] == L'\\' && folder[1] == L'\\';
+    if (!drivePath && !uncPath) {
+        return {};  // Never save relative to the Windhawk working directory.
+    }
+    const int created = SHCreateDirectoryExW(nullptr, folder.c_str(), nullptr);
+    if (created != ERROR_SUCCESS && created != ERROR_ALREADY_EXISTS &&
+        created != ERROR_FILE_EXISTS) {
+        return {};
+    }
+    const DWORD attributes = GetFileAttributesW(folder.c_str());
+    if (attributes == INVALID_FILE_ATTRIBUTES || !(attributes & FILE_ATTRIBUTE_DIRECTORY)) {
+        return {};
+    }
+    return folder;
+}
+
+bool SaveScreenshot(const Image& image, const std::wstring& configuredFolder,
+                    std::wstring& savedPath) {
+    savedPath.clear();
+    if (image.width <= 0 || image.height <= 0 ||
+        static_cast<uint64_t>(image.width) * image.height > UINT_MAX / 4 ||
+        image.pixels.size() != static_cast<size_t>(image.width) * image.height) {
+        return false;
+    }
+    std::vector<uint8_t> png;
+    if (!EncodePng(image, png) || png.size() > MAXDWORD) {
+        return false;
+    }
+    std::wstring folder = ScreenshotFolder(configuredFolder);
+    if (folder.empty()) {
+        return false;
+    }
+    if (folder.back() != L'\\') {
+        folder += L'\\';
+    }
+    SYSTEMTIME time{};
+    GetLocalTime(&time);
+    WCHAR name[80];
+    swprintf(name, ARRAYSIZE(name), L"Magic Pointer %04u-%02u-%02u %02u%02u%02u-%03u",
+             time.wYear, time.wMonth, time.wDay, time.wHour, time.wMinute,
+             time.wSecond, time.wMilliseconds);
+    for (unsigned attempt = 0; attempt < 1000; attempt++) {
+        const std::wstring path = folder + name +
+            (attempt ? L"-" + std::to_wstring(attempt) : L"") + L".png";
+        HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ,
+                                  nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (file == INVALID_HANDLE_VALUE) {
+            const DWORD error = GetLastError();
+            if (error == ERROR_FILE_EXISTS || error == ERROR_ALREADY_EXISTS) {
+                continue;
+            }
+            return false;
+        }
+        DWORD written = 0;
+        const bool ok = WriteFile(file, png.data(), static_cast<DWORD>(png.size()),
+                                  &written, nullptr) && written == png.size();
+        CloseHandle(file);
+        if (!ok) {
+            DeleteFileW(path.c_str());
+            return false;
+        }
+        savedPath = path;
+        return true;
+    }
+    return false;
+}
+
 bool OpenClipboardWithRetry(HWND owner) {
     for (int attempt = 0; attempt < 10; attempt++) {
         if (OpenClipboard(owner)) {
@@ -10776,7 +11650,8 @@ std::string SystemInstruction(const AiJob& job) {
             "question without selecting anything on their screen, so there is "
             "no image. Answer directly and concisely, in the language they "
             "write in. Prefer short paragraphs and bullet points, use bold "
-            "sparingly and no tables. When asked to translate, reply with only "
+            "sparingly. Use Markdown, fenced code blocks with a language label, "
+            "and tables when helpful. When asked to translate, reply with only "
             "the translation, written in the language they name, keeping its "
             "line breaks.";
     } else {
@@ -10787,13 +11662,18 @@ std::string SystemInstruction(const AiJob& job) {
             "selected it; the attached image is exactly what they selected. "
             "Answer their request about it directly and concisely, in the "
             "language they write in. Prefer short paragraphs and bullet "
-            "points, use bold sparingly and no tables. If the request is "
+            "points and use Markdown, fenced code blocks with a language label, "
+            "and tables when helpful. If the request is "
             "vague, briefly say what the selection shows and the most useful "
             "thing you can tell them about it. When asked to translate, "
             "translate all the text in the selection into the language they "
             "name and reply with only that translation, written in that "
             "language whatever language the request is in, keeping its line "
             "breaks.";
+    }
+    if (!job.suggestions) {
+        text += " Use $...$ for inline math and $$...$$ for display equations. "
+                "Write chemistry as \\ce{...} inside math delimiters.";
     }
     if (!job.context.empty()) {
         text += "\n\nText in the selection, from the app and from text "
@@ -12006,6 +12886,7 @@ struct CardTurn {
     bool streaming = false;
     bool error = false;
     std::wstring errorText = {};  // Status after a preserved partial answer.
+    std::wstring prompt = {};  // The actual user prompt, including translation instructions.
 };
 
 enum class ChipAction { Ask, AskInBrowser, Lens, CopyImage, CopyText };
@@ -12016,111 +12897,499 @@ struct Chip {
 };
 
 struct TextBlock {
-    enum class Kind { Paragraph, Heading, Bullet, Code };
+    enum class Kind { Paragraph, Heading, Bullet, Code, Quote, Rule, Table, Math };
     Kind kind;
     std::wstring bullet;
     std::wstring text;
+    int level = 0;
+    std::wstring language;
+    std::vector<std::vector<std::wstring>> rows;
+    std::vector<int> align;  // -1 = left, 0 = center, 1 = right.
+    int quoteDepth = 0;
 };
 
-std::wstring StripInlineMarkdown(const std::wstring& line) {
-    std::wstring out;
-    out.reserve(line.size());
-    for (size_t i = 0; i < line.size(); i++) {
-        const wchar_t c = line[i];
-        if ((c == L'*' || c == L'_') && i + 1 < line.size() && line[i + 1] == c) {
-            i++;
-            continue;
+enum InlineStyle { InlineBold = 1, InlineItalic = 2, InlineCode = 4, InlineStrike = 8 };
+
+struct InlineSpan {
+    std::wstring text;
+    int style = 0;
+    std::wstring link;
+    std::wstring math;
+    bool displayMath = false;
+    std::shared_ptr<MathLayout> formula;
+    std::shared_ptr<Image> fittedMath;
+};
+
+struct MarkdownMath {
+    size_t end = 0;
+    std::wstring source;
+    bool display = false;
+};
+
+bool ReadMarkdownMath(const std::wstring& text, size_t start, MarkdownMath& token) {
+    if (start >= text.size()) return false;
+    std::wstring close;
+    size_t opening = 0;
+    bool dollars = false;
+    if (text[start] == L'$') {
+        dollars = true;
+        opening = start + 1 < text.size() && text[start + 1] == L'$' ? 2 : 1;
+        close.assign(opening, L'$');
+        if (opening == 1 && (start + 1 == text.size() || iswspace(text[start + 1]))) return false;
+    } else if (text.compare(start, 2, L"\\(") == 0 || text.compare(start, 2, L"\\[") == 0) {
+        opening = 2;
+        close = text[start + 1] == L'(' ? L"\\)" : L"\\]";
+    } else if (text.compare(start, 4, L"\\ce{") == 0 || text.compare(start, 4, L"\\pu{") == 0) {
+        int depth = 1;
+        for (size_t i = start + 4; i < text.size(); i++) {
+            if (text[i] == L'\\' && i + 1 < text.size()) { i++; continue; }
+            if (text[i] == L'{') depth++;
+            if (text[i] == L'}' && --depth == 0) {
+                token = {i + 1, text.substr(start, i + 1 - start), false};
+                return true;
+            }
         }
-        if (c == L'`') {
-            continue;
+        return false;
+    } else {
+        return false;
+    }
+    int braces = 0;
+    for (size_t i = start + opening; i < text.size(); i++) {
+        if (braces == 0 && text.compare(i, close.size(), close) == 0) {
+            if (dollars && opening == 1 &&
+                (i == start + opening || iswspace(text[i - 1]) ||
+                 (i + 1 < text.size() && (iswdigit(text[i + 1]) || text[i + 1] == L'$')))) continue;
+            token = {i + close.size(), text.substr(start + opening, i - start - opening),
+                     opening == 2 && (dollars || text[start + 1] == L'[')};
+            return !Trim(token.source).empty();
         }
-        if (c == L']' && i + 1 < line.size() && line[i + 1] == L'(') {
-            const size_t close = line.find(L')', i + 2);
-            const size_t open = out.rfind(L'[');
-            if (close != std::wstring::npos && open != std::wstring::npos) {
-                out.erase(open, 1);
-                i = close;
+        if (text[i] == L'\\' && i + 1 < text.size()) { i++; continue; }
+        if (text[i] == L'{') braces++;
+        if (text[i] == L'}' && braces > 0) braces--;
+        if (opening == 1 && text[i] == L'\n') return false;
+    }
+    return false;
+}
+
+std::vector<std::wstring> MarkdownLogicalLines(const std::wstring& text) {
+    std::vector<std::wstring> lines;
+    std::wstring line;
+    wchar_t fenceChar = 0;
+    size_t fenceLength = 0;
+    for (size_t i = 0; i < text.size();) {
+        if (line.empty()) {
+            const size_t end = text.find(L'\n', i);
+            std::wstring physical = text.substr(i, end == std::wstring::npos ? text.size() - i : end - i);
+            if (!physical.empty() && physical.back() == L'\r') physical.pop_back();
+            const std::wstring trimmed = Trim(physical);
+            size_t length = 0;
+            if (!trimmed.empty() && (trimmed[0] == L'`' || trimmed[0] == L'~')) {
+                while (length < trimmed.size() && trimmed[length] == trimmed[0]) length++;
+            }
+            if (fenceLength || length >= 3) {
+                if (!fenceLength) { fenceChar = trimmed[0]; fenceLength = length; }
+                else if (length >= fenceLength && trimmed[0] == fenceChar && Trim(trimmed.substr(length)).empty()) fenceLength = 0;
+                lines.push_back(std::move(physical));
+                if (end == std::wstring::npos) return lines;
+                i = end + 1;
                 continue;
             }
         }
-        out += c;
+        if (text[i] == L'`') {
+            size_t count = 1;
+            while (i + count < text.size() && text[i + count] == L'`') count++;
+            const size_t end = text.find(std::wstring(count, L'`'), i + count);
+            if (end != std::wstring::npos && text.find(L'\n', i) > end) {
+                line += text.substr(i, end + count - i); i = end + count; continue;
+            }
+        }
+        MarkdownMath math;
+        if (ReadMarkdownMath(text, i, math)) {
+            line += text.substr(i, math.end - i); i = math.end; continue;
+        }
+        if (text[i] == L'\\' && i + 1 < text.size() && text[i + 1] != L'\n') {
+            line += text.substr(i, 2); i += 2; continue;
+        }
+        if (text[i] == L'\n') {
+            if (!line.empty() && line.back() == L'\r') line.pop_back();
+            lines.push_back(std::move(line)); line.clear(); i++;
+        } else {
+            line += text[i++];
+        }
     }
-    return out;
+    lines.push_back(std::move(line));
+    return lines;
 }
 
-std::vector<TextBlock> ParseMarkdown(const std::wstring& text) {
-    std::vector<TextBlock> blocks;
-    bool inCode = false;
-    std::wstring code;
-    size_t start = 0;
-    for (;;) {
-        size_t end = text.find(L'\n', start);
-        const bool last = end == std::wstring::npos;
-        if (last) {
-            end = text.size();
-        }
-        std::wstring line = text.substr(start, end - start);
-        start = end + 1;
-        if (!line.empty() && line.back() == L'\r') {
-            line.pop_back();
-        }
-        const std::wstring trimmed = Trim(line);
+bool IsSafeResponseLink(const std::wstring& url) {
+    for (wchar_t c : url) {
+        if (c <= L' ' || c == L'"' || c == L'\'') return false;
+    }
+    const std::wstring lower = Lowercase(url);
+    return (lower.rfind(L"https://", 0) == 0 && url.size() > 8) ||
+           (lower.rfind(L"http://", 0) == 0 && url.size() > 7) ||
+           (lower.rfind(L"mailto:", 0) == 0 && url.size() > 7);
+}
 
-        if (trimmed.rfind(L"```", 0) == 0) {
-            if (inCode) {
-                if (!code.empty() && code.back() == L'\n') {
-                    code.pop_back();
-                }
-                blocks.push_back({TextBlock::Kind::Code, L"", code});
-                code.clear();
-            }
-            inCode = !inCode;
-        } else if (inCode) {
-            code += line + L"\n";
-        } else if (trimmed.empty()) {
-            // Blank lines only separate blocks.
-        } else if (trimmed[0] == L'#') {
-            size_t level = 0;
-            while (level < trimmed.size() && trimmed[level] == L'#') {
-                level++;
-            }
-            blocks.push_back({TextBlock::Kind::Heading, L"",
-                              StripInlineMarkdown(Trim(trimmed.substr(level)))});
-        } else if (trimmed.size() > 2 &&
-                   (trimmed[0] == L'-' || trimmed[0] == L'*' ||
-                    trimmed[0] == L'\x2022') &&
-                   trimmed[1] == L' ') {
-            blocks.push_back({TextBlock::Kind::Bullet, L"\x2022",
-                              StripInlineMarkdown(Trim(trimmed.substr(2)))});
+std::vector<InlineSpan> ParseInlineMarkdown(const std::wstring& text,
+                                          int style = 0, int depth = 0) {
+    std::vector<InlineSpan> spans;
+    auto append = [&](const std::wstring& value, int flags, const std::wstring& link = L"") {
+        if (value.empty()) return;
+        if (!spans.empty() && spans.back().math.empty() &&
+            spans.back().style == flags && spans.back().link == link) {
+            spans.back().text += value;
         } else {
-            size_t digits = 0;
-            while (digits < trimmed.size() && iswdigit(trimmed[digits])) {
-                digits++;
-            }
-            if (digits > 0 && digits < 4 && digits + 1 < trimmed.size() &&
-                (trimmed[digits] == L'.' || trimmed[digits] == L')') &&
-                trimmed[digits + 1] == L' ') {
-                blocks.push_back(
-                    {TextBlock::Kind::Bullet, trimmed.substr(0, digits + 1),
-                     StripInlineMarkdown(Trim(trimmed.substr(digits + 2)))});
-            } else {
-                std::wstring paragraph = trimmed;
-                if (paragraph.rfind(L"> ", 0) == 0) {
-                    paragraph.erase(0, 2);
-                }
-                blocks.push_back({TextBlock::Kind::Paragraph, L"",
-                                  StripInlineMarkdown(paragraph)});
+            spans.push_back({value, flags, link});
+        }
+    };
+    auto appendSpan = [&](InlineSpan span) {
+        if (span.math.empty()) append(span.text, span.style, span.link);
+        else spans.push_back(std::move(span));
+    };
+    for (size_t i = 0; i < text.size();) {
+        MarkdownMath math;
+        if (ReadMarkdownMath(text, i, math)) {
+            InlineSpan span{math.source, style, L""};
+            span.math = math.source;
+            span.displayMath = math.display;
+            spans.push_back(std::move(span));
+            i = math.end;
+            continue;
+        }
+        if ((text.compare(i, 2, L"\\(") == 0 || text.compare(i, 2, L"\\[") == 0)) {
+            append(text.substr(i, 2), style); i += 2; continue;
+        }
+        if (text[i] == L'\\' && i + 1 < text.size() && iswpunct(text[i + 1])) {
+            append(text.substr(i + 1, 1), style);
+            i += 2;
+            continue;
+        }
+        if (text[i] == L'`') {
+            size_t count = 1;
+            while (i + count < text.size() && text[i + count] == L'`') count++;
+            const std::wstring marker(count, L'`');
+            const size_t end = text.find(marker, i + count);
+            if (end != std::wstring::npos) {
+                append(text.substr(i + count, end - i - count), style | InlineCode);
+                i = end + count;
+                continue;
             }
         }
-        if (last) {
-            break;
+        // Images use their alternative text; remote content is never fetched.
+        const bool image = text[i] == L'!' && i + 1 < text.size() && text[i + 1] == L'[';
+        const size_t bracket = image ? i + 1 : i;
+        if (text[bracket] == L'[' && depth < 8) {
+            const size_t labelEnd = text.find(L"](", bracket + 1);
+            if (labelEnd != std::wstring::npos) {
+                size_t end = labelEnd + 2;
+                int nesting = 1;
+                for (; end < text.size(); end++) {
+                    if (text[end] == L'\\' && end + 1 < text.size()) { end++; continue; }
+                    if (text[end] == L'(') nesting++;
+                    if (text[end] == L')' && --nesting == 0) break;
+                }
+                if (end < text.size()) {
+                    std::wstring url = Trim(text.substr(labelEnd + 2, end - labelEnd - 2));
+                    const size_t title = url.find_first_of(L" \t\r\n");
+                    if (title != std::wstring::npos) url.resize(title);
+                    if (url.size() > 1 && url.front() == L'<' && url.back() == L'>') {
+                        url = url.substr(1, url.size() - 2);
+                    }
+                    for (InlineSpan span : ParseInlineMarkdown(
+                             text.substr(bracket + 1, labelEnd - bracket - 1), style, depth + 1)) {
+                        span.link = !image && IsSafeResponseLink(url) ? url : L"";
+                        appendSpan(std::move(span));
+                    }
+                    i = end + 1;
+                    continue;
+                }
+            }
+        }
+        if (text[i] == L'<') {
+            const size_t end = text.find(L'>', i + 1);
+            if (end != std::wstring::npos) {
+                const std::wstring url = text.substr(i + 1, end - i - 1);
+                if (IsSafeResponseLink(url)) {
+                    append(url, style, url);
+                    i = end + 1;
+                    continue;
+                }
+            }
+        }
+        if ((text.compare(i, 8, L"https://") == 0 || text.compare(i, 7, L"http://") == 0) &&
+            (i == 0 || iswspace(text[i - 1]) || text[i - 1] == L'(')) {
+            size_t end = i;
+            while (end < text.size() && !iswspace(text[end]) && text[end] != L'<' &&
+                   text[end] != L'>' && text[end] != L'"') end++;
+            while (end > i && wcschr(L".,;:!?", text[end - 1])) end--;
+            if (end > i && text[end - 1] == L')') {
+                int balance = 0;
+                for (size_t p = i; p < end; p++) balance += (text[p] == L'(') - (text[p] == L')');
+                while (end > i && text[end - 1] == L')' && balance++ < 0) end--;
+            }
+            const std::wstring url = text.substr(i, end - i);
+            if (IsSafeResponseLink(url)) {
+                append(url, style, url);
+                i = end;
+                continue;
+            }
+        }
+        if (depth < 8 && (text[i] == L'*' || text[i] == L'_' || text[i] == L'~')) {
+            const wchar_t c = text[i];
+            size_t count = i + 1 < text.size() && text[i + 1] == c ? 2 : 1;
+            if (c != L'~' && count == 2 && i + 2 < text.size() && text[i + 2] == c) count = 3;
+            const bool insideWord = c == L'_' && i > 0 && iswalnum(text[i - 1]);
+            if (!insideWord && (c != L'~' || count == 2) &&
+                i + count < text.size() && !iswspace(text[i + count])) {
+                const std::wstring marker(count, c);
+                size_t end = i + count;
+                for (; end < text.size(); end++) {
+                    MarkdownMath expression;
+                    if (ReadMarkdownMath(text, end, expression)) { end = expression.end - 1; continue; }
+                    if (text[end] == L'`') {
+                        size_t ticks = 1;
+                        while (end + ticks < text.size() && text[end + ticks] == L'`') ticks++;
+                        const size_t closing = text.find(std::wstring(ticks, L'`'), end + ticks);
+                        if (closing != std::wstring::npos) { end = closing + ticks - 1; continue; }
+                    }
+                    if (text.compare(end, count, marker) == 0 && end > i + count &&
+                        !iswspace(text[end - 1]) && text[end - 1] != L'\\') break;
+                }
+                if (end < text.size()) {
+                    const int flag = c == L'~' ? InlineStrike : count == 3 ? InlineBold | InlineItalic
+                                                              : count == 2 ? InlineBold : InlineItalic;
+                    for (const InlineSpan& span : ParseInlineMarkdown(
+                             text.substr(i + count, end - i - count), style | flag, depth + 1)) {
+                        appendSpan(span);
+                    }
+                    i = end + count;
+                    continue;
+                }
+            }
+        }
+        if (text[i] == L'&') {
+            static const std::pair<PCWSTR, PCWSTR> entities[] = {
+                {L"&amp;", L"&"}, {L"&lt;", L"<"}, {L"&gt;", L">"},
+                {L"&quot;", L"\""}, {L"&#39;", L"'"}, {L"&nbsp;", L" "}};
+            bool decoded = false;
+            for (const auto& entity : entities) {
+                const size_t size = wcslen(entity.first);
+                if (text.compare(i, size, entity.first) == 0) {
+                    append(entity.second, style);
+                    i += size;
+                    decoded = true;
+                    break;
+                }
+            }
+            if (decoded) continue;
+        }
+        append(text.substr(i++, 1), style);
+    }
+    return spans;
+}
+
+std::vector<std::wstring> MarkdownCells(std::wstring line) {
+    line = Trim(line);
+    if (!line.empty() && line.front() == L'|') line.erase(0, 1);
+    if (!line.empty() && line.back() == L'|' &&
+        (line.size() < 2 || line[line.size() - 2] != L'\\')) line.pop_back();
+    std::vector<std::wstring> cells;
+    std::wstring cell;
+    size_t fence = 0;
+    for (size_t i = 0; i < line.size(); i++) {
+        MarkdownMath math;
+        if (fence == 0 && ReadMarkdownMath(line, i, math)) {
+            cell += line.substr(i, math.end - i); i = math.end - 1; continue;
+        }
+        if (line[i] == L'\\' && i + 1 < line.size()) {
+            cell += line[i++];
+            cell += line[i];
+        } else if (line[i] == L'`') {
+            size_t count = 1;
+            while (i + count < line.size() && line[i + count] == L'`') count++;
+            if (fence == 0) fence = count;
+            else if (fence == count) fence = 0;
+            cell.append(count, L'`');
+            i += count - 1;
+        } else if (line[i] == L'|' && fence == 0) {
+            cells.push_back(Trim(cell));
+            cell.clear();
+        } else {
+            cell += line[i];
         }
     }
-    if (inCode && !code.empty()) {
-        if (code.back() == L'\n') {
-            code.pop_back();
+    cells.push_back(Trim(cell));
+    return cells;
+}
+
+bool MarkdownTableDivider(const std::wstring& line, std::vector<int>& align) {
+    align.clear();
+    for (std::wstring cell : MarkdownCells(line)) {
+        const bool left = !cell.empty() && cell.front() == L':';
+        const bool right = !cell.empty() && cell.back() == L':';
+        if (left) cell.erase(0, 1);
+        if (right && !cell.empty()) cell.pop_back();
+        if (cell.size() < 3 || cell.find_first_not_of(L'-') != std::wstring::npos) return false;
+        align.push_back(left && right ? 0 : right ? 1 : -1);
+    }
+    return !align.empty();
+}
+
+bool MarkdownRule(const std::wstring& line) {
+    wchar_t marker = 0;
+    int count = 0;
+    for (wchar_t c : line) {
+        if (c == L' ' || c == L'\t') continue;
+        if (!marker && (c == L'*' || c == L'-' || c == L'_')) marker = c;
+        if (c != marker || !marker) return false;
+        count++;
+    }
+    return count >= 3;
+}
+
+std::vector<TextBlock> ParseMarkdown(const std::wstring& text, int nesting = 0) {
+    std::vector<std::wstring> lines = MarkdownLogicalLines(text);
+
+    std::vector<TextBlock> blocks;
+    bool joinParagraph = false;
+    for (size_t i = 0; i < lines.size(); i++) {
+        const std::wstring line = Trim(lines[i]);
+        if (line.empty()) { joinParagraph = false; continue; }
+        if (line[0] == L'>' && nesting < 8) {
+            std::wstring quoted;
+            for (; i < lines.size(); i++) {
+                std::wstring part = Trim(lines[i]);
+                if (!part.empty() && part[0] == L'>') {
+                    part.erase(0, 1);
+                    if (!part.empty() && part[0] == L' ') part.erase(0, 1);
+                    // Logical lines keep multiline math together; remove the matching
+                    // outer quote marker from each physical continuation as well.
+                    for (size_t newline = part.find(L'\n'); newline != std::wstring::npos;
+                         newline = part.find(L'\n', newline + 1)) {
+                        size_t marker = newline + 1;
+                        while (marker < part.size() && (part[marker] == L' ' || part[marker] == L'\t')) marker++;
+                        if (marker < part.size() && part[marker] == L'>') {
+                            part.erase(marker, 1);
+                            if (marker < part.size() && part[marker] == L' ') part.erase(marker, 1);
+                        }
+                    }
+                } else {
+                    const bool blockStart = part.empty() || MarkdownRule(part) || part[0] == L'#' ||
+                        part.rfind(L"```", 0) == 0 || part.rfind(L"~~~", 0) == 0 ||
+                        (part.size() > 1 && wcschr(L"-*+", part[0]) && iswspace(part[1]));
+                    if (blockStart) break;
+                }
+                if (!quoted.empty()) quoted += L'\n';
+                quoted += part;
+            }
+            i--;
+            for (TextBlock block : ParseMarkdown(quoted, nesting + 1)) {
+                block.quoteDepth++;
+                if (block.kind == TextBlock::Kind::Paragraph) block.kind = TextBlock::Kind::Quote;
+                if (block.kind == TextBlock::Kind::Quote) block.level = block.quoteDepth;
+                blocks.push_back(std::move(block));
+            }
+            joinParagraph = false;
+            continue;
         }
-        blocks.push_back({TextBlock::Kind::Code, L"", code});
+        size_t fence = 0;
+        if (line[0] == L'`' || line[0] == L'~') {
+            while (fence < line.size() && line[fence] == line[0]) fence++;
+        }
+        if (fence >= 3) {
+            TextBlock block{TextBlock::Kind::Code, L"", L""};
+            block.language = Trim(line.substr(fence));
+            const std::wstring language = Lowercase(block.language);
+            if (language == L"math" || language == L"chem" || language == L"mhchem") {
+                block.kind = TextBlock::Kind::Math;
+            }
+            for (i++; i < lines.size(); i++) {
+                const std::wstring close = Trim(lines[i]);
+                size_t length = 0;
+                while (length < close.size() && close[length] == line[0]) length++;
+                if (length >= fence && Trim(close.substr(length)).empty()) break;
+                block.text += lines[i];
+                if (i + 1 < lines.size()) block.text += L'\n';
+            }
+            blocks.push_back(std::move(block));
+            joinParagraph = false;
+            continue;
+        }
+        std::vector<int> align;
+        if (i + 1 < lines.size() && line.find(L'|') != std::wstring::npos &&
+            MarkdownTableDivider(lines[i + 1], align) && MarkdownCells(line).size() == align.size()) {
+            TextBlock block{TextBlock::Kind::Table, L"", L""};
+            block.align = std::move(align);
+            block.rows.push_back(MarkdownCells(line));
+            i += 2;
+            for (; i < lines.size() && !Trim(lines[i]).empty() && lines[i].find(L'|') != std::wstring::npos; i++) {
+                auto cells = MarkdownCells(lines[i]);
+                cells.resize(block.align.size());
+                block.rows.push_back(std::move(cells));
+            }
+            i--;
+            blocks.push_back(std::move(block));
+            joinParagraph = false;
+            continue;
+        }
+        size_t heading = 0;
+        while (heading < line.size() && line[heading] == L'#') heading++;
+        if (heading > 0 && heading <= 6 && heading < line.size() && iswspace(line[heading])) {
+            std::wstring value = Trim(line.substr(heading));
+            size_t end = value.size();
+            while (end > 0 && value[end - 1] == L'#') end--;
+            if (end < value.size() && end > 0 && iswspace(value[end - 1])) value = Trim(value.substr(0, end));
+            blocks.push_back({TextBlock::Kind::Heading, L"", value, static_cast<int>(heading)});
+            joinParagraph = false;
+        } else if (i + 1 < lines.size() && !Trim(lines[i + 1]).empty() &&
+                   (Trim(lines[i + 1]).find_first_not_of(L'=') == std::wstring::npos ||
+                    Trim(lines[i + 1]).find_first_not_of(L'-') == std::wstring::npos)) {
+            blocks.push_back({TextBlock::Kind::Heading, L"", line,
+                              Trim(lines[i + 1])[0] == L'=' ? 1 : 2});
+            i++;
+            joinParagraph = false;
+        } else if (MarkdownRule(line)) {
+            blocks.push_back({TextBlock::Kind::Rule, L"", L""});
+            joinParagraph = false;
+        } else {
+            size_t digits = 0;
+            while (digits < line.size() && iswdigit(line[digits])) digits++;
+            const bool ordered = digits > 0 && digits < 10 && digits + 1 < line.size() &&
+                                 (line[digits] == L'.' || line[digits] == L')') && iswspace(line[digits + 1]);
+            const bool bullet = line.size() > 1 && wcschr(L"-*+\x2022", line[0]) && iswspace(line[1]);
+            if (ordered || bullet) {
+                const size_t marker = ordered ? digits + 1 : 1;
+                std::wstring value = Trim(line.substr(marker));
+                std::wstring prefix = ordered ? line.substr(0, marker) : L"\x2022";
+                if (value.size() >= 3 && value[0] == L'[' && value[2] == L']' &&
+                    (value[1] == L' ' || value[1] == L'x' || value[1] == L'X')) {
+                    prefix = value[1] == L' ' ? L"\x2610" : L"\x2611";
+                    value = Trim(value.substr(3));
+                }
+                int indent = 0;
+                for (wchar_t c : lines[i]) {
+                    if (c != L' ' && c != L'\t') break;
+                    indent += c == L'\t' ? 4 : 1;
+                }
+                blocks.push_back({TextBlock::Kind::Bullet, prefix, value, std::min(4, indent / 2)});
+                joinParagraph = false;
+            } else if (!blocks.empty() && blocks.back().kind == TextBlock::Kind::Bullet &&
+                       !lines[i].empty() && iswspace(lines[i][0])) {
+                blocks.back().text += (i > 0 && Trim(lines[i - 1]).empty() ? L"\n\n" : L" ") + line;
+                joinParagraph = false;
+            } else if (joinParagraph && !blocks.empty() && blocks.back().kind == TextBlock::Kind::Paragraph) {
+                const std::wstring& previous = lines[i - 1];
+                const bool hardBreak = previous.size() >= 2 &&
+                    previous.compare(previous.size() - 2, 2, L"  ") == 0;
+                const bool escapedBreak = !previous.empty() && previous.back() == L'\\';
+                if (escapedBreak && !blocks.back().text.empty()) blocks.back().text.pop_back();
+                blocks.back().text += (hardBreak || escapedBreak ? L"\n" : L" ") + line;
+            } else {
+                blocks.push_back({TextBlock::Kind::Paragraph, L"", line});
+                joinParagraph = true;
+            }
+        }
     }
     return blocks;
 }
@@ -12243,11 +13512,16 @@ class AskCard {
         chips_.clear();
         convoItems_.clear();
         answerLines_.clear();
+        richActions_.clear();
         answerText_.clear();
         answerAnchor_ = answerCaret_ = 0;
         answerFocused_ = selectingAnswer_ = false;
         input_.clear();
+        inputLayoutText_.clear();
+        inputLines_.clear();
         caret_ = anchor_ = 0;
+        caretRowHint_ = preferredInputX_ = -1;
+        inputEnsureCaret_ = true;
         inputScroll_ = 0;
         scroll_ = 0;
         status_.clear();
@@ -12332,7 +13606,7 @@ class AskCard {
             answerCaret_ = AnswerIndexAt(answerDragPoint_);
             render = true;
         }
-        if (hover_ != kHitNone && hover_ <= kHitAdd && !tooltipShown_) {
+        if (hover_ != kHitNone && hover_ <= kHitInput && !tooltipShown_) {
             const double wait = kTooltipDelayMs - (now - hoverStart_);
             if (wait <= 0) {
                 tooltipShown_ = true;
@@ -12464,12 +13738,14 @@ class AskCard {
         kHitLens,
         kHitGemini,
         kHitTranslate,
+        kHitSave,
         kHitAdd,
         kHitSend,
         kHitInput,
         kHitConvo,
         kHitChip = 100,        // + chip index.
         kHitCopyAnswer = 200,  // + turn index.
+        kHitRetryAnswer = 100000,  // + latest assistant turn index.
     };
 
     struct HitRect {
@@ -12488,7 +13764,8 @@ class AskCard {
     };
 
     struct ConvoItem {
-        enum class Kind { UserBubble, Text, Thinking, CopyButton, Sparkle };
+        enum class Kind { UserBubble, Text, Thinking, CopyButton, Sparkle,
+                          CodePanel, CodeCopyButton, RetryButton, QuoteBar, Rule, TableCell };
         Kind kind;
         RECT rect;  // In conversation coordinates.
         RECT textRect;
@@ -12498,6 +13775,23 @@ class AskCard {
         Color color;
         int turn;
         bool code;
+        std::vector<InlineSpan> spans = {};
+        int align = -1;
+        int hit = 0;
+        bool header = false;
+    };
+
+    struct AnswerRun {
+        size_t offset;
+        size_t length;
+        HFONT font;
+        Color color;
+        int style;
+        std::wstring link;
+        int top = 0;
+        int height = 0;
+        std::shared_ptr<MathLayout> math;
+        std::shared_ptr<Image> fittedMath;
     };
 
     struct AnswerLine {
@@ -12508,6 +13802,14 @@ class AskCard {
         HFONT font;
         Color color;
         int turn;
+        std::vector<AnswerRun> runs = {};
+        RECT clip = {};
+    };
+
+    struct RichAction {
+        RECT rect;
+        std::wstring text;
+        bool link;
     };
 
     float S(float v) const { return v * scale_; }
@@ -12598,6 +13900,15 @@ class AskCard {
                           ? Tr(Str::ImageCopied)
                           : Tr(Str::ImageCopyFailed),
                       now);
+        }
+    }
+
+    void SaveImage(double now) {
+        if (const Attachment* a = MainAttachment()) {
+            std::wstring path;
+            SetStatus(SaveScreenshot(*a->image, g_settings.screenshotFolder, path)
+                          ? TrFormat(Str::ImageSaved, path)
+                          : Tr(Str::ImageSaveFailed), now);
         }
     }
 
@@ -12741,10 +14052,25 @@ class AskCard {
         }
     }
 
+    bool IsGenerating() const {
+        return !turns_.empty() && turns_.back().streaming;
+    }
+
+    void Retry(size_t turn, double now) {
+        if (IsGenerating() || turn == 0 || turn + 1 != turns_.size() ||
+            turns_[turn].fromUser || !turns_[turn - 1].fromUser || !HasAiKey()) {
+            return;
+        }
+        const CardTurn question = turns_[turn - 1];
+        turns_.resize(turn - 1);
+        ClearAnswerSelection();
+        Submit(question.text, now, true, question.prompt);
+    }
+
     void Submit(std::wstring question, double now, bool keepInput = false,
                 std::wstring prompt = {}) {
         question = Trim(question);
-        if (question.empty() || !open_) {
+        if (question.empty() || !open_ || IsGenerating()) {
             return;
         }
         if (prompt.empty()) {
@@ -12766,13 +14092,14 @@ class AskCard {
         job->context = ToUtf8(ContextText());
         for (size_t i = 0; i + 1 < turns_.size(); i += 2) {
             if (turns_[i].fromUser && !turns_[i + 1].error) {
-                job->history.push_back({true, ToUtf8(turns_[i].text)});
+                job->history.push_back({true, ToUtf8(turns_[i].prompt.empty()
+                                                       ? turns_[i].text : turns_[i].prompt)});
                 job->history.push_back({false, ToUtf8(turns_[i + 1].text)});
             }
         }
         job->history.push_back({true, ToUtf8(prompt)});
 
-        turns_.push_back({true, question, false, false});
+        turns_.push_back({true, question, false, false, {}, prompt});
         turns_.push_back({false, L"", true, false});
         if (!keepInput) {
             input_.clear();
@@ -12799,6 +14126,14 @@ class AskCard {
     }
 
     void Activate(int hit, double now) {
+        if (ActivateRichText(hit, now)) {
+            Update(now);
+            return;
+        }
+        if (hit >= kHitRetryAnswer) {
+            Retry(static_cast<size_t>(hit - kHitRetryAnswer), now);
+            return;
+        }
         if (hit >= kHitCopyAnswer) {
             const size_t turn = static_cast<size_t>(hit - kHitCopyAnswer);
             if (turn < turns_.size()) {
@@ -12838,6 +14173,9 @@ class AskCard {
                 case kHitCopy:
                     CopyImage(now);
                     break;
+                case kHitSave:
+                    SaveImage(now);
+                    break;
                 case kHitCopyText:
                     CopyText(now);
                     break;
@@ -12856,7 +14194,12 @@ class AskCard {
                     }
                     return;
                 case kHitSend:
-                    Submit(input_, now);
+                    if (IsGenerating()) {
+                        CancelChat();
+                        Update(now);
+                    } else {
+                        Submit(input_, now);
+                    }
                     return;
                 default:
                     return;
@@ -12868,19 +14211,54 @@ class AskCard {
     ////////////////////////////////////////////////////////////////////////
     // Text input
 
-    const std::vector<int>& InputExtents() {
-        if (extentsText_ != input_ || extentsFont_ != InputFont()) {
-            extentsText_ = input_;
-            extentsFont_ = InputFont();
-            text_.Extents(extentsFont_, input_, extents_);
-        }
-        return extents_;
+    int InputLineHeight() {
+        return std::max(1L, text_.Measure(InputFont(), L"Mg", 1, DT_SINGLELINE).cy);
     }
 
-    int CaretX(int index) {
-        const std::vector<int>& extents = InputExtents();
-        index = std::clamp(index, 0, static_cast<int>(extents.size()));
-        return index == 0 ? 0 : extents[index - 1];
+    void WrapInput(int width) {
+        width = std::max(1, width);
+        if (inputLayoutText_ == input_ && inputLayoutWidth_ == width &&
+            inputLayoutFont_ == InputFont() && !inputLines_.empty()) {
+            return;
+        }
+        caretRowHint_ = -1;
+        inputEnsureCaret_ = true;
+        inputLayoutText_ = input_;
+        inputLayoutWidth_ = width;
+        inputLayoutFont_ = InputFont();
+        inputLines_ = text_.Wrap(InputFont(), input_, width);
+        if (inputLines_.empty() || (!input_.empty() && input_.back() == L'\n')) {
+            inputLines_.push_back({input_.size(), 0, {}});
+        }
+    }
+
+    size_t InputRow(int index) const {
+        if (index == caret_ && caretRowHint_ >= 0 &&
+            static_cast<size_t>(caretRowHint_) < inputLines_.size()) {
+            const WrappedTextLine& line = inputLines_[caretRowHint_];
+            if (index >= static_cast<int>(line.start) &&
+                index <= static_cast<int>(line.start + line.length)) {
+                return static_cast<size_t>(caretRowHint_);
+            }
+        }
+        size_t row = 0;
+        while (row + 1 < inputLines_.size() &&
+               inputLines_[row + 1].start <= static_cast<size_t>(index)) {
+            row++;
+        }
+        return row;
+    }
+
+    int InputX(const WrappedTextLine& line, int index) const {
+        const size_t offset = static_cast<size_t>(std::clamp(
+            index - static_cast<int>(line.start), 0, static_cast<int>(line.length)));
+        return offset ? line.extents[offset - 1] : 0;
+    }
+
+    POINT InputCaretPoint() {
+        const size_t row = InputRow(caret_);
+        return {inputText_.left + InputX(inputLines_[row], caret_),
+                inputText_.top + static_cast<int>(row) * InputLineHeight() - inputScroll_};
     }
 
     int PrevChar(int i) const {
@@ -12930,6 +14308,9 @@ class AskCard {
     }
 
     void DeleteSelection() {
+        caretRowHint_ = -1;
+        preferredInputX_ = -1;
+        inputEnsureCaret_ = true;
         if (anchor_ != caret_) {
             const int a = std::min(anchor_, caret_);
             const int b = std::max(anchor_, caret_);
@@ -12939,41 +14320,70 @@ class AskCard {
     }
 
     void InsertText(std::wstring text) {
-        for (wchar_t& c : text) {
-            if (c == L'\r' || c == L'\n' || c == L'\t') {
-                c = L' ';
+        std::wstring normalized;
+        normalized.reserve(text.size());
+        for (size_t i = 0; i < text.size(); i++) {
+            if (text[i] == L'\r') {
+                normalized += L'\n';
+                if (i + 1 < text.size() && text[i + 1] == L'\n') i++;
+            } else if (text[i] == L'\t') {
+                normalized += L"    ";
+            } else if (text[i] == L'\n' || text[i] >= L' ') {
+                normalized += text[i];
             }
         }
+        text = std::move(normalized);
         DeleteSelection();
         const size_t room = input_.size() < 4000 ? 4000 - input_.size() : 0;
         if (text.size() > room) {
             text.resize(room);
+            if (!text.empty() && IS_HIGH_SURROGATE(text.back())) text.pop_back();
         }
         input_.insert(caret_, text);
         caret_ += static_cast<int>(text.size());
         anchor_ = caret_;
     }
 
-    void MoveCaret(int position, bool extend) {
+    void MoveCaret(int position, bool extend, int rowHint = -1) {
+        caretRowHint_ = rowHint;
+        preferredInputX_ = -1;
+        inputEnsureCaret_ = true;
         caret_ = std::clamp(position, 0, static_cast<int>(input_.size()));
         if (!extend) {
             anchor_ = caret_;
         }
     }
 
-    int InputIndexAt(int x) {
-        const std::vector<int>& extents = InputExtents();
-        const int offset = x - (inputText_.left - inputScroll_);
+    int InputIndexOnRow(size_t row, int x) const {
+        const WrappedTextLine& line = inputLines_[row];
         int previous = 0;
-        for (int i = 0; i < static_cast<int>(extents.size()); i = NextChar(i)) {
-            const int next = NextChar(i);
-            const int width = extents[next - 1];
-            if (offset < (previous + width) / 2) {
-                return i;
-            }
+        for (size_t i = 0; i < line.length;) {
+            size_t next = i + 1;
+            if (next < line.length && IS_HIGH_SURROGATE(input_[line.start + i]) &&
+                IS_LOW_SURROGATE(input_[line.start + next])) next++;
+            const int width = line.extents[next - 1];
+            if (x < (previous + width) / 2) return static_cast<int>(line.start + i);
             previous = width;
+            i = next;
         }
-        return static_cast<int>(input_.size());
+        return static_cast<int>(line.start + line.length);
+    }
+
+    int InputRowAt(POINT pt) {
+        return std::clamp(
+            static_cast<int>(pt.y - inputText_.top + inputScroll_) / InputLineHeight(),
+            0, static_cast<int>(inputLines_.size()) - 1);
+    }
+
+    int InputIndexAt(POINT pt) {
+        return InputIndexOnRow(static_cast<size_t>(InputRowAt(pt)), pt.x - inputText_.left);
+    }
+
+    void ScrollInputBy(int delta) {
+        const int maxScroll = std::max(0, static_cast<int>(inputLines_.size()) * InputLineHeight() -
+                                         static_cast<int>(inputText_.bottom - inputText_.top));
+        inputScroll_ = std::clamp(inputScroll_ + delta, 0, maxScroll);
+        inputEnsureCaret_ = false;
     }
 
     bool HandleKey(WPARAM key, double now) {
@@ -13038,6 +14448,10 @@ class AskCard {
                 Close();
                 return true;
             case VK_RETURN:
+                if (shift) {
+                    InsertText(L"\n");
+                    break;
+                }
                 Submit(input_, now);
                 return true;
             case VK_LEFT:
@@ -13055,11 +14469,16 @@ class AskCard {
                 }
                 break;
             case VK_HOME:
-                MoveCaret(0, shift);
+                MoveCaret(ctrl ? 0 : static_cast<int>(inputLines_[InputRow(caret_)].start),
+                          shift, ctrl ? -1 : static_cast<int>(InputRow(caret_)));
                 break;
-            case VK_END:
-                MoveCaret(static_cast<int>(input_.size()), shift);
+            case VK_END: {
+                const WrappedTextLine& line = inputLines_[InputRow(caret_)];
+                MoveCaret(ctrl ? static_cast<int>(input_.size())
+                               : static_cast<int>(line.start + line.length), shift,
+                          ctrl ? -1 : static_cast<int>(InputRow(caret_)));
                 break;
+            }
             case VK_BACK:
                 if (anchor_ == caret_) {
                     anchor_ = ctrl ? PrevWord(caret_) : PrevChar(caret_);
@@ -13073,12 +14492,20 @@ class AskCard {
                 DeleteSelection();
                 break;
             case VK_UP:
-            case VK_DOWN:
+            case VK_DOWN: {
+                const size_t row = InputRow(caret_);
+                const int target = std::clamp(static_cast<int>(row) + (key == VK_UP ? -1 : 1),
+                                             0, static_cast<int>(inputLines_.size()) - 1);
+                const int x = preferredInputX_ >= 0 ? preferredInputX_
+                                                    : InputX(inputLines_[row], caret_);
+                MoveCaret(InputIndexOnRow(static_cast<size_t>(target), x), shift, target);
+                preferredInputX_ = x;
+                break;
+            }
             case VK_PRIOR:
             case VK_NEXT: {
                 const int page = std::max(SI(48), static_cast<int>(convoRect_.bottom - convoRect_.top) - SI(40));
-                const int step = (key == VK_UP || key == VK_DOWN) ? SI(48) : page;
-                ScrollBy((key == VK_UP || key == VK_PRIOR) ? -step : step);
+                ScrollBy(key == VK_PRIOR ? -page : page);
                 Present(now);
                 return true;
             }
@@ -13112,6 +14539,7 @@ class AskCard {
             default:
                 return false;
         }
+        inputEnsureCaret_ = true;
         caretStart_ = now;
         caretOn_ = true;
         Update(now);
@@ -13150,8 +14578,11 @@ class AskCard {
         const AnswerLine* nearest = &answerLines_.front();
         int best = INT_MAX;
         for (const AnswerLine& line : answerLines_) {
-            const int gap = y < line.rect.top ? line.rect.top - y
-                           : y >= line.rect.bottom ? y - line.rect.bottom + 1 : 0;
+            const int vertical = y < line.rect.top ? line.rect.top - y
+                               : y >= line.rect.bottom ? y - line.rect.bottom + 1 : 0;
+            const int horizontal = x < line.rect.left ? line.rect.left - x
+                                 : x > line.rect.right ? x - line.rect.right : 0;
+            const int gap = vertical * std::max(1, convoWidth_) + horizontal;
             if (gap < best) {
                 nearest = &line;
                 best = gap;
@@ -13199,8 +14630,216 @@ class AskCard {
     ////////////////////////////////////////////////////////////////////////
     // Layout
 
+    static constexpr int kHitRich = 200000;
+
+    HFONT SpanFont(HFONT base, int style, bool code) {
+        LOGFONTW info{};
+        GetObjectW(base, sizeof(info), &info);
+        return g_fonts.Get(std::max(6, static_cast<int>(std::abs(info.lfHeight))),
+                           style & InlineBold ? FW_SEMIBOLD : info.lfWeight,
+                           code || (style & InlineCode), style & InlineItalic);
+    }
+
+    ConvoItem RichItem(const std::wstring& source, RECT rc, HFONT font,
+                       Color color, int turn, bool literal = false, bool displayMath = false) {
+        ConvoItem item{ConvoItem::Kind::Text, rc, rc, L"", L"", font, color, turn, literal};
+        item.spans = displayMath ? std::vector<InlineSpan>{{source, 0, L"", source, true}}
+                     : literal ? std::vector<InlineSpan>{{source, 0, L""}}
+                               : ParseInlineMarkdown(source);
+        LOGFONTW info{};
+        GetObjectW(font, sizeof(info), &info);
+        const int available = std::max(1L, rc.right - rc.left);
+        for (InlineSpan& span : item.spans) {
+            if (!span.math.empty()) {
+                int px = std::max(7, static_cast<int>(std::abs(info.lfHeight))) + (span.displayMath ? SI(2) : 0);
+                MathLayout formula = LayoutMath(span.math, px, text_, span.displayMath);
+                while (formula.width > available && px > 7) {
+                    px = std::max(7, px - std::max(1, px / 8));
+                    formula = LayoutMath(span.math, px, text_, span.displayMath);
+                }
+                span.text = formula.plain.empty() ? span.math : formula.plain;
+                bool ready = true;
+                if (formula.width > available) {
+                    Surface raster;
+                    if (static_cast<uint64_t>(formula.width) * formula.height <= 16 * 1024 * 1024 &&
+                        raster.Resize(formula.width, formula.height)) {
+                        DrawMath(raster, text_, formula, 0, 0, kWhite,
+                                 {0, 0, formula.width, formula.height});
+                        Image image;
+                        image.width = formula.width;
+                        image.height = formula.height;
+                        for (int row = 0; row < image.height; row++) {
+                            image.pixels.insert(image.pixels.end(), raster.Row(row), raster.Row(row) + image.width);
+                        }
+                        const int longest = std::max(image.width, image.height);
+                        const int maxSide = std::max(1, static_cast<int>(int64_t(available) * longest / image.width));
+                        span.fittedMath = std::make_shared<Image>(DownscaleImage(image, maxSide));
+                        formula.baseline = static_cast<int>(int64_t(formula.baseline) * span.fittedMath->height / formula.height);
+                        formula.width = span.fittedMath->width;
+                        formula.height = span.fittedMath->height;
+                    } else {
+                        span.text = span.math;  // Keep all source visible if a formula cannot be rasterized.
+                        ready = false;
+                    }
+                }
+                if (ready) span.formula = std::make_shared<MathLayout>(std::move(formula));
+            }
+            item.text += span.text;
+        }
+        return item;
+    }
+
+    std::vector<AnswerLine> WrapRichText(const ConvoItem& item) {
+        struct Unit {
+            size_t start, length, span;
+            int width, height, baseline;
+            HFONT font;
+            Color color;
+            int style;
+            std::wstring link;
+            std::shared_ptr<MathLayout> math;
+            std::shared_ptr<Image> fittedMath;
+            bool newline, space, display;
+        };
+        std::vector<Unit> units;
+        size_t offset = 0;
+        const auto spans = item.spans.empty()
+            ? std::vector<InlineSpan>{{item.text, 0, L""}} : item.spans;
+        const int available = std::max(1L, item.textRect.right - item.textRect.left);
+        const int padding = SI(3);
+        for (size_t spanIndex = 0; spanIndex < spans.size(); spanIndex++) {
+            const InlineSpan& span = spans[spanIndex];
+            HFONT font = SpanFont(item.font, span.style, item.code);
+            const Color color = span.link.empty() ? item.color : palette_.accent;
+            if (span.formula) {
+                units.push_back({offset, span.text.size(), spanIndex, span.formula->width,
+                    span.formula->height, span.formula->baseline, font, color, span.style,
+                    span.link, span.formula, span.fittedMath, false, false, span.displayMath});
+            } else {
+                TEXTMETRICW metrics{};
+                if (HDC dc = CreateCompatibleDC(nullptr)) {
+                    HGDIOBJ old = SelectObject(dc, font);
+                    GetTextMetricsW(dc, &metrics);
+                    SelectObject(dc, old);
+                    DeleteDC(dc);
+                }
+                const int height = metrics.tmHeight > 0 ? metrics.tmHeight
+                    : text_.Measure(font, L"Mg", 1, DT_SINGLELINE).cy;
+                const int baseline = metrics.tmAscent > 0 ? metrics.tmAscent : height * 4 / 5;
+                std::vector<int> extents;
+                text_.Extents(font, span.text, extents);
+                for (size_t p = 0; p < span.text.size();) {
+                    size_t length = 1;
+                    if (IS_HIGH_SURROGATE(span.text[p]) && p + 1 < span.text.size() &&
+                        IS_LOW_SURROGATE(span.text[p + 1])) length++;
+                    const bool newline = span.text[p] == L'\n';
+                    const int width = newline ? 0 : std::max(0, extents[p + length - 1] - (p ? extents[p - 1] : 0));
+                    units.push_back({offset + p, length, spanIndex, width, height, baseline,
+                        font, color, span.style, span.link, {}, {}, newline,
+                        !newline && iswspace(span.text[p]) != 0, false});
+                    p += length;
+                }
+            }
+            offset += span.text.size();
+        }
+        std::vector<AnswerLine> lines;
+        const int defaultHeight = text_.Measure(item.font, L"Mg", 1, DT_SINGLELINE).cy;
+        int y = item.textRect.top;
+        size_t first = 0;
+        do {
+            size_t last = first;
+            size_t breakAt = first;
+            int width = 0;
+            const bool display = first < units.size() && units[first].display;
+            while (last < units.size() && !units[last].newline) {
+                if (last > first && (display || units[last].display)) break;
+                if (width + units[last].width > available && last > first) {
+                    if (breakAt > first) last = breakAt;
+                    break;
+                }
+                width += units[last].width;
+                last++;
+                if (units[last - 1].space) breakAt = last;
+                if (display) break;
+            }
+            int ascent = 0;
+            int descent = 0;
+            width = 0;
+            for (size_t p = first; p < last; p++) {
+                width += units[p].width;
+                ascent = std::max(ascent, units[p].baseline);
+                descent = std::max(descent, units[p].height - units[p].baseline);
+            }
+            const int extra = display ? SI(8) : padding;
+            const int height = std::max(defaultHeight, ascent + descent) + extra;
+            const int inset = display ? extra / 2 : 0;
+            int left = item.textRect.left;
+            if (display || item.align == 0) left += std::max(0, available - width) / 2;
+            else if (item.align == 1) left += std::max(0, available - width);
+            const size_t start = first < units.size() ? units[first].start : item.text.size();
+            const size_t end = last > first ? units[last - 1].start + units[last - 1].length : start;
+            AnswerLine line{{left, y, left + width, y + height}, start, end - start,
+                            {}, item.font, item.color, item.turn};
+            line.clip = {item.textRect.left, y, item.textRect.right, y + height};
+            int x = 0;
+            size_t previousSpan = static_cast<size_t>(-1);
+            for (size_t p = first; p < last; p++) {
+                const Unit& unit = units[p];
+                for (size_t c = 0; c < unit.length; c++) {
+                    line.extents.push_back(x + static_cast<int>(unit.width * (c + 1) / unit.length));
+                }
+                const int top = inset + ascent - unit.baseline;
+                if (!unit.math && previousSpan == unit.span && !line.runs.empty() &&
+                    !line.runs.back().math) {
+                    line.runs.back().length += unit.length;
+                } else {
+                    AnswerRun run{unit.start - start, unit.length, unit.font, unit.color,
+                                  unit.style, unit.link};
+                    run.top = top;
+                    run.height = unit.height;
+                    run.math = unit.math;
+                    run.fittedMath = unit.fittedMath;
+                    line.runs.push_back(std::move(run));
+                }
+                previousSpan = unit.span;
+                x += unit.width;
+            }
+            lines.push_back(std::move(line));
+            y += height;
+            first = last;
+            if (first < units.size() && units[first].newline) first++;
+        } while (first < units.size());
+        return lines;
+    }
+
+    int RichHeight(const ConvoItem& item) {
+        const auto lines = WrapRichText(item);
+        return lines.empty() ? 0 : lines.back().rect.bottom - item.textRect.top;
+    }
+
+    int AddRichAction(const RECT& rect, const std::wstring& value, bool link) {
+        richActions_.push_back({rect, value, link});
+        return kHitRich + static_cast<int>(richActions_.size()) - 1;
+    }
+
+    bool ActivateRichText(int hit, double now) {
+        if (hit < kHitRich) return false;
+        const size_t index = static_cast<size_t>(hit - kHitRich);
+        if (index < richActions_.size()) {
+            const RichAction action = richActions_[index];
+            if (action.link) {
+                if (IsSafeResponseLink(action.text)) OpenInBrowser(action.text, SelectedBrowser());
+            } else {
+                SetStatus(CopyTextToClipboard(panel_.Hwnd(), action.text)
+                              ? Tr(Str::TextCopied) : Tr(Str::TextCopyFailed), now);
+            }
+        }
+        return true;
+    }
+
     void LayoutConversation() {
         convoItems_.clear();
+        richActions_.clear();
         const int width = convoWidth_;
         const int textLeft = SI(26);
         int y = 0;
@@ -13210,115 +14849,186 @@ class AskCard {
             if (turn.fromUser) {
                 HFONT font = BodyFont();
                 const int maxWidth = static_cast<int>(width * 0.82f) - SI(24);
-                const SIZE size =
-                    text_.Measure(font, turn.text, maxWidth, DT_WORDBREAK);
-                const int bubbleWidth =
-                    std::min(maxWidth, static_cast<int>(size.cx) + SI(3)) + SI(24);
+                const SIZE size = text_.Measure(font, turn.text, maxWidth, DT_WORDBREAK);
+                const int bubbleWidth = std::min(maxWidth, static_cast<int>(size.cx) + SI(3)) + SI(24);
                 const int bubbleHeight = size.cy + SI(16);
-                convoItems_.push_back(
-                    {ConvoItem::Kind::UserBubble,
-                     {width - bubbleWidth, y, width, y + bubbleHeight},
-                     {width - bubbleWidth + SI(12), y + SI(8), width - SI(12),
-                      y + SI(8) + size.cy},
-                     turn.text, L"", font, palette_.text, turnIndex, false});
+                convoItems_.push_back({ConvoItem::Kind::UserBubble,
+                    {width - bubbleWidth, y, width, y + bubbleHeight},
+                    {width - bubbleWidth + SI(12), y + SI(8), width - SI(12), y + SI(8) + size.cy},
+                    turn.text, L"", font, palette_.text, turnIndex, false});
                 y += bubbleHeight + SI(14);
                 continue;
             }
-
             convoItems_.push_back({ConvoItem::Kind::Sparkle,
-                                   {0, y + SI(1), SI(18), y + SI(19)},
-                                   {}, L"", L"", nullptr, palette_.text,
-                                   turnIndex, false});
+                {0, y + SI(1), SI(18), y + SI(19)}, {}, L"", L"", nullptr,
+                palette_.text, turnIndex, false});
             if (turn.streaming && turn.text.empty()) {
                 const RECT rc{textLeft, y - SI(1), width, y + SI(21)};
-                convoItems_.push_back({ConvoItem::Kind::Thinking, rc, rc,
-                                       Tr(Str::Thinking), L"", BodyFont(),
-                                       palette_.secondary, turnIndex, false});
-                y += SI(20) + SI(14);
+                convoItems_.push_back({ConvoItem::Kind::Thinking, rc, rc, Tr(Str::Thinking),
+                    L"", BodyFont(), palette_.secondary, turnIndex, false});
+                y += SI(34);
                 continue;
             }
             if (turn.error && turn.errorText.empty()) {
-                HFONT font = BodyFont();
-                const auto lines = text_.Wrap(font, turn.text, width - textLeft);
-                const SIZE size{width - textLeft, static_cast<LONG>(lines.size()) *
-                    text_.Measure(font, L"Mg", width - textLeft, DT_SINGLELINE).cy};
-                const RECT rc{textLeft, y, width, y + size.cy};
-                convoItems_.push_back({ConvoItem::Kind::Text, rc, rc, turn.text,
-                                       L"", font, palette_.error, turnIndex,
-                                       false});
-                y += size.cy + SI(14);
-                continue;
-            }
-
-            bool first = true;
-            for (const TextBlock& block : ParseMarkdown(turn.text)) {
-                if (block.text.empty()) {
-                    continue;
-                }
-                if (!first) {
-                    y += block.kind == TextBlock::Kind::Heading ? SI(10) : SI(6);
-                }
-                first = false;
-                const bool code = block.kind == TextBlock::Kind::Code;
-                HFONT font = block.kind == TextBlock::Kind::Heading ? HeadingFont()
-                             : code                                  ? CodeFont()
-                                                                     : BodyFont();
-                int left = textLeft;
-                int right = width;
-                if (block.kind == TextBlock::Kind::Bullet) {
-                    left += SI(block.bullet.size() > 1 ? 24 : 16);
-                } else if (code) {
-                    left += SI(10);
-                    right -= SI(10);
-                }
-                std::wstring display;
-                int column = 0;
-                for (wchar_t c : block.text) {
-                    if (c == L'\t') {
-                        const int spaces = 4 - column % 4;
-                        display.append(spaces, L' ');
-                        column += spaces;
-                    } else {
-                        display += c;
-                        column = c == L'\n' ? 0 : column + 1;
+                ConvoItem item = RichItem(turn.text, {textLeft, y, width, y},
+                                          BodyFont(), palette_.error, turnIndex, true);
+                const int height = RichHeight(item);
+                item.rect.bottom = item.textRect.bottom = y + height;
+                convoItems_.push_back(std::move(item));
+                y += height;
+            } else {
+                bool first = true;
+                int previousQuoteDepth = 0;
+                int previousQuoteEnd = y;
+                for (const TextBlock& block : ParseMarkdown(turn.text)) {
+                    if (!first) y += block.kind == TextBlock::Kind::Heading ? SI(10) : SI(7);
+                    first = false;
+                    const int depth = std::min(4, block.quoteDepth);
+                    const int blockLeft = textLeft + SI(depth * 12);
+                    const int quoteTop = y;
+                    auto finishQuote = [&] {
+                        for (int level = 0; level < depth; level++) {
+                            const int x = textLeft + SI(2 + level * 12);
+                            const int top = level < previousQuoteDepth ? previousQuoteEnd : quoteTop;
+                            convoItems_.push_back({ConvoItem::Kind::QuoteBar,
+                                {x, top, x + std::max(1, SI(2)), y}, {}, L"", L"", nullptr,
+                                WithAlpha(palette_.text, 0.30f), turnIndex, false});
+                        }
+                        previousQuoteDepth = depth;
+                        previousQuoteEnd = y;
+                    };
+                    if (block.kind == TextBlock::Kind::Rule) {
+                        convoItems_.push_back({ConvoItem::Kind::Rule,
+                            {blockLeft, y + SI(5), width, y + SI(6)}, {}, L"", L"", nullptr,
+                            WithAlpha(palette_.text, 0.25f), turnIndex, false});
+                        y += SI(12);
+                        finishQuote();
+                        continue;
                     }
+                    if (block.kind == TextBlock::Kind::Table) {
+                        const size_t columns = block.align.size();
+                        const int tableWidth = width - blockLeft;
+                        std::vector<int> edges{ blockLeft };
+                        // Every cell remains visible; long content wraps within its column.
+                        for (size_t c = 1; c <= columns; c++)
+                            edges.push_back(blockLeft + static_cast<int>(c * tableWidth / columns));
+                        for (size_t row = 0; row < block.rows.size(); row++) {
+                            std::vector<ConvoItem> cells;
+                            int height = SI(28);
+                            for (size_t c = 0; c < columns; c++) {
+                                ConvoItem cell = RichItem(block.rows[row][c],
+                                    {edges[c] + SI(6), y + SI(5), edges[c + 1] - SI(6), y},
+                                    row == 0 ? g_fonts.Get(SI(13), FW_SEMIBOLD) : g_fonts.Get(SI(13), FW_NORMAL),
+                                    palette_.text, turnIndex);
+                                cell.kind = ConvoItem::Kind::TableCell;
+                                cell.align = block.align[c];
+                                cell.header = row == 0;
+                                height = std::max(height, RichHeight(cell) + SI(10));
+                                cell.rect = {edges[c], y, edges[c + 1], y};
+                                cells.push_back(std::move(cell));
+                            }
+                            for (ConvoItem& cell : cells) {
+                                cell.rect.bottom = y + height;
+                                cell.textRect.bottom = y + height - SI(5);
+                                convoItems_.push_back(std::move(cell));
+                            }
+                            y += height;
+                        }
+                        finishQuote();
+                        continue;
+                    }
+                    if (block.kind == TextBlock::Kind::Math) {
+                        std::wstring source = block.text;
+                        if (Lowercase(block.language) == L"chem" || Lowercase(block.language) == L"mhchem") {
+                            source = L"\\ce{" + source + L"}";
+                        }
+                        ConvoItem formula = RichItem(source, {blockLeft, y, width, y},
+                            BodyFont(), palette_.text, turnIndex, false, true);
+                        const int height = RichHeight(formula);
+                        formula.rect.bottom = formula.textRect.bottom = y + height;
+                        convoItems_.push_back(std::move(formula));
+                        y += height;
+                        finishQuote();
+                        continue;
+                    }
+                    if (block.kind == TextBlock::Kind::Code) {
+                        std::wstring display;
+                        int column = 0;
+                        for (wchar_t c : block.text) {
+                            if (c == L'\t') {
+                                const int spaces = 4 - column % 4;
+                                display.append(spaces, L' ');
+                                column += spaces;
+                            } else {
+                                display += c;
+                                column = c == L'\n' ? 0 : column + 1;
+                            }
+                        }
+                        if (!display.empty() && display.back() == L'\n') display.pop_back();
+                        ConvoItem code = RichItem(display,
+                            {blockLeft + SI(10), y + SI(32), width - SI(10), y},
+                            CodeFont(), palette_.text, turnIndex, true);
+                        const int height = RichHeight(code);
+                        const int bottom = y + SI(40) + height;
+                        const RECT panel{blockLeft, y, width, bottom};
+                        convoItems_.push_back({ConvoItem::Kind::CodePanel, panel,
+                            {blockLeft + SI(10), y, width - SI(84), y + SI(28)}, block.language,
+                            L"", SmallFont(), palette_.secondary, turnIndex, true});
+                        const std::wstring label = Tr(Str::Copy);
+                        const int buttonWidth = std::min(width - blockLeft - SI(12),
+                            std::max(SI(64), text_.Width(SmallFont(), label.c_str(), static_cast<int>(label.size())) + SI(40)));
+                        const RECT button{width - buttonWidth - SI(4), y + SI(2), width - SI(4), y + SI(28)};
+                        ConvoItem copy{ConvoItem::Kind::CodeCopyButton, button, {}, label,
+                            L"", SmallFont(), palette_.secondary, turnIndex, false};
+                        copy.hit = AddRichAction(button, block.text, false);
+                        convoItems_.push_back(std::move(copy));
+                        code.rect.bottom = code.textRect.bottom = code.textRect.top + height;
+                        convoItems_.push_back(std::move(code));
+                        y = bottom;
+                        finishQuote();
+                        continue;
+                    }
+                    HFONT font = block.kind == TextBlock::Kind::Heading
+                        ? g_fonts.Get(SI(block.level == 1 ? 19 : block.level == 2 ? 17 : 15), FW_SEMIBOLD)
+                        : BodyFont();
+                    int left = blockLeft;
+                    if (block.kind == TextBlock::Kind::Bullet) left += SI(20 + block.level * 12);
+                    ConvoItem item = RichItem(block.text, {left, y, width, y}, font,
+                        block.kind == TextBlock::Kind::Quote ? palette_.secondary : palette_.text, turnIndex);
+                    const int height = RichHeight(item);
+                    item.rect = {block.kind == TextBlock::Kind::Bullet ? left - SI(20) : left, y, width, y + height};
+                    item.textRect.bottom = y + height;
+                    item.bullet = block.bullet;
+                    convoItems_.push_back(std::move(item));
+                    y += height;
+                    finishQuote();
                 }
-                const auto lines = text_.Wrap(font, display, right - left);
-                const SIZE size{right - left, static_cast<LONG>(lines.size()) *
-                    text_.Measure(font, L"Mg", right - left, DT_SINGLELINE).cy};
-                ConvoItem item{ConvoItem::Kind::Text,
-                               {textLeft, y, width, y + size.cy},
-                               {left, y, right, y + size.cy},
-                               display, block.bullet, font, palette_.text,
-                               turnIndex, code};
-                if (code) {
-                    item.rect.bottom += SI(16);
-                    OffsetRect(&item.textRect, 0, SI(8));
-                    y += SI(16);
-                }
-                convoItems_.push_back(item);
-                y += size.cy;
             }
             y += SI(8);
             if (turn.error && !turn.errorText.empty()) {
-                HFONT font = BodyFont();
-                const auto lines = text_.Wrap(font, turn.errorText, width - textLeft);
-                const int height = static_cast<int>(lines.size()) *
-                    text_.Measure(font, L"Mg", width - textLeft, DT_SINGLELINE).cy;
-                const RECT rc{textLeft, y, width, y + height};
-                convoItems_.push_back({ConvoItem::Kind::Text, rc, rc, turn.errorText,
-                                       L"", font, palette_.error, turnIndex, false});
+                ConvoItem item = RichItem(turn.errorText, {textLeft, y, width, y},
+                    BodyFont(), palette_.error, turnIndex, true);
+                const int height = RichHeight(item);
+                item.rect.bottom = item.textRect.bottom = y + height;
+                convoItems_.push_back(std::move(item));
                 y += height + SI(8);
             }
             const std::wstring copyLabel = Tr(Str::Copy);
-            const int copyWidth = std::max(
-                SI(72), SI(32) + text_.Width(SmallFont(), copyLabel.c_str(),
-                                             static_cast<int>(copyLabel.size())) + SI(10));
+            const int copyWidth = std::max(SI(72), SI(32) +
+                text_.Width(SmallFont(), copyLabel.c_str(), static_cast<int>(copyLabel.size())) + SI(10));
             convoItems_.push_back({ConvoItem::Kind::CopyButton,
-                                   {textLeft - SI(8), y, textLeft - SI(8) + copyWidth, y + SI(28)},
-                                   {}, copyLabel, L"", SmallFont(), palette_.secondary,
-                                   turnIndex, false});
-            y += SI(28) + SI(14);
+                {textLeft - SI(8), y, textLeft - SI(8) + copyWidth, y + SI(28)}, {}, copyLabel,
+                L"", SmallFont(), palette_.secondary, turnIndex, false});
+            if (!turn.streaming && t + 1 == turns_.size()) {
+                const std::wstring label = Tr(Str::Retry);
+                const int retryWidth = SI(32) + text_.Width(SmallFont(), label.c_str(),
+                    static_cast<int>(label.size())) + SI(10);
+                const int x = textLeft + copyWidth;
+                convoItems_.push_back({ConvoItem::Kind::RetryButton,
+                    {x, y, std::min(width, x + retryWidth), y + SI(28)}, {}, label,
+                    L"", SmallFont(), palette_.secondary, turnIndex, false});
+            }
+            y += SI(42);
         }
         contentHeight_ = std::max(0, y - SI(14));
         BuildAnswerLines();
@@ -13327,30 +15037,80 @@ class AskCard {
     void BuildAnswerLines() {
         answerLines_.clear();
         answerText_.clear();
+        const ConvoItem* previous = nullptr;
         for (const ConvoItem& item : convoItems_) {
-            if (item.kind != ConvoItem::Kind::Text) {
-                continue;
-            }
+            if (item.kind != ConvoItem::Kind::Text && item.kind != ConvoItem::Kind::TableCell) continue;
             if (!answerText_.empty()) {
-                answerText_ += L"\n\n";
+                if (item.kind == ConvoItem::Kind::TableCell && previous &&
+                    previous->kind == ConvoItem::Kind::TableCell) {
+                    answerText_ += previous->rect.top == item.rect.top ? L"\t" : L"\n";
+                } else {
+                    answerText_ += L"\n\n";
+                }
             }
-            if (!item.bullet.empty()) {
-                answerText_ += item.bullet + L" ";
-            }
+            previous = &item;
+            if (!item.bullet.empty()) answerText_ += item.bullet + L" ";
             const size_t base = answerText_.size();
             answerText_ += item.text;
-            const int height = text_.Measure(item.font, L"Mg", 1, DT_SINGLELINE).cy;
-            int y = item.textRect.top;
-            for (WrappedTextLine& line : text_.Wrap(item.font, item.text,
-                                                   item.textRect.right - item.textRect.left)) {
-                answerLines_.push_back({{item.textRect.left, y, item.textRect.right, y + height},
-                                         base + line.start, line.length, std::move(line.extents),
-                                         item.font, item.color, item.turn});
-                y += height;
+            for (AnswerLine line : WrapRichText(item)) {
+                line.start += base;
+                for (const AnswerRun& run : line.runs) {
+                    if (run.link.empty()) continue;
+                    const int left = line.rect.left + (run.offset ? line.extents[run.offset - 1] : 0);
+                    const int right = line.rect.left + line.extents[run.offset + run.length - 1];
+                    RECT visible;
+                    const RECT link{left, line.rect.top, right, line.rect.bottom};
+                    if (IntersectRect(&visible, &link, &line.clip)) AddRichAction(visible, run.link, true);
+                }
+                answerLines_.push_back(std::move(line));
             }
         }
         answerAnchor_ = std::min(answerAnchor_, answerText_.size());
         answerCaret_ = std::min(answerCaret_, answerText_.size());
+    }
+
+    void DrawAnswerLine(Surface& target, const AnswerLine& line, int dx, int dy,
+                        const RECT& clip, bool decorations = true) {
+        RECT bounds = line.clip;
+        OffsetRect(&bounds, dx, dy);
+        RECT lineClip;
+        if (!IntersectRect(&lineClip, &bounds, &clip)) return;
+        for (const AnswerRun& run : line.runs) {
+            const int x = line.rect.left + dx + (run.offset ? line.extents[run.offset - 1] : 0);
+            const int right = line.rect.left + dx + line.extents[run.offset + run.length - 1];
+            const int top = line.rect.top + dy + run.top;
+            const RECT rc{x, top, right + SI(1), top + run.height + SI(3)};
+            RECT visible;
+            if (!IntersectRect(&visible, &rc, &lineClip)) continue;
+            if (decorations && (run.style & InlineCode)) {
+                FillRoundRect(target, static_cast<float>(visible.left), static_cast<float>(visible.top),
+                    static_cast<float>(visible.right), static_cast<float>(visible.bottom), S(2), palette_.codeBg);
+            }
+            if (run.fittedMath) {
+                for (int py = visible.top; py < visible.bottom; py++) {
+                    const int sy = py - top;
+                    if (sy < 0 || sy >= run.fittedMath->height) continue;
+                    for (int px = visible.left; px < visible.right; px++) {
+                        const int sx = px - x;
+                        if (sx < 0 || sx >= run.fittedMath->width) continue;
+                        const uint32_t pixel = run.fittedMath->pixels[static_cast<size_t>(sy) * run.fittedMath->width + sx];
+                        BlendColor(target.Row(py)[px], run.color, (pixel & 0xFF) / 255.0f);
+                    }
+                }
+            } else if (run.math) {
+                DrawMath(target, text_, *run.math, x, top, run.color, visible);
+            } else {
+                text_.Draw(target, run.font, answerText_.substr(line.start + run.offset, run.length),
+                    rc, visible, DT_SINGLELINE | DT_LEFT, run.color);
+            }
+            if ((run.style & InlineStrike) || !run.link.empty()) {
+                const float y = static_cast<float>(run.style & InlineStrike ?
+                    (rc.top + rc.bottom) / 2 : rc.bottom - SI(3));
+                if (y >= lineClip.top && y < lineClip.bottom)
+                    StrokeLine(target, {static_cast<float>(visible.left), y},
+                        {static_cast<float>(visible.right), y}, std::max(1.0f, S(1)), run.color);
+            }
+        }
     }
 
     bool ConversationCacheCoversViewport() const {
@@ -13386,15 +15146,26 @@ class AskCard {
                                DT_WORDBREAK, item.color);
                     break;
                 case ConvoItem::Kind::Text:
-                    if (item.code) {
-                        FillRoundRect(convo_, l, t, r, b, S(6), palette_.codeBg);
-                    }
                     if (!item.bullet.empty()) {
                         const RECT bulletRect{item.rect.left, textRect.top,
                                               textRect.left, textRect.bottom};
                         text_.Draw(convo_, item.font, item.bullet, bulletRect,
                                    DT_LEFT | DT_SINGLELINE, palette_.secondary);
                     }
+                    break;
+                case ConvoItem::Kind::CodePanel:
+                    FillRoundRect(convo_, l, t, r, b, S(6), palette_.codeBg);
+                    text_.Draw(convo_, item.font, item.text, textRect,
+                               DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS, item.color);
+                    break;
+                case ConvoItem::Kind::QuoteBar:
+                case ConvoItem::Kind::Rule:
+                    FillRoundRect(convo_, l, t, r, b, S(1), item.color);
+                    break;
+                case ConvoItem::Kind::TableCell:
+                    if (item.header) FillRoundRect(convo_, l, t, r, b, 0, palette_.codeBg);
+                    StrokeRoundRect(convo_, l + 0.5f, t + 0.5f, r - 0.5f, b - 0.5f,
+                                    0, 1.0f, palette_.controlBorder);
                     break;
                 default:
                     break;
@@ -13404,10 +15175,8 @@ class AskCard {
             if (line.rect.bottom <= convoCacheTop_ || line.rect.top >= cacheBottom) {
                 continue;
             }
-            RECT rc = line.rect;
-            OffsetRect(&rc, 0, -convoCacheTop_);
-            text_.Draw(convo_, line.font, answerText_.substr(line.start, line.length),
-                       rc, DT_SINGLELINE | DT_LEFT, line.color);
+            DrawAnswerLine(convo_, line, 0, -convoCacheTop_,
+                           {0, 0, convo_.Width(), convo_.Height()});
         }
         convoDirty_ = false;
     }
@@ -13419,15 +15188,24 @@ class AskCard {
                                    }),
                     hits_.end());
         for (const ConvoItem& item : convoItems_) {
-            if (item.kind != ConvoItem::Kind::CopyButton) {
+            if (item.kind != ConvoItem::Kind::CopyButton &&
+                item.kind != ConvoItem::Kind::RetryButton) {
                 continue;
             }
             RECT rc = item.rect;
             OffsetRect(&rc, convoRect_.left, convoRect_.top - scroll_);
             RECT visible;
             if (IntersectRect(&visible, &rc, &convoRect_)) {
-                hits_.insert(hits_.begin(), HitRect{visible, kHitCopyAnswer + item.turn});
+                hits_.insert(hits_.begin(), HitRect{visible,
+                    (item.kind == ConvoItem::Kind::RetryButton ? kHitRetryAnswer : kHitCopyAnswer) + item.turn});
             }
+        }
+        for (size_t i = 0; i < richActions_.size(); i++) {
+            RECT rc = richActions_[i].rect;
+            OffsetRect(&rc, convoRect_.left, convoRect_.top - scroll_);
+            RECT visible;
+            if (IntersectRect(&visible, &rc, &convoRect_))
+                hits_.insert(hits_.begin(), HitRect{visible, kHitRich + static_cast<int>(i)});
         }
     }
 
@@ -13463,6 +15241,7 @@ class AskCard {
         }
         if (hasImage) {
             buttons.push_back(kHitCopy);
+            buttons.push_back(kHitSave);
         }
         if (!CopyableText().empty()) {
             buttons.push_back(kHitCopyText);
@@ -13474,7 +15253,8 @@ class AskCard {
         const int buttonSize =
             std::clamp((right - used - SI(6) - gaps) / count, SI(26), SI(32));
         int bx = right - buttonSize;
-        const int by = headerTop - SI(4);
+        const bool wrapButtons = used + SI(6) + SI(26) * count + gaps > right;
+        const int by = wrapButtons ? headerTop + thumbSize + SI(6) : headerTop - SI(4);
         for (RECT& rc : buttonRects_) {
             rc = {};
         }
@@ -13484,7 +15264,8 @@ class AskCard {
             bx -= buttonSize + (id == kHitClose ? SI(6) : SI(2));
         }
         const bool emptyHeader = attachments_.empty() && addRect_.right <= addRect_.left;
-        int y = emptyHeader ? by + buttonSize : headerTop + thumbSize;
+        int y = emptyHeader ? by + buttonSize
+                            : std::max(headerTop + thumbSize, by + buttonSize);
 
         convoWidth_ = width_ - pad * 2;
         convoRect_ = {};
@@ -13524,12 +15305,18 @@ class AskCard {
         }
 
         y += SI(12);
-        inputRect_ = {pad, y, width_ - pad, y + SI(40)};
         const int sendSize = SI(30);
-        sendRect_ = {inputRect_.right - SI(5) - sendSize, inputRect_.top + SI(5),
-                     inputRect_.right - SI(5), inputRect_.top + SI(5) + sendSize};
-        inputText_ = {inputRect_.left + SI(12), inputRect_.top,
-                      sendRect_.left - SI(8), inputRect_.bottom};
+        const int textWidth = width_ - pad * 2 - SI(12) - SI(5) - sendSize - SI(8);
+        WrapInput(textWidth);
+        const int lineHeight = InputLineHeight();
+        const int visibleLines = std::clamp(static_cast<int>(inputLines_.size()), 1, 5);
+        const int inputHeight = std::max(SI(40), visibleLines * lineHeight + SI(20));
+        inputRect_ = {pad, y, width_ - pad, y + inputHeight};
+        sendRect_ = {inputRect_.right - SI(5) - sendSize, inputRect_.bottom - SI(5) - sendSize,
+                     inputRect_.right - SI(5), inputRect_.bottom - SI(5)};
+        const int textTop = inputRect_.top + (inputHeight - visibleLines * lineHeight) / 2;
+        inputText_ = {inputRect_.left + SI(12), textTop,
+                      sendRect_.left - SI(8), textTop + visibleLines * lineHeight};
         hits_.push_back({sendRect_, kHitSend});
         hits_.push_back({inputRect_, kHitInput});
         if (convoRect_.bottom > convoRect_.top) {
@@ -13560,15 +15347,18 @@ class AskCard {
         height_ = y;
         UpdateCopyHits();
 
-        const int caretX = CaretX(caret_);
-        const int visibleWidth =
-            std::max(1, static_cast<int>(inputText_.right - inputText_.left) - SI(2));
-        if (caretX - inputScroll_ > visibleWidth) {
-            inputScroll_ = caretX - visibleWidth;
-        } else if (caretX < inputScroll_) {
-            inputScroll_ = caretX;
+        const int caretY = static_cast<int>(InputRow(caret_)) * lineHeight;
+        const int visibleHeight = inputText_.bottom - inputText_.top;
+        if (inputEnsureCaret_) {
+            if (caretY + lineHeight > inputScroll_ + visibleHeight) {
+                inputScroll_ = caretY + lineHeight - visibleHeight;
+            } else if (caretY < inputScroll_) {
+                inputScroll_ = caretY;
+            }
+            inputEnsureCaret_ = false;
         }
-        inputScroll_ = std::max(0, inputScroll_);
+        inputScroll_ = std::clamp(inputScroll_, 0,
+            std::max(0, static_cast<int>(inputLines_.size()) * lineHeight - visibleHeight));
     }
 
     void Position() {
@@ -13770,13 +15560,16 @@ class AskCard {
                 highlight.left += first ? line.extents[first - 1] : 0;
                 highlight.right = layout.left + (last ? line.extents[last - 1] : 0);
                 RECT clip;
-                if (IntersectRect(&clip, &highlight, &convoRect_)) {
+                RECT lineClip = line.clip;
+                OffsetRect(&lineClip, convoRect_.left, convoRect_.top - scroll_);
+                if (IntersectRect(&clip, &highlight, &lineClip) &&
+                    IntersectRect(&clip, &clip, &convoRect_)) {
                     FillRoundRect(surface_, static_cast<float>(clip.left),
                                   static_cast<float>(clip.top), static_cast<float>(clip.right),
                                   static_cast<float>(clip.bottom), S(2),
                                   WithAlpha(palette_.accent, focused_ ? 0.28f : 0.15f));
-                    text_.Draw(surface_, line.font, answerText_.substr(line.start, line.length),
-                               layout, clip, DT_SINGLELINE | DT_LEFT, line.color);
+                    DrawAnswerLine(surface_, line, convoRect_.left,
+                                   convoRect_.top - scroll_, clip, false);
                 }
             }
         }
@@ -13816,8 +15609,13 @@ class AskCard {
                     }
                     break;
                 }
-                case ConvoItem::Kind::CopyButton: {
-                    const bool hovered = hover_ == kHitCopyAnswer + item.turn;
+                case ConvoItem::Kind::CopyButton:
+                case ConvoItem::Kind::CodeCopyButton:
+                case ConvoItem::Kind::RetryButton: {
+                    const bool retry = item.kind == ConvoItem::Kind::RetryButton;
+                    const bool code = item.kind == ConvoItem::Kind::CodeCopyButton;
+                    const int hit = code ? item.hit : (retry ? kHitRetryAnswer : kHitCopyAnswer) + item.turn;
+                    const bool hovered = hover_ == hit;
                     if (hovered) {
                         FillRoundRect(surface_, static_cast<float>(visible.left),
                                       static_cast<float>(visible.top),
@@ -13828,8 +15626,14 @@ class AskCard {
                     const Color color = hovered ? palette_.text : palette_.secondary;
                     const float cy = (rc.top + rc.bottom) * 0.5f;
                     if (cy > convoRect_.top && cy < convoRect_.bottom) {
-                        DrawGlyph(surface_, text_, Glyph::Copy, rc.left + S(18), cy,
-                                  scale_ * 0.875f, color);
+                        if (retry) {
+                            const RECT icon{rc.left + SI(7), rc.top, rc.left + SI(29), rc.bottom};
+                            text_.Draw(surface_, BodyFont(), L"\x21BB", icon, convoRect_,
+                                       DT_SINGLELINE | DT_VCENTER | DT_CENTER, color);
+                        } else {
+                            DrawGlyph(surface_, text_, Glyph::Copy, rc.left + S(16), cy,
+                                      scale_ * 0.875f, color);
+                        }
                     }
                     const RECT label{rc.left + SI(32), rc.top, rc.right, rc.bottom};
                     text_.Draw(surface_, item.font, item.text, label, convoRect_,
@@ -13866,34 +15670,52 @@ class AskCard {
             [&](float, float) { return lineColor; });
 
         HFONT font = InputFont();
-        const int textX = inputText_.left - inputScroll_;
-        if (anchor_ != caret_) {
-            const int x0 = textX + CaretX(std::min(anchor_, caret_));
-            const int x1 = textX + CaretX(std::max(anchor_, caret_));
-            const float left = static_cast<float>(std::max(x0, static_cast<int>(inputText_.left)));
-            const float right = static_cast<float>(std::min(x1, static_cast<int>(inputText_.right)));
-            if (right > left) {
-                FillRoundRect(surface_, left, t + S(10), right, b - S(10), S(2),
-                              palette_.selection);
-            }
-        }
+        const int lineHeight = InputLineHeight();
+        const int selectionStart = std::min(anchor_, caret_);
+        const int selectionEnd = std::max(anchor_, caret_);
         if (input_.empty()) {
+            const RECT placeholder{inputText_.left, inputText_.top, inputText_.right,
+                                   inputText_.top + lineHeight};
             text_.Draw(surface_, font,
                        !turns_.empty()         ? Tr(Str::FollowUpPlaceholder)
                        : attachments_.empty() ? Tr(Str::AskAnythingPlaceholder)
                                               : Tr(Str::AskPlaceholder),
-                       inputText_, DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_END_ELLIPSIS,
+                       placeholder, DT_SINGLELINE | DT_LEFT | DT_END_ELLIPSIS,
                        palette_.secondary);
         } else {
-            const RECT layout{textX, inputText_.top, textX + 100000, inputText_.bottom};
-            text_.Draw(surface_, font, input_, layout, inputText_,
-                       DT_SINGLELINE | DT_VCENTER | DT_LEFT, palette_.text);
+            for (size_t row = 0; row < inputLines_.size(); row++) {
+                const WrappedTextLine& line = inputLines_[row];
+                const int top = inputText_.top + static_cast<int>(row) * lineHeight - inputScroll_;
+                RECT layout{inputText_.left, top, inputText_.right, top + lineHeight};
+                RECT clip;
+                if (!IntersectRect(&clip, &layout, &inputText_)) continue;
+                const int start = std::max(selectionStart, static_cast<int>(line.start));
+                const int end = std::min(selectionEnd, static_cast<int>(line.start + line.length));
+                if (start < end || (selectionStart <= static_cast<int>(line.start + line.length) &&
+                                   selectionEnd > static_cast<int>(line.start + line.length))) {
+                    RECT selected{inputText_.left + InputX(line, start), top,
+                                  inputText_.left + InputX(line, end), top + lineHeight};
+                    if (selectionEnd > static_cast<int>(line.start + line.length)) {
+                        selected.right += SI(5);
+                    }
+                    RECT visible;
+                    if (IntersectRect(&visible, &selected, &inputText_)) {
+                        FillRoundRect(surface_, static_cast<float>(visible.left),
+                                      static_cast<float>(visible.top), static_cast<float>(visible.right),
+                                      static_cast<float>(visible.bottom), S(2), palette_.selection);
+                    }
+                }
+                text_.Draw(surface_, font, input_.substr(line.start, line.length),
+                           layout, clip, DT_SINGLELINE | DT_LEFT, palette_.text);
+            }
         }
         if (inputFocused && caretOn_) {
-            const float x = textX + CaretX(caret_) + 0.5f;
-            if (x >= inputText_.left - 1 && x <= inputText_.right + 1) {
-                StrokeLine(surface_, {x, t + S(11)}, {x, b - S(11)}, std::max(1.0f, S(1)),
-                           palette_.text);
+            const POINT caret = InputCaretPoint();
+            if (caret.y >= inputText_.top && caret.y + lineHeight <= inputText_.bottom) {
+                const float x = caret.x + 0.5f;
+                StrokeLine(surface_, {x, static_cast<float>(caret.y)},
+                           {x, static_cast<float>(caret.y + lineHeight)},
+                           std::max(1.0f, S(1)), palette_.text);
             }
         }
 
@@ -13901,7 +15723,8 @@ class AskCard {
         const float st = static_cast<float>(sendRect_.top);
         const float sr = static_cast<float>(sendRect_.right);
         const float sb = static_cast<float>(sendRect_.bottom);
-        const bool enabled = !Trim(input_).empty();
+        const bool generating = IsGenerating();
+        const bool enabled = generating || !Trim(input_).empty();
         if (enabled) {
             FillRoundRect(surface_, sl, st, sr, sb, S(4),
                           hover_ == kHitSend ? WithAlpha(palette_.accent, 0.9f)
@@ -13909,8 +15732,14 @@ class AskCard {
         } else if (hover_ == kHitSend) {
             FillRoundRect(surface_, sl, st, sr, sb, S(4), palette_.subtleHover);
         }
-        DrawGlyph(surface_, text_, Glyph::Send, (sl + sr) * 0.5f, (st + sb) * 0.5f,
-                  scale_ * 0.875f, enabled ? palette_.onAccent : palette_.tertiary);
+        if (generating) {
+            FillRoundRect(surface_, (sl + sr) * 0.5f - S(5), (st + sb) * 0.5f - S(5),
+                          (sl + sr) * 0.5f + S(5), (st + sb) * 0.5f + S(5), S(1),
+                          palette_.onAccent);
+        } else {
+            DrawGlyph(surface_, text_, Glyph::Send, (sl + sr) * 0.5f, (st + sb) * 0.5f,
+                      scale_ * 0.875f, enabled ? palette_.onAccent : palette_.tertiary);
+        }
     }
 
     void DrawChips(double now) {
@@ -14008,17 +15837,28 @@ class AskCard {
             case kHitCopy:
                 tooltip = Tr(Str::CopyImage);
                 break;
+            case kHitSave:
+                tooltip = Tr(Str::SaveImage);
+                break;
             case kHitCopyText:
                 tooltip = Tr(Str::CopyText);
                 break;
             case kHitAdd:
                 tooltip = Tr(Str::AddSelection);
                 break;
+            case kHitSend:
+                tooltip = Tr(IsGenerating() ? Str::StopThinking : Str::Send);
+                break;
+            case kHitInput:
+                tooltip = Tr(Str::InputHelp);
+                break;
         }
         if (tooltip.empty() || !tooltipShown_) {
             return;
         }
-        const RECT& target = hover_ == kHitAdd ? addRect_ : buttonRects_[hover_];
+        const RECT& target = hover_ == kHitAdd ? addRect_
+                             : hover_ == kHitSend ? sendRect_
+                             : hover_ == kHitInput ? inputRect_ : buttonRects_[hover_];
         HFONT font = SmallFont();
         const int width =
             text_.Width(font, tooltip.c_str(), static_cast<int>(tooltip.size())) + SI(18);
@@ -14027,7 +15867,8 @@ class AskCard {
         const int maxLeft = std::max(minLeft, width_ - SI(4) - width);
         const int left = std::clamp(
             static_cast<int>((target.left + target.right) / 2 - width / 2), minLeft, maxLeft);
-        const int top = target.bottom + SI(6);
+        const int top = hover_ == kHitSend || hover_ == kHitInput
+                            ? target.top - height - SI(6) : target.bottom + SI(6);
         const float l = static_cast<float>(left);
         const float t = static_cast<float>(top);
         const float r = static_cast<float>(left + width);
@@ -14062,6 +15903,7 @@ class AskCard {
         DrawButton(kHitLens, Glyph::Camera);
         DrawButton(kHitTranslate, Glyph::Translate);
         DrawButton(kHitCopy, Glyph::Copy);
+        DrawButton(kHitSave, Glyph::Save);
         DrawButton(kHitCopyText, Glyph::Text);
 
         if (!turns_.empty() && convo_.Valid()) {
@@ -14199,7 +16041,10 @@ class AskCard {
                     Present(now);
                     RequestTick();
                 } else if (selectingText_) {
-                    MoveCaret(InputIndexAt(pt.x), true);
+                    if (pt.y < inputText_.top || pt.y >= inputText_.bottom) {
+                        ScrollInputBy(pt.y < inputText_.top ? -InputLineHeight() : InputLineHeight());
+                    }
+                    MoveCaret(InputIndexAt(pt), true, InputRowAt(pt));
                     Update(now);
                 } else {
                     SetHover(HitTest(pt), now);
@@ -14226,7 +16071,7 @@ class AskCard {
                 if (pressed_ == kHitInput) {
                     ClearAnswerSelection();
                     const bool shift = GetKeyState(VK_SHIFT) & 0x8000;
-                    MoveCaret(InputIndexAt(pt.x), shift);
+                    MoveCaret(InputIndexAt(pt), shift, InputRowAt(pt));
                     if (message == WM_LBUTTONDBLCLK && !input_.empty()) {
                         int begin = caret_;
                         int end = caret_;
@@ -14239,6 +16084,7 @@ class AskCard {
                         }
                         anchor_ = begin;
                         caret_ = end;
+                        caretRowHint_ = -1;
                     } else {
                         selectingText_ = true;
                         SetCapture(hwnd);
@@ -14292,13 +16138,20 @@ class AskCard {
                 selectingAnswer_ = false;
                 return false;
 
-            case WM_MOUSEWHEEL:
-                if (!turns_.empty()) {
-                    ScrollBy(-GET_WHEEL_DELTA_WPARAM(wParam) * SI(48) / WHEEL_DELTA);
+            case WM_MOUSEWHEEL: {
+                POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+                ScreenToClient(hwnd, &pt);
+                const int delta = -GET_WHEEL_DELTA_WPARAM(wParam) * SI(48) / WHEEL_DELTA;
+                if (PtInRect(&inputRect_, pt)) {
+                    ScrollInputBy(delta);
+                    Present(now);
+                } else if (!turns_.empty()) {
+                    ScrollBy(delta);
                     Present(now);
                 }
                 result = 0;
                 return true;
+            }
 
             case WM_KEYDOWN:
                 if (HandleKey(wParam, now)) {
@@ -14334,8 +16187,7 @@ class AskCard {
                 if (HIMC context = ImmGetContext(hwnd)) {
                     COMPOSITIONFORM form{};
                     form.dwStyle = CFS_POINT;
-                    form.ptCurrentPos.x = inputText_.left - inputScroll_ + CaretX(caret_);
-                    form.ptCurrentPos.y = inputRect_.top + SI(10);
+                    form.ptCurrentPos = InputCaretPoint();
                     ImmSetCompositionWindow(context, &form);
                     ImmReleaseContext(hwnd, context);
                 }
@@ -14404,11 +16256,15 @@ class AskCard {
     std::wstring input_;
     int caret_ = 0;
     int anchor_ = 0;  // The other end of the text selection.
-    int inputScroll_ = 0;
+    int inputScroll_ = 0;  // Vertical offset of the multiline editor.
+    int caretRowHint_ = -1;  // Resolves the shared caret position at a soft wrap.
+    int preferredInputX_ = -1;
+    bool inputEnsureCaret_ = true;
     bool selectingText_ = false;
-    std::wstring extentsText_;
-    HFONT extentsFont_ = nullptr;
-    std::vector<int> extents_;
+    std::wstring inputLayoutText_;
+    int inputLayoutWidth_ = 0;
+    HFONT inputLayoutFont_ = nullptr;
+    std::vector<WrappedTextLine> inputLines_;
 
     std::wstring status_;
     double statusUntil_ = 0;
@@ -14419,7 +16275,7 @@ class AskCard {
     int height_ = 0;
     std::vector<RECT> thumbRects_;
     RECT addRect_{};
-    RECT buttonRects_[kHitTranslate + 1] = {};
+    RECT buttonRects_[kHitAdd + 1] = {};
     RECT convoRect_{};
     RECT statusRect_{};
     RECT inputRect_{};
@@ -14434,6 +16290,7 @@ class AskCard {
 
     std::vector<ConvoItem> convoItems_;
     std::vector<AnswerLine> answerLines_;
+    std::vector<RichAction> richActions_;
     std::wstring answerText_;
     size_t answerAnchor_ = 0;
     size_t answerCaret_ = 0;
@@ -15539,6 +17396,7 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     }
     g_messageWindow = nullptr;
     g_fonts.Clear();
+    ClearMathFonts();
     CloseHandle(g_timer);
     g_timer = nullptr;
     if (g_rippleTimer) {
