@@ -407,8 +407,10 @@ class FrameSync {
 
     DWORD Wait() const {
         if (wait) {
+            // WOW64 requires a valid handle-array address even for zero handles.
+            const HANDLE unusedHandle = nullptr;
             // A sleeping display can report occlusion immediately.
-            return wait(0, nullptr, 65) == 0 ? 0 : 50;
+            return wait(0, &unusedHandle, 65) == 0 ? 0 : 50;
         }
 
         DWM_TIMING_INFO timing{sizeof(timing)};
