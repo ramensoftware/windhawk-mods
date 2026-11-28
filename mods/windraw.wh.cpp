@@ -2,7 +2,7 @@
 // @id              windraw
 // @name            WinDraw - Screen Inking & Annotation
 // @description     All-in-one hardware-accelerated screen drawing, shapes, radial quick menu, floating toolbar, and screenshot tool for Windows.
-// @version         1.0.0
+// @version         1.0.1
 // @author          ZainYousef
 // @github          https://github.com/ZainYoussef
 // @homepage        https://github.com/ZainYoussef/WinDraw
@@ -30,6 +30,7 @@ A complete, zero-bloat, hardware-accelerated screen annotation and drawing suite
 
 2. **Hardware-Accelerated Inking & Brushes**:
    - 144Hz+ butter-smooth Direct2D drawing with quadratic Bézier curve interpolation.
+   - **Mouse, Touch & Pen Support**: Full support for mice, touchscreens, and pen/stylus tablets (including Wacom devices), with Windows press-and-hold and pen flicks disabled on the canvas for zero start-of-stroke lag while preserving physical barrel-button actions. The radial quick menu and right-click eraser require a mouse right-click or pen barrel button (touchscreen users can switch tools and erase from the floating toolbar).
    - **Pen Mode** (`F` key): Solid color inking with subpixel accuracy.
    - **Highlighter Mode** (`H` key): Translucent alpha-blended highlighting.
    - Mouse wheel or **`[`** / **`]`** keys dynamically resize brush thickness with a real-time 1:1 circular indicator dot showing active color and zoom level.
@@ -1505,6 +1506,19 @@ static int g_snipBackdropH = 0;
 #define WM_USER_TOGGLE_POINTER (WM_USER + 101)
 #define WM_USER_TRAYICON       (WM_USER + 102)
 #define WM_USER_UPDATE_TRAY    (WM_USER + 103)
+
+#ifndef WM_TABLET_QUERYSYSTEMGESTURESTATUS
+#define WM_TABLET_QUERYSYSTEMGESTURESTATUS 0x02CC
+#endif
+
+static const ULONG_PTR kTabletDisableFlags =
+    0x00000001 | // TABLET_DISABLE_PRESSANDHOLD (stops pen touch from becoming right-click)
+    0x00000008 | // TABLET_DISABLE_PENTAPFEEDBACK
+    0x00000010 | // TABLET_DISABLE_PENBARRELFEEDBACK
+    0x00000200 | // TABLET_DISABLE_TOUCHUIFORCEOFF
+    0x00010000 | // TABLET_DISABLE_FLICKS (removes start-of-stroke lag)
+    0x00080000 | // TABLET_DISABLE_SMOOTHSCROLLING
+    0x00100000;  // TABLET_DISABLE_FLICKFALLBACKKEYS
 
 // ----------------------------------------------------------------------------
 // System Tray Notification Icon State & Helpers
@@ -6523,12 +6537,29 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             }
             return 0;
         }
-        if (wParam == 'F') { g_currentShape = ShapeType::Freehand; SetToolMode(ToolMode::Pen); g_shapesFlyoutOpen = false; g_gridFlyoutOpen = false; g_backdropFlyoutOpen = false; BuildToolbarLayout(GetSystemMetrics(SM_CXVIRTUALSCREEN), GetSystemMetrics(SM_CYVIRTUALSCREEN)); InvalidateOverlay(); return 0; }
-        if (wParam == 'L') { g_currentShape = ShapeType::Line; SetToolMode(ToolMode::Pen); g_shapesFlyoutOpen = false; g_gridFlyoutOpen = false; g_backdropFlyoutOpen = false; BuildToolbarLayout(GetSystemMetrics(SM_CXVIRTUALSCREEN), GetSystemMetrics(SM_CYVIRTUALSCREEN)); InvalidateOverlay(); return 0; }
-        if (wParam == 'A') { g_currentShape = ShapeType::Arrow; SetToolMode(ToolMode::Pen); g_shapesFlyoutOpen = false; g_gridFlyoutOpen = false; g_backdropFlyoutOpen = false; BuildToolbarLayout(GetSystemMetrics(SM_CXVIRTUALSCREEN), GetSystemMetrics(SM_CYVIRTUALSCREEN)); InvalidateOverlay(); return 0; }
-        if (wParam == 'R') { g_currentShape = ShapeType::Rectangle; SetToolMode(ToolMode::Pen); g_shapesFlyoutOpen = false; g_gridFlyoutOpen = false; g_backdropFlyoutOpen = false; BuildToolbarLayout(GetSystemMetrics(SM_CXVIRTUALSCREEN), GetSystemMetrics(SM_CYVIRTUALSCREEN)); InvalidateOverlay(); return 0; }
-        if (wParam == 'O') { g_currentShape = ShapeType::Ellipse; SetToolMode(ToolMode::Pen); g_shapesFlyoutOpen = false; g_gridFlyoutOpen = false; g_backdropFlyoutOpen = false; BuildToolbarLayout(GetSystemMetrics(SM_CXVIRTUALSCREEN), GetSystemMetrics(SM_CYVIRTUALSCREEN)); InvalidateOverlay(); return 0; }
-        if (wParam == 'T') { g_currentShape = ShapeType::Triangle; SetToolMode(ToolMode::Pen); g_shapesFlyoutOpen = false; g_gridFlyoutOpen = false; g_backdropFlyoutOpen = false; BuildToolbarLayout(GetSystemMetrics(SM_CXVIRTUALSCREEN), GetSystemMetrics(SM_CYVIRTUALSCREEN)); InvalidateOverlay(); return 0; }
+        static constexpr struct {
+            WPARAM key;
+            ShapeType shape;
+        } kShapeHotkeys[] = {
+            { 'F', ShapeType::Freehand },
+            { 'L', ShapeType::Line },
+            { 'A', ShapeType::Arrow },
+            { 'R', ShapeType::Rectangle },
+            { 'O', ShapeType::Ellipse },
+            { 'T', ShapeType::Triangle },
+        };
+        for (const auto& entry : kShapeHotkeys) {
+            if (wParam == entry.key) {
+                g_currentShape = entry.shape;
+                SetToolMode(ToolMode::Pen);
+                g_shapesFlyoutOpen = false;
+                g_gridFlyoutOpen = false;
+                g_backdropFlyoutOpen = false;
+                BuildToolbarLayout(GetSystemMetrics(SM_CXVIRTUALSCREEN), GetSystemMetrics(SM_CYVIRTUALSCREEN));
+                InvalidateOverlay();
+                return 0;
+            }
+        }
         if (wParam >= '1' && wParam <= '4') {
             int penIdx = (int)(wParam - '1');
             g_activeColor = kPresetColors[penIdx];
@@ -8340,10 +8371,14 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         break;
     }
 
+    case WM_TABLET_QUERYSYSTEMGESTURESTATUS:
+        return (LRESULT)kTabletDisableFlags;
+
     case WM_ERASEBKGND:
         return 1;
 
     case WM_DESTROY:
+        RemovePropW(hwnd, L"MicrosoftTabletPenServiceProperty");
         ReleaseD2DResources();
         return 0;
     }
@@ -8379,6 +8414,10 @@ void ShowOverlay() {
             vx, vy, vw, vh,
             NULL, NULL, wc.hInstance, NULL
         );
+        if (!g_hOverlayWnd) {
+            return;
+        }
+        SetPropW(g_hOverlayWnd, L"MicrosoftTabletPenServiceProperty", (HANDLE)kTabletDisableFlags);
         SetLayeredWindowAttributes(g_hOverlayWnd, 0, 255, LWA_ALPHA);
         CreateD2DResources(g_hOverlayWnd);
     }
